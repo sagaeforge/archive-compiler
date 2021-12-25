@@ -11,11 +11,13 @@ add_executable(
 )
 
 add_subdirectory(Modules/ProgramManager/)
+add_subdirectory(Modules/String/)
 target_link_libraries(
   QuantumCompiler
   PUBLIC
   
   ProgramManager
+  String
 )
 target_include_directories(
   QuantumCompiler
@@ -28,6 +30,9 @@ target_include_directories(
   Modules/ProgramManager/Includes/Public/
   Modules/ProgramManager/Includes/Private/
 
+  # String
+  Modules/String/Includes/Public/
+  Modules/String/Includes/Private/
 )
 target_compile_options(
   QuantumCompiler

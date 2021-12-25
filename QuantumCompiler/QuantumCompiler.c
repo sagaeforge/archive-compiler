@@ -1,5 +1,6 @@
 
 #include "ProgramManager.h"
+#include "String.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -19,6 +20,7 @@ int main(int argc, char const *argv[]) {
   ProgramManager_Init();
   Manager.Method.ProgramInit();
   Manager.Update.AddListener(test);
+  Manager.Main.AddListener(test1);
   Manager.Method.ProgramStart();
   sleep(1);
 
