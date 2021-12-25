@@ -20,9 +20,13 @@ target_include_directories(
   QuantumCompiler
   PUBLIC
 
+  # QuantumCompiler
+  Includes/
+
   # ProgramManager
   Modules/ProgramManager/Includes/Public/
   Modules/ProgramManager/Includes/Private/
+
 )
 
 add_definitions( 
