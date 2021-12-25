@@ -3,6 +3,7 @@
 
 #include "DataTypes.h"
 #include "Delegate.h"
+#include <pthread.h>
 
 #define MemoryMaxLength 32
 
@@ -65,12 +66,22 @@ typedef struct {
 } ProcessEvent;
 
 struct ProgramManager {
+  bool IsInitialized;
+  bool IsStarted;
+  bool IsUpdated;
+  pthread_t UpdateThread;
+  unsigned int UpdateTime;
+
   /** @brief 준비 단계 */
   ProcessEvent Awake;
   /** @brief 초기화 단계 */
   ProcessEvent Init;
   /** @brief 실행 단계 */
   ProcessEvent Start;
+  /** @brief 메인 단계 */
+  ProcessEvent Main;
+  /** @brief 주기 단계 */
+  ProcessEvent Update;
   /** @brief 종료 단계 */
   ProcessEvent Quit;
 
@@ -108,7 +119,10 @@ struct ProgramManager {
   /** @brief 종료 단계 */
   struct {
     // clang-format off
+    void (*ProgramInit)();
     void (*ProgramStart)();
+    void (*ProgramUpdateStart)();
+    void (*ProgramUpdateStop)();
     void (*ProgramQuit) ();
     // clang-format on
   } Method;

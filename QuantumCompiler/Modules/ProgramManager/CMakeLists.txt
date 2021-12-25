@@ -21,6 +21,7 @@ add_library(
   Sources/Memory/MemorySwap.c
 )
 
+target_link_libraries(ProgramManager PUBLIC pthread)
 target_include_directories(ProgramManager PUBLIC Includes/Public/ Includes/Private/)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})

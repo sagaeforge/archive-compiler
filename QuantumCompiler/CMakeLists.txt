@@ -3,6 +3,7 @@ project(QuantumCompiler VERSION 0.1.0)
 
 include(CTest)
 enable_testing()
+set ( CMAKE_VERBOSE_MAKEFILE true )
 
 add_executable(
   QuantumCompiler
@@ -28,12 +29,17 @@ target_include_directories(
   Modules/ProgramManager/Includes/Private/
 
 )
-
-add_definitions( 
-  -DDEBUG 
-  -g
+target_compile_options(
+  QuantumCompiler
+  PUBLIC
+  
   -Wall
 )
+
+add_definitions( 
+  -DDEBUG
+)
+
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)

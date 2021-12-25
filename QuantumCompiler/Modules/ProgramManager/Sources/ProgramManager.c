@@ -4,6 +4,7 @@
 #include "GarbageCollection.h"
 #include "Private_GarbageCollection.h"
 #include <stdlib.h>
+#include <unistd.h>
 
 struct ProgramManager Manager;
 
@@ -95,17 +96,53 @@ Generator_Chain_RemoveListener(Start);
 Generator_Chain_RemoveAllListener(Start);
 Generator_Chain_Invoke(Start);
 
+Generator_Chain_AddListener(Main);
+Generator_Chain_RemoveListener(Main);
+Generator_Chain_RemoveAllListener(Main);
+Generator_Chain_Invoke(Main);
+
+Generator_Chain_AddListener(Update);
+Generator_Chain_RemoveListener(Update);
+Generator_Chain_RemoveAllListener(Update);
+Generator_Chain_Invoke(Update);
+
 Generator_Chain_AddListener(Quit);
 Generator_Chain_RemoveListener(Quit);
 Generator_Chain_RemoveAllListener(Quit);
 Generator_Chain_Invoke(Quit);
 
+static void *ProgramManager_ProgramUpdateMethod(void *data) {
+  while (Manager.IsUpdated) {
+    Manager.Update.Invoke();
+    usleep(((float)1 / (float)Manager.UpdateTime) * 1000000);
+  }
+  return NULL;
+}
+
+static void ProgramManager_ProgramUpdateStart() {
+  if (Manager.Update.Nodes == NULL)
+    return;
+
+  Manager.IsUpdated = true;
+
+  int sig = pthread_create(&Manager.UpdateThread, NULL,
+                           ProgramManager_ProgramUpdateMethod, NULL);
+
+  if (sig < 0)
+    Error("쓰레드 생성 실패");
+}
+static void ProgramManager_ProgramUpdateStop() { Manager.IsUpdated = false; }
 static void ProgramManager_ProgramQuit() {
+  ProgramManager_ProgramUpdateStop();
   Manager.Quit.Invoke();
+  int status;
+  pthread_join(Manager.UpdateThread, (void **)&status);
 
   Manager.Awake.RemoveAllListener();
   Manager.Init.RemoveAllListener();
   Manager.Start.RemoveAllListener();
+  Manager.Main.RemoveAllListener();
+  Manager.Update.RemoveAllListener();
   Manager.Quit.RemoveAllListener();
 
   Manager.GarbageCollection.Method.Clear();
@@ -128,33 +165,50 @@ static void ProgramManager_ProgramQuit() {
   exit(0);
 }
 
-static void PrograManager_ProgramStart() {
+static void ProgramManager_ProgramInit() {
   Manager.Awake.Invoke();
   Manager.Init.Invoke();
   Manager.Start.Invoke();
+  Manager.IsInitialized = true;
+}
+
+static void ProgramManager_ProgramStart() {
+  Manager.Main.Invoke();
+  Manager.IsStarted = true;
+  ProgramManager_ProgramUpdateStart();
 }
 
 void ProgramManager_Init() {
   // clang-format off
-  Manager.Awake.AddListener       = Awake_AddListener;
-  Manager.Awake.RemoveListener    = Awake_RemoveListener;
-  Manager.Awake.RemoveAllListener = Awake_RemoveAllListener;
-  Manager.Awake.Invoke            = Awake_Invoke;
+  Manager.Awake.AddListener        = Awake_AddListener;
+  Manager.Awake.RemoveListener     = Awake_RemoveListener;
+  Manager.Awake.RemoveAllListener  = Awake_RemoveAllListener;
+  Manager.Awake.Invoke             = Awake_Invoke;
 
-  Manager.Init.AddListener        = Init_AddListener;
-  Manager.Init.RemoveListener     = Init_RemoveListener;
-  Manager.Init.RemoveAllListener  = Init_RemoveAllListener;
-  Manager.Init.Invoke             = Init_Invoke;
+  Manager.Init.AddListener         = Init_AddListener;
+  Manager.Init.RemoveListener      = Init_RemoveListener;
+  Manager.Init.RemoveAllListener   = Init_RemoveAllListener;
+  Manager.Init.Invoke              = Init_Invoke;
 
-  Manager.Start.AddListener       = Start_AddListener;
-  Manager.Start.RemoveListener    = Start_RemoveListener;
-  Manager.Start.RemoveAllListener = Start_RemoveAllListener;
-  Manager.Start.Invoke            = Start_Invoke;
+  Manager.Start.AddListener        = Start_AddListener;
+  Manager.Start.RemoveListener     = Start_RemoveListener;
+  Manager.Start.RemoveAllListener  = Start_RemoveAllListener;
+  Manager.Start.Invoke             = Start_Invoke;
   
-  Manager.Quit.AddListener        = Quit_AddListener;
-  Manager.Quit.RemoveListener     = Quit_RemoveListener;
-  Manager.Quit.RemoveAllListener  = Quit_RemoveAllListener;
-  Manager.Quit.Invoke             = Quit_Invoke;
+  Manager.Main.AddListener         = Main_AddListener;
+  Manager.Main.RemoveListener      = Main_RemoveListener;
+  Manager.Main.RemoveAllListener   = Main_RemoveAllListener;
+  Manager.Main.Invoke              = Main_Invoke;
+  
+  Manager.Update.AddListener       = Update_AddListener;
+  Manager.Update.RemoveListener    = Update_RemoveListener;
+  Manager.Update.RemoveAllListener = Update_RemoveAllListener;
+  Manager.Update.Invoke            = Update_Invoke;
+  
+  Manager.Quit.AddListener         = Quit_AddListener;
+  Manager.Quit.RemoveListener      = Quit_RemoveListener;
+  Manager.Quit.RemoveAllListener   = Quit_RemoveAllListener;
+  Manager.Quit.Invoke              = Quit_Invoke;
   // clang-format on
 
   Manager.GarbageCollection.Method.MemoryCreate = MemoryCreate;
@@ -178,6 +232,14 @@ void ProgramManager_Init() {
   Manager.GarbageCollection.UsedMemoryLength = 0;
   Manager.GarbageCollection.UsedMemoryPageLength = 1;
 
-  Manager.Method.ProgramStart = PrograManager_ProgramStart;
+  Manager.Method.ProgramInit = ProgramManager_ProgramInit;
+  Manager.Method.ProgramStart = ProgramManager_ProgramStart;
+  Manager.Method.ProgramUpdateStart = ProgramManager_ProgramUpdateStart;
+  Manager.Method.ProgramUpdateStart = ProgramManager_ProgramUpdateStop;
   Manager.Method.ProgramQuit = ProgramManager_ProgramQuit;
+
+  Manager.IsInitialized = false;
+  Manager.IsStarted = false;
+  Manager.IsUpdated = false;
+  Manager.UpdateTime = 60;
 }
