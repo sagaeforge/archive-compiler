@@ -21,7 +21,6 @@ add_library(
   Sources/Memory/MemorySwap.c
 )
 
-add_definitions( -DDEBUG )
 target_include_directories(ProgramManager PUBLIC Includes/Public/ Includes/Private/)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})

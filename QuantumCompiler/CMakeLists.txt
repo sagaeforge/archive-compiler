@@ -25,6 +25,11 @@ target_include_directories(
   Modules/ProgramManager/Includes/Private/
 )
 
+add_definitions( 
+  -DDEBUG 
+  -g
+  -Wall
+)
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)

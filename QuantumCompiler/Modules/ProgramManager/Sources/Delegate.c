@@ -7,7 +7,7 @@
 static void AddListener(struct __FuncChain *Chain, FP_Func Method) {
   FuncChainNode *ptr = (FuncChainNode *)malloc(sizeof(FuncChainNode));
   if (ptr == NULL) {
-    printf("ERR > NODE 생성 실패");
+    Warning("델리게이트 노드 생성 실패");
     return;
   }
   ptr->Next = NULL;
