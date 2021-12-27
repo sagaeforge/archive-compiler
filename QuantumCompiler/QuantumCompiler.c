@@ -10,6 +10,7 @@
 
 int main(int argc, char const *argv[]) {
   ProgramManager_Init();
+  Manager.Awake.AddListener(StringModule_Awake);
   Manager.Method.ProgramStart();
   String base = {
       0,

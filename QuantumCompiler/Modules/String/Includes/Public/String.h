@@ -72,6 +72,8 @@ struct StringMethod {
 String *StringConstructor_Chs(const_chs Value);
 String *StringConstructor_Wcs(const_wcs Value);
 
+void StringModule_Awake();
+
 extern struct StringMethod StringMethod;
 
 #endif

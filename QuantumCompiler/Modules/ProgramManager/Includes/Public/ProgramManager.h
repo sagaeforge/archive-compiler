@@ -5,7 +5,7 @@
 #include "Delegate.h"
 #include <pthread.h>
 
-#define MemoryMaxLength 32
+#define MemoryMaxLength 1024
 
 #pragma pack(push, 1)
 

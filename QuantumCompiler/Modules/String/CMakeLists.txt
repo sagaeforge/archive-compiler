@@ -10,6 +10,7 @@ add_library(
   Sources/Chs.c
   Sources/StringConstructor.c
   Sources/StringMethod.c
+  Sources/Stringinitialized.c
 )
 
 target_include_directories(
