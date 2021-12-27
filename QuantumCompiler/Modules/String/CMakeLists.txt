@@ -7,7 +7,9 @@ enable_testing()
 add_library(
   String
 
-  Sources/String.c
+  Sources/Chs.c
+  Sources/StringConstructor.c
+  Sources/StringMethod.c
 )
 
 target_include_directories(

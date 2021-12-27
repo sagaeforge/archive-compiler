@@ -8,6 +8,8 @@ set ( CMAKE_VERBOSE_MAKEFILE true )
 add_executable(
   QuantumCompiler
   QuantumCompiler.c
+
+  Sources/Parser.c
 )
 
 add_subdirectory(Modules/ProgramManager/)

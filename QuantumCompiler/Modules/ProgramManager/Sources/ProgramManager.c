@@ -101,11 +101,6 @@ Generator_Chain_RemoveListener(Main);
 Generator_Chain_RemoveAllListener(Main);
 Generator_Chain_Invoke(Main);
 
-Generator_Chain_AddListener(Update);
-Generator_Chain_RemoveListener(Update);
-Generator_Chain_RemoveAllListener(Update);
-Generator_Chain_Invoke(Update);
-
 Generator_Chain_AddListener(Quit);
 Generator_Chain_RemoveListener(Quit);
 Generator_Chain_RemoveAllListener(Quit);
@@ -173,9 +168,98 @@ static void ProgramManager_ProgramInit() {
 }
 
 static void ProgramManager_ProgramStart() {
+  if (!Manager.IsInitialized)
+    ProgramManager_ProgramInit();
+
   Manager.Main.Invoke();
   Manager.IsStarted = true;
   ProgramManager_ProgramUpdateStart();
+}
+
+static void Update_Wait() {
+  if (Manager.IsUpdated) {
+    ProgramManager_ProgramUpdateStop();
+    int status;
+    pthread_join(Manager.UpdateThread, (void **)&status);
+  }
+}
+
+static void Update_AddListener(FP_Func Method) {
+  Update_Wait();
+
+  FuncChainNode *ptr = (FuncChainNode *)malloc(sizeof(FuncChainNode));
+  if (ptr == NULL) {
+    printf("ERR > NODE 생성 실패");
+    return;
+  }
+  ptr->Next = NULL;
+  FuncChainNode *Pos = Manager.Update.Nodes;
+  if (Pos == NULL)
+    Manager.Update.Nodes = Pos = ptr;
+  else {
+    while (Pos->Next != NULL)
+      Pos = Pos->Next;
+    Pos->Next = ptr;
+    Pos = Pos->Next;
+  }
+  Pos->Method = Method;
+  ProgramManager_ProgramUpdateStart();
+}
+static void Update_RemoveListener(FP_Func Method) {
+  Update_Wait();
+
+  FuncChainNode *Pos = Manager.Update.Nodes;
+  FuncChainNode *Last = Manager.Update.Nodes;
+  while (Pos != NULL) {
+    if (Pos->Method == Method) {
+      if (Pos == Manager.Update.Nodes) {
+        Manager.Update.Nodes = Pos->Next;
+      } else {
+        Last->Next = Pos->Next;
+      }
+      Pos->Method = NULL;
+      Pos->Next = NULL;
+      free(Pos);
+      break;
+    }
+    Last = Pos;
+    Pos = Pos->Next;
+  }
+  ProgramManager_ProgramUpdateStart();
+}
+static void Update_RemoveAllListener() {
+  Update_Wait();
+
+  int length = 1;
+  FuncChainNode *Pos = Manager.Update.Nodes;
+  if (Pos == NULL)
+    return;
+  while (Pos->Next != NULL) {
+    length++;
+    Pos = Pos->Next;
+  }
+  void *tempAry = malloc(sizeof(FuncChainNode) * length);
+  if (tempAry == NULL) {
+    Error("버퍼공간을 확보하지 못했습니다.");
+  }
+  FuncChainNode **Ary = (FuncChainNode **)tempAry;
+  Pos = Manager.Update.Nodes;
+  int i = 0;
+  while (Pos != NULL) {
+    Ary[i++] = Pos;
+    Pos = Pos->Next;
+  }
+  for (i = 0; i < length; i++)
+    free(Ary[i]);
+  free(tempAry);
+  ProgramManager_ProgramUpdateStart();
+}
+static void Update_Invoke() {
+  FuncChainNode *Pos = Manager.Update.Nodes;
+  while (Pos != NULL) {
+    Pos->Method();
+    Pos = Pos->Next;
+  }
 }
 
 void ProgramManager_Init() {

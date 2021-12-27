@@ -6,23 +6,19 @@
 #include <time.h>
 #include <unistd.h>
 
-int v = 1;
-
-void test() {
-  time_t t = time(NULL);
-  struct tm tm = *localtime(&t);
-  printf("Update Call[%02d]: %02d:%02d:%02d\n", v, tm.tm_hour, tm.tm_min,
-         tm.tm_sec);
-  v++;
-}
+#define Test(Value) _Generic((Value), String : "Test")
 
 int main(int argc, char const *argv[]) {
   ProgramManager_Init();
-  Manager.Method.ProgramInit();
-  Manager.Update.AddListener(test);
-  Manager.Main.AddListener(test1);
   Manager.Method.ProgramStart();
-  sleep(1);
+  String base = {
+      0,
+  };
+  String *str = String(&base);
+  // String *str = String("");
+  printf("%p\n", str->Value);
+
+  printf("%p\n", &StringMethod);
 
   Manager.Method.ProgramQuit();
   return 0;

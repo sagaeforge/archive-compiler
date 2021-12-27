@@ -1,0 +1,77 @@
+
+#ifndef __STRING__
+#define __STRING__
+
+#include "DataTypes.h"
+#include "Exception.h"
+#include <wchar.h>
+
+typedef char *chs;
+typedef const char *const_chs;
+typedef wchar_t *wcs;
+typedef const wchar_t *const_wcs;
+
+typedef struct _String {
+  bool IsNone;
+  bool IsConst;
+  wcs Value;
+  Length Length;
+} String;
+
+typedef struct _StringAry {
+  struct _StringAryNode {
+    String *Value;
+    struct _StringAryNode *Next;
+  } Values;
+
+  Length Length;
+
+} StringAry;
+
+struct StringMethod {
+  // clang-format off
+    String     *(*Join)        (String*, String*);
+    void        (*Append)      (String*, String*);
+    String     *(*SubString)   (String*, String*);
+    String     *(*Loop)        (String*, Length);
+    StringAry  *(*Split)       (String*, String*);
+    bool        (*Compare)     (String*, String*);
+    String     *(*Trim)        (String*);
+    int         (*Contains)    (String*, String*);
+    Length     *(*Count)       (String*, String*);
+    wcs         (*Get)         (String*);
+    void       *(*Set)         (String*, String*);
+    Length     *(*GetLength)   (String*);
+    String     *(*ToLower)     (String*);
+    String     *(*ToUpper)     (String*);
+    bool        (*IsNone)      (String*);
+    Index       (*IndexOf)     (String*, String*);
+    Index       (*LastOfIndex) (String*, String*);
+    String     *(*Replace)     (String*, String*, String*);
+    String     *(*ReplaceFor)  (String*, String*, String*, Length);
+    String     *(*ReplaceAll)  (String*, String*, String*);
+    String     *(*Left)        (String*, Length);
+    String     *(*Right)       (String*, Length);
+    String     *(*Middle)      (String*, Index, Index);
+    void        (*Const)       (String*);
+    void        (*UnConst)     (String*);
+    void        (*Destructor)  (String*);
+  // clang-format on
+};
+
+// clang-format off
+#define String(Instance) _Generic((Instance),                                                                                  \
+  chs       : StringConstructor_Chs((const_chs) Instance),                     \
+  const_chs : StringConstructor_Chs((const_chs) Instance),                     \
+  wcs       : StringConstructor_Wcs((const_wcs) Instance),                     \
+  const_wcs : StringConstructor_Wcs((const_wcs) Instance),                     \
+  String *  : StringConstructor_Wcs((const_wcs) ((String *)Instance)->Value),  \
+  default   : StringConstructor_Chs("")                                        \
+)
+// clang-format on
+String *StringConstructor_Chs(const_chs Value);
+String *StringConstructor_Wcs(const_wcs Value);
+
+extern struct StringMethod StringMethod;
+
+#endif
