@@ -40,7 +40,7 @@ struct StringMethod {
     int         (*Contains)    (String*, String*);
     Length     *(*Count)       (String*, String*);
     wcs         (*Get)         (String*);
-    void       *(*Set)         (String*, String*);
+    void        (*Set)         (String*, String*);
     Length     *(*GetLength)   (String*);
     String     *(*ToLower)     (String*);
     String     *(*ToUpper)     (String*);
