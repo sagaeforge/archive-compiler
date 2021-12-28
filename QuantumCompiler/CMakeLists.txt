@@ -30,11 +30,9 @@ target_include_directories(
 
   # ProgramManager
   Modules/ProgramManager/Includes/Public/
-  Modules/ProgramManager/Includes/Private/
 
   # String
   Modules/String/Includes/Public/
-  Modules/String/Includes/Private/
 )
 target_compile_options(
   QuantumCompiler

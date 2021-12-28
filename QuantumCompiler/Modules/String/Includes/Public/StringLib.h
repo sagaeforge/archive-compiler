@@ -4,7 +4,6 @@
 #include "String.h"
 
 // clang-format off
-
 #define toString(Instance)                      \
   Method_Combine(_Generic((Instance),           \
   _Bool         : ToString_Bool,                \
@@ -14,6 +13,9 @@
   _uint64       : ToString_Decimal_unsigned,    \
   double        : ToString_Digit,               \
   ), Instance)
+  
+
+  
 #undef String
 #define String(Instance)                        \
   Method_Combine(_Generic((Instance),           \
@@ -25,9 +27,10 @@
   String *      : StringConstructor_Strp,       \
   _Bool         : ToString_Bool,                \
   int           : ToString_Decimal,             \
-  unsigned int  : ToString_Decimal_unsigned,    \
+  unsigned int  : ToString_Decimal,             \
+  long          : ToString_Decimal,             \
   _int64        : ToString_Decimal,             \
-  _uint64       : ToString_Decimal_unsigned,    \
+  _uint64       : ToString_Decimal,             \
   float         : ToString_Digit,               \
   double        : ToString_Digit),              \
   Instance)
@@ -35,7 +38,8 @@
 
 String *ToString_Bool(bool Value);
 String *ToString_Decimal(_int64 Value);
-String *ToString_Decimal_unsigned(_uint64 Value);
 String *ToString_Digit(double Value);
+
+extern struct StringLibMethod StringLibMethod;
 
 #endif

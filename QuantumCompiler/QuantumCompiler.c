@@ -15,9 +15,11 @@ int main(int argc, char const *argv[]) {
   Manager.Awake.AddListener(StringModule_Awake);
   Manager.Method.ProgramStart();
   double i = -3.1415926842378431241212123425436E+29;
-  String *bab = String(i);
-  printf("%S\n", bab->Value);
-  printf("%u\n", bab->Length);
+  long long d = 9022222222222;
+  String *bab1 = String(i);
+  String *bab2 = String(d);
+  printf("%S\n", bab1->Value);
+  printf("%S\n", bab2->Value);
 
   Manager.Method.ProgramQuit();
   return 0;
