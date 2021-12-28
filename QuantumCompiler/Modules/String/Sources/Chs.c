@@ -27,7 +27,7 @@ wcs __WcsCreate(Length Length) {
             sizeof(wchar_t) * (Length + 1));
     return NULL;
   }
-  MemorySet(temp, 0, sizeof(wchar_t), sizeof(wchar_t) * (Length + 1));
+  MemorySet(temp, 0, sizeof(wchar_t), (Length + 1));
   return temp;
 }
 void __WcsChsSet(wcs Obj1, const_chs Obj2, Length Length) {

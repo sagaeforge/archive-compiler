@@ -8,9 +8,11 @@ add_library(
   String
 
   Sources/Chs.c
+  Sources/String.c
   Sources/StringConstructor.c
   Sources/StringMethod.c
-  Sources/Stringinitialized.c
+  Sources/StringInitialized.c
+  Sources/StringLib.c
 )
 
 target_include_directories(

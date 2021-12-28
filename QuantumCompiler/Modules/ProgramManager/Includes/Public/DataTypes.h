@@ -5,6 +5,10 @@
 
 typedef unsigned int Length;
 typedef unsigned int Index;
+typedef long long int _int64;
+typedef unsigned long long int _uint64;
+
+#define Method_Combine(MethodName, Instance) MethodName(Instance)
 
 // [*]  [자료형 파트]
 // [+ START] 자료형

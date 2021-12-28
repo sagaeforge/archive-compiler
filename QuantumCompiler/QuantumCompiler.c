@@ -1,6 +1,6 @@
 
 #include "ProgramManager.h"
-#include "String.h"
+#include "StringLib.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -8,18 +8,16 @@
 
 #define Test(Value) _Generic((Value), String : "Test")
 
+void Test2(String a) {}
+
 int main(int argc, char const *argv[]) {
   ProgramManager_Init();
   Manager.Awake.AddListener(StringModule_Awake);
   Manager.Method.ProgramStart();
-  String base = {
-      0,
-  };
-  String *str = String(&base);
-  // String *str = String("");
-  printf("%p\n", str->Value);
-
-  printf("%p\n", &StringMethod);
+  double i = -3.1415926842378431241212123425436E+29;
+  String *bab = String(i);
+  printf("%S\n", bab->Value);
+  printf("%u\n", bab->Length);
 
   Manager.Method.ProgramQuit();
   return 0;

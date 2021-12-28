@@ -71,6 +71,8 @@ struct StringMethod {
 // clang-format on
 String *StringConstructor_Chs(const_chs Value);
 String *StringConstructor_Wcs(const_wcs Value);
+String *StringConstructor_Str(String Value);
+String *StringConstructor_Strp(String *Value);
 
 void StringModule_Awake();
 

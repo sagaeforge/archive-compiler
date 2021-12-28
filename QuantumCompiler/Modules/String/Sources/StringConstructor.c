@@ -49,3 +49,9 @@ String *StringConstructor_Wcs(const wchar_t *Value) {
 
   return temp;
 }
+String *StringConstructor_Str(String Value) {
+  return StringConstructor_Wcs(Value.Value);
+}
+String *StringConstructor_Strp(String *Value) {
+  return StringConstructor_Wcs(Value->Value);
+}

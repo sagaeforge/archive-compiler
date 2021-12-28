@@ -24,17 +24,17 @@
 #else
 #define Warning(format, args...)                                               \
   do {                                                                         \
-    printf("Warning >>> ");                                                    \
+    fprintf(stderr, "Warning >>> ");                                           \
     fprintf(stderr, format, ##args);                                           \
-    printf("\n");                                                              \
+    fprintf(stderr, "\n");                                                     \
   } while (0)
 #endif
 
 #define Error(format, args...)                                                 \
   do {                                                                         \
-    printf("Error >>> ");                                                      \
+    fprintf(stderr, "Error >>> ");                                             \
     fprintf(stderr, format, ##args);                                           \
-    printf("\n");                                                              \
+    fprintf(stderr, "\n");                                                     \
     exit(1);                                                                   \
   } while (0)
 
