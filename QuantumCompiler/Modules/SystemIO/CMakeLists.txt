@@ -18,6 +18,9 @@ target_include_directories(
   ../ProgramManager/Includes/Public/
 
   # String
+  ../String/Includes/Public/
+
+  # SystemIO
   Includes/Public/
   Includes/Private/
 
