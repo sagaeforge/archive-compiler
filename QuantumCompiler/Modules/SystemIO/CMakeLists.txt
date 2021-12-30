@@ -23,8 +23,6 @@ target_include_directories(
   # SystemIO
   Includes/Public/
   Includes/Private/
-
-  
 )
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})

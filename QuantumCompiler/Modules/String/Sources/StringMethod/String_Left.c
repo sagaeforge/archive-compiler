@@ -1,5 +1,15 @@
 
+#include "Chs.h"
 #include "Private_String.h"
 #include "ProgramManager.h"
 
-String *String_Left(String *Self, Length Length) { return NULL; }
+// TODO 오류 검사
+String *String_Left(String *Self, Length Length) {
+  wcs temp = __WcsCreate(Length);
+
+  int i;
+  for (i = 0; i < Length; i++)
+    temp[i] = Self->Value[i];
+  temp[i] = '\0';
+  return String(temp);
+}

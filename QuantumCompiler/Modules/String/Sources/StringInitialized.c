@@ -4,6 +4,8 @@
 #include "String.h"
 #include <stdio.h>
 
+// TODO 삭제 예정
+
 static void StringModule_StringInit() {
   StringMethod.Join = String_Join;
   StringMethod.Append = String_Append;

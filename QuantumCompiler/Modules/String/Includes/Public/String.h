@@ -38,10 +38,10 @@ struct StringMethod {
     bool        (*Compare)     (String*, String*);
     String     *(*Trim)        (String*);
     bool        (*Contains)    (String*, String*);
-    Length     *(*Count)       (String*, String*);
+    Length      (*Count)       (String*, String*);
     wcs         (*Get)         (String*);
     void        (*Set)         (String*, String*);
-    Length     *(*Length)      (String*);
+    Length      (*Length)      (String*);
     String     *(*ToLower)     (String*);
     String     *(*ToUpper)     (String*);
     bool        (*IsNone)      (String*);
@@ -55,7 +55,7 @@ struct StringMethod {
     String     *(*Middle)      (String*, Index, Index);
     void        (*Const)       (String*);
     void        (*UnConst)     (String*);
-    void        (*Destructor)  (String*);
+    void        (*Destructor)  (String**);
   // clang-format on
 };
 
