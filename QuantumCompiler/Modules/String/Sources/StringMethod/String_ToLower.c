@@ -11,9 +11,9 @@ String *String_ToLower(String *Self) {
   int i;
   for (i = 0; i < Self->Length; i++)
     if (_IsUpper(Self->Value[i]))
-      temp = 'a' + (Self->Value[i] - 'A');
+      temp[i] = 'a' + (Self->Value[i] - 'A');
     else
-      temp = Self->Value[i];
+      temp[i] = Self->Value[i];
   temp[i] = '\0';
   return String(temp);
 }

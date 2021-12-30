@@ -1,4 +1,5 @@
 
+#include "Chs.h"
 #include "Private_String.h"
 #include "ProgramManager.h"
 

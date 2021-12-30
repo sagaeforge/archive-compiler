@@ -12,5 +12,5 @@ String *String_Middle(String *Self, Index Start, Index End) {
   for (i = Start; i <= End; i++, total++)
     temp[total] = Self->Value[i];
   temp[total] = '\0';
-  return temp;
+  return String(temp);
 }

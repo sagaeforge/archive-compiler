@@ -1,4 +1,5 @@
 
+#include "Chs.h"
 #include "Private_String.h"
 #include "ProgramManager.h"
 
@@ -10,9 +11,9 @@ String *String_ToUpper(String *Self) {
   int i;
   for (i = 0; i < Self->Length; i++)
     if (_IsLower(Self->Value[i]))
-      temp = 'A' + (Self->Value[i] - 'a');
+      temp[i] = 'A' + (Self->Value[i] - 'a');
     else
-      temp = Self->Value[i];
+      temp[i] = Self->Value[i];
   temp[i] = '\0';
   return String(temp);
 }
