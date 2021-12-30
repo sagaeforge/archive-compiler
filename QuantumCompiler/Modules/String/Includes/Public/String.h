@@ -45,8 +45,8 @@ struct StringMethod {
     String     *(*ToLower)     (String*);
     String     *(*ToUpper)     (String*);
     bool        (*IsNone)      (String*);
-    Index       (*IndexOf)     (String*, String*);
-    Index       (*LastOfIndex) (String*, String*);
+    int         (*IndexOf)     (String*, String*);
+    int         (*LastOfIndex) (String*, String*);
     String     *(*Replace)     (String*, String*, String*);
     String     *(*ReplaceFor)  (String*, String*, String*, Length);
     String     *(*ReplaceAll)  (String*, String*, String*);
