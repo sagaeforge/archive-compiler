@@ -1,28 +1,43 @@
 cmake_minimum_required(VERSION 3.0.0)
-project(ProgramManager VERSION 0.1.0)
+project(Exception VERSION 0.1.0)
 
 include(CTest)
 enable_testing()
 
+add_subdirectory(Module/Exception)
+add_subdirectory(Module/GarbageCollection)
+add_subdirectory(Module/InputSystem)
+add_subdirectory(Module/ProcessEvent)
+
 add_library(
   ProgramManager
-  Sources/Delegate.c
+
   Sources/ProgramManager.c
-  Sources/GarbageCollection.c
-  
-  # Sources/Memory
-  Sources/Memory/MemoryCompare.c
-  Sources/Memory/MemoryCopy.c
-  Sources/Memory/MemoryCreate.c
-  Sources/Memory/MemoryLength.c
-  Sources/Memory/MemoryMove.c
-  Sources/Memory/MemoryRemove.c
-  Sources/Memory/MemorySet.c 
-  Sources/Memory/MemorySwap.c
+
 )
 
-target_link_libraries(ProgramManager PUBLIC pthread)
-target_include_directories(ProgramManager PUBLIC Includes/Public/ Includes/Private/)
+target_include_directories(
+  ProgramManager
+  PUBLIC
+
+  Includes/
+
+  Exception/Includes/Public
+  GarbageCollection/Includes/Public
+  InputSystem/Includes/Public
+  ProcessEvent/Includes/Public
+
+  # String
+  ../String/Includes/Public/
+)
+target_link_libraries(
+  ProgramManager
+
+  Exception
+  GarbageCollection
+  InputSystem
+  ProcessEvent
+)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

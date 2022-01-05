@@ -74,7 +74,7 @@ String *StringConstructor_Wcs(const_wcs Value);
 String *StringConstructor_Str(String Value);
 String *StringConstructor_Strp(String *Value);
 
-void StringModule_Awake();
+void StringModule_Initialized();
 
 extern struct StringMethod StringMethod;
 

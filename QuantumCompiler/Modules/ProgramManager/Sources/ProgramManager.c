@@ -1,329 +1,109 @@
 
 #include "ProgramManager.h"
-#include "Exception.h"
 #include "GarbageCollection.h"
-#include "Private_GarbageCollection.h"
+#include "ProcessEvent.h"
+#include "String.h"
+
 #include <stdlib.h>
-#include <unistd.h>
 
-struct ProgramManager Manager;
+struct ProgramManager Application;
 
-#define Generator_Chain_AddListener(name)                                      \
-  static void name##_AddListener(FP_Func Method) {                             \
-    FuncChainNode *ptr = (FuncChainNode *)malloc(sizeof(FuncChainNode));       \
-    if (ptr == NULL) {                                                         \
-      printf("ERR > NODE 생성 실패");                                          \
-      return;                                                                  \
-    }                                                                          \
-    ptr->Next = NULL;                                                          \
-    FuncChainNode *Pos = Manager.name.Nodes;                                   \
-    if (Pos == NULL)                                                           \
-      Manager.name.Nodes = Pos = ptr;                                          \
-    else {                                                                     \
-      while (Pos->Next != NULL)                                                \
-        Pos = Pos->Next;                                                       \
-      Pos->Next = ptr;                                                         \
-      Pos = Pos->Next;                                                         \
-    }                                                                          \
-    Pos->Method = Method;                                                      \
-  }
-#define Generator_Chain_RemoveListener(name)                                   \
-  static void name##_RemoveListener(FP_Func Method) {                          \
-    FuncChainNode *Pos = Manager.name.Nodes;                                   \
-    FuncChainNode *Last = Manager.name.Nodes;                                  \
-    while (Pos != NULL) {                                                      \
-      if (Pos->Method == Method) {                                             \
-        if (Pos == Manager.name.Nodes) {                                       \
-          Manager.name.Nodes = Pos->Next;                                      \
-        } else {                                                               \
-          Last->Next = Pos->Next;                                              \
-        }                                                                      \
-        Pos->Method = NULL;                                                    \
-        Pos->Next = NULL;                                                      \
-        free(Pos);                                                             \
-        break;                                                                 \
-      }                                                                        \
-      Last = Pos;                                                              \
-      Pos = Pos->Next;                                                         \
-    }                                                                          \
-  }
-#define Generator_Chain_RemoveAllListener(name)                                \
-  static void name##_RemoveAllListener() {                                     \
-    int length = 1;                                                            \
-    FuncChainNode *Pos = Manager.name.Nodes;                                   \
-    if (Pos == NULL)                                                           \
-      return;                                                                  \
-    while (Pos->Next != NULL) {                                                \
-      length++;                                                                \
-      Pos = Pos->Next;                                                         \
-    }                                                                          \
-    void *tempAry = malloc(sizeof(FuncChainNode) * length);                    \
-    if (tempAry == NULL) {                                                     \
-      Error("버퍼공간을 확보하지 못했습니다.");                                \
-    }                                                                          \
-    FuncChainNode **Ary = (FuncChainNode **)tempAry;                           \
-    Pos = Manager.name.Nodes;                                                  \
-    int i = 0;                                                                 \
-    while (Pos != NULL) {                                                      \
-      Ary[i++] = Pos;                                                          \
-      Pos = Pos->Next;                                                         \
-    }                                                                          \
-    for (i = 0; i < length; i++)                                               \
-      free(Ary[i]);                                                            \
-    free(tempAry);                                                             \
-  }
-#define Generator_Chain_Invoke(name)                                           \
-  static void name##_Invoke() {                                                \
-    FuncChainNode *Pos = Manager.name.Nodes;                                   \
-    while (Pos != NULL) {                                                      \
-      Pos->Method();                                                           \
-      Pos = Pos->Next;                                                         \
-    }                                                                          \
-  }
-
-Generator_Chain_AddListener(Awake);
-Generator_Chain_RemoveListener(Awake);
-Generator_Chain_RemoveAllListener(Awake);
-Generator_Chain_Invoke(Awake);
-
-Generator_Chain_AddListener(Init);
-Generator_Chain_RemoveListener(Init);
-Generator_Chain_RemoveAllListener(Init);
-Generator_Chain_Invoke(Init);
-
-Generator_Chain_AddListener(Start);
-Generator_Chain_RemoveListener(Start);
-Generator_Chain_RemoveAllListener(Start);
-Generator_Chain_Invoke(Start);
-
-Generator_Chain_AddListener(Main);
-Generator_Chain_RemoveListener(Main);
-Generator_Chain_RemoveAllListener(Main);
-Generator_Chain_Invoke(Main);
-
-Generator_Chain_AddListener(Quit);
-Generator_Chain_RemoveListener(Quit);
-Generator_Chain_RemoveAllListener(Quit);
-Generator_Chain_Invoke(Quit);
-
-static void *ProgramManager_ProgramUpdateMethod(void *data) {
-  while (Manager.IsUpdated) {
-    Manager.Update.Invoke();
-    usleep(((float)1 / (float)Manager.UpdateTime) * 1000000);
-  }
-  return NULL;
+static void ProgramInit() {
+  Application.ProcessEvent[ProcessEvent_Awake].Invoke();
+  Application.ProcessEvent[ProcessEvent_Init].Invoke();
+  Application.ProcessEvent[ProcessEvent_Start].Invoke();
+  Application.Member.ProcessEvent_IsInitialized = true;
 }
 
-static void ProgramManager_ProgramUpdateStart() {
-  if (Manager.Update.Nodes == NULL)
-    return;
+static void ProgramStart() {
+  if (!Application.Member.ProcessEvent_IsInitialized)
+    ProgramInit();
 
-  Manager.IsUpdated = true;
-
-  int sig = pthread_create(&Manager.UpdateThread, NULL,
-                           ProgramManager_ProgramUpdateMethod, NULL);
-
-  if (sig < 0)
-    Error("쓰레드 생성 실패");
+  Application.ProcessEvent[ProcessEvent_Main].Invoke();
+  Application.Member.ProcessEvent_IsStarted = true;
+  Application.UpdateStart(ProcessEvent_Update);
+  Application.UpdateStart(ProcessEvent_FixedUpdate);
 }
-static void ProgramManager_ProgramUpdateStop() { Manager.IsUpdated = false; }
-static void ProgramManager_ProgramQuit() {
-  ProgramManager_ProgramUpdateStop();
-  Manager.Quit.Invoke();
-  int status;
-  pthread_join(Manager.UpdateThread, (void **)&status);
 
-  Manager.Awake.RemoveAllListener();
-  Manager.Init.RemoveAllListener();
-  Manager.Start.RemoveAllListener();
-  Manager.Main.RemoveAllListener();
-  Manager.Update.RemoveAllListener();
-  Manager.Quit.RemoveAllListener();
+static void ProgramQuit() {
+  Update_AllStop();
+  Application.ProcessEvent[ProcessEvent_Quit].Invoke();
 
-  Manager.GarbageCollection.Method.Clear();
-  int i = 0;
-  MemoryPage *page = Manager.GarbageCollection.Pages.Next;
-  if (Manager.GarbageCollection.UsedMemoryPageLength != 1) {
-    MemoryPage **Temp =
-        malloc(sizeof(MemoryPage) *
-               (Manager.GarbageCollection.UsedMemoryPageLength - 1));
+  Application.ProcessEvent[ProcessEvent_Awake].RemoveAllListener();
+  Application.ProcessEvent[ProcessEvent_Init].RemoveAllListener();
+  Application.ProcessEvent[ProcessEvent_Start].RemoveAllListener();
+  Application.ProcessEvent[ProcessEvent_Main].RemoveAllListener();
+  Application.ProcessEvent[ProcessEvent_Update].RemoveAllListener();
+  Application.ProcessEvent[ProcessEvent_FixedUpdate].RemoveAllListener();
+  Application.ProcessEvent[ProcessEvent_Quit].RemoveAllListener();
 
-    while (page != NULL) {
-      Temp[i++] = page;
-      page = page->Next;
+  // TODO GarbageCollection 메모리 해제 프로세스 작성
+  Length len = Application.Member.GarbageCollection_UsedMemoryPageLength;
+  MemoryPage **pages = malloc(sizeof(MemoryPage) * len);
+  MemoryPage *page = &Application.Member.GarbageCollection_Pages;
+  int i;
+  for (i = 0; page != NULL; i++) {
+    pages[i] = page;
+    int j;
+    for (j = 0; j < page->UsedMemoryLength; j++) {
+      free(page->Datas[j].Position);
+      page->Datas[j].Length = 0;
+      page->Datas[j].Policy = MemoryPolicy_None;
+      page->Datas[j].Position = NULL;
     }
-    for (i = 0; i < Manager.GarbageCollection.UsedMemoryPageLength - 1; i++)
-      free(Temp[i]);
-    free(Temp);
+    page = page->Next;
   }
-
-  exit(0);
+  for (i = 1; i < len; i++)
+    free(pages[i]);
+  free(pages);
 }
 
-static void ProgramManager_ProgramInit() {
-  Manager.Awake.Invoke();
-  Manager.Init.Invoke();
-  Manager.Start.Invoke();
-  Manager.IsInitialized = true;
-}
-
-static void ProgramManager_ProgramStart() {
-  if (!Manager.IsInitialized)
-    ProgramManager_ProgramInit();
-
-  Manager.Main.Invoke();
-  Manager.IsStarted = true;
-  ProgramManager_ProgramUpdateStart();
-}
-
-static void Update_Wait() {
-  if (Manager.IsUpdated) {
-    ProgramManager_ProgramUpdateStop();
-    int status;
-    pthread_join(Manager.UpdateThread, (void **)&status);
-  }
-}
-
-static void Update_AddListener(FP_Func Method) {
-  Update_Wait();
-
-  FuncChainNode *ptr = (FuncChainNode *)malloc(sizeof(FuncChainNode));
-  if (ptr == NULL) {
-    printf("ERR > NODE 생성 실패");
+static void UpdateStart(ProcessEventName Name) {
+  if (Name == ProcessEvent_Update) {
+    if (!Application.Member.ProcessEvent_IsUpdated)
+      Application.Member.Private_Method.Update_Start();
+  } else if (Name == ProcessEvent_FixedUpdate) {
+    if (!Application.Member.ProcessEvent_IsFixedUpdated)
+      Application.Member.Private_Method.FixedUpdate_Start();
+  } else
+    // TODO Exception 처리
+    // 지정된 프로세스 이벤트 이외의 이벤트를 이 함수에서 사용할 수 없습니다.
     return;
-  }
-  ptr->Next = NULL;
-  FuncChainNode *Pos = Manager.Update.Nodes;
-  if (Pos == NULL)
-    Manager.Update.Nodes = Pos = ptr;
-  else {
-    while (Pos->Next != NULL)
-      Pos = Pos->Next;
-    Pos->Next = ptr;
-    Pos = Pos->Next;
-  }
-  Pos->Method = Method;
-  ProgramManager_ProgramUpdateStart();
 }
-static void Update_RemoveListener(FP_Func Method) {
-  Update_Wait();
-
-  FuncChainNode *Pos = Manager.Update.Nodes;
-  FuncChainNode *Last = Manager.Update.Nodes;
-  while (Pos != NULL) {
-    if (Pos->Method == Method) {
-      if (Pos == Manager.Update.Nodes) {
-        Manager.Update.Nodes = Pos->Next;
-      } else {
-        Last->Next = Pos->Next;
-      }
-      Pos->Method = NULL;
-      Pos->Next = NULL;
-      free(Pos);
-      break;
-    }
-    Last = Pos;
-    Pos = Pos->Next;
-  }
-  ProgramManager_ProgramUpdateStart();
-}
-static void Update_RemoveAllListener() {
-  Update_Wait();
-
-  int length = 1;
-  FuncChainNode *Pos = Manager.Update.Nodes;
-  if (Pos == NULL)
+static void UpdateStop(ProcessEventName Name) {
+  if (Name == ProcessEvent_Update) {
+    if (Application.Member.ProcessEvent_IsUpdated)
+      Application.Member.Private_Method.Update_Stop();
+  } else if (Name == ProcessEvent_FixedUpdate) {
+    if (Application.Member.ProcessEvent_IsFixedUpdated)
+      Application.Member.Private_Method.FixedUpdate_Stop();
+  } else
+    // TODO Exception 처리
+    // 지정된 프로세스 이벤트 이외의 이벤트를 이 함수에서 사용할 수 없습니다.
     return;
-  while (Pos->Next != NULL) {
-    length++;
-    Pos = Pos->Next;
-  }
-  void *tempAry = malloc(sizeof(FuncChainNode) * length);
-  if (tempAry == NULL) {
-    Error("버퍼공간을 확보하지 못했습니다.");
-  }
-  FuncChainNode **Ary = (FuncChainNode **)tempAry;
-  Pos = Manager.Update.Nodes;
-  int i = 0;
-  while (Pos != NULL) {
-    Ary[i++] = Pos;
-    Pos = Pos->Next;
-  }
-  for (i = 0; i < length; i++)
-    free(Ary[i]);
-  free(tempAry);
-  ProgramManager_ProgramUpdateStart();
 }
-static void Update_Invoke() {
-  FuncChainNode *Pos = Manager.Update.Nodes;
-  while (Pos != NULL) {
-    Pos->Method();
-    Pos = Pos->Next;
-  }
+static void UpdateStopWait(ProcessEventName Name) {
+  if (Name == ProcessEvent_Update) {
+    if (Application.Member.ProcessEvent_IsUpdated)
+      Application.Member.Private_Method.Update_StopWait();
+  } else if (Name == ProcessEvent_FixedUpdate) {
+    if (Application.Member.ProcessEvent_IsFixedUpdated)
+      Application.Member.Private_Method.FixedUpdate_StopWait();
+  } else
+    // TODO Exception 처리
+    // 지정된 프로세스 이벤트 이외의 이벤트를 이 함수에서 사용할 수 없습니다.
+    return;
 }
 
 void ProgramManager_Init() {
-  // clang-format off
-  Manager.Awake.AddListener        = Awake_AddListener;
-  Manager.Awake.RemoveListener     = Awake_RemoveListener;
-  Manager.Awake.RemoveAllListener  = Awake_RemoveAllListener;
-  Manager.Awake.Invoke             = Awake_Invoke;
+  ProcessEventModule_Initialized();
+  GarbageCollectionModule_Initialized();
+  StringModule_Initialized();
 
-  Manager.Init.AddListener         = Init_AddListener;
-  Manager.Init.RemoveListener      = Init_RemoveListener;
-  Manager.Init.RemoveAllListener   = Init_RemoveAllListener;
-  Manager.Init.Invoke              = Init_Invoke;
-
-  Manager.Start.AddListener        = Start_AddListener;
-  Manager.Start.RemoveListener     = Start_RemoveListener;
-  Manager.Start.RemoveAllListener  = Start_RemoveAllListener;
-  Manager.Start.Invoke             = Start_Invoke;
-  
-  Manager.Main.AddListener         = Main_AddListener;
-  Manager.Main.RemoveListener      = Main_RemoveListener;
-  Manager.Main.RemoveAllListener   = Main_RemoveAllListener;
-  Manager.Main.Invoke              = Main_Invoke;
-  
-  Manager.Update.AddListener       = Update_AddListener;
-  Manager.Update.RemoveListener    = Update_RemoveListener;
-  Manager.Update.RemoveAllListener = Update_RemoveAllListener;
-  Manager.Update.Invoke            = Update_Invoke;
-  
-  Manager.Quit.AddListener         = Quit_AddListener;
-  Manager.Quit.RemoveListener      = Quit_RemoveListener;
-  Manager.Quit.RemoveAllListener   = Quit_RemoveAllListener;
-  Manager.Quit.Invoke              = Quit_Invoke;
-  // clang-format on
-
-  Manager.GarbageCollection.Method.MemoryCreate = MemoryCreate;
-  Manager.GarbageCollection.Method.MemoryConstCreate = MemoryConstCreate;
-  Manager.GarbageCollection.Method.MemoryRemove = MemoryRemove;
-  Manager.GarbageCollection.Method.MemoryCompare = MemoryCompare;
-  Manager.GarbageCollection.Method.MemorySet = MemorySet;
-  Manager.GarbageCollection.Method.MemoryCopy = MemoryCopy;
-  Manager.GarbageCollection.Method.MemoryLength = MemoryLength;
-  Manager.GarbageCollection.Method.MemoryMove = MemoryMove;
-  Manager.GarbageCollection.Method.MemorySwap = MemorySwap;
-
-  Manager.GarbageCollection.Method.Clear = Clear;
-  Manager.GarbageCollection.Method.Info = Info;
-  Manager.GarbageCollection.Method.Memory = Memory;
-
-  Manager.GarbageCollection.Method.Policy = Policey;
-  Manager.GarbageCollection.Method.PolicyAppend = Policey_Append;
-  Manager.GarbageCollection.Method.PolicyRemove = Policey_Remove;
-
-  Manager.GarbageCollection.UsedMemoryLength = 0;
-  Manager.GarbageCollection.UsedMemoryPageLength = 1;
-
-  Manager.Method.ProgramInit = ProgramManager_ProgramInit;
-  Manager.Method.ProgramStart = ProgramManager_ProgramStart;
-  Manager.Method.ProgramUpdateStart = ProgramManager_ProgramUpdateStart;
-  Manager.Method.ProgramUpdateStart = ProgramManager_ProgramUpdateStop;
-  Manager.Method.ProgramQuit = ProgramManager_ProgramQuit;
-
-  Manager.IsInitialized = false;
-  Manager.IsStarted = false;
-  Manager.IsUpdated = false;
-  Manager.UpdateTime = 60;
+  Application.ProgramInit = ProgramInit;
+  Application.ProgramStart = ProgramStart;
+  Application.ProgramQuit = ProgramQuit;
+  Application.UpdateStart = UpdateStart;
+  Application.UpdateStop = UpdateStop;
+  Application.UpdateStopWait = UpdateStopWait;
 }

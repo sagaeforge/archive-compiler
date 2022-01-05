@@ -31,7 +31,11 @@ target_include_directories(
   Includes/
 
   # ProgramManager
-  Modules/ProgramManager/Includes/Public/
+  Modules/ProgramManager/Includes
+  Modules/ProgramManager/Module/Exception/Includes/Public
+  Modules/ProgramManager/Module/GarbageCollection/Includes/Public
+  Modules/ProgramManager/Module/InputSystem/Includes/Public
+  Modules/ProgramManager/Module/ProcessEvent/Includes/Public
 
   # String
   Modules/String/Includes/Public/

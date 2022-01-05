@@ -6,7 +6,7 @@
 
 // TODO 삭제 예정
 
-static void StringModule_StringInit() {
+void StringModule_Initialized() {
   StringMethod.Join = String_Join;
   StringMethod.Append = String_Append;
   StringMethod.SubString = String_SubString;
@@ -34,5 +34,3 @@ static void StringModule_StringInit() {
   StringMethod.UnConst = String_UnConst;
   StringMethod.Destructor = String_Destructor;
 }
-
-void StringModule_Awake() { Manager.Init.AddListener(StringModule_StringInit); }

@@ -47,7 +47,11 @@ target_include_directories(
   PUBLIC
 
   # ProgramManager
-  ../ProgramManager/Includes/Public/
+  ../ProgramManager/Includes/
+  ../ProgramManager/Module/ProcessEvent/Includes/Public/
+  ../ProgramManager/Module/GarbageCollection/Includes/Public/
+  ../ProgramManager/Module/InputSystem/Includes/Public/
+  ../ProgramManager/Module/Exception/Includes/Public/
 
   # String
   Includes/Public/
