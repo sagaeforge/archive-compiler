@@ -2,6 +2,8 @@
 #include "Private_String.h"
 #include "ProgramManager.h"
 #include "String.h"
+
+#include <locale.h>
 #include <stdio.h>
 
 // TODO 삭제 예정
@@ -33,4 +35,6 @@ void StringModule_Initialized() {
   StringMethod.Const = String_Const;
   StringMethod.UnConst = String_UnConst;
   StringMethod.Destructor = String_Destructor;
+
+  setlocale(LC_ALL, "");
 }

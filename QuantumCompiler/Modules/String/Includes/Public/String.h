@@ -56,19 +56,19 @@ struct StringMethod {
     void        (*Const)       (String*);
     void        (*UnConst)     (String*);
     void        (*Destructor)  (String**);
-  // clang-format on
 };
 
-// clang-format off
-#define String(Instance) _Generic((Instance),                                                                                  \
-  chs       : StringConstructor_Chs((const_chs) Instance),                     \
-  const_chs : StringConstructor_Chs((const_chs) Instance),                     \
-  wcs       : StringConstructor_Wcs((const_wcs) Instance),                     \
-  const_wcs : StringConstructor_Wcs((const_wcs) Instance),                     \
-  String *  : StringConstructor_Wcs((const_wcs) ((String *)Instance)->Value),  \
-  default   : StringConstructor_Chs("")                                        \
-)
+#define String(Instance) _Generic(&*(Instance),    \
+  chs             : StringConstructor_Chs,         \
+  const_chs       : StringConstructor_Chs,         \
+  wcs             : StringConstructor_Wcs,         \
+  const_wcs       : StringConstructor_Wcs,         \
+  unsigned int *  : StringConstructor_Wcs,         \
+  String          : StringConstructor_Str,         \
+  String *        : StringConstructor_Strp)        \
+  (Instance)
 // clang-format on
+
 String *StringConstructor_Chs(const_chs Value);
 String *StringConstructor_Wcs(const_wcs Value);
 String *StringConstructor_Str(String Value);

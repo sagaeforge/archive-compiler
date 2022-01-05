@@ -5,12 +5,12 @@
 
 // clang-format off
 #undef String
-#define String(Instance)                        \
-  Method_Combine(_Generic((Instance),           \
+#define String(Instance) _Generic(&*(Instance), \
   chs           : StringConstructor_Chs,        \
   const_chs     : StringConstructor_Chs,        \
   wcs           : StringConstructor_Wcs,        \
   const_wcs     : StringConstructor_Wcs,        \
+  unsigned int *: StringConstructor_Wcs,        \
   String        : StringConstructor_Str,        \
   String *      : StringConstructor_Strp,       \
   _Bool         : ToString_Bool,                \
@@ -20,18 +20,18 @@
   _int64        : ToString_Decimal,             \
   _uint64       : ToString_Decimal_Unsigned,    \
   float         : ToString_Digit,               \
-  double        : ToString_Digit),              \
-  Instance)
+  double        : ToString_Digit)               \
+  (Instance)
 
-#define toString(Instance)                      \
-  Method_Combine(_Generic((Instance),           \
-  _Bool         : ToString_Bool,                \
-  int           : ToString_Decimal,             \
-  unsigned int  : ToString_Decimal_Unsigned,    \
-  _int64        : ToString_Decimal,             \
-  _uint64       : ToString_Decimal_Unsigned,    \
-  double        : ToString_Digit,               \
-  ), Instance)
+#define toString(Instance) _Generic(&*(Instance), \
+  _Bool         : ToString_Bool,                  \
+  int           : ToString_Decimal,               \
+  unsigned int  : ToString_Decimal_Unsigned,      \
+  _int64        : ToString_Decimal,               \
+  _uint64       : ToString_Decimal_Unsigned,      \
+  double        : ToString_Digit,                 \
+  (Instance)
+
 String *ToString_Bool             (bool Value);
 String *ToString_Decimal          (_int64 Value);
 String *ToString_Decimal_Unsigned (_uint64 Value);
