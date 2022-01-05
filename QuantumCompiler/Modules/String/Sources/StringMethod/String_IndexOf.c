@@ -6,7 +6,7 @@
 static bool _StringCompare(wcs Ary, String *FindValue, Index Start) {
   int i;
   for (i = Start; i < Start + FindValue->Length; i++)
-    if (Ary[i] != FindValue->Value[i])
+    if (Ary[i] != FindValue->Value[i - Start])
       return false;
   return true;
 }

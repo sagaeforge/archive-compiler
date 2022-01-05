@@ -5,6 +5,9 @@
 
 // TODO 오류 검사
 String *String_Left(String *Self, Length Length) {
+  if (Length >= Self->Length)
+    return String(Self);
+
   wcs temp = __WcsCreate(Length);
 
   int i;

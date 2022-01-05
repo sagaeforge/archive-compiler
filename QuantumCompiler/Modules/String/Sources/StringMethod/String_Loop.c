@@ -9,8 +9,8 @@ String *String_Loop(String *Self, Length Length) {
   int i, j;
   for (i = 0; i < Length; i++)
     for (j = 0; j < Self->Length; j++)
-      temp[i + j] = Self->Value[j];
-  temp[i + j] = '\0';
+      temp[(i * Self->Length) + j] = Self->Value[j];
+  temp[(i * Self->Length)] = '\0';
 
   return String(temp);
 }

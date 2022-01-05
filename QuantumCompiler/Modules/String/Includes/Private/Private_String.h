@@ -26,7 +26,7 @@ String    *String_ReplaceFor  (String *Self, String *Ori, String *Value, Length 
 String    *String_ReplaceAll  (String *Self, String *Ori, String *Value);
 String    *String_Left        (String *Self, Length Length);
 String    *String_Right       (String *Self, Length Length);
-String    *String_Middle      (String *Self, Index Start, Index End);
+String    *String_Middle      (String *Self, Index Start, Index Count);
 void       String_Const       (String *Self);
 void       String_UnConst     (String *Self);
 void       String_Destructor  (String **Self);

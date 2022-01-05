@@ -4,10 +4,6 @@
 #include <stdio.h>
 #include <wchar.h>
 
-#define Test(Value) _Generic((Value), char * : "Test", char[] : "Test2")
-
-void Test2(String a) {}
-
 int main(int argc, char const *argv[]) {
   ProgramManager_Init();
   // Manager.Awake.AddListener(StringModule_Awake);
@@ -15,11 +11,14 @@ int main(int argc, char const *argv[]) {
   // double i = -3.14;
   // // long long d = 9022222222222;
 
-  wcs test = L"가나디";
-  String *bab1 = String("Test");
-  String *bab2 = String(test);
+  // wcs test = L"abc";
+  // clang-format off
+  String *bab1 = String("abfdDSADASFGskmv@#!$@!$sklfdl3124121s");
+  // clang-format on
+  // String *bab2 = String(test);
 
-  printf("%S", StringMethod.Join(bab1, bab2)->Value);
+  printf("%S", StringMethod.Middle(bab1, 2, 3)->Value);
+
   // printf("%s", Test("abs"));
   // // String *bab2 = String(d);
   // // printf("%S\n", bab1->Value);
