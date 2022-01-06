@@ -10,8 +10,6 @@ add_library(
   Sources/Chs.c
   Sources/String.c
   Sources/StringConstructor.c
-  Sources/StringMethod.c
-  Sources/StringInitialized.c
   Sources/StringLib.c
 
   Sources/StringMethod/String_Append.c   

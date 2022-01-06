@@ -7,7 +7,8 @@
 static String *StringConstructor_None() {
   String *temp = (String *)MemoryCreate(sizeof(String));
   if (temp == NULL) {
-    Warning("문자열 객체를 생성할 수 없습니다. (Size:%lu)", sizeof(String));
+    // Warning("문자열 객체를 생성할 수 없습니다. (Size:%lu)", sizeof(String));
+    // TODO Exception 처리
     return NULL;
   }
   temp->IsConst = false;
