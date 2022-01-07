@@ -1,11 +1,18 @@
-# Quantum
+# Quantum Info
+```
+1. X Language 를 지원하는 컴파일러
+2. 중간코드(.xByte)및 실행(Binary) 파일을 바로 실행시킬 수 있는 프로그램 집합
+```
 
 ## 프로그램 종류
-* QuantumCompiler: Compiler
-* QuantumVM      : VM
+* Quantum : Compiler, Interpreter
+* QuantumVM : VM
 
 ## Includes Info
-"${workspaceFolder}/**",
+VSCode에서 사용하고 있는 Includes Cache 정보 
+
+### System Includes
+    "${workspaceFolder}/**",
 
 ### ProgramManager Includes
     "${workspaceFolder}/Includes", 
