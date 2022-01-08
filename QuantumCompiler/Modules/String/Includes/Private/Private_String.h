@@ -20,6 +20,7 @@ String    *String_ToLower     (String *Self);
 String    *String_ToUpper     (String *Self);
 bool       String_IsNone      (String *Self);
 int        String_IndexOf     (String *Self, String *Value);
+Index      String_IndexFor    (String *Self, String *Value, Index Index);
 int        String_LastOfIndex (String *Self, String *Value);
 String    *String_Replace     (String *Self, String *Ori, String *Value);
 String    *String_ReplaceFor  (String *Self, String *Ori, String *Value, Length Length);

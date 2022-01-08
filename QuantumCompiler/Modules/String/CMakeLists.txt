@@ -7,10 +7,57 @@ enable_testing()
 add_library(
   String
 
-  Sources/Chs.c
   Sources/String.c
   Sources/StringConstructor.c
   Sources/StringLib.c
+  Sources/StringAry.c
+
+  Sources/Chs/Chslen.c
+  Sources/Chs/WcsChsSet.c
+  Sources/Chs/WcsCreate.c
+  Sources/Chs/WcsWcsSet.c
+  Sources/Chs/Wcslen.c
+  Sources/Chs/ToUpper.c
+  Sources/Chs/ToLower.c
+  
+  Sources/Chs/Is/IsAlpha.c
+  Sources/Chs/Is/IsBinary.c
+  Sources/Chs/Is/IsControl.c
+  Sources/Chs/Is/IsDecimal.c
+  Sources/Chs/Is/IsHex.c
+  Sources/Chs/Is/IsLower.c
+  Sources/Chs/Is/IsOctal.c
+  Sources/Chs/Is/IsSpace.c
+  Sources/Chs/Is/IsUpper.c
+
+
+  Sources/StringLibrary/Is/String_IsAlpha.c
+  Sources/StringLibrary/Is/String_IsAlphaDigit.c
+  Sources/StringLibrary/Is/String_IsBinary.c
+  Sources/StringLibrary/Is/String_IsControl.c
+  Sources/StringLibrary/Is/String_IsDecimal.c
+  Sources/StringLibrary/Is/String_IsDigit.c
+  Sources/StringLibrary/Is/String_IsHex.c
+  Sources/StringLibrary/Is/String_IsLower.c
+  Sources/StringLibrary/Is/String_IsOctal.c
+  Sources/StringLibrary/Is/String_IsSpace.c
+  Sources/StringLibrary/Is/String_IsUpper.c
+
+  Sources/StringLibrary/ToString/String_ToString_Bool.c
+  Sources/StringLibrary/ToString/String_ToString_Decimal.c
+  Sources/StringLibrary/ToString/String_ToString_Decimal_Unsigned.c
+  Sources/StringLibrary/ToString/String_ToString_Digit.c
+
+  Sources/StringLibrary/ValueOf/String_ValueOf_Bool.c
+  Sources/StringLibrary/ValueOf/String_ValueOf_Decimal.c
+  Sources/StringLibrary/ValueOf/String_ValueOf_Decimal_Unsigned.c
+  Sources/StringLibrary/ValueOf/String_ValueOf_Digit.c
+
+  Sources/StringLibrary/String_Extract.c
+  Sources/StringLibrary/String_Format.c
+  Sources/StringLibrary/String_Notation.c
+  Sources/StringLibrary/String_Pattern.c
+  Sources/StringLibrary/String_Reverse.c
 
   Sources/StringMethod/String_Append.c   
   Sources/StringMethod/String_Contains.c    
@@ -24,6 +71,7 @@ add_library(
   Sources/StringMethod/String_Compare.c  
   Sources/StringMethod/String_Count.c       
   Sources/StringMethod/String_IndexOf.c  
+  Sources/StringMethod/String_IndexFor.c  
   Sources/StringMethod/String_LastOfIndex.c  
   Sources/StringMethod/String_Loop.c    
   Sources/StringMethod/String_ReplaceAll.c  

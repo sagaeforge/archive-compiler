@@ -13,37 +13,36 @@
   unsigned int *: StringConstructor_Wcs,        \
   String        : StringConstructor_Str,        \
   String *      : StringConstructor_Strp,       \
-  _Bool         : ToString_Bool,                \
-  int           : ToString_Decimal,             \
-  unsigned int  : ToString_Decimal_Unsigned,    \
-  long          : ToString_Decimal,             \
-  _int64        : ToString_Decimal,             \
-  _uint64       : ToString_Decimal_Unsigned,    \
-  float         : ToString_Digit,               \
-  double        : ToString_Digit)               \
+  _Bool         : String_ToString_Bool,                \
+  int           : String_ToString_Decimal,             \
+  unsigned int  : String_ToString_Decimal_Unsigned,    \
+  long          : String_ToString_Decimal,             \
+  _int64        : String_ToString_Decimal,             \
+  _uint64       : String_ToString_Decimal_Unsigned,    \
+  float         : String_ToString_Digit,               \
+  double        : String_ToString_Digit)               \
   (Instance)
 
 #define toString(Instance) _Generic(&*(Instance), \
-  _Bool         : ToString_Bool,                  \
-  int           : ToString_Decimal,               \
-  unsigned int  : ToString_Decimal_Unsigned,      \
-  _int64        : ToString_Decimal,               \
-  _uint64       : ToString_Decimal_Unsigned,      \
-  double        : ToString_Digit,                 \
+  _Bool         : String_ToString_Bool,                  \
+  int           : String_ToString_Decimal,               \
+  unsigned int  : String_ToString_Decimal_Unsigned,      \
+  _int64        : String_ToString_Decimal,               \
+  _uint64       : String_ToString_Decimal_Unsigned,      \
+  double        : String_ToString_Digit,                 \
   (Instance)
 
-String *ToString_Bool             (bool Value);
-String *ToString_Decimal          (_int64 Value);
-String *ToString_Decimal_Unsigned (_uint64 Value);
-String *ToString_Digit            (double Value);
+String *String_ToString_Bool             (bool Value);
+String *String_ToString_Decimal          (_int64 Value);
+String *String_ToString_Decimal_Unsigned (_uint64 Value);
+String *String_ToString_Digit            (double Value);
 
 #define ValueOf(Type, Self) ValueOf_##Type(Self)
-bool    ValueOf_Bool              (String *Self);
-_int64  ValueOf_Decimal           (String *Self);
-_uint64 ValueOf_Decimal_Unsigned  (String *Self);
-double  ValueOf_Digit             (String *Self);
+bool    String_ValueOf_Bool              (String *Self);
+_int64  String_ValueOf_Decimal           (String *Self);
+_uint64 String_ValueOf_Decimal_Unsigned  (String *Self);
+double  String_ValueOf_Digit             (String *Self);
 
 // clang-format on
-extern struct StringLibMethod StringLibMethod;
 
 #endif

@@ -1,30 +1,28 @@
 
+#include "Private_StringLib.h"
 #include "ProgramManager.h"
 #include "String.h"
+#include "StringLib.h"
 #include <stdio.h>
-#include <wchar.h>
 
 int main(int argc, char const *argv[]) {
   ProgramManager_Init();
-  // Manager.Awake.AddListener(StringModule_Awake);
   Application.ProgramStart();
-  // double i = -3.14;
-  // // long long d = 9022222222222;
 
-  // wcs test = L"abc";
   // clang-format off
-  String *bab1 = String("abfdDSADASFGskmv@#!$@!$sklfdl3124121s");
+  // bool isF = 
+  // String_Pattern(
+  //   String(L"누군가: 0.123E+1 123"),
+  //   String(L"누군가: %f 123")
+  //   );
+  // String *bab1 = String_Notatiosn(244, 2);
   // clang-format on
-  // String *bab2 = String(test);
-
-  printf("%S", StringMethod.Middle(bab1, 2, 3)->Value);
-
-  // printf("%s", Test("abs"));
-  // // String *bab2 = String(d);
-  // // printf("%S\n", bab1->Value);
-  // // printf("%S\n", bab2->Value);
-  // // int i = 0;
-  // // printf("%s", Test(i));
+  // printf("%S", bab1->Value);
+  // printf("%d", isF);
+  // bool isc = String_IsDigit(String("12-s34.23"));
+  // printf("%d", isc);
+  // printf("")
+  String_Format(String("%s%s"), String("2131234"), String("2131234"));
 
   Application.ProgramQuit();
   return 0;

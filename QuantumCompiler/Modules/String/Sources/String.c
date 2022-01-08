@@ -37,6 +37,6 @@ void StringModule_Initialized() {
   StringMethod.Const = String_Const;
   StringMethod.UnConst = String_UnConst;
   StringMethod.Destructor = String_Destructor;
-
+  StringMethod.IndexFor = String_IndexFor;
   setlocale(LC_ALL, "");
 }
