@@ -9,7 +9,6 @@ add_library(
 
   Sources/String.c
   Sources/StringConstructor.c
-  Sources/StringLib.c
   Sources/StringAry.c
 
   Sources/Chs/Chslen.c
