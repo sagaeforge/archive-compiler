@@ -9,7 +9,6 @@ add_library(
 
   Sources/String.c
   Sources/StringConstructor.c
-  Sources/StringAry.c
 
   Sources/Chs/Chslen.c
   Sources/Chs/WcsChsSet.c
@@ -30,6 +29,16 @@ add_library(
   Sources/Chs/Is/IsSpace.c
   Sources/Chs/Is/IsUpper.c
 
+  Sources/StringAry/StringAryConstructor.c
+  Sources/StringAry/StringAry_Contains.c
+  Sources/StringAry/StringAry_Insert.c
+  Sources/StringAry/StringAry_Pop.c
+  Sources/StringAry/StringAry_Remove.c
+  Sources/StringAry/StringAryDestructor.c
+  Sources/StringAry/StringAry_Get.c
+  Sources/StringAry/StringAry_NodeCreate.c
+  Sources/StringAry/StringAry_Push.c
+  Sources/StringAry/StringAry_Search.c
 
   Sources/StringLibrary/Is/String_IsAlpha.c
   Sources/StringLibrary/Is/String_IsAlphaDigit.c
