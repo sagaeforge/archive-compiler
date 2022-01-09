@@ -14,6 +14,7 @@ void  MemoryMove        (void *Src, void *Data, Length Length);
 void  MemorySwap        (void *Src, void *Data, Length Length);
 bool  MemoryCompare     (void *Obj1, void *Obj2, Length Length);
 Length MemoryLength     (void *Obj);
+
 void  GarbageCollectionModule_Initialized();
 // clang-format on
 
