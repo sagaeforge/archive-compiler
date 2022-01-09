@@ -2,7 +2,7 @@
 #include "Chs.h"
 
 bool
-__IsDecimal(int ch)
+__IsBinary(int ch)
 {
-  return ch >= '0' && ch <= '9';
+  return ch >= '0' && ch <= '1';
 }

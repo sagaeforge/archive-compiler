@@ -1,9 +1,11 @@
 
 #include <stdarg.h>
+#include <stdio.h>
 
 #include "Chs.h"
 #include "Private_String.h"
 #include "Private_StringLib.h"
+#include "StringAry.h"
 
 // TODO 구현
 String*
@@ -13,50 +15,43 @@ String_Format(String* Format, ...)
   va_start(ap, Format);
   int percent = String_Count(Format, String("%"));
   int perper = String_Count(Format, String("%%"));
-  int ParamLen = percent - perper;
-  int Totallen = Format->Length - ParamLen;
+  int ptr_param;
 
-  // String 객체 생성
+  StringAry* Ary = StringAryConstructor(0);
+
   int i;
-  for (i = 0; i < ParamLen; i++) {
-    int ptr_param = String_IndexFor(Format, String("%"), i);
-    String* str1;
-    wcs str_wcs;
-    chs str_chs;
-    int Var;
-    long long longVar;
-    double DoubleVar;
-
+  for (i = 0; i < percent; i++) {
+    ptr_param = String_IndexFor(Format, String("%"), i);
+    char ch[2];
+    _int64 temp_d;
+    double temp_f;
     // clang-format off
     switch (Format->Value[ptr_param + 1]) {
-    case 's':
-      str1 = va_arg(ap, String *);
-      Totallen += str1->Length;
-      break;
-    case 'S':
-      str_chs = va_arg(ap, char *);
-      Totallen += __Chslen(str_chs);\
-      break;
-    case 'w': case 'W':
-      str_wcs = va_arg(ap, wchar_t *);
-      Totallen += __Wcslen(str_wcs);
-      break;
-    case 'c': case 'C': Totallen++; break;
-    case 'd': case 'D':
-      Var = va_arg(ap, int);
-      str1 = String_ToString_Decimal(Var);
-      Totallen += str1->Length;
-      break;
-    case 'l': case 'L':
-      longVar = va_arg(ap, long long);
-      str1 = String_ToString_Decimal(longVar);
-      Totallen += str1->Length;
-      break;
-    case 'f': case 'F':
-      DoubleVar = va_arg(ap, double);
-      str1 = String_ToString_Decimal(DoubleVar);
-      Totallen += str1->Length;
-      break;
+    case 's': StringAry_Push(Ary, va_arg(ap, String *)); break;
+    case 'S': StringAry_Push(Ary, String(va_arg(ap, char *))); break;
+    case 'w': case 'W': StringAry_Push(Ary, String(va_arg(ap, wchar_t *))); break;
+    case 'c': case 'C': ch[0] = va_arg(ap, int);
+                        ch[1] = '\0';
+                        StringAry_Push(Ary, String(ch)); 
+                        break;
+    case 'd': case 'D': temp_d = va_arg(ap, int);
+                        StringAry_Push(Ary, toString((_int64) temp_d)); 
+                        break;
+    case 'l': case 'L': temp_d = va_arg(ap, _int64);
+                        StringAry_Push(Ary, toString((_int64) temp_d)); 
+                        break;
+    case 'f': case 'F': temp_f = va_arg(ap, double);
+                        StringAry_Push(Ary, toString(temp_f)); 
+                        break;
+    case 'g': case 'G': temp_f = va_arg(ap, double);
+                        StringAry_Push(Ary, String_Prettier(temp_f)); 
+                        break;
+    case '%': if(Format->Value[ptr_param - 1] != '%')
+              {
+                ch[0] = '%'; ch[1] = '\0';
+                StringAry_Push(Ary, String(ch));
+              }
+              break;
     default:
       // Exception 처리
       // 지정된 포멧외 문자를 사용하였습니다.
@@ -65,9 +60,41 @@ String_Format(String* Format, ...)
     // clang-format on
   }
 
-  // String 객체에 값 대입
+  Length Leng = 0;
+  for (i = 0; i < Ary->Length; i++)
+    Leng += StringAry_Get(Ary, i)->Length;
 
-  // 새로운 객체 생성
+  Leng += Format->Length - ((percent - perper) * 2);
+  ptr_param = 0;
+
+  int gap = 0;
+  wcs temp = __WcsCreate(Leng);
+  for (i = 0; i < Format->Length; i++) {
+    if (Format->Value[i] == '%') {
+      i++;
+      gap -= 1;
+
+      String* str;
+      // clang-format off
+      switch (Format->Value[i]) {
+        case 's': case 'S': case 'w': case 'W': case 'c': 
+        case 'C': case 'd': case 'D': case 'l': case 'L': 
+        case 'f': case 'F': case '%': case 'g': case 'G':
+          str = StringAry_Get(Ary, ptr_param++);
+          __WcsWcsInsert(temp, str->Value, i + gap, str->Length);
+          gap += str->Length - 1;
+          break;
+        default:
+          // Exception 처리
+          // 지정된 포멧외 문자를 사용하였습니다.
+          break;
+      }
+      // clang-format on
+      continue;
+    }
+
+    temp[i + gap] = Format->Value[i];
+  }
   va_end(ap);
-  return String("");
+  return String(temp);
 }

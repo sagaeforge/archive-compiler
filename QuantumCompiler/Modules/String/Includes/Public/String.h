@@ -8,23 +8,26 @@
 // TODO format, parttern, is 계열 함수 구현
 
 #define String(Instance)                                                       \
-  _Generic(&*(Instance),    \
-  chs             : StringConstructor_Chs,         \
-  const_chs       : StringConstructor_Chs,         \
-  wcs             : StringConstructor_Wcs,         \
-  const_wcs       : StringConstructor_Wcs,         \
-  unsigned int *  : StringConstructor_Wcs,         \
-  String          : StringConstructor_Str,         \
-  String *        : StringConstructor_Strp)        \
+  _Generic(&*(Instance),                                                       \
+  chs             : StringConstructor_Chs,                                     \
+  const_chs       : StringConstructor_Chs,                                     \
+  wcs             : StringConstructor_Wcs,                                     \
+  const_wcs       : StringConstructor_Wcs,                                     \
+  unsigned int *  : StringConstructor_Wcs,                                     \
+  String          : StringConstructor_Str,                                     \
+  String *        : StringConstructor_Strp)                                    \
   (Instance)
 // clang-format on
 
 String*
 StringConstructor_Chs(const_chs Value);
+
 String*
 StringConstructor_Wcs(const_wcs Value);
+
 String*
 StringConstructor_Str(String Value);
+
 String*
 StringConstructor_Strp(String* Value);
 

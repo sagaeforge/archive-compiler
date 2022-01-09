@@ -21,8 +21,10 @@ String_Count(String* Self, String* Value)
   Length sum = 0;
   for (i = 0; i < Self->Length - Value->Length + 1; i++)
     if (Self->Value[i] == Value->Value[0])
-      if (_StringCompare(Self->Value, Value, i))
+      if (_StringCompare(Self->Value, Value, i)) {
         sum++;
+        i += Value->Length - 1;
+      }
 
   return sum;
 }

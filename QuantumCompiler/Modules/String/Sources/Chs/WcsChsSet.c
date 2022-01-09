@@ -12,6 +12,5 @@ __WcsCreate(Length Length)
     // TODO Exception 처리
     return NULL;
   }
-  MemorySet(temp, 0, sizeof(wchar_t), (Length + 1));
   return temp;
 }

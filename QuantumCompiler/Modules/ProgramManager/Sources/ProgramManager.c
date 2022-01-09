@@ -8,14 +8,18 @@
 
 struct ProgramManager Application;
 
-static void ProgramInit() {
+static void
+ProgramInit()
+{
   Application.ProcessEvent[ProcessEvent_Awake].Invoke();
   Application.ProcessEvent[ProcessEvent_Init].Invoke();
   Application.ProcessEvent[ProcessEvent_Start].Invoke();
   Application.Member.ProcessEvent_IsInitialized = true;
 }
 
-static void ProgramStart() {
+static void
+ProgramStart()
+{
   if (!Application.Member.ProcessEvent_IsInitialized)
     ProgramInit();
 
@@ -25,7 +29,9 @@ static void ProgramStart() {
   Application.UpdateStart(ProcessEvent_FixedUpdate);
 }
 
-static void ProgramQuit() {
+static void
+ProgramQuit()
+{
   Update_AllStop();
   Application.ProcessEvent[ProcessEvent_Quit].Invoke();
 
@@ -37,10 +43,9 @@ static void ProgramQuit() {
   Application.ProcessEvent[ProcessEvent_FixedUpdate].RemoveAllListener();
   Application.ProcessEvent[ProcessEvent_Quit].RemoveAllListener();
 
-  // TODO GarbageCollection 메모리 해제 프로세스 작성
   Length len = Application.Member.GarbageCollection_UsedMemoryPageLength;
-  MemoryPage **pages = malloc(sizeof(MemoryPage) * len);
-  MemoryPage *page = &Application.Member.GarbageCollection_Pages;
+  MemoryPage** pages = malloc(sizeof(MemoryPage) * len);
+  MemoryPage* page = &Application.Member.GarbageCollection_Pages;
   int i;
   for (i = 0; page != NULL; i++) {
     pages[i] = page;
@@ -58,7 +63,9 @@ static void ProgramQuit() {
   free(pages);
 }
 
-static void UpdateStart(ProcessEventName Name) {
+static void
+UpdateStart(ProcessEventName Name)
+{
   if (Name == ProcessEvent_Update) {
     if (!Application.Member.ProcessEvent_IsUpdated)
       Application.Member.Private_Method.Update_Start();
@@ -70,7 +77,9 @@ static void UpdateStart(ProcessEventName Name) {
     // 지정된 프로세스 이벤트 이외의 이벤트를 이 함수에서 사용할 수 없습니다.
     return;
 }
-static void UpdateStop(ProcessEventName Name) {
+static void
+UpdateStop(ProcessEventName Name)
+{
   if (Name == ProcessEvent_Update) {
     if (Application.Member.ProcessEvent_IsUpdated)
       Application.Member.Private_Method.Update_Stop();
@@ -82,7 +91,9 @@ static void UpdateStop(ProcessEventName Name) {
     // 지정된 프로세스 이벤트 이외의 이벤트를 이 함수에서 사용할 수 없습니다.
     return;
 }
-static void UpdateStopWait(ProcessEventName Name) {
+static void
+UpdateStopWait(ProcessEventName Name)
+{
   if (Name == ProcessEvent_Update) {
     if (Application.Member.ProcessEvent_IsUpdated)
       Application.Member.Private_Method.Update_StopWait();
@@ -95,7 +106,9 @@ static void UpdateStopWait(ProcessEventName Name) {
     return;
 }
 
-void ProgramManager_Init() {
+void
+ProgramManager_Init()
+{
   ProcessEventModule_Initialized();
   GarbageCollectionModule_Initialized();
   StringModule_Initialized();

@@ -13,6 +13,8 @@ void
 __WcsChsSet(wcs Obj1, const_chs Obj2, Length Length);
 void
 __WcsWcsSet(wcs Obj1, const_wcs Obj2, Length Length);
+void
+__WcsWcsInsert(wcs Obj1, const_wcs Obj2, Index Start, Length Length);
 
 bool
 __IsUpper(int ch);

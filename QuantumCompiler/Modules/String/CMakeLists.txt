@@ -15,6 +15,7 @@ add_library(
   Sources/Chs/WcsChsSet.c
   Sources/Chs/WcsCreate.c
   Sources/Chs/WcsWcsSet.c
+  Sources/Chs/WcsWcsInsert.c
   Sources/Chs/Wcslen.c
   Sources/Chs/ToUpper.c
   Sources/Chs/ToLower.c
@@ -57,6 +58,7 @@ add_library(
   Sources/StringLibrary/String_Notation.c
   Sources/StringLibrary/String_Pattern.c
   Sources/StringLibrary/String_Reverse.c
+  Sources/StringLibrary/String_Prettier.c
 
   Sources/StringMethod/String_Append.c   
   Sources/StringMethod/String_Contains.c    

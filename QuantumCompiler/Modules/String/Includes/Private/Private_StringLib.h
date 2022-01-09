@@ -4,13 +4,12 @@
 #include "StringLib.h"
 
 // clang-format off
-String *String_Format             (String *Format, ...);
-bool    String_Pattern            (String *Self, String *Format);
-String *String_Extract            (String *Self, Index Start, Index End);
-
-String *String_Notation           (_int64 Value, int notation);
-
-String *String_Reverse            (String *Self);
+String *String_Format   (String *Format, ...);
+bool    String_Pattern  (String *Self, String *Format);
+String *String_Extract  (String *Self, Index Start, Index End);
+String *String_Notation (_int64 Value, int notation);
+String *String_Reverse  (String *Self);
+String *String_Prettier (double Value);
 
 bool String_IsAlpha       (String *Self);
 bool String_IsLower       (String *Self);

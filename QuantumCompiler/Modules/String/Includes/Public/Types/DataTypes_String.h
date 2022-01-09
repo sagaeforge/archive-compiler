@@ -25,7 +25,7 @@ typedef struct _StringAry
   {
     String* Value;
     struct _StringAryNode* Next;
-  } Values;
+  } * Values;
   Length Length;
 } StringAry;
 
@@ -79,5 +79,6 @@ struct StringLibMethod {
   bool    (*IsOctal)          (String *);
   bool    (*IsBinary)         (String *);
 };
+
 
 #endif

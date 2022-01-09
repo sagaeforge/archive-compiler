@@ -5,7 +5,9 @@
 #include "StringLib.h"
 #include <stdio.h>
 
-int main(int argc, char const *argv[]) {
+int
+main(int argc, char const* argv[])
+{
   ProgramManager_Init();
   Application.ProgramStart();
 
@@ -16,13 +18,21 @@ int main(int argc, char const *argv[]) {
   //   String(L"누군가: %f 123")
   //   );
   // String *bab1 = String_Notatiosn(244, 2);
-  // clang-format on
+  
   // printf("%S", bab1->Value);
   // printf("%d", isF);
   // bool isc = String_IsDigit(String("12-s34.23"));
   // printf("%d", isc);
   // printf("")
-  String_Format(String("%s%s"), String("2131234"), String("2131234"));
+  String *str = String_Format(
+    String("ABD%%%s%s%D%g"), 
+    String("12"), 
+    String("34"), 
+    56,
+    3.14
+  );
+
+  printf("%S", str->Value);
 
   Application.ProgramQuit();
   return 0;

@@ -14,5 +14,6 @@ MemoryCreate(Length Length)
     return NULL;
 
   GC_Append(ptr, Length);
+  MemorySet(ptr, 0, 1, Length);
   return ptr;
 }

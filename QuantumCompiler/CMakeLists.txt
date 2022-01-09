@@ -3,7 +3,8 @@ project(QuantumCompiler VERSION 0.1.0)
 
 include(CTest)
 enable_testing()
-set ( CMAKE_VERBOSE_MAKEFILE true )
+# 상세 과정 출력
+# set ( CMAKE_VERBOSE_MAKEFILE true )
 
 add_executable(
   QuantumCompiler
