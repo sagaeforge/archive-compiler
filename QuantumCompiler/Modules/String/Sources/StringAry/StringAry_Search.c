@@ -1,5 +1,6 @@
 
 #include "GarbageCollection.h"
+#include "Private_String.h"
 #include "Private_StringAry.h"
 
 Index
