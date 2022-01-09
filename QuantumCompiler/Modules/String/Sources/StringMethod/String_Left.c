@@ -4,7 +4,9 @@
 #include "ProgramManager.h"
 
 // TODO 오류 검사
-String *String_Left(String *Self, Length Length) {
+String*
+String_Left(String* Self, Length Length)
+{
   if (Length >= Self->Length)
     return String(Self);
 

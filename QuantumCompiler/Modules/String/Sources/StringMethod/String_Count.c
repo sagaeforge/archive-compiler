@@ -3,7 +3,9 @@
 #include "Private_String.h"
 
 // TODO 최적화
-static bool _StringCompare(wcs Ary, String *FindValue, Index Start) {
+static bool
+_StringCompare(wcs Ary, String* FindValue, Index Start)
+{
   int i;
   for (i = Start; i < Start + FindValue->Length; i++)
     if (Ary[i] != FindValue->Value[i - Start])
@@ -11,7 +13,9 @@ static bool _StringCompare(wcs Ary, String *FindValue, Index Start) {
   return true;
 }
 
-Length String_Count(String *Self, String *Value) {
+Length
+String_Count(String* Self, String* Value)
+{
   // TODO 조건 검사
   int i;
   Length sum = 0;

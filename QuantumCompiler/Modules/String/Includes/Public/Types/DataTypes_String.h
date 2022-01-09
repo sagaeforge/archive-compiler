@@ -6,27 +6,31 @@
 
 #include <wchar.h>
 
-typedef char *chs;
-typedef const char *const_chs;
-typedef wchar_t *wcs;
-typedef const wchar_t *const_wcs;
+typedef char* chs;
+typedef const char* const_chs;
+typedef wchar_t* wcs;
+typedef const wchar_t* const_wcs;
 
-typedef struct _String {
+typedef struct _String
+{
   bool IsNone;
   bool IsConst;
   wcs Value;
   Length Length;
 } String;
 
-typedef struct _StringAry {
-  struct _StringAryNode {
-    String *Value;
-    struct _StringAryNode *Next;
+typedef struct _StringAry
+{
+  struct _StringAryNode
+  {
+    String* Value;
+    struct _StringAryNode* Next;
   } Values;
   Length Length;
 } StringAry;
 
-struct StringMethod {
+struct StringMethod
+{
   // clang-format off
     String     *(*Join)             (String*, String*);
     void        (*Append)           (String*, String*);

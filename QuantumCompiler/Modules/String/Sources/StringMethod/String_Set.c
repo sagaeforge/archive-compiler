@@ -3,11 +3,13 @@
 #include "GarbageCollection.h"
 #include "Private_String.h"
 
-void String_Set(String *Self, String *Value) {
+void
+String_Set(String* Self, String* Value)
+{
   if (Self->IsNone == true)
     Self->Value = Value->Value;
   else {
-    MemoryRemove((void **)&Self->Value);
+    MemoryRemove((void**)&Self->Value);
     Self->Value = __WcsCreate(Value->Length);
   }
   Self->IsConst = Value->IsConst;

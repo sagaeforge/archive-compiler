@@ -4,4 +4,8 @@
 
 // TODO 나중에 구현
 
-StringAry *String_Split(String *Self, String *Value) { return NULL; }
+StringAry*
+String_Split(String* Self, String* Value)
+{
+  return NULL;
+}

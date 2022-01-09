@@ -4,15 +4,18 @@
 
 #include "DataTypes.h"
 
-typedef struct {
+typedef struct
+{
 
 } Input;
 
-typedef struct {
+typedef struct
+{
 
 } Output;
 
-typedef struct {
+typedef struct
+{
 
 } ErrorOutput;
 

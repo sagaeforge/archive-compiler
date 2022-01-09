@@ -3,7 +3,9 @@
 #include "Private_String.h"
 #include "ProgramManager.h"
 
-String *String_Right(String *Self, Length Length) {
+String*
+String_Right(String* Self, Length Length)
+{
   if (Length >= Self->Length)
     return String(Self);
 

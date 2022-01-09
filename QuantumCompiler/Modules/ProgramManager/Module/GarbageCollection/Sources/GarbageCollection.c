@@ -3,7 +3,9 @@
 #include "Private_GarbageCollection.h"
 #include "ProgramManager.h"
 
-void GarbageCollectionModule_Initialized() {
+void
+GarbageCollectionModule_Initialized()
+{
   // clang-format off
   Application.GarbageCollection.Compare       = MemoryCompare;
   Application.GarbageCollection.ConstCreate   = MemoryConstCreate;

@@ -1,12 +1,14 @@
 
+#include <stdarg.h>
+
 #include "Chs.h"
 #include "Private_String.h"
 #include "Private_StringLib.h"
 
-#include <stdarg.h>
-
 // TODO 구현
-String *String_Format(String *Format, ...) {
+String*
+String_Format(String* Format, ...)
+{
   va_list ap;
   va_start(ap, Format);
   int percent = String_Count(Format, String("%"));
@@ -17,9 +19,8 @@ String *String_Format(String *Format, ...) {
   // String 객체 생성
   int i;
   for (i = 0; i < ParamLen; i++) {
-
     int ptr_param = String_IndexFor(Format, String("%"), i);
-    String *str1;
+    String* str1;
     wcs str_wcs;
     chs str_chs;
     int Var;

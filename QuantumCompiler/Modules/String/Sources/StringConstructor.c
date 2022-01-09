@@ -4,8 +4,10 @@
 #include "String.h"
 #include <stdio.h>
 
-static String *StringConstructor_None() {
-  String *temp = (String *)MemoryCreate(sizeof(String));
+static String*
+StringConstructor_None()
+{
+  String* temp = (String*)MemoryCreate(sizeof(String));
   if (temp == NULL) {
     // Warning("문자열 객체를 생성할 수 없습니다. (Size:%lu)", sizeof(String));
     // TODO Exception 처리
@@ -18,8 +20,10 @@ static String *StringConstructor_None() {
   return temp;
 }
 
-String *StringConstructor_Chs(const char *Value) {
-  String *temp = StringConstructor_None();
+String*
+StringConstructor_Chs(const char* Value)
+{
+  String* temp = StringConstructor_None();
   if (temp == NULL)
     return NULL;
 
@@ -34,8 +38,10 @@ String *StringConstructor_Chs(const char *Value) {
 
   return temp;
 }
-String *StringConstructor_Wcs(const wchar_t *Value) {
-  String *temp = StringConstructor_None();
+String*
+StringConstructor_Wcs(const wchar_t* Value)
+{
+  String* temp = StringConstructor_None();
   if (temp == NULL)
     return NULL;
 
@@ -50,9 +56,13 @@ String *StringConstructor_Wcs(const wchar_t *Value) {
 
   return temp;
 }
-String *StringConstructor_Str(String Value) {
+String*
+StringConstructor_Str(String Value)
+{
   return StringConstructor_Wcs(Value.Value);
 }
-String *StringConstructor_Strp(String *Value) {
+String*
+StringConstructor_Strp(String* Value)
+{
   return StringConstructor_Wcs(Value->Value);
 }

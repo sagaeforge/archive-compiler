@@ -3,7 +3,9 @@
 #include "Private_String.h"
 #include "ProgramManager.h"
 
-String *String_ToUpper(String *Self) {
+String*
+String_ToUpper(String* Self)
+{
   wcs temp = __WcsCreate(Self->Length);
 
   int i;

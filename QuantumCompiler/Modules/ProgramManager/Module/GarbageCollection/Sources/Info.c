@@ -2,10 +2,12 @@
 #include "Private_GarbageCollection.h"
 #include "ProgramManager.h"
 
-MemoryInfo Info(void *Obj) {
-  MemoryPage *page = &Application.Member.GarbageCollection_Pages;
+MemoryInfo
+Info(void* Obj)
+{
+  MemoryPage* page = &Application.Member.GarbageCollection_Pages;
   MemoryInfo ret = {
-      0,
+    0,
   };
 
   if (Obj == NULL)

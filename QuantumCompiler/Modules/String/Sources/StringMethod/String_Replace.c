@@ -3,7 +3,9 @@
 #include "Private_String.h"
 #include "ProgramManager.h"
 
-String *String_Replace(String *Self, String *Ori, String *Value) {
+String*
+String_Replace(String* Self, String* Ori, String* Value)
+{
   int ind = String_IndexOf(Self, Ori);
   if (ind == -1)
     return String(Self);

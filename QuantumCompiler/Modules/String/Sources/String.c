@@ -12,7 +12,9 @@ struct StringLibMethod StringLibMethod;
 
 // TODO 각종 전역 변수 및 모듈 초기화 함수를 통합
 
-void StringModule_Initialized() {
+void
+StringModule_Initialized()
+{
   StringMethod.Join = String_Join;
   StringMethod.Append = String_Append;
   StringMethod.SubString = String_SubString;

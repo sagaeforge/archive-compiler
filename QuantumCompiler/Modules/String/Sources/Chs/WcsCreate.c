@@ -1,7 +1,9 @@
 
 #include "Chs.h"
 
-Length __Chslen(const_chs Value) {
+Length
+__Chslen(const_chs Value)
+{
   if (Value == NULL)
     return 0;
 

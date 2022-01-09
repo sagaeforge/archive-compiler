@@ -2,7 +2,9 @@
 #include "Chs.h"
 #include "Private_StringLib.h"
 
-bool String_IsOctal(String *Self) {
+bool
+String_IsOctal(String* Self)
+{
   int i;
   if (!(Self->Value[0] == '0' &&
         (Self->Value[1] == 'o' || Self->Value[1] == 'O')))

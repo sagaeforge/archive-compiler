@@ -1,8 +1,10 @@
 
 #include "Private_GarbageCollection.h"
 
-void GC_Append(void *ptr, Length Length) {
-  MemoryPage *page = EmptyPageGet();
+void
+GC_Append(void* ptr, Length Length)
+{
+  MemoryPage* page = EmptyPageGet();
 
   page->Datas[page->UsedMemoryLength].Position = ptr;
   page->Datas[page->UsedMemoryLength].Length = Length;

@@ -3,12 +3,14 @@
 #include "ProgramManager.h"
 #include <stdlib.h>
 
-typedef ProcessEvent *Events;
+typedef ProcessEvent* Events;
 
-static void AddListener(FP_Func Callback) {
+static void
+AddListener(FP_Func Callback)
+{
   Events event = &Application.ProcessEvent[ProcessEvent_Start];
 
-  FuncChainNode *ptr = (FuncChainNode *)malloc(sizeof(FuncChainNode));
+  FuncChainNode* ptr = (FuncChainNode*)malloc(sizeof(FuncChainNode));
   if (ptr == NULL) {
     // TODO Exception 처리
     return;
@@ -16,7 +18,7 @@ static void AddListener(FP_Func Callback) {
   ptr->Next = NULL;
   ptr->Callback = Callback;
 
-  FuncChainNode *Pos = event->Nodes;
+  FuncChainNode* Pos = event->Nodes;
   if (Pos == NULL)
     event->Nodes = ptr;
   else {
@@ -26,11 +28,13 @@ static void AddListener(FP_Func Callback) {
   }
 }
 
-static void RemoveListener(FP_Func Method) {
+static void
+RemoveListener(FP_Func Method)
+{
   Events event = &Application.ProcessEvent[ProcessEvent_Start];
 
-  FuncChainNode *Pos = event->Nodes;
-  FuncChainNode *Last = event->Nodes;
+  FuncChainNode* Pos = event->Nodes;
+  FuncChainNode* Last = event->Nodes;
 
   while (Pos != NULL) {
     if (Pos->Callback == Method) {
@@ -53,10 +57,12 @@ static void RemoveListener(FP_Func Method) {
   // 지정된 함수 포인터가 등록된 함수 포인터가 아닌경우에
 }
 
-static void RemoveAllListener() {
+static void
+RemoveAllListener()
+{
   Events event = &Application.ProcessEvent[ProcessEvent_Start];
   int length = 0;
-  FuncChainNode *Pos = event->Nodes;
+  FuncChainNode* Pos = event->Nodes;
 
   while (Pos != NULL) {
     length++;
@@ -66,8 +72,7 @@ static void RemoveAllListener() {
   if (length == 0)
     return;
 
-  FuncChainNode **Ary =
-      (FuncChainNode **)malloc(sizeof(FuncChainNode) * length);
+  FuncChainNode** Ary = (FuncChainNode**)malloc(sizeof(FuncChainNode) * length);
   if (Ary == NULL) {
     // TODO Exception 처리
     return;
@@ -87,14 +92,18 @@ static void RemoveAllListener() {
   event->Nodes = NULL;
 }
 
-static void Invoke() {
-  FuncChainNode *Pos = Application.ProcessEvent[ProcessEvent_Start].Nodes;
+static void
+Invoke()
+{
+  FuncChainNode* Pos = Application.ProcessEvent[ProcessEvent_Start].Nodes;
   while (Pos != NULL) {
     Pos->Callback();
     Pos = Pos->Next;
   }
 }
-void ProcessEventModule_Start_Initialized() {
+void
+ProcessEventModule_Start_Initialized()
+{
   Events event = &Application.ProcessEvent[ProcessEvent_Start];
   event->AddListener = AddListener;
   event->RemoveListener = RemoveListener;

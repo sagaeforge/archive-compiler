@@ -5,7 +5,9 @@
 #include "ProgramManager.h"
 #include <stdlib.h>
 
-Length MemoryLength(void *Obj) {
+Length
+MemoryLength(void* Obj)
+{
   MemoryInfo info = Info(Obj);
   return info.Memory.Length;
 }

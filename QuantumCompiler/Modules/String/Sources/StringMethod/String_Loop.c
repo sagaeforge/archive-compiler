@@ -3,7 +3,9 @@
 #include "Private_String.h"
 #include "ProgramManager.h"
 
-String *String_Loop(String *Self, Length Length) {
+String*
+String_Loop(String* Self, Length Length)
+{
   wcs temp = __WcsCreate(Self->Length * Length);
 
   int i, j;

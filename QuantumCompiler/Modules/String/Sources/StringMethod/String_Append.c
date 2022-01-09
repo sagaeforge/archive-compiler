@@ -3,7 +3,9 @@
 #include "GarbageCollection.h"
 #include "Private_String.h"
 
-void String_Append(String *Self, String *Value) {
+void
+String_Append(String* Self, String* Value)
+{
   wcs temp = __WcsCreate(Self->Length + Value->Length);
   __WcsWcsSet(temp, Self->Value, Self->Length);
 

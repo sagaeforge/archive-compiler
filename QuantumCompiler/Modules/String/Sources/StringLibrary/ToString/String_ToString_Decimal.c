@@ -1,7 +1,9 @@
 
 #include "Private_StringLib.h"
 
-String *String_ToString_Decimal(_int64 Value) {
+String*
+String_ToString_Decimal(_int64 Value)
+{
   if (Value > 0)
     String_ToString_Decimal_Unsigned(Value);
 

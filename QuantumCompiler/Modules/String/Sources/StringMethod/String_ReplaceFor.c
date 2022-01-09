@@ -3,7 +3,9 @@
 #include "Private_String.h"
 #include "ProgramManager.h"
 
-static bool _StringCompare(wcs Ary, String *FindValue, Index Start) {
+static bool
+_StringCompare(wcs Ary, String* FindValue, Index Start)
+{
   int i;
   for (i = Start; i < Start + FindValue->Length; i++)
     if (Ary[i] != FindValue->Value[i - Start])
@@ -11,8 +13,9 @@ static bool _StringCompare(wcs Ary, String *FindValue, Index Start) {
   return true;
 }
 
-String *String_ReplaceFor(String *Self, String *Ori, String *Value,
-                          Length Length) {
+String*
+String_ReplaceFor(String* Self, String* Ori, String* Value, Length Length)
+{
   if (Length > String_Count(Self, Ori) || Length == 0)
     return String(Self);
 

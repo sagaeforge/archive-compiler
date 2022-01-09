@@ -3,7 +3,9 @@
 #include "Private_String.h"
 #include "ProgramManager.h"
 
-String *String_Middle(String *Self, Index Start, Index Count) {
+String*
+String_Middle(String* Self, Index Start, Index Count)
+{
   // TODO 길이 검사
   Length len = Count - Start + 1;
   if (Start + len >= Self->Length)

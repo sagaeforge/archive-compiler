@@ -1,4 +1,8 @@
 
 #include "Chs.h"
 
-bool __IsOctal(int ch) { return ch >= '0' && ch <= '8'; }
+bool
+__IsOctal(int ch)
+{
+  return ch >= '0' && ch <= '8';
+}

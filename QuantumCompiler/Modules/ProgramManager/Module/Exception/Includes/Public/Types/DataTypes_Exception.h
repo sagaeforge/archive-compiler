@@ -4,7 +4,8 @@
 
 #include "DataTypes.h"
 
-typedef struct {
+typedef struct
+{
   int i;
 } ProgramError;
 

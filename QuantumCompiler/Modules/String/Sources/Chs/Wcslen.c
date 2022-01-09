@@ -1,7 +1,9 @@
 
 #include "Chs.h"
 
-Length __Wcslen(const_wcs Value) {
+Length
+__Wcslen(const_wcs Value)
+{
   if (Value == NULL)
     return 0;
 

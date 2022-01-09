@@ -1,7 +1,9 @@
 
 #include "Private_StringLib.h"
 
-_int64 String_ValueOf_Decimal(String *Self) {
+_int64
+String_ValueOf_Decimal(String* Self)
+{
   // TODO 최적화, 오류 검사
   if (Self->Value[0] != '-')
     String_ValueOf_Decimal_Unsigned(Self);

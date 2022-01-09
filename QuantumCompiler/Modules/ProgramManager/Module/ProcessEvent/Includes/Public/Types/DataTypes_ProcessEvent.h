@@ -7,8 +7,9 @@
 #include <pthread.h>
 
 /** @brief 프로세스 이벤트 주기 */
-typedef struct {
-  struct __FuncChainNode *Nodes;
+typedef struct
+{
+  struct __FuncChainNode* Nodes;
   // clang-format off
   /**
    * @brief 프로세스 이벤트에 함수 추가
@@ -38,7 +39,8 @@ typedef struct {
 } ProcessEvent;
 
 /** @brief 프로세스 이벤트 코드 */
-typedef enum {
+typedef enum
+{
   /** @brief <ProcessEvent> 없음 */
   ProcessEvent_None = 0,
   /** @brief <ProcessEvent> 준비 단계 */
