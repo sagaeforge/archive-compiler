@@ -47,7 +47,7 @@ VSCode에서 사용하고 있는 Includes Cache 정보
 # TODO
 1. GC, String 정책 기능 업데이트
 2. String 오류 검수
-3. String 최적화
+3. 모든 소스코드에 라이센스 파일 및 엔티티 코드 추가
 4. InputSystem 설계
 5. Exception 설계
 6. 헤더 파일 주석 추가
