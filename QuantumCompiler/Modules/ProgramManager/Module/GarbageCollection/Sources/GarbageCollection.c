@@ -5,27 +5,27 @@
 void
 GarbageCollectionModule_Initialized()
 {
-  // clang-format off
-  Application.GarbageCollection.Compare       = MemoryCompare;
-  Application.GarbageCollection.ConstCreate   = MemoryConstCreate;
-  Application.GarbageCollection.Copy          = MemoryCopy;
-  Application.GarbageCollection.Create        = MemoryCreate;
-  Application.GarbageCollection.Info          = Info;
-  Application.GarbageCollection.Length        = MemoryLength;
-  Application.GarbageCollection.Move          = MemoryMove;
-  Application.GarbageCollection.Policy        = Policy;
-  Application.GarbageCollection.PolicyAppend  = Policy_Append;
-  Application.GarbageCollection.PolicyRemove  = Policy_Remove;
-  Application.GarbageCollection.Remove        = MemoryRemove;
-  Application.GarbageCollection.Set           = MemorySet;
-  Application.GarbageCollection.Swap          = MemorySwap;
-  
+  Application.GarbageCollection.Compare = MemoryCompare;
+  Application.GarbageCollection.ConstCreate = MemoryConstCreate;
+  Application.GarbageCollection.Copy = MemoryCopy;
+  Application.GarbageCollection.Create = MemoryCreate;
+  Application.GarbageCollection.Info = Info;
+  Application.GarbageCollection.Length = MemoryLength;
+  Application.GarbageCollection.Move = MemoryMove;
+  Application.GarbageCollection.Policy = Policy;
+  Application.GarbageCollection.PolicyAppend = Policy_Append;
+  Application.GarbageCollection.PolicyRemove = Policy_Remove;
+  Application.GarbageCollection.Remove = MemoryRemove;
+  Application.GarbageCollection.Set = MemorySet;
+  Application.GarbageCollection.Swap = MemorySwap;
+
   Application.Member.GarbageCollection_UsedMemoryLength = 0;
   Application.Member.GarbageCollection_UsedMemoryPageLength = 1;
-  MemorySet(&Application.Member.GarbageCollection_Pages.Datas, 
+  MemorySet(&Application.Member.GarbageCollection_Pages.Datas,
             0,
             1,
-            sizeof(Application.Member.GarbageCollection_Pages.Datas[0]) * MemoryMaxLength);
+            sizeof(Application.Member.GarbageCollection_Pages.Datas[0]) *
+              MemoryMaxLength);
   // clang-format on
   MemoryInfo info;
   info.IsFound = false;
