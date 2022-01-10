@@ -45,7 +45,6 @@ VSCode에서 사용하고 있는 Includes Cache 정보
     "${workspaceFolder}/Modules/String/Includes/Private/**" 
 
 # TODO
-1. GC, String 정책 기능 업데이트
 2. String 오류 검수
 3. 모든 소스코드에 라이센스 파일 및 엔티티 코드 추가
 4. InputSystem 설계
