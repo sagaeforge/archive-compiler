@@ -11,14 +11,14 @@
 ## Includes Info
 VSCode에서 사용하고 있는 Includes Cache 정보 
 
-### System Includes
+    # System Includes
     "${workspaceFolder}/**",
 
-### ProgramManager Includes
+    # ProgramManager Includes
     "${workspaceFolder}/Includes", 
     "${workspaceFolder}/Includes/**",
 
-### ProgramManager Includes
+    # ProgramManager Includes
     "${workspaceFolder}/Modules/ProgramManager/Includes/", 
     "${workspaceFolder}/Modules/ProgramManager/Includes/**", 
     "${workspaceFolder}/Modules/ProgramManager/Module/Exception/Includes/Public", 
@@ -38,7 +38,7 @@ VSCode에서 사용하고 있는 Includes Cache 정보
     "${workspaceFolder}/Modules/ProgramManager/Module/ProcessEvent/Includes/Private/", 
     "${workspaceFolder}/Modules/ProgramManager/Module/ProcessEvent/Includes/Private/**", 
 
-### String Includes
+    # String Includes
     "${workspaceFolder}/Modules/String/Includes/Public/", 
     "${workspaceFolder}/Modules/String/Includes/Public/**", 
     "${workspaceFolder}/Modules/String/Includes/Private/", 
@@ -63,12 +63,16 @@ VSCode에서 사용하고 있는 Includes Cache 정보
 ## Exception 설계
 
     CallException 함수를 통해 오류를 시스템에 보고
-    CallAssert    함수를 통해 어디서 오류가 났는지 시스템에 보고
+    (ErrCode Code) 
+    CallAssert 함수를 통해 어디서 오류가 났는지 시스템에 보고
+    (ErrCode code, const_chs File, const_chs FuncName, int Line)
  
     ExceptionAction 특정 오류가 나면 처리되는 함수를 처리함.
 
     ExceptionDefines 특정 오류가 무엇인지 정의함.
+    (const_chs Name)
     ExceptionUnDefines 특정 오류 정의를 삭제함.
+    (const_chs Name)
 
     Try_Catch(ExcuteFunc, Exception<err_name, CatchAction>)
     Try_Catch_Finnaly(ExcuteFunc, Exception<err_name, CatchAction>, FinallyFunc)
