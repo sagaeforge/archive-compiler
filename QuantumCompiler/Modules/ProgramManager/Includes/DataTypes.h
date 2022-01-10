@@ -8,8 +8,6 @@ typedef unsigned int Index;
 typedef long long int _int64;
 typedef unsigned long long int _uint64;
 
-#define Method_Combine(MethodName, Instance) MethodName(Instance)
-
 // [*]  [자료형 파트]
 // [+ START] 자료형
 
@@ -49,8 +47,6 @@ typedef unsigned long long int _uint64;
   _Bool                 : "_Bool",                                             \
   default: "unknown" )
 
-// [Public] TypeCompare(Instance1: 변수, Instance2: 변수),
-// [Public] 두 변수의 자료형을 비교합니다.
 #define TypeCompare(Instance1, Instance2)                                      \
   strcmp(GetType(Instance1), GetType(Instance2)) == 0
 

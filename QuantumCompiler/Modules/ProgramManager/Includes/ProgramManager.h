@@ -206,11 +206,14 @@ struct ProgramManager
   } Member;
 };
 
-/**
- * @brief 프로그램 관리자 및 프로그램 지원 기능
- */
+/** @brief 프로그램 관리자 및 프로그램 지원 기능 */
 extern struct ProgramManager Application;
 
+/**
+ * @brief 프로그램을 초기화함
+ * @param None - 없음
+ * @return None - 없음
+ */
 void
 ProgramManager_Init();
 

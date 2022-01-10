@@ -1,8 +1,5 @@
 
-#include "Exception.h"
-#include "GarbageCollection.h"
 #include "Private_GarbageCollection.h"
-#include <stdlib.h>
 
 static int
 MemoryCheck(void* Obj1, void* Obj2, Length Length)
@@ -33,7 +30,7 @@ MemoryCheck(void* Obj1, void* Obj2, Length Length)
 void
 MemorySwap(void* Src, void* Data, Length Length)
 {
-  if (MemoryCheck(srand, Data, Length) != 0)
+  if (MemoryCheck(Src, Data, Length) != 0)
     // TODO Exception 처리
     return;
 
