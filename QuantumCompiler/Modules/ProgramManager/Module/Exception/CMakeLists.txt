@@ -21,6 +21,9 @@ target_include_directories(
 
   # 상위 프로젝트의 헤더 참조
   ../../Includes/
+  
+  # String 모듈 참조
+  ../../../String/Includes/Public
 
   Includes/Private
 )
