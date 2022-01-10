@@ -11,6 +11,7 @@ Info(void* Obj)
   };
 
   if (Obj == NULL)
+    // TODO Exception 처리
     return ret;
 
   int i;

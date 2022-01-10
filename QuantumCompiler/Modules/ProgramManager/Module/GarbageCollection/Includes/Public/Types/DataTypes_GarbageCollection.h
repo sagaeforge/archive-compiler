@@ -14,13 +14,7 @@ typedef enum
   MemoryPolicy_None             = 0,
   MemoryPolicy_Const            = (1 << 0),
   MemoryPolicy_NoDestructor     = (1 << 1),
-  MemoryPolicy_SystemMemory     = (1 << 2),
-  MemoryPolicy_NoMemorySet      = (1 << 3),
-  MemoryPolicy_NoMemoryCopy     = (1 << 4),
-  MemoryPolicy_NoMemoryMove     = (1 << 5),
-  MemoryPolicy_NoMemorySwap     = (1 << 6),
-  MemoryPolicy_NoMemoryCompare  = (1 << 7),
-  MemoryPolicy_NoMemoryLength   = (1 << 8),
+  MemoryPolicy_SystemMemory     = (1 << 2)
   // clang-format on
 } MemoryPolicy;
 

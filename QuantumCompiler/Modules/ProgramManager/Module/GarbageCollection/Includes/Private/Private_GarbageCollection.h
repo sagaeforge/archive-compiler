@@ -2,7 +2,7 @@
 #ifndef __PRIVATE_GARBAGECOLLECTION__
 #define __PRIVATE_GARBAGECOLLECTION__
 
-#include "ProgramManager.h"
+#include "GarbageCollection.h"
 
 // clang-format off
 void        Clear         ();

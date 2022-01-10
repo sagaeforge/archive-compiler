@@ -27,7 +27,7 @@ EmptyPageGet()
   page->Next = NULL;
   page->Info.IsFound = false;
   page->Info.Memory.Length = sizeof(MemoryPage);
-  page->Info.Memory.Policy = MemoryPolicy_None;
+  page->Info.Memory.Policy = MemoryPolicy_SystemMemory;
   page->Info.Memory.Position = page;
   page->Info.Position.MemoryIndex = 0;
   page->Info.Position.PageIndex =
