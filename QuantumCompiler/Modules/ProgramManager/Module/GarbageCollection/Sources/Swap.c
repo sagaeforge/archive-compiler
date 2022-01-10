@@ -22,9 +22,9 @@ MemoryCheck(void* Obj1, void* Obj2, Length Length)
     return 3;
 
   // 수정할 수 없는 메모리인 경우
-  if (info1.Memory.Position == MemoryPolicy_Const)
+  if (info1.Memory.Policy == MemoryPolicy_Const)
     return 4;
-  if (info2.Memory.Position == MemoryPolicy_Const)
+  if (info2.Memory.Policy == MemoryPolicy_Const)
     return 5;
 
   return 0;

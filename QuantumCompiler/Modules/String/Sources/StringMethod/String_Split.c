@@ -24,5 +24,8 @@ String_Split(String* Self, String* Value)
     Start = index + Value->Length;
   }
 
+  Index index = String_IndexFor(Self, Value, i - 1) + Value->Length;
+  StringAry_Push(Ary, String_Extract(Self, index, Self->Length));
+
   return Ary;
 }

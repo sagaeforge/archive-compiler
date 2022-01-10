@@ -2,6 +2,7 @@
 #define __STRING_LIBRARY__
 
 #include "String.h"
+#include "StringAry.h"
 
 // clang-format off
 #define toString(Instance) _Generic((Instance),           \
