@@ -18,8 +18,6 @@ String_Split(String* Self, String* Value)
     return Ary;
   }
   
-  wcs *temp = __WcsCreate(Self->Length);
-  
   Index Start = 0;
   int i;
   for (i = 0; i < Cnt; i++)
