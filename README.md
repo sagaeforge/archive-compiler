@@ -53,24 +53,24 @@ VSCode에서 사용하고 있는 Includes Cache 정보
 
 ## InputSystem 설계
 
-stdin: 입력에 관련된 함수들이 존재함.
-stdout: 출력에 관련된 함수들이 존재함.
-stderr: 오류에 관련된 함수들이 존재함.
+    stdin: 입력에 관련된 함수들이 존재함.
+    stdout: 출력에 관련된 함수들이 존재함.
+    stderr: 오류에 관련된 함수들이 존재함.
 
-bufSize : 각 입출력 시스템의 버퍼 공간.
+    bufSize : 각 입출력 시스템의 버퍼 공간.
 
 
 ## Exception 설계
 
-CallException 함수를 통해 오류를 시스템에 보고
-CallAssert    함수를 통해 어디서 오류가 났는지 시스템에 보고
+    CallException 함수를 통해 오류를 시스템에 보고
+    CallAssert    함수를 통해 어디서 오류가 났는지 시스템에 보고
  
-ExceptionAction 특정 오류가 나면 처리되는 함수를 처리함.
+    ExceptionAction 특정 오류가 나면 처리되는 함수를 처리함.
 
-ExceptionDefines 특정 오류가 무엇인지 정의함.
-ExceptionUnDefines 특정 오류 정의를 삭제함.
+    ExceptionDefines 특정 오류가 무엇인지 정의함.
+    ExceptionUnDefines 특정 오류 정의를 삭제함.
 
-Try_Catch(ExcuteFunc, Exception<err_name, CatchAction>)
-Try_Catch_Finnaly(ExcuteFunc, Exception<err_name, CatchAction>, FinallyFunc)
+    Try_Catch(ExcuteFunc, Exception<err_name, CatchAction>)
+    Try_Catch_Finnaly(ExcuteFunc, Exception<err_name, CatchAction>, FinallyFunc)
 
 
