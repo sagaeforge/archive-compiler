@@ -2,7 +2,6 @@
 #include "Private_StringAry.h"
 #include "Private_String.h"
 #include "Private_StringLib.h"
-#include "ProgramManager.h"
 
 // 오류 테스트 나중에 구현
 
