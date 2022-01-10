@@ -45,11 +45,11 @@ VSCode에서 사용하고 있는 Includes Cache 정보
     "${workspaceFolder}/Modules/String/Includes/Private/**" 
 
 # TODO
-2. String 오류 검수
-3. 모든 소스코드에 라이센스 파일 및 엔티티 코드 추가
-4. InputSystem 설계
-5. Exception 설계
-6. 헤더 파일 주석 추가
+1. String 오류 검수
+2. 모든 소스코드에 라이센스 파일 및 엔티티 코드 추가
+3. InputSystem 설계
+4. Exception 설계
+5. 헤더 파일 주석 추가
 
 
 ## InputSystem 설계
