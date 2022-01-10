@@ -11,12 +11,12 @@ main(int argc, char const* argv[])
   Application.ProgramStart();
 
   String* str = String("NUGUNGA123, NUGUNGA456, NUGUNGA789, NUGUNGA159");
-  StringAry* Ary = StringAry(1, StringMethod.SubString(str, String(", ")));
+  // StringAry* Ary = StringAry(1, StringMethod.SubString(str, String(", ")));
 
-  int i;
-  for (i = 0; i < Ary->Length; i++) {
-    printf("%S\n", StringAry_Get(Ary, i)->Value);
-  }
+  // int i;
+  // for (i = 0; i < Ary->Length; i++) {
+  //   printf("%S\n", StringAry_Get(Ary, i)->Value);
+  // }
 
   Application.ProgramQuit();
   return 0;

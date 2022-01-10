@@ -11,10 +11,18 @@ typedef const char* const_chs;
 typedef wchar_t* wcs;
 typedef const wchar_t* const_wcs;
 
+enum StringPolicy
+{
+  // claog-format off
+  StringPolicy_None = 0,
+  StringPolicy_Null = 1,
+  StringPolicy_Const = 2
+  // claog-format on
+};
+
 typedef struct _String
 {
-  bool IsNone;
-  bool IsConst;
+  unsigned char Policy;
   wcs Value;
   Length Length;
 } String;

@@ -5,5 +5,5 @@
 void
 String_Const(String* Self)
 {
-  Self->IsConst = true;
+  Self->Policy |= StringPolicy_Const;
 }
