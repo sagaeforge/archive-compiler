@@ -4,18 +4,26 @@
 #include "DataTypes.h"
 #include "Types/DataTypes_GarbageCollection.h"
 
-// clang-format off
-void *MemoryCreate      (Length Length);
-void *MemoryConstCreate (Length Length);
-void  MemoryRemove      (void **ptr);
-void  MemorySet         (void *Src, int value, Length WordSize, Length Length);
-void  MemoryCopy        (void *Src, void *Data, Length Length);
-void  MemoryMove        (void *Src, void *Data, Length Length);
-void  MemorySwap        (void *Src, void *Data, Length Length);
-bool  MemoryCompare     (void *Obj1, void *Obj2, Length Length);
-Length MemoryLength     (void *Obj);
+void*
+MemoryCreate(Length Length);
+void*
+MemoryConstCreate(Length Length);
+void
+MemoryRemove(void** ptr);
+void
+MemorySet(void* Src, int value, Length WordSize, Length Length);
+void
+MemoryCopy(void* Src, void* Data, Length Length);
+void
+MemoryMove(void* Src, void* Data, Length Length);
+void
+MemorySwap(void* Src, void* Data, Length Length);
+bool
+MemoryCompare(void* Obj1, void* Obj2, Length Length);
+Length
+MemoryLength(void* Obj);
 
-void  GarbageCollectionModule_Initialized();
-// clang-format on
+void
+GarbageCollectionModule_Initialized();
 
 #endif
