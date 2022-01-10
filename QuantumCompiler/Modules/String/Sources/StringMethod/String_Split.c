@@ -3,7 +3,7 @@
 #include "Private_String.h"
 #include "Private_StringLib.h"
 
-// 오류 테스트 나중에 구현
+// TODO 오류 테스트 나중에 구현
 
 StringAry*
 String_Split(String* Self, String* Value)
