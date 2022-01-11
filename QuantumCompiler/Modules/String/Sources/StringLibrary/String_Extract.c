@@ -5,6 +5,9 @@
 String*
 String_Extract(String* Self, Index Start, Index End)
 {
+  if (Self->Length < End)
+    return String(Self);
+
   Length leng = End - Start + 1;
   wchar_t* temp = __WcsCreate(leng);
   int i;

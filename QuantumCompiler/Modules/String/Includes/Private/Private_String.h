@@ -50,7 +50,7 @@ String_Left(String* Self, Length Length);
 String*
 String_Right(String* Self, Length Length);
 String*
-String_Middle(String* Self, Index Start, Index Count);
+String_Middle(String* Self, Index Start, Index End);
 void
 String_Const(String* Self);
 void

@@ -10,5 +10,5 @@ String_Right(String* Self, Length Length)
   if (Length >= Self->Length)
     return String(Self);
 
-  return String_Extract(Self, Self->Length - Length - 1, Self->Length - 1);
+  return String_Extract(Self, Self->Length - Length, Self->Length);
 }

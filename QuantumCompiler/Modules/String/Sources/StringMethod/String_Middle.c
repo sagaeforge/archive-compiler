@@ -5,12 +5,12 @@
 #include "ProgramManager.h"
 
 String*
-String_Middle(String* Self, Index Start, Index Count)
+String_Middle(String* Self, Index Start, Index End)
 {
   // TODO 길이 검사
-  Length len = Count - Start + 1;
+  Length len = End - Start + 1;
   if (Start + len >= Self->Length)
     return String(Self);
 
-  return String_Extract(Self, Start, Start + Count);
+  return String_Extract(Self, Start, End);
 }
