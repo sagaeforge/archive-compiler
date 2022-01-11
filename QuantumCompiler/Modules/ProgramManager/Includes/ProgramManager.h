@@ -4,6 +4,8 @@
 
 #include "DataTypes.h"
 
+#include "Types/DataTypes_String.h"
+
 #include "Types/DataTypes_Exception.h"
 #include "Types/DataTypes_GarbageCollection.h"
 #include "Types/DataTypes_InputSystem.h"
@@ -15,6 +17,10 @@ struct ProgramManager
   /** @brief 이벤트들 */
   ProcessEvent ProcessEvent[8];
   // [*] 가비지 컬렉션
+
+  /** @brief 프로그램 시작 매개변수 */
+  StringAry* ProgramAguments;
+
   // 가비지 컬렉션
   struct
   {
@@ -216,5 +222,15 @@ extern struct ProgramManager Application;
  */
 void
 ProgramManager_Init();
+
+/**
+ * @brief 프로그램을 실행시킬 때 사용한 매개변수를 등록합니다.
+ *
+ * @param argc argv의 길이
+ * @param argv 프로그램 매개 변수
+ * @return None - 없음
+ */
+void
+ProgramManager_ProgramAgumentsSet(int argc, const_chs argv[]);
 
 #endif

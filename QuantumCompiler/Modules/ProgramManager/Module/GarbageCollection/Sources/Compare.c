@@ -28,6 +28,12 @@ MemoryCompare(void* Obj1, void* Obj2, Length Length)
     // TODO Exception 처리
     return false;
 
+  return Private_MemoryCompare(Obj1, Obj2, Length);
+}
+
+bool
+Private_MemoryCompare(void* Obj1, void* Obj2, Length Length)
+{
   char* a = (char*)Obj1;
   char* b = (char*)Obj2;
   int i = 0;

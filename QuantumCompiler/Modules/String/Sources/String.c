@@ -1,6 +1,7 @@
 
 #include "String.h"
 #include "Private_String.h"
+#include "Private_StringAry.h"
 #include "Private_StringLib.h"
 #include "ProgramManager.h"
 
@@ -9,6 +10,7 @@
 
 struct StringMethod StringMethod;
 struct StringLibMethod StringLibMethod;
+struct StringAryMethod StringAryMethod;
 
 // TODO 각종 전역 변수 및 모듈 초기화 함수를 통합
 
@@ -59,6 +61,15 @@ StringModule_Initialized()
   StringLibMethod.Notation = String_Notation;
   StringLibMethod.Pattern = String_Pattern;
   StringLibMethod.Reverse = String_Reverse;
+
+  StringAryMethod.Destructor = StringAryDestructor;
+  StringAryMethod.Contains = StringAry_Contains;
+  StringAryMethod.Get = StringAry_Get;
+  StringAryMethod.Insert = StringAry_Insert;
+  StringAryMethod.Pop = StringAry_Pop;
+  StringAryMethod.Push = StringAry_Push;
+  StringAryMethod.Remove = StringAry_Remove;
+  StringAryMethod.Search = StringAry_Search;
 
   setlocale(LC_ALL, "");
 }

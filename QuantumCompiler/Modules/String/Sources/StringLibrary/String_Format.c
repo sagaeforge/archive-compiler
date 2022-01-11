@@ -4,8 +4,8 @@
 
 #include "Chs.h"
 #include "Private_String.h"
+#include "Private_StringAry.h"
 #include "Private_StringLib.h"
-#include "StringAry.h"
 
 // TODO 구현
 String*

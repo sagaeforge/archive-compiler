@@ -3,16 +3,13 @@
 #define __CHARSTRING__
 
 #include "String.h"
+
 Length
-__Chslen(const_chs Value);
-Length
-__Wcslen(const_wcs Value);
+__StrLen(void* Obj, Length WordSize);
 wcs
 __WcsCreate(Length Length);
 void
-__WcsChsSet(wcs Obj1, const_chs Obj2, Length Length);
-void
-__WcsWcsSet(wcs Obj1, const_wcs Obj2, Length Length);
+__StrSet(wcs Obj1, const void* Obj2, Length WordSize, Length Length);
 void
 __WcsWcsInsert(wcs Obj1, const_wcs Obj2, Index Start, Length Length);
 

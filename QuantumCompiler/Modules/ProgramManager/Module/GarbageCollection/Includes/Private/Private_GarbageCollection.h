@@ -89,4 +89,60 @@ PageGet(Index Index);
 MemoryPage*
 EmptyPageGet();
 
+/**
+ * @brief Src의 Length 만큼의 공간을 value로 초기화합니다.
+ *
+ * @param Src 수정할 주기억장치 상의 위치
+ * @param value 덮어쓰는 값
+ * @param WordSize 덮어쓰는 값의 크기
+ * @param Length 수정할 메모리의 연속된 길이
+ * @return None - 없음
+ */
+void
+Private_MemorySet(void* Src, int value, Length WordSize, Length Length);
+
+/**
+ * @brief Src의 공간을 Data로 Length 만큼 복사합니다.
+ *
+ * @param Src 수정할 주기억장치 상의 위치
+ * @param Data 덮어쓰는 값
+ * @param Length 수정할 메모리의 크기
+ * @return None - 없음
+ */
+void
+Private_MemoryCopy(void* Src, void* Data, Length Length);
+
+/**
+ * @brief Src의 공간에 Data를 Length 복사합니다.
+ *
+ * @param Src 수정할 주기억장치 상의 위치
+ * @param Data 덮어쓰는 값
+ * @param Length 수정할 메모리의 크기
+ * @return None - 없음
+ */
+void
+Private_MemoryMove(void* Src, void* Data, Length Length);
+
+/**
+ * @brief Src와 Data의 Length 만큼 교환합니다.
+ *
+ * @param Src 교환할 주기억장치 상의 위치 1
+ * @param Data 교환할 주기억장치 상의 위치 2
+ * @param Length 교환할 메모리의 크기
+ * @return None - 없음
+ */
+void
+Private_MemorySwap(void* Src, void* Data, Length Length);
+
+/**
+ * @brief Obj1과 Obj2의 값을 비교합니다.
+ *
+ * @param Obj1 비교할 주기억장치 상의 위치 1
+ * @param Obj2 비교할 주기억장치 상의 위치 2
+ * @param Length 비교할 메모리의 크기
+ * @return <true/false> 값이 같은 가?
+ */
+bool
+Private_MemoryCompare(void* Obj1, void* Obj2, Length Length);
+
 #endif

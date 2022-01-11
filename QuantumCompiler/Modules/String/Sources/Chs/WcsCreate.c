@@ -1,14 +1,16 @@
 
 #include "Chs.h"
+#include "GarbageCollection.h"
 
-Length
-__Chslen(const_chs Value)
+wcs
+__WcsCreate(Length Length)
 {
-  if (Value == NULL)
-    return 0;
-
-  Index i = 0;
-  while (Value[i] != '\0')
-    i++;
-  return i;
+  wcs temp = MemoryCreate(sizeof(wchar_t) * (Length + 1));
+  if (temp == NULL) {
+    // Warning("메모리를 생성할 수 없습니다. (Size:%lu)",
+    //         sizeof(wchar_t) * (Length + 1));
+    // TODO Exception 처리
+    return NULL;
+  }
+  return temp;
 }

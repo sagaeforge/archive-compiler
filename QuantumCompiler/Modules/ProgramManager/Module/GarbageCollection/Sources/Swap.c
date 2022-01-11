@@ -34,6 +34,12 @@ MemorySwap(void* Src, void* Data, Length Length)
     // TODO Exception 처리
     return;
 
+  Private_MemorySwap(Src, Data, Length);
+}
+
+void
+Private_MemorySwap(void* Src, void* Data, Length Length)
+{
   char* a = (char*)Src;
   char* b = (char*)Data;
 

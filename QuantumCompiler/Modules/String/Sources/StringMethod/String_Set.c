@@ -15,5 +15,5 @@ String_Set(String* Self, String* Value)
   Self->Policy = Value->Policy;
   Self->Length = Value->Length;
 
-  __WcsWcsSet(Self->Value, Value->Value, Value->Length);
+  __StrSet(Self->Value, Value->Value, 4, Value->Length);
 }

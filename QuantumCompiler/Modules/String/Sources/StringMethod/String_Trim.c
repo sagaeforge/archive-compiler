@@ -1,6 +1,7 @@
 
 #include "Chs.h"
 #include "Private_String.h"
+#include "Private_StringLib.h"
 #include "ProgramManager.h"
 
 static bool
@@ -27,10 +28,6 @@ String_Trim(String* Self)
     else
       space_Rear++;
 
-  Length len = Self->Length - space_Front - space_Rear;
-  wcs temp = __WcsCreate(len);
-  for (i = 0; i < len; i++)
-    temp[i] = Self->Value[i + space_Front];
-  temp[i] = '\0';
-  return String(temp);
+  // TODO 검사
+  return String_Extract(Self, space_Front, space_Rear);
 }

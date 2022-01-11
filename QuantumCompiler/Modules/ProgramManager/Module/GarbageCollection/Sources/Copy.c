@@ -32,6 +32,12 @@ MemoryCopy(void* Src, void* Data, Length Length)
     // TODO exception 처리
     return;
 
+  Private_MemoryCopy(Src, Data, Length);
+}
+
+void
+Private_MemoryCopy(void* Src, void* Data, Length Length)
+{
   char* a = (char*)Src;
   char* b = (char*)Data;
 

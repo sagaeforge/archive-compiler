@@ -26,10 +26,11 @@ StringConstructor_Chs(const char* Value)
   if (temp == NULL)
     return NULL;
 
-  Length len = __Chslen(Value);
+  Length len = __StrLen((void*)Value, 1);
+
   if (len != 0) {
     wcs tempValue = __WcsCreate(len);
-    __WcsChsSet(tempValue, Value, len);
+    __StrSet(tempValue, Value, 1, len);
     temp->Policy = StringPolicy_None;
     temp->Length = len;
     temp->Value = tempValue;
@@ -44,10 +45,10 @@ StringConstructor_Wcs(const wchar_t* Value)
   if (temp == NULL)
     return NULL;
 
-  Length len = __Wcslen(Value);
+  Length len = __StrLen((void*)Value, 4);
   if (len != 0) {
     wcs tempValue = __WcsCreate(len);
-    __WcsWcsSet(tempValue, Value, len);
+    __StrSet(tempValue, Value, 4, len);
     temp->Policy = StringPolicy_None;
     temp->Length = len;
     temp->Value = tempValue;

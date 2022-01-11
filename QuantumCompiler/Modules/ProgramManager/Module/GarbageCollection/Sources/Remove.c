@@ -8,7 +8,7 @@ MemoryCheck(void* Obj)
   MemoryInfo info = Info(Obj);
 
   // GarbageCollection이 관리하고 있는 메모리가 아니라면
-  if (info.IsFound)
+  if (!info.IsFound)
     return 1;
 
   // 프로그램이 종료될 때 까지 삭제될 수 없는 메모리
@@ -21,7 +21,7 @@ MemoryCheck(void* Obj)
 void
 MemoryRemove(void** ptr)
 {
-  if (MemoryCheck((*ptr)))
+  if (MemoryCheck((*ptr)) != 0)
     // TODO Exception 처리
     return;
 

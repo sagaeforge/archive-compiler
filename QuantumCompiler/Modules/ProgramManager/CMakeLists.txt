@@ -28,7 +28,7 @@ target_include_directories(
   ProcessEvent/Includes/Public
 
   # String
-  ../String/Includes/Public/
+  ../String/Includes/Public
 )
 target_link_libraries(
   ProgramManager

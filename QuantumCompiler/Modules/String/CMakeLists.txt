@@ -10,12 +10,10 @@ add_library(
   Sources/String.c
   Sources/StringConstructor.c
 
-  Sources/Chs/Chslen.c
-  Sources/Chs/WcsChsSet.c
+  Sources/Chs/StrLen.c
+  Sources/Chs/StrSet.c
   Sources/Chs/WcsCreate.c
-  Sources/Chs/WcsWcsSet.c
   Sources/Chs/WcsWcsInsert.c
-  Sources/Chs/Wcslen.c
   Sources/Chs/ToUpper.c
   Sources/Chs/ToLower.c
   

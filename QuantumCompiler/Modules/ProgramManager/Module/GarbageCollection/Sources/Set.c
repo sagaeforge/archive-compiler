@@ -7,7 +7,7 @@ MemoryCheck(void* Obj, Length Length)
   MemoryInfo info = Info(Obj);
 
   // GarbageCollection이 관리하고 있는 메모리가 아니라면
-  if (info.IsFound)
+  if (!info.IsFound)
     return 1;
 
   // 메모리 할당보다 크게 사용하려는 경우
@@ -24,21 +24,26 @@ MemoryCheck(void* Obj, Length Length)
 void
 MemorySet(void* Src, int value, Length WordSize, Length Length)
 {
-  int i = 0, j = 0;
   Length *= WordSize;
   if (MemoryCheck(Src, Length) != 0)
     // TODO Exception 처리
     return;
 
+  Private_MemorySet(Src, value, WordSize, Length);
+}
+
+void
+Private_MemorySet(void* Src, int value, Length WordSize, Length Length)
+{
   char* a = (char*)Src;
   char* b = (char*)&value;
   const char* backup = b;
+
+  int i = 0;
   while (i < Length) {
-    while (j < WordSize) {
+    int j;
+    for (j = 0; j < WordSize; a++, b++, i++, j++)
       *a = *b;
-      a++, b++, i++, j++;
-    }
-    j = 0;
     b = (char*)backup;
   }
 }

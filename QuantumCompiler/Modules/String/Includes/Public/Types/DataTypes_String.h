@@ -88,5 +88,17 @@ struct StringLibMethod {
   bool    (*IsBinary)         (String *);
 };
 
+struct StringAryMethod
+{
+  void      (*Destructor)  (StringAry**);
+  String*   (*Get)        (StringAry*, Index);
+  void      (*Insert)     (StringAry*, String*, Index);
+  void      (*Remove)     (StringAry*, Index);
+  void      (*Push)       (StringAry*, String*);
+  String*   (*Pop)        (StringAry*);
+  Index     (*Search)     (StringAry*, String*);
+  Length    (*Contains)   (StringAry*, String*);
+};
+
 
 #endif

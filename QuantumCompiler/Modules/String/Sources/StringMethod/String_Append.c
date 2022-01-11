@@ -7,11 +7,12 @@ void
 String_Append(String* Self, String* Value)
 {
   wcs temp = __WcsCreate(Self->Length + Value->Length);
-  __WcsWcsSet(temp, Self->Value, Self->Length);
+  __WcsWcsInsert(temp, Self->Value, 0, Self->Length);
 
-  int i;
-  for (i = 0; i < Value->Length; i++)
-    temp[Self->Length + i - 1] = Value->Value[i];
-  temp[Self->Length + i] = L'\0';
+  if (!(Self->Policy & StringPolicy_Null)) {
+    MemoryRemove((void**)&Self->Value);
+  }
+
+  __WcsWcsInsert(temp, Value->Value, Self->Length - 1, Value->Length);
   String_Set(Self, String(temp));
 }

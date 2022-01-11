@@ -44,11 +44,12 @@ GC_Remove(void* ptr)
   page->Datas[Check.info.Position.MemoryIndex].Length = 0;
   page->Datas[Check.info.Position.MemoryIndex].Policy = MemoryPolicy_None;
 
-  page->UsedMemoryLength--;
-  Application.Member.GarbageCollection_UsedMemoryLength--;
-
   int i;
   for (i = Check.info.Position.MemoryIndex; i < page->UsedMemoryLength; i++) {
-    MemorySwap(&page->Datas[i], &page->Datas[i + 1], sizeof(page->Datas[i]));
+    Private_MemorySwap(
+      &page->Datas[i], &page->Datas[i + 1], sizeof(page->Datas[i]));
   }
+
+  page->UsedMemoryLength--;
+  Application.Member.GarbageCollection_UsedMemoryLength--;
 }

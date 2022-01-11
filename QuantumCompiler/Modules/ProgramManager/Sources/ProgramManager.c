@@ -3,6 +3,7 @@
 #include "GarbageCollection.h"
 #include "ProcessEvent.h"
 #include "String.h"
+#include "StringAry.h"
 
 #include <stdlib.h>
 
@@ -106,6 +107,8 @@ UpdateStopWait(ProcessEventName Name)
     return;
 }
 
+static bool ProgramManagerModuleInitalized = false;
+
 void
 ProgramManager_Init()
 {
@@ -119,4 +122,20 @@ ProgramManager_Init()
   Application.UpdateStart = UpdateStart;
   Application.UpdateStop = UpdateStop;
   Application.UpdateStopWait = UpdateStopWait;
+  ProgramManagerModuleInitalized = true;
+}
+
+void
+ProgramManager_ProgramAgumentsSet(int argc, const_chs argv[])
+{
+  if (!ProgramManagerModuleInitalized)
+    // Exception 처리
+    return;
+
+  StringAry* temp = StringAry(1, String(argv[0]));
+  int i;
+  for (i = 1; i < argc; i++)
+    StringAryMethod.Push(temp, String(argv[i]));
+
+  Application.ProgramAguments = temp;
 }

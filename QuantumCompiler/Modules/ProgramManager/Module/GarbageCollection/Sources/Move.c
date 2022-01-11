@@ -33,6 +33,12 @@ MemoryMove(void* Src, void* Data, Length Length)
     // TODO Exception 처리
     return;
 
+  Private_MemoryMove(Src, Data, Length);
+}
+
+void
+Private_MemoryMove(void* Src, void* Data, Length Length)
+{
   char* buf = (char*)malloc(Length);
   if (buf == NULL) {
     // TODO Exception 처리

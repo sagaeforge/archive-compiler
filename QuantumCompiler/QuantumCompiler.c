@@ -8,15 +8,10 @@ int
 main(int argc, char const* argv[])
 {
   ProgramManager_Init();
+  ProgramManager_ProgramAgumentsSet(argc, argv);
   Application.ProgramStart();
 
-  String* str = String("NUGUNGA123, NUGUNGA456, NUGUNGA789, NUGUNGA159");
-  // StringAry* Ary = StringAry(1, StringMethod.SubString(str, String(", ")));
-
-  // int i;
-  // for (i = 0; i < Ary->Length; i++) {
-  //   printf("%S\n", StringAry_Get(Ary, i)->Value);
-  // }
+  // String 모듈 기능 테스트
 
   Application.ProgramQuit();
   return 0;
