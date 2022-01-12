@@ -18,6 +18,7 @@ target_include_directories(
   ../GarbageCollection/Includes/Public
   ../InputSystem/Includes/Public
   ../ProcessEvent/Includes/Public
+  ../Object/Includes/Public
 
   # 상위 프로젝트의 헤더 참조
   ../../Includes/

@@ -11,14 +11,12 @@
 ## Includes Info
 VSCode에서 사용하고 있는 Includes Cache 정보 
 
-    # System Includes
+    // System Includes
     "${workspaceFolder}/**",
-
-    # ProgramManager Includes
+    // ProgramManager Includes
     "${workspaceFolder}/Includes", 
     "${workspaceFolder}/Includes/**",
-
-    # ProgramManager Includes
+    // ProgramManager Includes
     "${workspaceFolder}/Modules/ProgramManager/Includes/", 
     "${workspaceFolder}/Modules/ProgramManager/Includes/**", 
     "${workspaceFolder}/Modules/ProgramManager/Module/Exception/Includes/Public", 
@@ -37,26 +35,28 @@ VSCode에서 사용하고 있는 Includes Cache 정보
     "${workspaceFolder}/Modules/ProgramManager/Module/ProcessEvent/Includes/Public/**", 
     "${workspaceFolder}/Modules/ProgramManager/Module/ProcessEvent/Includes/Private/", 
     "${workspaceFolder}/Modules/ProgramManager/Module/ProcessEvent/Includes/Private/**", 
-
-    # String Includes
+    "${workspaceFolder}/Modules/ProgramManager/Module/Object/Includes/Public/", 
+    "${workspaceFolder}/Modules/ProgramManager/Module/Object/Includes/Public/**", 
+    "${workspaceFolder}/Modules/ProgramManager/Module/Object/Includes/Private/", 
+    "${workspaceFolder}/Modules/ProgramManager/Module/Object/Includes/Private/**",
+    // String Includes
     "${workspaceFolder}/Modules/String/Includes/Public/", 
     "${workspaceFolder}/Modules/String/Includes/Public/**", 
     "${workspaceFolder}/Modules/String/Includes/Private/", 
     "${workspaceFolder}/Modules/String/Includes/Private/**" 
 
 # TODO
-1. String 오류 검수
-2. 모든 소스코드에 라이센스 파일 및 엔티티 코드 추가
-3. InputSystem 설계
-4. Exception 설계
-5. 헤더 파일 주석 추가
+1. 모든 소스코드에 라이센스 파일 및 엔티티 코드 추가
+2. InputSystem 설계
+3. Exception 설계
+4. 헤더 파일 주석 추가
+5. 프로그램 매니저 - Object 모듈 추가
 
 
 ## InputSystem 설계
-
-    stdin: 입력에 관련된 함수들이 존재함.
-    stdout: 출력에 관련된 함수들이 존재함.
-    stderr: 오류에 관련된 함수들이 존재함.
+    stdin: 표준 입력에 관련된 함수들이 존재함.
+    stdout: 표준 출력에 관련된 함수들이 존재함.
+    stderr: 표준 오류 출력에 관련된 함수들이 존재함.
 
     bufSize : 각 입출력 시스템의 버퍼 공간.
 

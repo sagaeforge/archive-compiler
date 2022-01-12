@@ -8,6 +8,7 @@ add_subdirectory(Module/Exception)
 add_subdirectory(Module/GarbageCollection)
 add_subdirectory(Module/InputSystem)
 add_subdirectory(Module/ProcessEvent)
+add_subdirectory(Module/Object)
 
 add_library(
   ProgramManager
@@ -26,6 +27,7 @@ target_include_directories(
   GarbageCollection/Includes/Public
   InputSystem/Includes/Public
   ProcessEvent/Includes/Public
+  Object/Includes/Public
 
   # String
   ../String/Includes/Public
@@ -37,6 +39,7 @@ target_link_libraries(
   GarbageCollection
   InputSystem
   ProcessEvent
+  Object
 )
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})

@@ -14,7 +14,7 @@ typedef struct
   String* (*Bool)     ();
   String* (*Digit)    ();
   String* (*Decimal)  ();
-  String* (*Format)   ();
+  String* (*Format)   (const String *Format);
 } Input;
 
 typedef struct
@@ -22,20 +22,29 @@ typedef struct
   void (*Charator) (String *Value);
   void (*Word)     (String *Value);
   void (*Line)     (String *Value);
-  void (*Bool)     ();
-  void (*Digit)    ();
-  void (*Decimal)  ();
+  void (*Bool)     (bool Value);
+  void (*Digit)    (double Value);
+  void (*Decimal)  (_int64 Value);
   void (*Format)   (const String *Format, ...);
 } Output;
 
 typedef struct
 {
-
+  void (*Charator) (String *Value);
+  void (*Word)     (String *Value);
+  void (*Line)     (String *Value);
+  void (*Bool)     (bool Value);
+  void (*Digit)    (double Value);
+  void (*Decimal)  (_int64 Value);
+  void (*Format)   (const String *Format, ...);
 } ErrorOutput;
 
 typedef struct
 {
-
+  void (*BufReSize) (String *PtrName, Length Size);
+  void (*SetStdIO) (String *PtrName);
 } InputSystemMethod;
+
+
 
 #endif

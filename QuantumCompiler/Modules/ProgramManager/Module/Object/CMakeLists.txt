@@ -1,16 +1,17 @@
 cmake_minimum_required(VERSION 3.0.0)
-project(InputSystem VERSION 0.1.0)
+project(Object VERSION 0.1.0)
 
 include(CTest)
 enable_testing()
 
 add_library(
-  InputSystem
-  Sources/InputSystem.c
+  Object
+
+  Sources/Object.c
 )
 
 target_include_directories(
-  InputSystem
+  Object
   PUBLIC
 
   # 모듈들
@@ -22,8 +23,8 @@ target_include_directories(
 
   # 상위 프로젝트의 헤더 참조
   ../../Includes/
-  
-  # String 모듈 참조
+
+  # String 헤더 참조
   ../../../String/Includes/Public
 
   Includes/Private
