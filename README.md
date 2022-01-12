@@ -54,12 +54,15 @@ VSCode에서 사용하고 있는 Includes Cache 정보
 
 ## InputSystem 설계
 
-    stdin: 입력에 관련된 함수들이 존재함.
-    stdout: 출력에 관련된 함수들이 존재함.
-    stderr: 오류에 관련된 함수들이 존재함.
+    stdin: 표준 입력에 관련된 함수들이 존재함.
+    stdout: 표준 출력에 관련된 함수들이 존재함.
+    stderr: 표준 오류에 관련된 함수들이 존재함.
 
     bufSize : 각 입출력 시스템의 버퍼 공간.
 
+    Console : Console 기반의 입출력 기능을 담당하는 함수가 있음.
+    NetWork : Network 기반의 입출력 기능을 담당하는 함수가 있음. <- 만들지 안 만들지는 모름. 여유가 있으면 개발
+    Serial  : Serial Port 기반의 입출력 기능을 담당하는 함수가 있음. 
 
 ## Exception 설계
 
