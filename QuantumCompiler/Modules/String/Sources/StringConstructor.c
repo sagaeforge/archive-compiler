@@ -13,7 +13,7 @@ StringConstructor_None()
     // TODO Exception 처리
     return NULL;
   }
-  temp->Policy = StringPolicy_Null;
+  temp->IsNone = true;
   temp->Length = 0;
   temp->Value = NULL;
   return temp;
@@ -31,7 +31,7 @@ StringConstructor_Chs(const char* Value)
   if (len != 0) {
     wcs tempValue = __WcsCreate(len);
     __StrSet(tempValue, Value, 1, len);
-    temp->Policy = StringPolicy_None;
+    temp->IsNone = false;
     temp->Length = len;
     temp->Value = tempValue;
   }
@@ -49,7 +49,7 @@ StringConstructor_Wcs(const wchar_t* Value)
   if (len != 0) {
     wcs tempValue = __WcsCreate(len);
     __StrSet(tempValue, Value, 4, len);
-    temp->Policy = StringPolicy_None;
+    temp->IsNone = false;
     temp->Length = len;
     temp->Value = tempValue;
   }

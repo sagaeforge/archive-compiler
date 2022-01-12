@@ -2,8 +2,8 @@
 #include "Private_String.h"
 #include "ProgramManager.h"
 
-void
-String_UnConst(String* Self)
+String*
+String_UnConst(const String* Self)
 {
-  Self->Policy &= ~StringPolicy_Const;
+  return (String*)Self;
 }

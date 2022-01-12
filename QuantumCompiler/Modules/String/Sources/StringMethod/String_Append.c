@@ -9,7 +9,7 @@ String_Append(String* Self, String* Value)
   wcs temp = __WcsCreate(Self->Length + Value->Length);
   __WcsWcsInsert(temp, Self->Value, 0, Self->Length);
 
-  if (!(Self->Policy & StringPolicy_Null)) {
+  if (!Self->IsNone) {
     MemoryRemove((void**)&Self->Value);
   }
 

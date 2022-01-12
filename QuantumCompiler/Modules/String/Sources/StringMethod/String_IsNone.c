@@ -5,5 +5,5 @@
 bool
 String_IsNone(String* Self)
 {
-  return ~Self->Policy & StringPolicy_Null;
+  return Self->IsNone;
 }

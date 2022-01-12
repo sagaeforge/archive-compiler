@@ -6,13 +6,13 @@
 void
 String_Set(String* Self, String* Value)
 {
-  if (Self->Policy == StringPolicy_Null)
+  if (Self->IsNone)
     Self->Value = Value->Value;
   else {
     MemoryRemove((void**)&Self->Value);
     Self->Value = __WcsCreate(Value->Length);
   }
-  Self->Policy = Value->Policy;
+  Self->IsNone = Value->IsNone;
   Self->Length = Value->Length;
 
   __StrSet(Self->Value, Value->Value, 4, Value->Length);
