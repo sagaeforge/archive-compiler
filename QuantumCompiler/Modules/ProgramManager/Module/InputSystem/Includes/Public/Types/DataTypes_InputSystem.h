@@ -7,6 +7,11 @@
 
 typedef struct
 {
+  // TODO 분석하고 만들것
+} IOStream;
+
+typedef struct
+{
   // clang-format off
   String* (*Charator) ();
   String* (*Word)     ();

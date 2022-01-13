@@ -38,7 +38,7 @@ typedef struct
   /** @brief GarbageCollection 상의 메모리 위치 */
   void* Position;
   /** @brief 메모리 정책 */
-  MemoryPolicy Policy;
+  int Policy;
   /** @brief 메모리가 차지하고 있는 크기 */
   Length Length;
 } Memory;
