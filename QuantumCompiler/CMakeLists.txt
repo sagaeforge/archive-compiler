@@ -13,14 +13,14 @@ add_executable(
   Sources/Parser.c
 )
 
-add_subdirectory(Modules/ProgramManager/)
-add_subdirectory(Modules/String/)
+add_subdirectory(Modules/Application/)
+# add_subdirectory(Modules/String/)
 target_link_libraries(
   QuantumCompiler
   PUBLIC
   
-  ProgramManager
-  String
+  Application
+  # String
 )
 target_include_directories(
   QuantumCompiler
@@ -30,20 +30,17 @@ target_include_directories(
   Includes/
 
   # ProgramManager
-  Modules/ProgramManager/Includes
-  Modules/ProgramManager/Module/Exception/Includes/Public
-  Modules/ProgramManager/Module/GarbageCollection/Includes/Public
-  Modules/ProgramManager/Module/InputSystem/Includes/Public
-  Modules/ProgramManager/Module/ProcessEvent/Includes/Public
+  Modules/Application/Includes/Public/
 
   # String
-  Modules/String/Includes/Public/
+  # Modules/String/Includes/Public/
 )
 target_compile_options(
   QuantumCompiler
   PUBLIC
   
   -Wall
+  -std=gnu17
 )
 
 add_definitions( 
