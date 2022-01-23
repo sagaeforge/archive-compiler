@@ -47,6 +47,8 @@ add_library(
   # [*] Object 기본 박싱
   Sources/Object/Object_Boxing_Int.c
   Sources/Object/Object_Boxing_Bool.c
+  Sources/Object/Object_Boxing_Ptr_Bool.c
+  Sources/Object/Object_Boxing_Double_Ptr_Bool.c
   Sources/Object/Object_Boxing_Double_Ptr_U_Short.c
   Sources/Object/Object_Boxing_Ptr_U_Int.c
   Sources/Object/Object_Boxing_Char.c
@@ -124,6 +126,8 @@ add_library(
   Sources/Object/Object_UnBoxing_Double_Ptr_U_Long_Long.c
   Sources/Object/Object_UnBoxing_Ptr_U_Char.c
   Sources/Object/Object_UnBoxing_Bool.c
+  Sources/Object/Object_UnBoxing_Ptr_Bool.c
+  Sources/Object/Object_UnBoxing_Double_Ptr_Bool.c
   Sources/Object/Object_UnBoxing_Double_Ptr_U_Short.c
   Sources/Object/Object_UnBoxing_Ptr_U_Int.c
   Sources/Object/Object_UnBoxing_Char.c

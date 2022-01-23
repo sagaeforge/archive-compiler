@@ -2,10 +2,10 @@
 #include "Object.h"
 #include "Private_GarbageCollection.h"
 
-unsigned long*
-__Object_UnBoxing_Ptr_U_Long(const Object pSelf)
+bool**
+__Object_UnBoxing_Double_Ptr_Bool(const Object pSelf)
 {
-  unsigned long* value = (unsigned long*)pSelf->m_Value;
+  bool** value = (bool**)pSelf->m_Value;
   Excute_MemoryRemove(pSelf->m_Value);
   FreeObject(pSelf);
   return value;

@@ -10,7 +10,6 @@
 // clang-format off
 #define Obj(Instance)                                                          \
   _Generic((Instance),                                                         \
-  _Bool    : NULL,                                                             \
   default  : __SystemObject(Instance))                                         \
   (Instance)
 

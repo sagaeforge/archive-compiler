@@ -66,6 +66,8 @@ typedef enum
   DataType_Double_Ptr_Void,
   DataType_Triple_Ptr_Void,
   DataType_Bool,
+  DataType_Ptr_Bool,
+  DataType_Double_Ptr_Bool,
   DataType_None
 } DataTypeCode_t;
 
