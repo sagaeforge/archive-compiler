@@ -1,9 +1,10 @@
 
 #include "Application.h"
+#include "Private_GarbageCollection.h"
 #include "Private_Object.h"
 
 void
-FreeObject(const Object* Ref)
+FreeObject(Object Ref)
 {
   // TODO Exception 처리
   // 만약에 Ref가 Object의 주소가 아닐경우
@@ -12,15 +13,19 @@ FreeObject(const Object* Ref)
     return;
 
   // index 구하기
-  Index_t Index =
-    (Index_t)Ref -
-    (Index_t)Application.Member.GarbageCollection_ObjectTable.Value;
+  int i;
+  for (i = 0; i < ObjectMaxLength; i++) {
+    if (Ref == Application.Member.GarbageCollection_ObjectTable.Value[i])
+      break;
+  }
+  if (i == ObjectMaxLength)
+    // TODO Exception 처리
+    return;
 
-  Index /= sizeof(Object);
-
-  Application.Member.GarbageCollection_ObjectTable.IsUsed[Index] = false;
-  Application.Member.GarbageCollection_ObjectTable.Value[Index]->m_Info = NULL;
-  Application.Member.GarbageCollection_ObjectTable.Value[Index]
-    ->m_Value.m_Value1d = NULL;
+  Application.Member.GarbageCollection_ObjectTable.IsUsed[i] = false;
+  Excute_MemorySet(Application.Member.GarbageCollection_ObjectTable.Value[i],
+                   0,
+                   1,
+                   sizeof(Object_t));
   Application.Member.GarbageCollection_ObjectTable.UsedObjectLength--;
 }

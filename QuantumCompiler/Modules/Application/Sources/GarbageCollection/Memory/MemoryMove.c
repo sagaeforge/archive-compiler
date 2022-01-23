@@ -20,4 +20,6 @@ Excute_MemoryMove(void* pObj, const void* pData, const Length_t pLength)
 
 void
 MemoryMove(void* pObj, const void* pData, const Length_t pLength)
-{}
+{
+  Excute_MemoryMove(pObj, pData, pLength);
+}

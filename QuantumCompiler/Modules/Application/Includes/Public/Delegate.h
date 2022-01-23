@@ -65,17 +65,17 @@
  * [+ START] 펑크 정의
  * * 반환 타입이 없으며 매개 변수도 존재하지 않는 경우
  */
-typedef void (*FP_Func)();
+typedef void (*Func_t)();
 typedef struct __FuncChainNode
 {
-  FP_Func Callback;
+  Func_t Callback;
   struct __FuncChainNode* Next;
 } FuncChainNode;
 typedef struct __FuncChain
 {
   FuncChainNode* m_Nodes;
-  void (*AddListener)(struct __FuncChain*, FP_Func);
-  void (*RemoveListener)(struct __FuncChain*, FP_Func);
+  void (*AddListener)(struct __FuncChain*, Func_t);
+  void (*RemoveListener)(struct __FuncChain*, Func_t);
   void (*RemoveAllListener)(struct __FuncChain*);
   void (*Invoke)(struct __FuncChain*);
 } FuncChain;

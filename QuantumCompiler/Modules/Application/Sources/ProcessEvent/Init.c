@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 static void
-AddListener(FP_Func Callback)
+AddListener(Func_t Callback)
 {
   Events event = &Application.ProcessEvent[ProcessEvent_Init];
 
@@ -28,7 +28,7 @@ AddListener(FP_Func Callback)
 }
 
 static void
-RemoveListener(FP_Func Method)
+RemoveListener(Func_t Method)
 {
   Events event = &Application.ProcessEvent[ProcessEvent_Init];
 

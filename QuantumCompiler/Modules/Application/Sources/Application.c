@@ -9,10 +9,7 @@
 // clang-format off
 // const라 접근하기 애매한것들 초기화
 
-struct ApplicationManager_t Application = {
-  .Member.SystemDataTypeTable = g_SystemDataTypeTable,
-  .Member.CustumDataTypeTable = g_CustumDataTypeTable,
-};
+struct ApplicationManager_t Application;
 // clang-format on
 
 static void
@@ -48,9 +45,32 @@ Application_Quit()
   Application.ProcessEvent[ProcessEvent_Quit].RemoveAllListener();
 
   // GarbageCollection 해제
-  int i;
+  int i, j;
   for (i = 0; i < ObjectMaxLength; i++)
     free(Application.Member.GarbageCollection_ObjectTable.Value[i]);
+
+  MemoryPage page = &Application.Member.GarbageCollection_HeapTable.MemoryPages;
+  MemoryPage* PageAry = (MemoryPage*)malloc(sizeof(MemoryPage_t));
+  if (PageAry == NULL)
+    // TODO Exception 처리
+    return;
+  i = 0;
+  while (page != NULL) {
+    // 페이지를 등록함
+    if (page != &Application.Member.GarbageCollection_HeapTable.MemoryPages)
+      PageAry[i++] = page;
+    // 원소를 삭제함
+    for (j = 0; j < MemoryMaxLength; j++) {
+      if (page->Nodes[j].m_Value == NULL)
+        break;
+      free(page->Nodes[j].m_Value);
+    }
+    page = page->Next;
+  }
+  // 생성함 페이지도 삭제함.
+  for (j = 0; j < i; j++)
+    free(PageAry[i]);
+  free(PageAry);
 }
 
 void
@@ -66,4 +86,5 @@ Application_Initialized()
   Application.Update_AllStart = Update_AllStart;
   Application.Update_AllStop = Update_AllStop;
   Application.Update_AllWaitStop = Update_AllWaitStop;
+  Application.Member.DataTypeTable = g_DataTypeTable;
 }

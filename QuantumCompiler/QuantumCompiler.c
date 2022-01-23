@@ -4,7 +4,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "GarbageCollection.h"
 #include "Object.h"
+#include "Private_GarbageCollection.h"
 #include "Types/DataType.h"
 
 /*
@@ -24,7 +26,17 @@ main(int argc, char const* argv[])
   // Application.ProcessEvent[ProcessEvent_Awake].AddListener(test);
   Application.ApplicationStart();
 
-  printf("%lu byte", sizeof(Application));
+  printf("%lu byte\n", sizeof(Application));
+
+  int* a = Constructor(int);
+
+  *a = 50;
+  printf("%d\n", *a);
+
+  Object obj = Boxing(int)(50);
+  printf("%s\n", g_DataTypeTable[DataType_Int].m_Name);
+  int b = UnBoxing(int)(obj);
+  printf("%d\n", b);
 
   // struct DataType DT;
   // printf("\n%lu", sizeof(DT));

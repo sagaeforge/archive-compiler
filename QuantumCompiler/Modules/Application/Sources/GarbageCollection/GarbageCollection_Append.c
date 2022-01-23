@@ -5,7 +5,7 @@
 
 void
 GarbageCollection_Append(const void* pObj,
-                         const DataTypeInfo* pInfo,
+                         const DataTypeInfo_t* pInfo,
                          const Length_t pLength)
 {
   if (pObj == NULL)
@@ -14,8 +14,8 @@ GarbageCollection_Append(const void* pObj,
   MemoryPage page = GarbageCollection_EmptyPageGet();
   page->Nodes[page->UsedMemoryLength].m_Length = pLength;
   page->Nodes[page->UsedMemoryLength].m_Policy = MemoryPolicy_None;
-  page->Nodes[page->UsedMemoryLength].m_TypeInfo = (DataTypeInfo*)pInfo;
+  page->Nodes[page->UsedMemoryLength].m_TypeInfo = (DataTypeInfo_t*)pInfo;
   page->Nodes[page->UsedMemoryLength].m_Value = (void*)pObj;
   page->UsedMemoryLength++;
-  Application.Member.GarbageCollection_HeapTable.UsedMemoryLength++;
+  Application.Member.GarbageCollection_HeapTable.TotalUsedMemoryLength++;
 }

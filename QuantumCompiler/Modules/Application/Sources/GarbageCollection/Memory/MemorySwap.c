@@ -20,4 +20,6 @@ Excute_MemorySwap(void* pObj, void* pData, const Length_t pLength)
 
 void
 MemorySwap(void* pObj, void* pData, const Length_t pLength)
-{}
+{
+  Excute_MemorySwap(pObj, pData, pLength);
+}

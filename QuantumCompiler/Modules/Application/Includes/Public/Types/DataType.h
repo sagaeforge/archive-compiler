@@ -16,13 +16,13 @@ typedef uint8_t BitMask;
 #define type(Instance)                                                         \
   _Generic(Instance,                                                           \
     _Bool : "bool",                                                            \
-    Object : "Object",                                                         \
+    Object : "object",                                                         \
     default : SystemType(Instance)                                             \
   )
 #define TypeCompare(Instance1, Instance2) (strcmp(type(Instance1), type(Instance2)) == 0)
 
-typedef void (*Constructor)(void*);
-typedef void (*Destructor)(void*);
+typedef void (*Constructor_t)(void**);
+typedef void (*Destructor_t)(void*);
 
 typedef enum
 {
@@ -65,66 +65,41 @@ typedef enum
   DataType_Ptr_Void,
   DataType_Double_Ptr_Void,
   DataType_Triple_Ptr_Void,
-  DataType_SystemDataTypeNone
-} SystemDataTypeCode;
-
-typedef enum
-{
-  DataTypeOption_TypeIsValue = 0,
-  DataTypeOption_TypeIsReference = (1 << 0),
-  DataTypeOption_TypeIsNone = (1 << 1),
-  DataTypeOption_Unsigned = (1 << 2),
-  DataTypeOption_Generic = (1 << 3),
-  DataTypeOption_None = (1 << 4),
-
-  DataTypeIsSystem = (1 << 14),
-  DataTypeIsCustum = (1 << 15)
-} DataTypeOption;
-
-typedef enum
-{
   DataType_Bool,
-  DataType_CustumDataTypeNone
-} CustumDataTypeCode;
+  DataType_None
+} DataTypeCode_t;
 
+typedef enum
+{
+  DataTypeOption_TypeIsValue      = 0,
+  DataTypeOption_TypeIsReference  = (1 << 0),
+  DataTypeOption_TypeIsNone       = (1 << 1),
+  DataTypeOption_Unsigned         = (1 << 2),
+  DataTypeOption_Generic          = (1 << 3),
+  DataTypeOption_None             = (1 << 4),
+} DataTypeOption_t;
+
+#pragma pack(push, 1)
 typedef struct
 {
-  char*               m_Name;
-  SystemDataTypeCode  m_Code;
-  Length_t            m_WordSize;
-  DataTypeOption      m_Type;
-  Constructor         m_Constructor;
-  Destructor          m_Destructor;
-  FP_Func             m_Boxing;
-  FP_Func             m_UnBoxing;
-} SystemDataTypeInfo;
+  char*             m_Name;
+  int               m_Code;
+  Length_t          m_WordSize;
+  DataTypeOption_t  m_Type;
+  Constructor_t     m_Constructor;
+  Destructor_t      m_Destructor;
+  Func_t            m_Boxing;
+  Func_t            m_UnBoxing;
+} DataTypeInfo_t;
+#pragma pack(pop)
 
-typedef struct
-{
-  char*               m_Name;
-  CustumDataTypeCode  m_Code;
-  Length_t            m_WordSize;
-  DataTypeOption      m_Type;
-  Constructor         m_Constructor;
-  Destructor          m_Destructor;
-  FP_Func             m_Boxing;
-  FP_Func             m_UnBoxing;
-} CustumDataTypeInfo;
-
-typedef struct
-{
-  DataTypeOption        m_Option;
-  union {
-    SystemDataTypeInfo *m_SystemInfo;
-    CustumDataTypeInfo *m_CustemInfo;
-  };
-} DataTypeInfo;
-
-const DataTypeInfo* DataType_Find(const char *pDataType);
+const DataTypeInfo_t* DataType_Find(const char *pDataType);
 
 // clang-format on
 
-extern const SystemDataTypeInfo g_SystemDataTypeTable[];
-extern const CustumDataTypeInfo g_CustumDataTypeTable[];
+extern const DataTypeInfo_t g_DataTypeTable[];
+#ifdef DEBUG
+extern const DataTypeInfo_t* Debug_DataTypeTable;
+#endif
 
 #endif

@@ -13,4 +13,6 @@ Excute_MemoryRemove(void* pObj)
 
 void
 MemoryRemove(void* pObj)
-{}
+{
+  Excute_MemoryRemove(pObj);
+}

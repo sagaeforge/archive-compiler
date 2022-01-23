@@ -49,7 +49,7 @@ UpdateStopWait()
 }
 
 static void
-AddListener(FP_Func Callback)
+AddListener(Func_t Callback)
 {
   UpdateStopWait();
   Events event = &Application.ProcessEvent[ProcessEvent_FixedUpdate];
@@ -76,7 +76,7 @@ AddListener(FP_Func Callback)
 }
 
 static void
-RemoveListener(FP_Func Method)
+RemoveListener(Func_t Method)
 {
   UpdateStopWait();
   Events event = &Application.ProcessEvent[ProcessEvent_FixedUpdate];

@@ -113,6 +113,7 @@ __attribute__((warn_unused_result)) const Object          __Object_Boxing_Double
 __attribute__((warn_unused_result)) const Object          __Object_Boxing_Ptr_Void                  (const void *                 pValue);
 __attribute__((warn_unused_result)) const Object          __Object_Boxing_Double_Ptr_Void           (const void **                pValue);
 __attribute__((warn_unused_result)) const Object          __Object_Boxing_Triple_Ptr_Void           (const void ***               pValue);
+__attribute__((warn_unused_result)) const Object          __Object_Boxing_Bool                      (const void ***               pValue);
                                     char                  __Object_UnBoxing_Char                    (const Object                 pSelf);
                                     unsigned char         __Object_UnBoxing_U_Char                  (const Object                 pSelf);
                                     short                 __Object_UnBoxing_Short                   (const Object                 pSelf);
@@ -152,6 +153,7 @@ __attribute__((warn_unused_result)) const Object          __Object_Boxing_Triple
                                     void *                __Object_UnBoxing_Ptr_Void                (const Object                 pSelf);
                                     void **               __Object_UnBoxing_Double_Ptr_Void         (const Object                 pSelf);
                                     void ***              __Object_UnBoxing_Triple_Ptr_Void         (const Object                 pSelf);
+                                    bool                  __Object_UnBoxing_Bool                    (const Object                 pSelf);
 // clang-format on
 
 #endif

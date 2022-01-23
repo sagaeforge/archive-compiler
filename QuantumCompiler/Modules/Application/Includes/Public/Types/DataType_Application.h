@@ -23,15 +23,14 @@ struct ApplicationManager_t {
     bool              ProcessEvent_IsUpdated;
     bool              ProcessEvent_IsFixedUpdated;
     ProcessEventName  ProcessEvent_Status;
-    FP_Func           ProcessEvent_UpdateStart;
-    FP_Func           ProcessEvent_UpdateStop;
-    FP_Func           ProcessEvent_UpdateWaitStop;
-    FP_Func           ProcessEvent_FixedUpdateStart;
-    FP_Func           ProcessEvent_FixedUpdateStop;
-    FP_Func           ProcessEvent_FixedUpdateWaitStop;
+    Func_t           ProcessEvent_UpdateStart;
+    Func_t           ProcessEvent_UpdateStop;
+    Func_t           ProcessEvent_UpdateWaitStop;
+    Func_t           ProcessEvent_FixedUpdateStart;
+    Func_t           ProcessEvent_FixedUpdateStop;
+    Func_t           ProcessEvent_FixedUpdateWaitStop;
 
-    const SystemDataTypeInfo* SystemDataTypeTable;
-    const CustumDataTypeInfo* CustumDataTypeTable;
+    const DataTypeInfo_t* DataTypeTable;
 
     struct {
       Length_t UsedObjectLength;
@@ -40,7 +39,7 @@ struct ApplicationManager_t {
     } GarbageCollection_ObjectTable;
     struct
     {
-      Length_t UsedMemoryLength;
+      Length_t TotalUsedMemoryLength;
       Length_t UsedMemoryPageLength;
       MemoryPage_t MemoryPages;
     } GarbageCollection_HeapTable;

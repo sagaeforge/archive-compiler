@@ -2,14 +2,18 @@
 #include "GarbageCollection.h"
 #include "Private_GarbageCollection.h"
 
-void*
-Excute_MemoryDestructor(const DataTypeInfo* pInfo, const void* pObj)
+void
+Excute_MemoryDestructor(const DataTypeInfo_t* pInfo, void* pObj)
 {
-  return NULL;
+  if (pInfo->m_Destructor != NULL)
+    pInfo->m_Destructor(&pObj);
+
+  Excute_MemorySet(pObj, 0, 1, pInfo->m_WordSize);
+  GarbageCollection_Remove(pObj);
 }
 
-void*
-MemoryDestructor(const DataTypeInfo* pInfo, const void* pObj)
+void
+MemoryDestructor(const DataTypeInfo_t* pInfo, void* pObj)
 {
-  return NULL;
+  Excute_MemoryDestructor(pInfo, pObj);
 }

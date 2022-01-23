@@ -15,16 +15,16 @@ typedef struct
   // clang-format off
   /**
    * @brief 프로세스 이벤트에 함수 추가
-   * @param FP_Func - void (*) (void) 타입의 함수
+   * @param Func_t - void (*) (void) 타입의 함수
    * @return None - 없음
    */
-  void (*AddListener)       (FP_Func);
+  void (*AddListener)       (Func_t);
   /**
    * @brief 프로세스 이벤트에 함수 삭제
-   * @param FP_Func - void (*) (void) 타입의 함수
+   * @param Func_t - void (*) (void) 타입의 함수
    * @return None - 없음
    */
-  void (*RemoveListener)    (FP_Func);
+  void (*RemoveListener)    (Func_t);
   /**
    * @brief 프로세스 이벤트에 등록된 모든 함수 삭제
    * @param None - 없음

@@ -13,11 +13,12 @@ GarbageCollectionModule_ObjectTableInitialized()
   int i;
   for (i = 0; i < ObjectMaxLength; i++) {
     Application.Member.GarbageCollection_ObjectTable.Value[i] =
-      (Object)malloc(sizeof(Object_t));
-    Application.Member.GarbageCollection_ObjectTable.Value[i]->m_Info = NULL;
-    Application.Member.GarbageCollection_ObjectTable.Value[i]
-      ->m_Value.m_Value1d = NULL;
+      malloc(sizeof(Object_t));
     Application.Member.GarbageCollection_ObjectTable.IsUsed[i] = false;
+    Excute_MemorySet(Application.Member.GarbageCollection_ObjectTable.Value[i],
+                     0,
+                     1,
+                     sizeof(Object_t));
   }
 }
 
@@ -28,24 +29,18 @@ GarbageCollectionModule_HeapTableInitialized()
   Application.Member.GarbageCollection_HeapTable.MemoryPages.Next = NULL;
   Application.Member.GarbageCollection_HeapTable.MemoryPages.UsedMemoryLength =
     0;
-  Application.Member.GarbageCollection_HeapTable.UsedMemoryLength = 0;
+  Application.Member.GarbageCollection_HeapTable.TotalUsedMemoryLength = 0;
 
+  MemoryPage page = &Application.Member.GarbageCollection_HeapTable.MemoryPages;
   int i;
   for (i = 0; i < MemoryMaxLength; i++) {
-    Application.Member.GarbageCollection_HeapTable.MemoryPages.Nodes[i]
-      .m_Length = 0;
-    Application.Member.GarbageCollection_HeapTable.MemoryPages.Nodes[i]
-      .m_Policy = MemoryPolicy_None;
-    Application.Member.GarbageCollection_HeapTable.MemoryPages.Nodes[i]
-      .m_TypeInfo = NULL;
-    Application.Member.GarbageCollection_HeapTable.MemoryPages.Nodes[i]
-      .m_Value = NULL;
+    Excute_MemorySet(&page->Nodes[i], 0, 1, sizeof(Memory_t));
   }
 }
 
 void
 GarbageCollectionModule_Initialized()
 {
-  GarbageCollectionModule_HeapTableInitialized();
   GarbageCollectionModule_ObjectTableInitialized();
+  GarbageCollectionModule_HeapTableInitialized();
 }

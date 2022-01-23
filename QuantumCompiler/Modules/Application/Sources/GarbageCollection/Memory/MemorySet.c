@@ -27,4 +27,6 @@ MemorySet(void* pObj,
           const int pValue,
           const Length_t pWordSize,
           const Length_t pLength)
-{}
+{
+  Excute_MemorySet(pObj, pValue, pWordSize, pLength);
+}

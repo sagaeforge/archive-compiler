@@ -20,7 +20,7 @@ enum MemoryPolicy
 
 typedef struct
 {
-  DataTypeInfo*         m_TypeInfo;
+  DataTypeInfo_t*       m_TypeInfo;
   enum MemoryPolicy     m_Policy;
   void*                 m_Value;
   Length_t              m_Length;
@@ -29,8 +29,8 @@ typedef struct
 typedef struct _MemoryPage {
   Length_t              UsedMemoryLength;
   Memory_t              Nodes[MemoryMaxLength];
-  struct _MemoryPage*  Next;
-} *MemoryPage, MemoryPage_t;
+  struct _MemoryPage*   Next;
+} MemoryPage_t, *MemoryPage;
 
 #pragma pack(pop)
 #endif

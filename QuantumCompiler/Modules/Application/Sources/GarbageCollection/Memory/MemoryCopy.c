@@ -17,4 +17,6 @@ Excute_MemoryCopy(void* pObj, const void* pData, const Length_t pLength)
 
 void
 MemoryCopy(void* pObj, const void* pData, const Length_t pLength)
-{}
+{
+  Excute_MemoryCopy(pObj, pData, pLength);
+}

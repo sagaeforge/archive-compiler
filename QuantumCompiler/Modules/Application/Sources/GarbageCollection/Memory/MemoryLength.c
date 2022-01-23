@@ -5,12 +5,14 @@
 Length_t
 Excute_MemoryLength(const void* pObj)
 {
-  return 0;
+  MemoryPage page;
+  Index_t index;
+  Memory info = GarbageCollection_Find(pObj, &page, &index);
+  return info->m_Length;
 }
 
 Length_t
 MemoryLength(const void* pObj)
 {
-  // TODO 구현
-  return 0;
+  return Excute_MemoryLength(pObj);
 }
