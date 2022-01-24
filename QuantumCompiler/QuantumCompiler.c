@@ -49,6 +49,8 @@ main(int argc, char const* argv[])
 
   // void* ptr = Object(int)(23);
 
+  printf("%lu", sizeof(long));
+
   Application.ApplicationQuit();
   return 0;
 }

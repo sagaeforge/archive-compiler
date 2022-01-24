@@ -14,13 +14,13 @@ add_executable(
 )
 
 add_subdirectory(Modules/Application/)
-# add_subdirectory(Modules/String/)
+add_subdirectory(Modules/String/)
 target_link_libraries(
   QuantumCompiler
   PUBLIC
   
   Application
-  # String
+  String
 )
 target_include_directories(
   QuantumCompiler
@@ -33,7 +33,7 @@ target_include_directories(
   Modules/Application/Includes/Public/
 
   # String
-  # Modules/String/Includes/Public/
+  Modules/String/Includes/Public/
 )
 target_compile_options(
   QuantumCompiler

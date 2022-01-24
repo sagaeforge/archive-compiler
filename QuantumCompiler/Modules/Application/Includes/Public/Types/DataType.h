@@ -2,8 +2,8 @@
 #ifndef __PUBLIC_APPLICATION_DATATYPE__
 #define __PUBLIC_APPLICATION_DATATYPE__
 
-#include "Delegate.h"
-#include "Private_DataType.h"
+#include "../../Private/Private_DataType.h"
+#include "../Delegate.h"
 
 #include <string.h>
 
