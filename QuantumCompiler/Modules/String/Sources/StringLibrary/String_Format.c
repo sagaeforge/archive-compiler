@@ -8,8 +8,8 @@
 #include "Private_StringLib.h"
 
 // TODO 구현
-String*
-String_Format(String* Format, ...)
+String
+String_Format(String Format, ...)
 {
   va_list ap;
   va_start(ap, Format);
@@ -17,7 +17,7 @@ String_Format(String* Format, ...)
   int perper = String_Count(Format, String("%%"));
   int ptr_param;
 
-  StringAry* Ary = StringAryConstructor(0);
+  StringAry Ary = StringAryConstructor(0);
 
   int i;
   for (i = 0; i < percent; i++) {
@@ -27,7 +27,7 @@ String_Format(String* Format, ...)
     double temp_f;
     // clang-format off
     switch (Format->Value[ptr_param + 1]) {
-    case 's': StringAry_Push(Ary, va_arg(ap, String *)); break;
+    case 's': StringAry_Push(Ary, va_arg(ap, String)); break;
     case 'S': StringAry_Push(Ary, String(va_arg(ap, char *))); break;
     case 'w': case 'W': StringAry_Push(Ary, String(va_arg(ap, wchar_t *))); break;
     case 'c': case 'C': ch[0] = va_arg(ap, int);
@@ -74,7 +74,7 @@ String_Format(String* Format, ...)
       i++;
       gap -= 1;
 
-      String* str;
+      String str;
       // clang-format off
       switch (Format->Value[i]) {
         case 's': case 'S': case 'w': case 'W': case 'c': 

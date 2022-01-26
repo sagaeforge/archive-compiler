@@ -1,7 +1,7 @@
 
 #include "Private_StringLib.h"
 
-String*
+String
 String_ToString_Decimal(int64_t Value)
 {
   if (Value > 0)

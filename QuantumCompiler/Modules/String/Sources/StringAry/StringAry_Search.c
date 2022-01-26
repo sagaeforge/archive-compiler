@@ -4,7 +4,7 @@
 #include "Private_StringAry.h"
 
 Index_t
-StringAry_Search(StringAry* Self, String* Value)
+StringAry_Search(StringAry Self, String Value)
 {
   StringAryNode* node = Self->Values;
   int i;

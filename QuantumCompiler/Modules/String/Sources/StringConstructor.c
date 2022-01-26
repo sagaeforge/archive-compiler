@@ -4,10 +4,10 @@
 #include "String.h"
 #include <stdio.h>
 
-static String*
+static String
 StringConstructor_None()
 {
-  String* temp = (String*)MemoryCreate(sizeof(String));
+  String temp = (String)MemoryCreate(sizeof(String_t));
   if (temp == NULL) {
     // Warning("문자열 객체를 생성할 수 없습니다. (Size:%lu)", sizeof(String));
     // TODO Exception 처리
@@ -19,10 +19,10 @@ StringConstructor_None()
   return temp;
 }
 
-String*
+String
 StringConstructor_Chs(const char* Value)
 {
-  String* temp = StringConstructor_None();
+  String temp = StringConstructor_None();
   if (temp == NULL)
     return NULL;
 
@@ -38,10 +38,10 @@ StringConstructor_Chs(const char* Value)
 
   return temp;
 }
-String*
+String
 StringConstructor_Wcs(const wchar_t* Value)
 {
-  String* temp = StringConstructor_None();
+  String temp = StringConstructor_None();
   if (temp == NULL)
     return NULL;
 
@@ -56,13 +56,13 @@ StringConstructor_Wcs(const wchar_t* Value)
 
   return temp;
 }
-String*
-StringConstructor_Str(String Value)
+String
+StringConstructor_Str(String_t Value)
 {
   return StringConstructor_Wcs(Value.Value);
 }
-String*
-StringConstructor_Strp(String* Value)
+String
+StringConstructor_Strp(String Value)
 {
   return StringConstructor_Wcs(Value->Value);
 }

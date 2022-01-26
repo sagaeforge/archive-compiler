@@ -4,7 +4,7 @@
 
 // TODO 최적화
 static bool
-_StringCompare(wcs Ary, String* FindValue, Index_t Start)
+_StringCompare(wcs Ary, String FindValue, Index_t Start)
 {
   int i;
   for (i = Start; i < Start + FindValue->Length; i++)
@@ -14,7 +14,7 @@ _StringCompare(wcs Ary, String* FindValue, Index_t Start)
 }
 
 Length_t
-String_Count(String* Self, String* Value)
+String_Count(String Self, String Value)
 {
   // TODO 조건 검사
   int i;

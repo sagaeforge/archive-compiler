@@ -3,7 +3,7 @@
 #include "Private_String.h"
 
 void
-String_Destructor(String** Self)
+String_Destructor(String* Self)
 {
   (*Self)->IsNone = false;
   (*Self)->Length = 0;

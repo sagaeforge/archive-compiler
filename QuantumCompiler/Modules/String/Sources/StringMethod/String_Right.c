@@ -3,8 +3,8 @@
 #include "Private_String.h"
 #include "Private_StringLib.h"
 
-String*
-String_Right(String* Self, Length_t Length)
+String
+String_Right(String Self, Length_t Length)
 {
   if (Length >= Self->Length)
     return String(Self);

@@ -2,8 +2,8 @@
 #include "Chs.h"
 #include "Private_StringLib.h"
 
-String*
-String_Extract(String* Self, Index_t Start, Index_t End)
+String
+String_Extract(String Self, Index_t Start, Index_t End)
 {
   if (Self->Length < End)
     return String(Self);

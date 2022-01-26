@@ -3,7 +3,7 @@
 #include "Private_String.h"
 
 static bool
-_StringCompare(wcs Ary, String* FindValue, Index_t Start)
+_StringCompare(wcs Ary, String FindValue, Index_t Start)
 {
   int i;
   for (i = Start; i < Start + FindValue->Length; i++)
@@ -12,8 +12,8 @@ _StringCompare(wcs Ary, String* FindValue, Index_t Start)
   return true;
 }
 
-String*
-String_ReplaceAll(String* Self, String* Ori, String* Value)
+String
+String_ReplaceAll(String Self, String Ori, String Value)
 {
   Length_t calcvalue = String_Count(Self, Ori);
   if (calcvalue == 0)

@@ -30,22 +30,22 @@
   ) (Instance)
 // clang-format on
 
-String*
+String
 String_ToString_Bool(bool Value);
-String*
+String
 String_ToString_Decimal(int64_t Value);
-String*
+String
 String_ToString_Decimal_Unsigned(uint64_t Value);
-String*
+String
 String_ToString_Digit(double Value);
 
 bool
-String_ValueOf_Bool(String* Self);
+String_ValueOf_Bool(String Self);
 int64_t
-String_ValueOf_Decimal(String* Self);
+String_ValueOf_Decimal(String Self);
 uint64_t
-String_ValueOf_Decimal_Unsigned(String* Self);
+String_ValueOf_Decimal_Unsigned(String Self);
 double
-String_ValueOf_Digit(String* Self);
+String_ValueOf_Digit(String Self);
 
 #endif

@@ -2,8 +2,8 @@
 #include "Chs.h"
 #include "Private_String.h"
 
-String*
-String_ToUpper(String* Self)
+String
+String_ToUpper(String Self)
 {
   wcs temp = __WcsCreate(Self->Length);
 

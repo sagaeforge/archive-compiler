@@ -3,7 +3,7 @@
 #include "Private_StringAry.h"
 
 void
-StringAry_Remove(StringAry* Self, Index_t Index)
+StringAry_Remove(StringAry Self, Index_t Index)
 {
   Index = Index >= Self->Length ? Self->Length : Index;
 

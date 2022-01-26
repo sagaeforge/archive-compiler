@@ -2,8 +2,8 @@
 #include "Chs.h"
 #include "Private_StringLib.h"
 
-String*
-String_Reverse(String* Self)
+String
+String_Reverse(String Self)
 {
   wchar_t* temp = __WcsCreate(Self->Length);
   int i;

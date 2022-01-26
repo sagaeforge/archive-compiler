@@ -3,7 +3,7 @@
 #include "Private_StringLib.h"
 
 bool
-String_IsDigit(String* Self)
+String_IsDigit(String Self)
 {
   int i, dotCount = 0, ECount = 0;
   for (i = 0; i < Self->Length; i++) {

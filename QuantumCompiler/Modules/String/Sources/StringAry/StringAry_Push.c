@@ -3,7 +3,7 @@
 #include "Private_StringAry.h"
 
 void
-StringAry_Push(StringAry* Self, String* Value)
+StringAry_Push(StringAry Self, String Value)
 {
   StringAryNode* node = StringAry_NodeCreate();
   node->Next = NULL;

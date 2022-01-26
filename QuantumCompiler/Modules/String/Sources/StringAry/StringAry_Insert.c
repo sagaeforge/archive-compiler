@@ -3,7 +3,7 @@
 #include "Private_StringAry.h"
 
 void
-StringAry_Insert(StringAry* Self, String* Value, Index_t Index)
+StringAry_Insert(StringAry Self, String Value, Index_t Index)
 {
   if (Index >= Self->Length - 1)
     StringAry_Push(Self, Value);

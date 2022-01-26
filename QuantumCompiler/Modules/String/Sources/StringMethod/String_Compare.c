@@ -3,7 +3,7 @@
 #include "Private_String.h"
 
 bool
-String_Compare(String* Self, String* Value)
+String_Compare(String Self, String Value)
 {
   if (Self->Length != Value->Length)
     return false;

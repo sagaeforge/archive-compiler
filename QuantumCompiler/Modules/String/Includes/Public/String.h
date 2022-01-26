@@ -14,22 +14,22 @@
   wcs             : StringConstructor_Wcs,                                     \
   const_wcs       : StringConstructor_Wcs,                                     \
   unsigned int *  : StringConstructor_Wcs,                                     \
-  String          : StringConstructor_Str,                                     \
-  String *        : StringConstructor_Strp)                                    \
+  String_t        : StringConstructor_Str,                                     \
+  String          : StringConstructor_Strp)                                    \
   (Instance)
 // clang-format on
 
-String*
+String
 StringConstructor_Chs(const_chs Value);
 
-String*
+String
 StringConstructor_Wcs(const_wcs Value);
 
-String*
-StringConstructor_Str(String Value);
+String
+StringConstructor_Str(String_t Value);
 
-String*
-StringConstructor_Strp(String* Value);
+String
+StringConstructor_Strp(String Value);
 
 void
 StringModule_Initialized();

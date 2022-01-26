@@ -4,10 +4,10 @@
 
 #include <stdarg.h>
 
-StringAry*
+StringAry
 StringAryConstructor(int Cnt, ...)
 {
-  StringAry* Ary = MemoryCreate(sizeof(StringAry));
+  StringAry Ary = MemoryCreate(sizeof(StringAry_t));
   if (Ary == NULL)
     // TODO Exception 처리
     return NULL;
@@ -21,7 +21,7 @@ StringAryConstructor(int Cnt, ...)
   va_start(ap, Cnt);
   int i;
   for (i = 0; i < Cnt; i++) {
-    String* temp = va_arg(ap, String*);
+    String temp = va_arg(ap, String);
     StringAry_Push(Ary, temp);
   }
   va_end(ap);

@@ -3,9 +3,9 @@
 #include "Private_StringAry.h"
 
 void
-StringAryDestructor(StringAry** Self)
+StringAryDestructor(StringAry* Self)
 {
-  StringAry* Ary = *Self;
+  StringAry Ary = *Self;
   if (Ary->Length != 0) {
     StringAryNode** ptr =
       (StringAryNode**)MemoryCreate(sizeof(StringAryNode*) * Ary->Length);

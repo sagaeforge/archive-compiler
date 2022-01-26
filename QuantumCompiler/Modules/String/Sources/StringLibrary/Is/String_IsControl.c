@@ -3,7 +3,7 @@
 #include "Private_StringLib.h"
 
 bool
-String_IsControl(String* Self)
+String_IsControl(String Self)
 {
   int i;
   for (i = 0; i < Self->Length; i++)

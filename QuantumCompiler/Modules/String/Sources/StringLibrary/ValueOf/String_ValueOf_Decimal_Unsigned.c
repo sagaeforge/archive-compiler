@@ -2,7 +2,7 @@
 #include "Private_StringLib.h"
 
 uint64_t
-String_ValueOf_Decimal_Unsigned(String* Self)
+String_ValueOf_Decimal_Unsigned(String Self)
 {
   // TODO 최적화, 오류 검사
   uint64_t ret = 0;

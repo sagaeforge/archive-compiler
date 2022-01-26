@@ -3,7 +3,7 @@
 #include "Private_StringLib.h"
 
 bool
-String_IsOctal(String* Self)
+String_IsOctal(String Self)
 {
   int i;
   if (!(Self->Value[0] == '0' &&

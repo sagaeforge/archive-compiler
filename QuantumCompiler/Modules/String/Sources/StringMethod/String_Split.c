@@ -5,10 +5,10 @@
 
 // TODO 오류 테스트
 
-StringAry*
-String_Split(String* Self, String* Value)
+StringAry
+String_Split(String Self, String Value)
 {
-  StringAry* Ary = StringAryConstructor(0);
+  StringAry Ary = StringAryConstructor(0);
   Length_t Cnt = String_Count(Self, Value);
 
   if (Cnt == 0) {

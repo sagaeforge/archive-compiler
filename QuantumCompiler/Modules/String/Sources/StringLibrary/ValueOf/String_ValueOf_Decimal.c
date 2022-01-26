@@ -2,7 +2,7 @@
 #include "Private_StringLib.h"
 
 int64_t
-String_ValueOf_Decimal(String* Self)
+String_ValueOf_Decimal(String Self)
 {
   // TODO 최적화, 오류 검사
   if (Self->Value[0] != '-')
