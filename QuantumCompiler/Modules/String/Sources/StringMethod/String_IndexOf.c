@@ -1,10 +1,9 @@
 
 #include "Private_String.h"
-#include "ProgramManager.h"
 
 // TODO 최적화
 static bool
-_StringCompare(wcs Ary, String* FindValue, Index Start)
+_StringCompare(wcs Ary, String FindValue, Index_t Start)
 {
   int i;
   for (i = Start; i < Start + FindValue->Length; i++)
@@ -13,8 +12,8 @@ _StringCompare(wcs Ary, String* FindValue, Index Start)
   return true;
 }
 
-int
-String_IndexOf(String* Self, String* Value)
+Index_t
+String_IndexOf(String Self, String Value)
 {
   int i;
   for (i = 0; i < Self->Length - Value->Length + 1; i++)

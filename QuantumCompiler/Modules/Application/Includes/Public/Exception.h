@@ -1,0 +1,5 @@
+
+#ifndef __PUBLIC_APPLICATION_EXCEPTION__
+#define __PUBLIC_APPLICATION_EXCEPTION__
+
+#endif

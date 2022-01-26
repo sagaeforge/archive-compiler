@@ -1,7 +1,7 @@
 
 #include "Private_StringLib.h"
 
-String*
+String
 String_ToString_Bool(bool Value)
 {
   return Value ? String("true") : String("false");

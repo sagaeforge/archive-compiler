@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 bool
-String_Pattern(String* Self, String* Format)
+String_Pattern(String Self, String Format)
 {
   int i;
   int gap = 0;

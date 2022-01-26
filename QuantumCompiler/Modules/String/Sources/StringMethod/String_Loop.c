@@ -1,10 +1,9 @@
 
 #include "Chs.h"
 #include "Private_String.h"
-#include "ProgramManager.h"
 
-String*
-String_Loop(String* Self, Length Length)
+String
+String_Loop(String Self, Length_t Length)
 {
   wcs temp = __WcsCreate(Self->Length * Length);
 

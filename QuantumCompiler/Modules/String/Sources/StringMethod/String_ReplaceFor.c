@@ -1,10 +1,9 @@
 
 #include "Chs.h"
 #include "Private_String.h"
-#include "ProgramManager.h"
 
 static bool
-_StringCompare(wcs Ary, String* FindValue, Index Start)
+_StringCompare(wcs Ary, String FindValue, Index_t Start)
 {
   int i;
   for (i = Start; i < Start + FindValue->Length; i++)
@@ -13,8 +12,8 @@ _StringCompare(wcs Ary, String* FindValue, Index Start)
   return true;
 }
 
-String*
-String_ReplaceFor(String* Self, String* Ori, String* Value, Length Length)
+String
+String_ReplaceFor(String Self, String Ori, String Value, Length_t Length)
 {
   if (Length > String_Count(Self, Ori) || Length == 0)
     return String(Self);

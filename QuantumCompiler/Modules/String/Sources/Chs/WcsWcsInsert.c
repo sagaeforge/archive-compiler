@@ -2,7 +2,7 @@
 #include "Chs.h"
 
 void
-__WcsWcsInsert(wcs Obj1, const_wcs Obj2, Index Start, Length Length)
+__WcsWcsInsert(wcs Obj1, const_wcs Obj2, Index_t Start, Length_t Length)
 {
   // TODO 오류 검사
   int i;

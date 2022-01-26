@@ -4,14 +4,14 @@
 
 #include "String.h"
 
-Length
-__StrLen(void* Obj, Length WordSize);
+Length_t
+__StrLen(void* Obj, Length_t WordSize);
 wcs
-__WcsCreate(Length Length);
+__WcsCreate(Length_t Length);
 void
-__StrSet(wcs Obj1, const void* Obj2, Length WordSize, Length Length);
+__StrSet(wcs Obj1, const void* Obj2, Length_t WordSize, Length_t Length);
 void
-__WcsWcsInsert(wcs Obj1, const_wcs Obj2, Index Start, Length Length);
+__WcsWcsInsert(wcs Obj1, const_wcs Obj2, Length_t Start, Length_t Length);
 
 bool
 __IsUpper(int ch);

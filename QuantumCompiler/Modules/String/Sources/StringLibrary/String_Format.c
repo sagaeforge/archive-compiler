@@ -8,8 +8,8 @@
 #include "Private_StringLib.h"
 
 // TODO 구현
-String*
-String_Format(String* Format, ...)
+String
+String_Format(String Format, ...)
 {
   va_list ap;
   va_start(ap, Format);
@@ -17,17 +17,17 @@ String_Format(String* Format, ...)
   int perper = String_Count(Format, String("%%"));
   int ptr_param;
 
-  StringAry* Ary = StringAryConstructor(0);
+  StringAry Ary = StringAryConstructor(0);
 
   int i;
   for (i = 0; i < percent; i++) {
     ptr_param = String_IndexFor(Format, String("%"), i);
     char ch[2];
-    _int64 temp_d;
+    int64_t temp_d;
     double temp_f;
     // clang-format off
     switch (Format->Value[ptr_param + 1]) {
-    case 's': StringAry_Push(Ary, va_arg(ap, String *)); break;
+    case 's': StringAry_Push(Ary, va_arg(ap, String)); break;
     case 'S': StringAry_Push(Ary, String(va_arg(ap, char *))); break;
     case 'w': case 'W': StringAry_Push(Ary, String(va_arg(ap, wchar_t *))); break;
     case 'c': case 'C': ch[0] = va_arg(ap, int);
@@ -35,10 +35,10 @@ String_Format(String* Format, ...)
                         StringAry_Push(Ary, String(ch)); 
                         break;
     case 'd': case 'D': temp_d = va_arg(ap, int);
-                        StringAry_Push(Ary, toString((_int64) temp_d)); 
+                        StringAry_Push(Ary, toString((int64_t) temp_d)); 
                         break;
-    case 'l': case 'L': temp_d = va_arg(ap, _int64);
-                        StringAry_Push(Ary, toString((_int64) temp_d)); 
+    case 'l': case 'L': temp_d = va_arg(ap, int64_t);
+                        StringAry_Push(Ary, toString((int64_t) temp_d)); 
                         break;
     case 'f': case 'F': temp_f = va_arg(ap, double);
                         StringAry_Push(Ary, toString(temp_f)); 
@@ -60,7 +60,7 @@ String_Format(String* Format, ...)
     // clang-format on
   }
 
-  Length Leng = 0;
+  Length_t Leng = 0;
   for (i = 0; i < Ary->Length; i++)
     Leng += StringAry_Get(Ary, i)->Length;
 
@@ -74,7 +74,7 @@ String_Format(String* Format, ...)
       i++;
       gap -= 1;
 
-      String* str;
+      String str;
       // clang-format off
       switch (Format->Value[i]) {
         case 's': case 'S': case 'w': case 'W': case 'c': 

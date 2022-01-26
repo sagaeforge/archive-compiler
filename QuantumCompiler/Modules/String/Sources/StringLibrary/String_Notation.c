@@ -1,8 +1,8 @@
 
 #include "Private_StringLib.h"
 
-String*
-String_Notation(_int64 Value, int notation)
+String
+String_Notation(int64_t Value, int notation)
 {
   if (notation != 2 && notation != 8 && notation != 16)
     return String_ToString_Decimal_Unsigned(Value);

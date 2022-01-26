@@ -3,7 +3,7 @@
 #include "Private_StringLib.h"
 
 bool
-String_IsUpper(String* Self)
+String_IsUpper(String Self)
 {
   int i;
   for (i = 0; i < Self->Length; i++)

@@ -1,7 +1,7 @@
 
 #include "Private_StringLib.h"
 
-String*
+String
 String_ToString_Digit(double Value)
 {
   wchar_t temp[300];

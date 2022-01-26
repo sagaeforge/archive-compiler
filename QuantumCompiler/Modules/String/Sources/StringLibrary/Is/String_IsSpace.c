@@ -3,7 +3,7 @@
 #include "Private_StringLib.h"
 
 bool
-String_IsSpace(String* Self)
+String_IsSpace(String Self)
 {
   int i;
   for (i = 0; i < Self->Length; i++)

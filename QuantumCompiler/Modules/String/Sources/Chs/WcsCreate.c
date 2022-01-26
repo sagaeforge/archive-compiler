@@ -3,7 +3,7 @@
 #include "GarbageCollection.h"
 
 wcs
-__WcsCreate(Length Length)
+__WcsCreate(Length_t Length)
 {
   wcs temp = MemoryCreate(sizeof(wchar_t) * (Length + 1));
   if (temp == NULL) {

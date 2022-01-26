@@ -1,11 +1,10 @@
 
 #include "Chs.h"
 #include "Private_String.h"
-#include "ProgramManager.h"
 
 // TODO 오류 검사
-String*
-String_Join(String* Self, String* Value)
+String
+String_Join(String Self, String Value)
 {
   wcs temp = __WcsCreate(Self->Length + Value->Length);
 

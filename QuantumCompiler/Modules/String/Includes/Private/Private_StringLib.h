@@ -3,41 +3,41 @@
 
 #include "StringLib.h"
 
-String*
-String_Format(String* Format, ...);
+String
+String_Format(String Format, ...);
 bool
-String_Pattern(String* Self, String* Format);
-String*
-String_Extract(String* Self, Index Start, Index End);
-String*
-String_Notation(_int64 Value, int notation);
-String*
-String_Reverse(String* Self);
-String*
+String_Pattern(String Self, String Format);
+String
+String_Extract(String Self, Index_t Start, Index_t End);
+String
+String_Notation(int64_t Value, int notation);
+String
+String_Reverse(String Self);
+String
 String_Prettier(double Value);
 
 bool
-String_IsAlpha(String* Self);
+String_IsAlpha(String Self);
 bool
-String_IsLower(String* Self);
+String_IsLower(String Self);
 bool
-String_IsUpper(String* Self);
+String_IsUpper(String Self);
 bool
-String_IsDecimal(String* Self);
+String_IsDecimal(String Self);
 bool
-String_IsDigit(String* Self);
+String_IsDigit(String Self);
 bool
-String_IsSpace(String* Self);
+String_IsSpace(String Self);
 bool
-String_IsAlphaDigit(String* Self);
+String_IsAlphaDigit(String Self);
 bool
-String_IsHex(String* Self);
+String_IsHex(String Self);
 bool
-String_IsControl(String* Self);
+String_IsControl(String Self);
 
 bool
-String_IsOctal(String* Self);
+String_IsOctal(String Self);
 bool
-String_IsBinary(String* Self);
+String_IsBinary(String Self);
 
 #endif

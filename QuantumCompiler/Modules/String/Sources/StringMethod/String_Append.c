@@ -4,7 +4,7 @@
 #include "Private_String.h"
 
 void
-String_Append(String* Self, String* Value)
+String_Append(String Self, String Value)
 {
   wcs temp = __WcsCreate(Self->Length + Value->Length);
   __WcsWcsInsert(temp, Self->Value, 0, Self->Length);

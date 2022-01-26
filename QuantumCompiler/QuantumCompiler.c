@@ -1,38 +1,56 @@
 
-#include "ProgramManager.h"
-#include "String.h"
-#include "StringLib.h"
+#include "Application.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
-void
-test()
-{
-  printf("tesewqdwqt");
-}
+#include "GarbageCollection.h"
+#include "Object.h"
+#include "Private_GarbageCollection.h"
+#include "Types/DataType.h"
 
-#define Test(FuncPtr) _Generic((FuncPtr), void (*)() : test())
+/*
+  해야할 것
+
+  GC 포팅 메모리 페이지가 3개로 구성됨.
+  Object 테이블 - Object 구조체만 저장함 있음.
+  Object Boxing 테이블 - Object 구조체의 값만 저장함.
+  Memory 테이블
+
+*/
 
 int
 main(int argc, char const* argv[])
 {
-  ProgramManager_Init();
-  ProgramManager_ProgramAgumentsSet(argc, argv);
-  Application.ProgramStart();
+  Application_Initialized();
+  // Application.ProcessEvent[ProcessEvent_Awake].AddListener(test);
+  Application.ApplicationStart();
 
-  // // String 모듈 기능 테스트
-  // String* strE1 = String("test test test");
-  // String* strE2 = String("a");
+  printf("%lu byte\n", sizeof(Application));
 
-  // String* Temp = StringMethod.Trim(strE1);
+  int* a = Constructor(int);
 
-  // printf("%S\n", strE1->Value);
-  // printf("%S\n", strE2->Value);
-  // printf("%S", Temp->Value);
+  *a = 50;
+  printf("%d\n", *a);
 
-  void (*test2)();
+  Object obj = Boxing(int)(50);
+  printf("%s\n", g_DataTypeTable[DataType_Int].m_Name);
+  int b = UnBoxing(int)(obj);
+  printf("%d\n", b);
 
-  Test(test2);
+  // struct DataType DT;
+  // printf("\n%lu", sizeof(DT));
 
-  Application.ProgramQuit();
+  // char chs = '\0';
+  // Object* obds = Object(chs);
+  // Test2(&a);
+
+  // trsads(test3213());
+
+  // void* ptr = Object(int)(23);
+
+  printf("%lu", sizeof(long));
+
+  Application.ApplicationQuit();
   return 0;
 }

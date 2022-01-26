@@ -2,7 +2,7 @@
 #include "Chs.h"
 
 static void
-__WcsSet(wcs Obj1, wcs Obj2, Length Length)
+__WcsSet(wcs Obj1, wcs Obj2, Length_t Length)
 {
   int i;
   for (i = 0; i < Length; i++)
@@ -10,7 +10,7 @@ __WcsSet(wcs Obj1, wcs Obj2, Length Length)
 }
 
 static void
-__ChsSet(wcs Obj1, chs Obj2, Length Length)
+__ChsSet(wcs Obj1, chs Obj2, Length_t Length)
 {
   int i;
   for (i = 0; i < Length; i++)
@@ -18,7 +18,7 @@ __ChsSet(wcs Obj1, chs Obj2, Length Length)
 }
 
 void
-__StrSet(wcs Obj1, const void* Obj2, Length WordSize, Length Length)
+__StrSet(wcs Obj1, const void* Obj2, Length_t WordSize, Length_t Length)
 {
   if (WordSize == 1)
     __ChsSet(Obj1, (chs)Obj2, Length);

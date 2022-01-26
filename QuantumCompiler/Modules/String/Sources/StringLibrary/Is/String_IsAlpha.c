@@ -3,7 +3,7 @@
 #include "Private_StringLib.h"
 
 bool
-String_IsAlpha(String* Self)
+String_IsAlpha(String Self)
 {
   int i;
   for (i = 0; i < Self->Length; i++)

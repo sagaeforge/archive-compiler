@@ -6,7 +6,7 @@
 
 #define StringAry(Cnt, args...) StringAryConstructor(Cnt, args)
 
-StringAry*
+StringAry
 StringAryConstructor(int Cnt, ...);
 
 extern struct StringAryMethod StringAryMethod;

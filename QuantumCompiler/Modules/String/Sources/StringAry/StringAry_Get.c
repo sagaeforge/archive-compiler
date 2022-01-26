@@ -2,8 +2,8 @@
 #include "GarbageCollection.h"
 #include "Private_StringAry.h"
 
-String*
-StringAry_Get(StringAry* Self, Index Index)
+String
+StringAry_Get(StringAry Self, Index_t Index)
 {
   if (Index >= Self->Length)
     // TODO Exception 처리

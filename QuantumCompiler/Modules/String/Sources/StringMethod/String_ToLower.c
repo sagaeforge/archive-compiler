@@ -1,10 +1,9 @@
 
 #include "Chs.h"
 #include "Private_String.h"
-#include "ProgramManager.h"
 
-String*
-String_ToLower(String* Self)
+String
+String_ToLower(String Self)
 {
   wcs temp = __WcsCreate(Self->Length);
 

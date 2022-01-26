@@ -2,7 +2,6 @@
 #include "Chs.h"
 #include "Private_String.h"
 #include "Private_StringLib.h"
-#include "ProgramManager.h"
 
 static bool
 _IsSpaceChs(wchar_t ch)
@@ -10,8 +9,8 @@ _IsSpaceChs(wchar_t ch)
   return (ch >= 9 && ch <= 13) || ch == 32;
 }
 
-String*
-String_Trim(String* Self)
+String
+String_Trim(String Self)
 {
   int i, space_Front = 0, space_Rear = 0;
   for (i = 0; i < Self->Length; i++)

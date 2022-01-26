@@ -2,8 +2,8 @@
 #include "GarbageCollection.h"
 #include "Private_StringAry.h"
 
-String*
-StringAry_Pop(StringAry* Self)
+String
+StringAry_Pop(StringAry Self)
 {
   StringAryNode* node = Self->Values;
   StringAryNode* backup = node;
@@ -11,7 +11,7 @@ StringAry_Pop(StringAry* Self)
     // TODO Exception 처리
     return NULL;
 
-  String* temp = NULL;
+  String temp = NULL;
   if (Self->Length == 1) {
     temp = Self->Values->Value;
     MemoryRemove((void**)&Self->Values);

@@ -3,7 +3,7 @@
 #include "Private_StringLib.h"
 
 bool
-String_IsHex(String* Self)
+String_IsHex(String Self)
 {
   int i;
   if (!(Self->Value[0] == '0' &&

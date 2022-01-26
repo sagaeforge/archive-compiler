@@ -3,8 +3,8 @@
 #include "Private_String.h"
 #include "Private_StringAry.h"
 
-Index
-StringAry_Search(StringAry* Self, String* Value)
+Index_t
+StringAry_Search(StringAry Self, String Value)
 {
   StringAryNode* node = Self->Values;
   int i;

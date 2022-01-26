@@ -4,7 +4,7 @@
 #include "Private_String.h"
 
 void
-String_Set(String* Self, String* Value)
+String_Set(String Self, String Value)
 {
   if (Self->IsNone)
     Self->Value = Value->Value;

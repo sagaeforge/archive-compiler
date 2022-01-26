@@ -1,8 +1,8 @@
 
 #include "Chs.h"
 
-Length
-__StrLen(void* Obj, Length WordSize)
+Length_t
+__StrLen(void* Obj, Length_t WordSize)
 {
   // WordSize를 기준으로 비교함.
   const char* a = Obj;

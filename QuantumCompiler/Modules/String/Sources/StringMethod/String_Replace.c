@@ -1,17 +1,16 @@
 
 #include "Chs.h"
 #include "Private_String.h"
-#include "ProgramManager.h"
 
-String*
-String_Replace(String* Self, String* Ori, String* Value)
+String
+String_Replace(String Self, String Ori, String Value)
 {
   int ind = String_IndexOf(Self, Ori);
   if (ind == -1)
     return String(Self);
 
   bool IsNull = String_IsNone(Value);
-  Length leng = Self->Length - Ori->Length + Value->Length;
+  Length_t leng = Self->Length - Ori->Length + Value->Length;
   wcs temp = __WcsCreate(leng);
   int i, j, temp_Pos = 0;
   for (i = 0; i < leng; i++)
