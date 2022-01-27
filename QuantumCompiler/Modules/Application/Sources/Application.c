@@ -3,6 +3,8 @@
 #include <Object.h>
 #include <Private_GarbageCollection.h>
 #include <Private_ProcessEvent.h>
+#include <String.h>
+#include <StringAry.h>
 
 #include <stdlib.h>
 
@@ -74,10 +76,11 @@ Application_Quit()
 }
 
 void
-Application_Initialized()
+Application_Initialized(int argc, char const* argv[])
 {
   ProcessEventModule_Initialized();
   GarbageCollectionModule_Initialized();
+  StringModule_Initialized();
 
   Application.ApplicationInit = Application_Init;
   Application.ApplicationStart = Application_Start;
@@ -87,4 +90,11 @@ Application_Initialized()
   Application.Update_AllStop = Update_AllStop;
   Application.Update_AllWaitStop = Update_AllWaitStop;
   Application.Member.DataTypeTable = g_DataTypeTable;
+
+  int i;
+  StringAry Param = StringAryConstructor(0);
+  for (i = 0; i < argc; i++) {
+    StringAryMethod.Push(Param, String(argv[i]));
+  }
+  *(StringAry*)(&Application.ProgramParam) = Param;
 }

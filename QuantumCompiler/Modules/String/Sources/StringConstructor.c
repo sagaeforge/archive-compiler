@@ -38,6 +38,7 @@ StringConstructor_Chs(const char* Value)
 
   return temp;
 }
+
 String
 StringConstructor_Wcs(const wchar_t* Value)
 {

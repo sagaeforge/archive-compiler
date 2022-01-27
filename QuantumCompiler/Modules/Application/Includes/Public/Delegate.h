@@ -4,6 +4,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+#pragma pack(push, 1)
+
 /**
  * [*] 델리게이트
  * [+ START] 델리게이트 정의
@@ -83,5 +85,7 @@ typedef struct __FuncChain
 
 void
 FuncChain_Setting(FuncChain* Chain);
+
+#pragma pack(pop)
 
 #endif

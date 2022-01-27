@@ -140,6 +140,7 @@ target_include_directories(
   Application
   PUBLIC
 
+  ../String/Includes/Public/
   Includes/Public/
   Includes/Private/
 )

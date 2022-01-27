@@ -11,6 +11,7 @@ typedef const char* const_chs;
 typedef wchar_t* wcs;
 typedef const wchar_t* const_wcs;
 
+#pragma pack(push, 1)
 typedef struct _String
 {
   bool IsNone;
@@ -91,5 +92,5 @@ struct StringAryMethod
   Length_t  (*Contains)   (StringAry, String);
 };
 
-
+#pragma pack(pop)
 #endif

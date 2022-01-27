@@ -7,6 +7,6 @@
 extern struct ApplicationManager_t Application;
 
 void
-Application_Initialized();
+Application_Initialized(int argc, char const* argv[]);
 
 #endif

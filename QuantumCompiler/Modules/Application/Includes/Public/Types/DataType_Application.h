@@ -10,11 +10,13 @@
 #include <Types/DataType_GarbageCollection.h>
 #include <Types/DataType_Object.h>
 #include <Types/DataType_ProcessEvent.h>
+#include <Types/DataTypes_String.h>
 
 #include <pthread.h>
 
 struct ApplicationManager_t {
   ProcessEvent ProcessEvent[8];
+  const StringAry ProgramParam;
 
   struct {
     pthread_t         ProcessEvent_UpdateThread;

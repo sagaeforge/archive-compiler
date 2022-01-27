@@ -3,8 +3,8 @@ project(QuantumCompiler VERSION 0.1.0)
 
 include(CTest)
 enable_testing()
-# 상세 과정 출력
-set ( CMAKE_VERBOSE_MAKEFILE true )
+# CMake 빌드 상세 과정 출력
+# set ( CMAKE_VERBOSE_MAKEFILE true )
 
 add_executable(
   QuantumCompiler
@@ -44,8 +44,11 @@ target_compile_options(
   QuantumCompiler
   PUBLIC
   
+  # -O2
   -Wall
   -std=gnu17
+# 컴파일 과정 상세 출력
+  # -v
 )
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})

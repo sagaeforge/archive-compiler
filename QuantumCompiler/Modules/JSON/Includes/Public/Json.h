@@ -6,7 +6,6 @@
 
 // clang-format off
 
-
 JSONObject    JSON_Constructor        ();
 bool          JSON_Destructor         (const JSONObject pSelf);
 

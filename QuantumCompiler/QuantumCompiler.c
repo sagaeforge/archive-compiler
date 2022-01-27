@@ -1,5 +1,4 @@
 
-#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -25,7 +24,7 @@
 int
 main(int argc, char const* argv[])
 {
-  Application_Initialized();
+  Application_Initialized(argc, argv);
   // Application.ProcessEvent[ProcessEvent_Awake].AddListener(test);
   Application.ApplicationStart();
 
@@ -41,15 +40,14 @@ main(int argc, char const* argv[])
   int b = UnBoxing(int)(obj);
   printf("%d\n", b);
 
-  setlocale(LC_ALL, "");
+  String_t* str = String("ABCDEFGHIJKLMNOPQRTWVUXYZ ABCDEFGHIJKLMNOPQRTWVUXYZ");
+  printf("%S", str->Value);
+  // StringAry Ary = StringMethod.Split(str, String(" "));
 
-  String str = String("ABCDEFGHIJKLMNOPQRTWVUXYZ ABCDEFGHIJKLMNOPQRTWVUXYZ");
-  StringAry Ary = StringMethod.Split(str, String(" "));
-
-  int i;
-  for (i = 0; i < Ary->Length; i++) {
-    printf("%S\n", StringAryMethod.Get(Ary, i)->Value);
-  }
+  // int i;
+  // for (i = 0; i < Ary->Length; i++) {
+  //   printf("%S\n", StringAryMethod.Get(Ary, i)->Value);
+  // }
 
   // struct DataType DT;
   // printf("\n%lu", sizeof(DT));
