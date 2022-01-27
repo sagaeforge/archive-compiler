@@ -140,8 +140,8 @@ target_include_directories(
   Application
   PUBLIC
 
-  Includes/Private
-  Includes/Public
+  Includes/Public/
+  Includes/Private/
 )
 
 target_link_libraries(

@@ -1,6 +1,6 @@
 
-#include "Object.h"
-#include "Private_GarbageCollection.h"
+#include <Object.h>
+#include <Private_GarbageCollection.h>
 
 short**
 __Object_UnBoxing_Double_Ptr_Short(const Object pSelf)

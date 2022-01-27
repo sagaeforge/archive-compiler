@@ -1,7 +1,7 @@
 #ifndef __PRIVATE__STRING__
 #define __PRIVATE__STRING__
 
-#include "String.h"
+#include <String.h>
 
 // clang-format off
 String       String_Join(String Self, String Value);

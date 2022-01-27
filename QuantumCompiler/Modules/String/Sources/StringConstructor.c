@@ -1,7 +1,7 @@
 
-#include "Chs.h"
-#include "GarbageCollection.h"
-#include "String.h"
+#include <Chs.h>
+#include <GarbageCollection.h>
+#include <String.h>
 #include <stdio.h>
 
 static String

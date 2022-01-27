@@ -1,6 +1,6 @@
 
-#include "Object.h"
-#include "Private_GarbageCollection.h"
+#include <Object.h>
+#include <Private_GarbageCollection.h>
 
 unsigned int**
 __Object_UnBoxing_Double_Ptr_U_Int(const Object pSelf)

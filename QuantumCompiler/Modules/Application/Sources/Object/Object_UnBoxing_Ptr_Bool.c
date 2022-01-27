@@ -1,6 +1,6 @@
 
-#include "Object.h"
-#include "Private_GarbageCollection.h"
+#include <Object.h>
+#include <Private_GarbageCollection.h>
 
 bool*
 __Object_UnBoxing_Ptr_Bool(const Object pSelf)

@@ -1,6 +1,6 @@
 
-#include "Chs.h"
-#include "Private_StringLib.h"
+#include <Chs.h>
+#include <Private_StringLib.h>
 
 bool
 String_IsUpper(String Self)

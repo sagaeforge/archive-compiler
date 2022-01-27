@@ -1,6 +1,6 @@
 
-#include "Application.h"
-#include "Private_GarbageCollection.h"
+#include <Application.h>
+#include <Private_GarbageCollection.h>
 
 Object
 GetObject(const DataTypeInfo_t* pInfo, const void* pValue)

@@ -1,7 +1,7 @@
 
-#include "Chs.h"
-#include "Private_String.h"
-#include "Private_StringLib.h"
+#include <Chs.h>
+#include <Private_String.h>
+#include <Private_StringLib.h>
 
 static bool
 _IsSpaceChs(wchar_t ch)

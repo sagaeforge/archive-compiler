@@ -1,6 +1,6 @@
 
-#include "Object.h"
-#include "Private_GarbageCollection.h"
+#include <Object.h>
+#include <Private_GarbageCollection.h>
 
 int
 __Object_UnBoxing_Int(const Object pSelf)

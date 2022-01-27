@@ -1,7 +1,7 @@
 
-#include "Application.h"
-#include "GarbageCollection.h"
-#include "Private_GarbageCollection.h"
+#include <Application.h>
+#include <GarbageCollection.h>
+#include <Private_GarbageCollection.h>
 
 MemoryPage
 GarbageCollection_PageGet(const Index_t pIndex)

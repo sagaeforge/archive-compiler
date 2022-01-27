@@ -1,6 +1,6 @@
 
-#include "GarbageCollection.h"
-#include "Private_StringAry.h"
+#include <GarbageCollection.h>
+#include <Private_StringAry.h>
 
 void
 StringAry_Push(StringAry Self, String Value)

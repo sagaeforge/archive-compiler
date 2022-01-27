@@ -2,36 +2,40 @@
 #ifndef __PUBLIC_JSON_DATATYPE_JSON__
 #define __PUBLIC_JSON_DATATYPE_JSON__
 
-#include "String.h"
+#include <Object.h>
+#include <String.h>
 
-enum JSONDataType
+typedef enum
 {
   JSONDataType_Digit,
+  JSONDataType_Decimal,
   JSONDataType_Boolean,
   JSONDataType_String,
   JSONDataType_JSONObject,
   JSONDataType_Ary,
   JSONDataType_NULL,
   JSONDataType_None
-};
+} JSONDataType;
 
 #pragma pack(push, 1)
-typedef struct
-{
-  enum JSONDataType m_DataType;
-  String m_Name;
-  String m_Content;
-  void* m_Value;
-} JSONObject_t, *JSONObject;
+
+// clang-format off
 
 typedef struct
 {
-  enum JSONDataType m_DataType;
-  String m_Name;
-  String m_Content;
-  Index_t m_Length;
-  JSONObject* m_Value;
-} JSONObjectAry_t, *JSONObjectAry;
+  String              m_Name;
+  String              m_Content;
+  void*               m_Value;
+  JSONDataType        m_DataType;
+} JSONNode_t, *JSONNode;
+
+typedef struct _JSONObject
+{
+  StringAry           m_FieldNames;
+  Length_t            m_FieldLength;
+  struct _JSONObject* m_Parent;
+  JSONNode            m_Nodes;
+} JSONObject_t, *JSONObject;
 
 #pragma pack(pop)
 

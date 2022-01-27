@@ -1,6 +1,6 @@
 
-#include "GarbageCollection.h"
-#include "Private_StringAry.h"
+#include <GarbageCollection.h>
+#include <Private_StringAry.h>
 
 void
 StringAry_Remove(StringAry Self, Index_t Index)
@@ -13,7 +13,7 @@ StringAry_Remove(StringAry Self, Index_t Index)
   if (Index == 0) {
     node = node->Next;
     Self->Values = node;
-    MemoryRemove((void**)&backup);
+    MemoryRemove(backup);
     return;
   }
 
@@ -23,5 +23,5 @@ StringAry_Remove(StringAry Self, Index_t Index)
     node = node->Next;
   }
   node->Next = backup->Next;
-  MemoryRemove((void**)&backup);
+  MemoryRemove(backup);
 }

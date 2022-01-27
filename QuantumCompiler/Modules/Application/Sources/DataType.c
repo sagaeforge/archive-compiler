@@ -1,5 +1,5 @@
 
-#include "Types/DataType.h"
+#include <Types/DataType.h>
 
 // 멀티 쓰레드 환경에서 사용을 주의할 것
 DataTypeInfo_t g_DataType;

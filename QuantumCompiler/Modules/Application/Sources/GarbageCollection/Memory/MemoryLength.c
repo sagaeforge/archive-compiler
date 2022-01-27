@@ -1,6 +1,6 @@
 
-#include "GarbageCollection.h"
-#include "Private_GarbageCollection.h"
+#include <GarbageCollection.h>
+#include <Private_GarbageCollection.h>
 
 Length_t
 Excute_MemoryLength(const void* pObj)

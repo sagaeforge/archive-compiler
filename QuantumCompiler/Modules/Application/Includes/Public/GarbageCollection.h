@@ -2,7 +2,7 @@
 #ifndef __PUBLIC_APPLICATION_GARBAGECOLLECTION__
 #define __PUBLIC_APPLICATION_GARBAGECOLLECTION__
 
-#include "Types/DataType.h"
+#include <Types/DataType.h>
 
 #define Constructor(DataType)                                                  \
   (DataType*)MemoryConstructor(DataType_Find(#DataType))

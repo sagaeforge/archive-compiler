@@ -1,7 +1,7 @@
 
-#include "Application.h"
-#include "GarbageCollection.h"
-#include "Private_GarbageCollection.h"
+#include <Application.h>
+#include <GarbageCollection.h>
+#include <Private_GarbageCollection.h>
 
 void
 GarbageCollection_Append(const void* pObj,

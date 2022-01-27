@@ -1,10 +1,12 @@
 
-#include "Application.h"
-#include "Private_ProcessEvent.h"
+#include <Application.h>
+#include <Private_ProcessEvent.h>
 
 #include <pthread.h>
 
-void ProcessEventModule_Initialized() {
+void
+ProcessEventModule_Initialized()
+{
   ProcessEventModule_Awake_Initialized();
   ProcessEventModule_Init_Initialized();
   ProcessEventModule_Start_Initialized();
@@ -18,12 +20,16 @@ void ProcessEventModule_Initialized() {
   Application.Member.ProcessEvent_IsFixedUpdated = false;
 }
 
-void Update_Wait(pthread_t *Thread) {
+void
+Update_Wait(pthread_t* Thread)
+{
   int status;
-  pthread_join(*Thread, (void **)&status);
+  pthread_join(*Thread, (void**)&status);
 }
 
-void Update_AllStart() {
+void
+Update_AllStart()
+{
   if (!Application.Member.ProcessEvent_IsUpdated) {
     Application.Member.ProcessEvent_IsUpdated = true;
     Application.Member.ProcessEvent_UpdateStart();
@@ -35,7 +41,9 @@ void Update_AllStart() {
   }
 }
 
-void Update_AllStop() {
+void
+Update_AllStop()
+{
   if (Application.Member.ProcessEvent_IsUpdated) {
     Application.Member.ProcessEvent_IsUpdated = false;
     Application.Member.ProcessEvent_UpdateStop();
@@ -47,7 +55,9 @@ void Update_AllStop() {
   }
 }
 
-void Update_AllWaitStop() {
+void
+Update_AllWaitStop()
+{
   if (Application.Member.ProcessEvent_IsUpdated) {
     Application.Member.ProcessEvent_IsUpdated = false;
     Application.Member.ProcessEvent_UpdateWaitStop();

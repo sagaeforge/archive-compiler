@@ -1,9 +1,9 @@
 
-#include "String.h"
-#include "Application.h"
-#include "Private_String.h"
-#include "Private_StringAry.h"
-#include "Private_StringLib.h"
+#include <Application.h>
+#include <Private_String.h>
+#include <Private_StringAry.h>
+#include <Private_StringLib.h>
+#include <String.h>
 
 #include <locale.h>
 #include <stdio.h>

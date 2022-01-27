@@ -1,6 +1,6 @@
 
-#include "GarbageCollection.h"
-#include "Private_StringAry.h"
+#include <GarbageCollection.h>
+#include <Private_StringAry.h>
 
 void
 StringAry_Insert(StringAry Self, String Value, Index_t Index)

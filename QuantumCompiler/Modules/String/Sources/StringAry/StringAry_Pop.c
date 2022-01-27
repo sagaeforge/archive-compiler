@@ -1,6 +1,6 @@
 
-#include "GarbageCollection.h"
-#include "Private_StringAry.h"
+#include <GarbageCollection.h>
+#include <Private_StringAry.h>
 
 String
 StringAry_Pop(StringAry Self)
@@ -14,7 +14,7 @@ StringAry_Pop(StringAry Self)
   String temp = NULL;
   if (Self->Length == 1) {
     temp = Self->Values->Value;
-    MemoryRemove((void**)&Self->Values);
+    MemoryRemove(Self->Values);
     return temp;
   }
 
@@ -23,7 +23,7 @@ StringAry_Pop(StringAry Self)
     node = node->Next;
   }
   temp = node->Value;
-  MemoryRemove((void**)&node);
+  MemoryRemove(node);
   backup->Next = NULL;
   Self->Length--;
   return temp;

@@ -1,6 +1,6 @@
 
-#include "Object.h"
-#include "Private_GarbageCollection.h"
+#include <Object.h>
+#include <Private_GarbageCollection.h>
 
 void***
 __Object_UnBoxing_Triple_Ptr_Void(const Object pSelf)

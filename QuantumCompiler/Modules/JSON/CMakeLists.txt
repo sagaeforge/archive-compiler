@@ -14,6 +14,7 @@ target_include_directories(
   PUBLIC
 
   ../Application/Includes/Public/
+  ../Application/Includes/Private/
   ../String/Includes/Public/
 
   Includes/Public/

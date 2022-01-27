@@ -2,7 +2,7 @@
 #ifndef __PUBLIC_DATATYPES_STRING__
 #define __PUBLIC_DATATYPES_STRING__
 
-#include "Types/DataType.h"
+#include <Types/DataType.h>
 
 #include <wchar.h>
 

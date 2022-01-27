@@ -1,6 +1,6 @@
 
-#include "GarbageCollection.h"
-#include "Private_StringAry.h"
+#include <GarbageCollection.h>
+#include <Private_StringAry.h>
 
 void
 StringAryDestructor(StringAry* Self)
@@ -17,13 +17,13 @@ StringAryDestructor(StringAry* Self)
       node = node->Next;
     }
     for (i = 0; i < Ary->Length; i++)
-      MemoryRemove((void**)&ptr[i]);
-    MemoryRemove((void**)ptr);
+      MemoryRemove(ptr[i]);
+    MemoryRemove(ptr);
   }
 
   (*Self)->Values = NULL;
   (*Self)->Length = 0;
 
-  MemoryRemove((void**)Self);
+  MemoryRemove(Self);
   (*Self) = NULL;
 }

@@ -1,7 +1,7 @@
 #ifndef __PRIVATE_STRING_LIBRARY__
 #define __PRIVATE_STRING_LIBRARY__
 
-#include "StringLib.h"
+#include <StringLib.h>
 
 String
 String_Format(String Format, ...);

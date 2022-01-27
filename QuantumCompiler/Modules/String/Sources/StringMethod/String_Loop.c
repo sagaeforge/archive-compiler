@@ -1,6 +1,6 @@
 
-#include "Chs.h"
-#include "Private_String.h"
+#include <Chs.h>
+#include <Private_String.h>
 
 String
 String_Loop(String Self, Length_t Length)

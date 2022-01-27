@@ -1,8 +1,8 @@
 
-#include "Application.h"
-#include "Object.h"
-#include "Private_GarbageCollection.h"
-#include "Private_ProcessEvent.h"
+#include <Application.h>
+#include <Object.h>
+#include <Private_GarbageCollection.h>
+#include <Private_ProcessEvent.h>
 
 #include <stdlib.h>
 

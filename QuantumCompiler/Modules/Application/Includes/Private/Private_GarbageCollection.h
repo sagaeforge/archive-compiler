@@ -2,7 +2,7 @@
 #ifndef __PRIVATE_APPLICATION_GARBAGECOLLECTION__
 #define __PRIVATE_APPLICATION_GARBAGECOLLECTION__
 
-#include "Types/DataType_GarbageCollection.h"
+#include <Types/DataType_GarbageCollection.h>
 
 // clang-format off
 void GarbageCollectionModule_Initialized();

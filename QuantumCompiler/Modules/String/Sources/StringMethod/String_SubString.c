@@ -1,6 +1,6 @@
 
-#include "Private_String.h"
-#include "Private_StringLib.h"
+#include <Private_String.h>
+#include <Private_StringLib.h>
 
 String
 String_SubString(String Self, String Value)

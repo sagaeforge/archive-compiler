@@ -2,7 +2,7 @@
 #ifndef __CHARSTRING__
 #define __CHARSTRING__
 
-#include "String.h"
+#include <String.h>
 
 Length_t
 __StrLen(void* Obj, Length_t WordSize);

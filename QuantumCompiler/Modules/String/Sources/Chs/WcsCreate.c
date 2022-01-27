@@ -1,6 +1,6 @@
 
-#include "Chs.h"
-#include "GarbageCollection.h"
+#include <Chs.h>
+#include <GarbageCollection.h>
 
 wcs
 __WcsCreate(Length_t Length)

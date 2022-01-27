@@ -5,11 +5,11 @@
 #pragma pack(push, 1)
 // clang-format off
 
-#include "DataType.h"
-#include "DataType_Exception.h"
-#include "DataType_GarbageCollection.h"
-#include "DataType_Object.h"
-#include "DataType_ProcessEvent.h"
+#include <Types/DataType.h>
+#include <Types/DataType_Exception.h>
+#include <Types/DataType_GarbageCollection.h>
+#include <Types/DataType_Object.h>
+#include <Types/DataType_ProcessEvent.h>
 
 #include <pthread.h>
 

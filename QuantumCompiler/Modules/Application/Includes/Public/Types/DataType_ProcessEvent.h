@@ -5,8 +5,8 @@
 #pragma pack(push, 1)
 // clang-format off
 
-#include "DataType.h"
-#include "Delegate.h"
+#include <Types/DataType.h>
+#include <Delegate.h>
 
 /** @brief 프로세스 이벤트 주기 */
 typedef struct

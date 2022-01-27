@@ -1,6 +1,6 @@
 
-#include "GarbageCollection.h"
-#include "Private_GarbageCollection.h"
+#include <GarbageCollection.h>
+#include <Private_GarbageCollection.h>
 
 void
 Excute_MemorySwap(void* pObj, void* pData, const Length_t pLength)

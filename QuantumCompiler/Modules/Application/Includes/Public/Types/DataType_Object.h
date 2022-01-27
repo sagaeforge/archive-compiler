@@ -2,7 +2,7 @@
 #ifndef __PUBLIC_APPLICATION_DATATYPE_OBJECT__
 #define __PUBLIC_APPLICATION_DATATYPE_OBJECT__
 
-#include "DataType.h"
+#include <Types/DataType.h>
 
 #include <stdarg.h>
 

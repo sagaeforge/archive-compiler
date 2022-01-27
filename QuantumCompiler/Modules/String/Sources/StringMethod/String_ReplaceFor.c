@@ -1,6 +1,6 @@
 
-#include "Chs.h"
-#include "Private_String.h"
+#include <Chs.h>
+#include <Private_String.h>
 
 static bool
 _StringCompare(wcs Ary, String FindValue, Index_t Start)

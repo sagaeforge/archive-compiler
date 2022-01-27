@@ -1,6 +1,6 @@
 
-#include "Object.h"
-#include "Private_GarbageCollection.h"
+#include <Object.h>
+#include <Private_GarbageCollection.h>
 
 unsigned char*
 __Object_UnBoxing_Ptr_U_Char(const Object pSelf)

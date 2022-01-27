@@ -1,7 +1,6 @@
 
-#include "Application.h"
-#include "Private_GarbageCollection.h"
-#include "Private_Object.h"
+#include <Application.h>
+#include <Private_GarbageCollection.h>
 
 void
 FreeObject(Object Ref)

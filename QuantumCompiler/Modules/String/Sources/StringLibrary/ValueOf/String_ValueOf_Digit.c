@@ -1,5 +1,5 @@
 
-#include "Private_StringLib.h"
+#include <Private_StringLib.h>
 
 double
 String_ValueOf_Digit(String Self)

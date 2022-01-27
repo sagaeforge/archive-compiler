@@ -1,6 +1,6 @@
 
-#include "GarbageCollection.h"
-#include "Private_GarbageCollection.h"
+#include <GarbageCollection.h>
+#include <Private_GarbageCollection.h>
 
 bool
 Excute_MemoryCompare(const void* pObj1,

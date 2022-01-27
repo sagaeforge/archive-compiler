@@ -1,6 +1,6 @@
 
-#include "GarbageCollection.h"
-#include "Private_String.h"
+#include <GarbageCollection.h>
+#include <Private_String.h>
 
 // TODO 최적화
 static bool

@@ -1,6 +1,6 @@
 
-#include "Object.h"
-#include "Private_GarbageCollection.h"
+#include <Object.h>
+#include <Private_GarbageCollection.h>
 
 long**
 __Object_UnBoxing_Double_Ptr_Long(const Object pSelf)

@@ -4,7 +4,7 @@ project(QuantumCompiler VERSION 0.1.0)
 include(CTest)
 enable_testing()
 # 상세 과정 출력
-# set ( CMAKE_VERBOSE_MAKEFILE true )
+set ( CMAKE_VERBOSE_MAKEFILE true )
 
 add_executable(
   QuantumCompiler
@@ -46,10 +46,6 @@ target_compile_options(
   
   -Wall
   -std=gnu17
-)
-
-add_definitions( 
-  -DDEBUG
 )
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})

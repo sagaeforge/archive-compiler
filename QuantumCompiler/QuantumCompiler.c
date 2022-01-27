@@ -1,13 +1,16 @@
 
-#include "Application.h"
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "GarbageCollection.h"
-#include "Object.h"
-#include "Private_GarbageCollection.h"
-#include "Types/DataType.h"
+#include <Application.h>
+#include <GarbageCollection.h>
+#include <Object.h>
+#include <Private_GarbageCollection.h>
+#include <String.h>
+#include <StringAry.h>
+#include <Types/DataType.h>
 
 /*
   해야할 것
@@ -37,6 +40,16 @@ main(int argc, char const* argv[])
   printf("%s\n", g_DataTypeTable[DataType_Int].m_Name);
   int b = UnBoxing(int)(obj);
   printf("%d\n", b);
+
+  setlocale(LC_ALL, "");
+
+  String str = String("ABCDEFGHIJKLMNOPQRTWVUXYZ ABCDEFGHIJKLMNOPQRTWVUXYZ");
+  StringAry Ary = StringMethod.Split(str, String(" "));
+
+  int i;
+  for (i = 0; i < Ary->Length; i++) {
+    printf("%S\n", StringAryMethod.Get(Ary, i)->Value);
+  }
 
   // struct DataType DT;
   // printf("\n%lu", sizeof(DT));

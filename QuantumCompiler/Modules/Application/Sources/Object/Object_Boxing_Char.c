@@ -1,6 +1,6 @@
 
-#include "Object.h"
-#include "Private_GarbageCollection.h"
+#include <Object.h>
+#include <Private_GarbageCollection.h>
 
 __attribute__((warn_unused_result)) const Object
 __Object_Boxing_Char(const char pValue)

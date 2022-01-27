@@ -1,6 +1,6 @@
 
-#include "Object.h"
-#include "Private_GarbageCollection.h"
+#include <Object.h>
+#include <Private_GarbageCollection.h>
 
 __attribute__((warn_unused_result)) const Object
 __Object_Boxing_Double_Ptr_U_Long_Long(const unsigned long long** pValue)
