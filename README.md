@@ -1,9 +1,3 @@
-# Quantum Info
-```
-1. X Language 를 지원하는 컴파일러
-2. 중간코드(.xByte)및 실행(Binary) 파일을 바로 실행시킬 수 있는 프로그램 집합
-```
-
 ## 프로그램 종류
 * Quantum : Compiler, Interpreter
 * QuantumVM : VM
@@ -54,16 +48,9 @@ VSCode에서 사용하고 있는 Includes Cache 정보
 
 
 ## InputSystem 설계
-<<<<<<< HEAD
     stdin: 표준 입력에 관련된 함수들이 존재함.
     stdout: 표준 출력에 관련된 함수들이 존재함.
     stderr: 표준 오류 출력에 관련된 함수들이 존재함.
-=======
-
-    stdin: 표준 입력에 관련된 함수들이 존재함.
-    stdout: 표준 출력에 관련된 함수들이 존재함.
-    stderr: 표준 오류에 관련된 함수들이 존재함.
->>>>>>> 6c451c75fe5ce49d62b479e4051f2b37eb701cbf
 
     bufSize : 각 입출력 시스템의 버퍼 공간.
 
