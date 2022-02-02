@@ -6,8 +6,7 @@ String
 StringAry_Get(StringAry Self, Index_t Index)
 {
   if (Index >= Self->Length)
-    // TODO Exception 처리
-    return NULL;
+    Index = Self->Length;
 
   StringAryNode* node = Self->Values;
   int i;

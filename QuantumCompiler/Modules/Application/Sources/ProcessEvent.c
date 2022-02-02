@@ -18,6 +18,7 @@ ProcessEventModule_Initialized()
   Application.Member.ProcessEvent_FixedUpdateTime = 60;
   Application.Member.ProcessEvent_IsUpdated = false;
   Application.Member.ProcessEvent_IsFixedUpdated = false;
+  Application.Member.ProcessEvent_ProgramQuit = false;
 }
 
 void

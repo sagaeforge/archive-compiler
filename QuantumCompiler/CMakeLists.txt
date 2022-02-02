@@ -50,6 +50,9 @@ target_compile_options(
 # 컴파일 과정 상세 출력
   # -v
 )
+add_compile_definitions(
+  DEBUG
+)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

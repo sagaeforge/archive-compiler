@@ -1,17 +1,6 @@
 
 #include <Private_String.h>
 
-// TODO 최적화
-static bool
-_StringCompare(wcs Ary, String FindValue, Index_t Start)
-{
-  int i;
-  for (i = Start; i < Start + FindValue->Length; i++)
-    if (Ary[i] != FindValue->Value[i - Start])
-      return false;
-  return true;
-}
-
 Index_t
 String_IndexOf(String Self, String Value)
 {

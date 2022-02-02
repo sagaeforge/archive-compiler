@@ -1,4 +1,5 @@
 
+#include <Exception.h>
 #include <GarbageCollection.h>
 #include <Private_GarbageCollection.h>
 
@@ -9,7 +10,7 @@ Excute_MemoryMove(void* pObj, const void* pData, const Length_t pLength)
 {
   char* buf = (char*)malloc(pLength);
   if (buf == NULL) {
-    // TODO Exception 처리
+    Exception(ERROR, "임시 공간 할당에 실패했습니다. [size:%u]", pLength);
     return;
   }
 

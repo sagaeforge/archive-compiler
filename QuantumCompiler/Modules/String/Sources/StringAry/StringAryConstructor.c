@@ -1,4 +1,5 @@
 
+#include <Exception.h>
 #include <GarbageCollection.h>
 #include <Private_StringAry.h>
 
@@ -8,9 +9,12 @@ StringAry
 StringAryConstructor(int Cnt, ...)
 {
   StringAry Ary = MemoryCreate(sizeof(StringAry_t));
-  if (Ary == NULL)
-    // TODO Exception 처리
+  if (Ary == NULL) {
+    Exception(ERROR,
+              "StringAry를 생성하지 못했습니다. [size:%lu]",
+              sizeof(StringAry_t));
     return NULL;
+  }
 
   Ary->Length = 0;
   Ary->Values = NULL;

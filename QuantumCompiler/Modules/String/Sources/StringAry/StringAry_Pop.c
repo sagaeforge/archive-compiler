@@ -1,4 +1,5 @@
 
+#include <Exception.h>
 #include <GarbageCollection.h>
 #include <Private_StringAry.h>
 
@@ -7,9 +8,10 @@ StringAry_Pop(StringAry Self)
 {
   StringAryNode* node = Self->Values;
   StringAryNode* backup = node;
-  if (Self->Length == 0)
-    // TODO Exception 처리
+  if (Self->Length == 0) {
+    Exception(ERROR, "가지고 있는 원소가 없습니다.");
     return NULL;
+  }
 
   String temp = NULL;
   if (Self->Length == 1) {

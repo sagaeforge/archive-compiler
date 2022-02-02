@@ -3,8 +3,6 @@
 #include <Private_StringAry.h>
 #include <Private_StringLib.h>
 
-// TODO 오류 테스트
-
 StringAry
 String_Split(String Self, String Value)
 {

@@ -1,4 +1,5 @@
 
+#include <Exception.h>
 #include <Types/DataType.h>
 
 // 멀티 쓰레드 환경에서 사용을 주의할 것
@@ -13,6 +14,6 @@ DataType_Find(const char* pDataType)
       return &g_DataTypeTable[i];
   }
 
-  // TODO Exception 처리
+  Exception(ERROR, "값을 찾을 수 없습니다. [Key:%p]", pDataType);
   return NULL;
 }

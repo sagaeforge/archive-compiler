@@ -1,7 +1,9 @@
 
 #include <Chs.h>
+#include <Exception.h>
 #include <GarbageCollection.h>
 #include <String.h>
+
 #include <stdio.h>
 
 static String
@@ -9,8 +11,8 @@ StringConstructor_None()
 {
   String temp = (String)MemoryCreate(sizeof(String_t));
   if (temp == NULL) {
-    // Warning("문자열 객체를 생성할 수 없습니다. (Size:%lu)", sizeof(String));
-    // TODO Exception 처리
+    Exception(
+      ERROR, "문자열 객체를 생성할 수 없습니다. [size:%lu]", sizeof(String_t));
     return NULL;
   }
   temp->IsNone = true;

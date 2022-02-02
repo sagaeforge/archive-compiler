@@ -1,13 +1,11 @@
 
 #include <Application.h>
+#include <Exception.h>
 #include <Private_GarbageCollection.h>
 
 void
 FreeObject(Object Ref)
 {
-  // TODO Exception 처리
-  // 만약에 Ref가 Object의 주소가 아닐경우
-
   if (Ref == NULL)
     return;
 
@@ -17,9 +15,11 @@ FreeObject(Object Ref)
     if (Ref == Application.Member.GarbageCollection_ObjectTable.Value[i])
       break;
   }
-  if (i == ObjectMaxLength)
-    // TODO Exception 처리
+
+  if (i == ObjectMaxLength) {
+    Exception(ERROR, "할당한 Object 메모리 위치가 아닙니다. [Ref:%p]", Ref);
     return;
+  }
 
   Application.Member.GarbageCollection_ObjectTable.IsUsed[i] = false;
   Excute_MemorySet(Application.Member.GarbageCollection_ObjectTable.Value[i],

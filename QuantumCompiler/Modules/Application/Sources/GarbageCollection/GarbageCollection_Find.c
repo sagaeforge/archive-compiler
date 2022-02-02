@@ -1,5 +1,6 @@
 
 #include <Application.h>
+#include <Exception.h>
 #include <GarbageCollection.h>
 #include <Private_GarbageCollection.h>
 
@@ -10,9 +11,10 @@ GarbageCollection_Find(const void* pObj,
 {
   MemoryPage page = &Application.Member.GarbageCollection_HeapTable.MemoryPages;
 
-  if (pObj == NULL)
-    // TODO Exception 처리
+  if (pObj == NULL) {
+    Exception(ERROR, "해당 메모리는 생성된 메모리가 아닙니다. [NULL 포인터]");
     return NULL;
+  }
 
   int i;
   for (i = 0; page != NULL; i++) {

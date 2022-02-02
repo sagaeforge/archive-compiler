@@ -1,5 +1,6 @@
 
 #include <Application.h>
+#include <Exception.h>
 #include <GarbageCollection.h>
 #include <Private_GarbageCollection.h>
 
@@ -10,9 +11,12 @@ GetPage()
 {
   // 페이지 생성 함수
   MemoryPage page = malloc(sizeof(MemoryPage_t));
-  if (page == NULL)
-    // TODO Exception 처리
+  if (page == NULL) {
+    Exception(ERROR,
+              "메모리 페이지를 생성할 수 없습니다. [size:%lu]",
+              sizeof(MemoryPage_t));
     return NULL;
+  }
   page->Next = NULL;
   page->UsedMemoryLength = 0;
 

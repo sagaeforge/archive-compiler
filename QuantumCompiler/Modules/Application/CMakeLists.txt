@@ -12,7 +12,7 @@ add_library(
   Sources/Object.c
   Sources/GarbageCollection.c
   Sources/DataTable.c
-  Sources/DataType.c
+  Sources/DataType.c 
   
   Sources/ProcessEvent/Awake.c
   Sources/ProcessEvent/Init.c

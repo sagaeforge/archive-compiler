@@ -4,9 +4,6 @@
 
 #include <Types/DataTypes_String.h>
 
-// TODO 자료형 확장으로 메소드 기능 구현하기
-// TODO format, parttern, is 계열 함수 구현
-
 #define String(Instance)                                                       \
   _Generic(&*(Instance),                                                       \
   chs             : StringConstructor_Chs,                                     \

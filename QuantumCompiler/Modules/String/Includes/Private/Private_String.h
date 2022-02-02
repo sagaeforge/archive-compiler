@@ -31,5 +31,7 @@ String       String_Middle(String Self, Index_t Start, Index_t End);
 const        String String_Const(String Self);
 String       String_UnConst(const String Self);
 void         String_Destructor(String* Self);
+bool        _StringCompare(wcs Ary, String FindValue, Index_t Start);
+
 
 #endif

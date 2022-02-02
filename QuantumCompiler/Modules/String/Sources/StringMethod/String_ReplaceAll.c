@@ -2,16 +2,6 @@
 #include <Chs.h>
 #include <Private_String.h>
 
-static bool
-_StringCompare(wcs Ary, String FindValue, Index_t Start)
-{
-  int i;
-  for (i = Start; i < Start + FindValue->Length; i++)
-    if (Ary[i] != FindValue->Value[i - Start])
-      return false;
-  return true;
-}
-
 String
 String_ReplaceAll(String Self, String Ori, String Value)
 {

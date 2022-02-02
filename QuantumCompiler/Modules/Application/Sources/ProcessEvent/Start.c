@@ -1,5 +1,6 @@
 
 #include <Application.h>
+#include <Exception.h>
 #include <Private_ProcessEvent.h>
 
 #include <stdlib.h>
@@ -11,7 +12,9 @@ AddListener(Func_t Callback)
 
   FuncChainNode* ptr = (FuncChainNode*)malloc(sizeof(FuncChainNode));
   if (ptr == NULL) {
-    // TODO Exception 처리
+    Exception(ERROR,
+              "Start 함수 노드를 생성하지 못했습니다. [size:%lu]",
+              sizeof(FuncChainNode));
     return;
   }
   ptr->Next = NULL;
@@ -52,8 +55,7 @@ RemoveListener(Func_t Method)
     Pos = Pos->Next;
   }
 
-  // TODO Exception 처리
-  // 지정된 함수 포인터가 등록된 함수 포인터가 아닌경우에
+  Exception(ERROR, "할당한 Start 함수가 아닙니다. [func:%p]", Method);
 }
 
 static void
@@ -73,7 +75,9 @@ RemoveAllListener()
 
   FuncChainNode** Ary = (FuncChainNode**)malloc(sizeof(FuncChainNode) * length);
   if (Ary == NULL) {
-    // TODO Exception 처리
+    Exception(ERROR,
+              "임시 객체를 생성하지 못했습니다. [size:%lu]",
+              sizeof(FuncChainNode) * length);
     return;
   }
 

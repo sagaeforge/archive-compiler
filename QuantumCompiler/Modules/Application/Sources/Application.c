@@ -1,5 +1,6 @@
 
 #include <Application.h>
+#include <Exception.h>
 #include <Object.h>
 #include <Private_GarbageCollection.h>
 #include <Private_ProcessEvent.h>
@@ -8,11 +9,7 @@
 
 #include <stdlib.h>
 
-// clang-format off
-// const라 접근하기 애매한것들 초기화
-
 struct ApplicationManager_t Application;
-// clang-format on
 
 static void
 Application_Init()
@@ -35,6 +32,9 @@ Application_Start()
 static void
 Application_Quit()
 {
+  if (Application.Member.ProcessEvent_ProgramQuit)
+    return;
+
   Application.ProcessEvent[ProcessEvent_Quit].Invoke();
   Update_AllWaitStop();
 
@@ -52,10 +52,15 @@ Application_Quit()
     free(Application.Member.GarbageCollection_ObjectTable.Value[i]);
 
   MemoryPage page = &Application.Member.GarbageCollection_HeapTable.MemoryPages;
-  MemoryPage* PageAry = (MemoryPage*)malloc(sizeof(MemoryPage_t));
+  MemoryPage* PageAry = (MemoryPage*)malloc(
+    sizeof(MemoryPage_t) *
+    Application.Member.GarbageCollection_HeapTable.UsedMemoryPageLength);
   if (PageAry == NULL)
-    // TODO Exception 처리
-    return;
+    Exception(
+      WARNING,
+      "임시 객체를 생성하지 못했습니다. [size:%lu]",
+      sizeof(MemoryPage_t) *
+        Application.Member.GarbageCollection_HeapTable.UsedMemoryPageLength);
   i = 0;
   while (page != NULL) {
     // 페이지를 등록함
@@ -73,6 +78,8 @@ Application_Quit()
   for (j = 0; j < i; j++)
     free(PageAry[i]);
   free(PageAry);
+
+  Application.Member.ProcessEvent_ProgramQuit = true;
 }
 
 void

@@ -6,7 +6,6 @@
 // clang-format off
 
 #include <Types/DataType.h>
-#include <Types/DataType_Exception.h>
 #include <Types/DataType_GarbageCollection.h>
 #include <Types/DataType_Object.h>
 #include <Types/DataType_ProcessEvent.h>
@@ -24,13 +23,14 @@ struct ApplicationManager_t {
     Length_t          ProcessEvent_FixedUpdateTime;
     bool              ProcessEvent_IsUpdated;
     bool              ProcessEvent_IsFixedUpdated;
+    bool              ProcessEvent_ProgramQuit;
     ProcessEventName  ProcessEvent_Status;
-    Func_t           ProcessEvent_UpdateStart;
-    Func_t           ProcessEvent_UpdateStop;
-    Func_t           ProcessEvent_UpdateWaitStop;
-    Func_t           ProcessEvent_FixedUpdateStart;
-    Func_t           ProcessEvent_FixedUpdateStop;
-    Func_t           ProcessEvent_FixedUpdateWaitStop;
+    Func_t            ProcessEvent_UpdateStart;
+    Func_t            ProcessEvent_UpdateStop;
+    Func_t            ProcessEvent_UpdateWaitStop;
+    Func_t            ProcessEvent_FixedUpdateStart;
+    Func_t            ProcessEvent_FixedUpdateStop;
+    Func_t            ProcessEvent_FixedUpdateWaitStop;
 
     const DataTypeInfo_t* DataTypeTable;
 

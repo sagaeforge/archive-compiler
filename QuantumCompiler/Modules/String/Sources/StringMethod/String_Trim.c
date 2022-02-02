@@ -27,6 +27,5 @@ String_Trim(String Self)
     else
       space_Rear++;
 
-  // TODO 검사
   return String_Extract(Self, space_Front, Self->Length - space_Rear);
 }

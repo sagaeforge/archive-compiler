@@ -7,7 +7,6 @@
 #include <Private_StringAry.h>
 #include <Private_StringLib.h>
 
-// TODO 구현
 String
 String_Format(String Format, ...)
 {

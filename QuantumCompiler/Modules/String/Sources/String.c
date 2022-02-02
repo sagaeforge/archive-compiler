@@ -12,8 +12,6 @@ struct StringMethod StringMethod;
 struct StringLibMethod StringLibMethod;
 struct StringAryMethod StringAryMethod;
 
-// TODO 각종 전역 변수 및 모듈 초기화 함수를 통합
-
 void
 StringModule_Initialized()
 {
