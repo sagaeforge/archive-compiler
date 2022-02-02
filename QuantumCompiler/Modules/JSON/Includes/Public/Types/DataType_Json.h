@@ -12,20 +12,23 @@ typedef enum
   JSONDataType_Boolean,
   JSONDataType_String,
   JSONDataType_JSONObject,
-  JSONDataType_Ary,
+  JSONDataType_Digit_Ary,
+  JSONDataType_Decimal_Ary,
+  JSONDataType_Boolean_Ary,
+  JSONDataType_String_Ary,
+  JSONDataType_JSONObject_Ary,
   JSONDataType_NULL,
   JSONDataType_None
 } JSONDataType;
 
-#pragma pack(push, 1)
-
 // clang-format off
+#pragma pack(push, 1)
 
 typedef struct
 {
   String              m_Name;
-  String              m_Content;
-  void*               m_Value;
+  String              m_Value;
+  Length_t            m_Length;
   JSONDataType        m_DataType;
 } JSONNode_t, *JSONNode;
 

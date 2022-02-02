@@ -22,7 +22,7 @@ GarbageCollection_Find(const void* pObj,
     int pr = page->UsedMemoryLength;
     int pc = 0;
 
-    do {
+    while (pl <= pr) {
       pc = (pl + pr) / 2;
 
       if (page->Nodes[pc].m_Value == pObj) {
@@ -33,8 +33,7 @@ GarbageCollection_Find(const void* pObj,
         pl = pc + 1;
       else
         pr = pc - 1;
-
-    } while (pl <= pr);
+    }
     page = page->Next;
   }
 

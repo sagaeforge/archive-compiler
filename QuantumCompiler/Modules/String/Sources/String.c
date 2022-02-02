@@ -38,10 +38,9 @@ StringModule_Initialized()
   StringMethod.Left = String_Left;
   StringMethod.Right = String_Right;
   StringMethod.Middle = String_Middle;
-  StringMethod.Const = String_Const;
-  StringMethod.UnConst = String_UnConst;
   StringMethod.Destructor = String_Destructor;
   StringMethod.IndexFor = String_IndexFor;
+  StringMethod.IndexAt = String_IndexAt;
 
   StringLibMethod.Extract = String_Extract;
   StringLibMethod.Format = String_Format;
@@ -59,6 +58,8 @@ StringModule_Initialized()
   StringLibMethod.Notation = String_Notation;
   StringLibMethod.Pattern = String_Pattern;
   StringLibMethod.Reverse = String_Reverse;
+  StringLibMethod.FileAllRead = String_FileAllRead;
+  StringLibMethod.FileAllWrite = String_FileAllWrite;
 
   StringAryMethod.Destructor = StringAryDestructor;
   StringAryMethod.Contains = StringAry_Contains;

@@ -48,6 +48,7 @@ struct StringMethod
     String       (*ToUpper)          (String);
     bool         (*IsNone)           (String);
     Index_t      (*IndexOf)          (String, String);
+    Index_t      (*IndexAt)          (String, String, Index_t);
     Index_t      (*IndexFor)         (String, String, Index_t);
     Index_t      (*LastOfIndex)      (String, String);
     String       (*Replace)          (String, String, String);
@@ -56,28 +57,28 @@ struct StringMethod
     String       (*Left)             (String, Length_t);
     String       (*Right)            (String, Length_t);
     String       (*Middle)           (String, Index_t, Index_t);
-    const String (*Const)            (String);
-    String       (*UnConst)          (const String);
     void         (*Destructor)       (String*);
 };
 
 struct StringLibMethod {
-  String  (*Format)           (String, ...);
-  bool    (*Pattern)          (String, String Format);
-  String  (*Extract)          (String, Index_t, Index_t);
-  String  (*Notation)         (int64_t, int);
-  String  (*Reverse)          (String);
-  bool    (*IsAlpha)          (String);
-  bool    (*IsLower)          (String);
-  bool    (*IsUpper)          (String);
-  bool    (*IsDecimal)        (String);
-  bool    (*IsDigit)          (String);
-  bool    (*IsSpace)          (String);
-  bool    (*IsAlphaDigit)     (String);
-  bool    (*IsHex)            (String);
-  bool    (*IsControl)        (String);
-  bool    (*IsOctal)          (String);
-  bool    (*IsBinary)         (String);
+  String    (*Format)               (String, ...);
+  bool      (*Pattern)              (String, String);
+  String    (*Extract)              (String, Index_t, Index_t);
+  String    (*Notation)             (int64_t, int);
+  String    (*Reverse)              (String);
+  StringAry (*FileAllRead)          (FILE*);
+  bool      (*FileAllWrite)         (StringAry, FILE*);
+  bool      (*IsAlpha)              (String);
+  bool      (*IsLower)              (String);
+  bool      (*IsUpper)              (String);
+  bool      (*IsDecimal)            (String);
+  bool      (*IsDigit)              (String);
+  bool      (*IsSpace)              (String);
+  bool      (*IsAlphaDigit)         (String);
+  bool      (*IsHex)                (String);
+  bool      (*IsControl)            (String);
+  bool      (*IsOctal)              (String);
+  bool      (*IsBinary)             (String);
 };
 
 struct StringAryMethod

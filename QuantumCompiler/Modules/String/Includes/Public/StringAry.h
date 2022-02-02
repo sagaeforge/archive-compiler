@@ -4,7 +4,7 @@
 
 #include <Types/DataTypes_String.h>
 
-#define StringAry(Cnt, args...) StringAryConstructor(Cnt, args)
+#define StringAry(Cnt, args...) StringAryConstructor(Cnt, ##args)
 
 StringAry
 StringAryConstructor(int Cnt, ...);

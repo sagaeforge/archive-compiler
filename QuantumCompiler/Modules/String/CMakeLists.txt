@@ -38,6 +38,7 @@ add_library(
   Sources/StringMethod/String_Trim.c
   Sources/StringMethod/String_Compare.c
   Sources/StringMethod/String_Count.c
+  Sources/StringMethod/String_IndexAt.c
   Sources/StringMethod/String_IndexOf.c
   Sources/StringMethod/String_IndexFor.c
   Sources/StringMethod/String_LastOfIndex.c 
@@ -45,8 +46,6 @@ add_library(
   Sources/StringMethod/String_ReplaceAll.c
   Sources/StringMethod/String_Set.c
   Sources/StringMethod/String_ToLower.c
-  Sources/StringMethod/String_UnConst.c
-  Sources/StringMethod/String_Const.c
   Sources/StringMethod/String_Destructor.c
   Sources/StringMethod/String_IsNone.c
   Sources/StringMethod/String_Left.c
@@ -83,6 +82,7 @@ add_library(
   Sources/StringLibrary/ToString/String_ToString_Decimal.c
   Sources/StringLibrary/ToString/String_ToString_Decimal_Unsigned.c
   Sources/StringLibrary/ToString/String_ToString_Digit.c
+  Sources/StringLibrary/ToString/String_ToString_StringAry.c
 
   Sources/StringLibrary/ValueOf/String_ValueOf_Bool.c
   Sources/StringLibrary/ValueOf/String_ValueOf_Decimal.c
@@ -95,6 +95,9 @@ add_library(
   Sources/StringLibrary/String_Pattern.c
   Sources/StringLibrary/String_Reverse.c
   Sources/StringLibrary/String_Prettier.c
+  Sources/StringLibrary/String_FileAllRead.c
+  Sources/StringLibrary/String_FileAllWrite.c
+  Sources/StringLibrary/String_ValueOfSearch.c
 
 )
 

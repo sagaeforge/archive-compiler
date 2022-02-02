@@ -9,6 +9,8 @@
 #define ERRORCOLOR 91
 #define MESSAGECOLOR 90
 
+#define DEBUG
+
 #ifdef DEBUG
 #define Exception(errorcode, format, args...)                                  \
   do {                                                                         \

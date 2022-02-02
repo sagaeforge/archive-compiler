@@ -15,6 +15,10 @@ String
 String_Reverse(String Self);
 String
 String_Prettier(double Value);
+StringAry
+String_FileAllRead(FILE* pfile);
+bool
+String_FileAllWrite(StringAry Self, FILE* pFile);
 
 bool
 String_IsAlpha(String Self);

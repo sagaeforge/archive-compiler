@@ -16,6 +16,15 @@ GarbageCollection_Append(const void* pObj,
   page->Nodes[page->UsedMemoryLength].m_Policy = MemoryPolicy_None;
   page->Nodes[page->UsedMemoryLength].m_TypeInfo = (DataTypeInfo_t*)pInfo;
   page->Nodes[page->UsedMemoryLength].m_Value = (void*)pObj;
+
+  int i;
+  for (i = Application.Member.GarbageCollection_HeapTable.TotalUsedMemoryLength;
+       i > 0;
+       i--) {
+    if (page->Nodes[i - 1].m_Value > page->Nodes[i].m_Value)
+      Excute_MemorySwap(&page->Nodes[i - 1], &page->Nodes[i], sizeof(Memory_t));
+  }
+
   page->UsedMemoryLength++;
   Application.Member.GarbageCollection_HeapTable.TotalUsedMemoryLength++;
 }

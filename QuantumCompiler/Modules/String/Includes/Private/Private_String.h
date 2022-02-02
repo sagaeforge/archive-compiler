@@ -20,6 +20,7 @@ String       String_ToLower(String Self);
 String       String_ToUpper(String Self);
 bool         String_IsNone(String Self);
 Index_t      String_IndexOf(String Self, String Value);
+Index_t      String_IndexAt(String Self, String Value, Index_t Start);
 Index_t      String_IndexFor(String Self, String Value, Index_t Index);
 Index_t      String_LastOfIndex(String Self, String Value);
 String       String_Replace(String Self, String Ori, String Value);
@@ -28,10 +29,7 @@ String       String_ReplaceAll(String Self, String Ori, String Value);
 String       String_Left(String Self, Length_t Length);
 String       String_Right(String Self, Length_t Length);
 String       String_Middle(String Self, Index_t Start, Index_t End);
-const        String String_Const(String Self);
-String       String_UnConst(const String Self);
 void         String_Destructor(String* Self);
 bool        _StringCompare(wcs Ary, String FindValue, Index_t Start);
-
 
 #endif
