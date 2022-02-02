@@ -105,12 +105,13 @@ target_include_directories(
   String
   PUBLIC
 
-  ../Application/Includes/Public/
+  ../Application/Includes/Public
 
   # String
   Includes/Public/
   Includes/Private/
 )
+
 add_compile_definitions(
   DEBUG
 )
