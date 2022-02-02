@@ -27,6 +27,35 @@ add_library(
   Sources/Chs/Is/IsSpace.c
   Sources/Chs/Is/IsUpper.c
 
+  Sources/StringMethod/String_Append.c
+  Sources/StringMethod/String_Contains.c
+  Sources/StringMethod/String_Get.c
+  Sources/StringMethod/String_Join.c
+  Sources/StringMethod/String_Length.c
+  Sources/StringMethod/String_Replace.c
+  Sources/StringMethod/String_Right.c
+  Sources/StringMethod/String_SubString.c
+  Sources/StringMethod/String_Trim.c
+  Sources/StringMethod/String_Compare.c
+  Sources/StringMethod/String_Count.c
+  Sources/StringMethod/String_IndexOf.c
+  Sources/StringMethod/String_IndexFor.c
+  Sources/StringMethod/String_LastOfIndex.c 
+  Sources/StringMethod/String_Loop.c
+  Sources/StringMethod/String_ReplaceAll.c
+  Sources/StringMethod/String_Set.c
+  Sources/StringMethod/String_ToLower.c
+  Sources/StringMethod/String_UnConst.c
+  Sources/StringMethod/String_Const.c
+  Sources/StringMethod/String_Destructor.c
+  Sources/StringMethod/String_IsNone.c
+  Sources/StringMethod/String_Left.c
+  Sources/StringMethod/String_Middle.c
+  Sources/StringMethod/String_ReplaceFor.c
+  Sources/StringMethod/String_Split.c
+  Sources/StringMethod/String_ToUpper.c
+  Sources/StringMethod/_StringCompare.c
+
   Sources/StringAry/StringAryConstructor.c
   Sources/StringAry/StringAry_Contains.c
   Sources/StringAry/StringAry_Insert.c
@@ -67,34 +96,6 @@ add_library(
   Sources/StringLibrary/String_Reverse.c
   Sources/StringLibrary/String_Prettier.c
 
-  Sources/StringMethod/String_Append.c
-  Sources/StringMethod/String_Contains.c
-  Sources/StringMethod/String_Get.c
-  Sources/StringMethod/String_Join.c
-  Sources/StringMethod/String_Length.c
-  Sources/StringMethod/String_Replace.c
-  Sources/StringMethod/String_Right.c
-  Sources/StringMethod/String_SubString.c
-  Sources/StringMethod/String_Trim.c
-  Sources/StringMethod/String_Compare.c
-  Sources/StringMethod/String_Count.c
-  Sources/StringMethod/String_IndexOf.c
-  Sources/StringMethod/String_IndexFor.c
-  Sources/StringMethod/String_LastOfIndex.c 
-  Sources/StringMethod/String_Loop.c
-  Sources/StringMethod/String_ReplaceAll.c
-  Sources/StringMethod/String_Set.c
-  Sources/StringMethod/String_ToLower.c
-  Sources/StringMethod/String_UnConst.c
-  Sources/StringMethod/String_Const.c
-  Sources/StringMethod/String_Destructor.c
-  Sources/StringMethod/String_IsNone.c
-  Sources/StringMethod/String_Left.c
-  Sources/StringMethod/String_Middle.c
-  Sources/StringMethod/String_ReplaceFor.c
-  Sources/StringMethod/String_Split.c
-  Sources/StringMethod/String_ToUpper.c
-  Sources/StringMethod/_StringCompare.c
 )
 
 target_include_directories(
