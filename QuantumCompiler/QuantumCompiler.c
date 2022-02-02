@@ -36,7 +36,9 @@ main(int argc, char const* argv[])
   Application.ApplicationStart();
 
   StringAry ary = StringAry(3, String("ABC"), String("GEF"), String("HIJ"));
-  String str = toString(ary, String("\n"));
+  String str = toString(ary, String(" \n"));
+
+  Exception(ERROR, "테스트");
 
   printf("%S", str->Value);
 
