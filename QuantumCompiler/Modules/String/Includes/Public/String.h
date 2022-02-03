@@ -4,6 +4,8 @@
 
 #include <Types/DataTypes_String.h>
 
+// clang-format off
+
 #define String(Instance)                                                       \
   _Generic(&*(Instance),                                                       \
   chs             : StringConstructor_Chs,                                     \
@@ -14,22 +16,13 @@
   String_t        : StringConstructor_Str,                                     \
   String          : StringConstructor_Strp)                                    \
   (Instance)
-// clang-format on
 
-String
-StringConstructor_Chs(const_chs Value);
+String  StringConstructor_Chs     (const_chs pValue);
+String  StringConstructor_Wcs     (const_wcs pValue);
+String  StringConstructor_Str     (String_t pValue);
+String  StringConstructor_Strp    (String pValue);
 
-String
-StringConstructor_Wcs(const_wcs Value);
-
-String
-StringConstructor_Str(String_t Value);
-
-String
-StringConstructor_Strp(String Value);
-
-void
-StringModule_Initialized();
+void    StringModule_Initialized  ();
 
 extern struct StringMethod StringMethod;
 

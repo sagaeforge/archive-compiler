@@ -3,26 +3,18 @@
 
 #include <StringAry.h>
 
+// clang-format off
+
 typedef struct _StringAryNode StringAryNode;
 
-StringAryNode*
-StringAry_NodeCreate();
-
-void
-StringAryDestructor(StringAry* Self);
-String
-StringAry_Get(StringAry Self, Index_t Index);
-void
-StringAry_Insert(StringAry Self, String Value, Index_t Index);
-void
-StringAry_Remove(StringAry Self, Index_t Index);
-void
-StringAry_Push(StringAry Self, String Value);
-String
-StringAry_Pop(StringAry Self);
-Index_t
-StringAry_Search(StringAry Self, String Value);
-Length_t
-StringAry_Contains(StringAry Self, String Value);
+StringAryNode*  StringAry_NodeCreate  ();
+void            StringAryDestructor   (StringAry* pSelf);
+String          StringAry_Get         (StringAry pSelf, Index_t pIndex);
+void            StringAry_Insert      (StringAry pSelf, String pValue, Index_t pIndex);
+void            StringAry_Remove      (StringAry pSelf, Index_t pIndex);
+void            StringAry_Push        (StringAry pSelf, String pValue);
+String          StringAry_Pop         (StringAry pSelf);
+Index_t         StringAry_Search      (StringAry pSelf, String pValue);
+Length_t        StringAry_Contains    (StringAry pSelf, String pValue);
 
 #endif

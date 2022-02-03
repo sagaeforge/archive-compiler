@@ -18,13 +18,6 @@
 
   JSON에서 사용할 수 있는 String lib 메소드 추가
 
-  FileAllRead,
-  FileAllWrite,
-  StringAryToString
-  String_IndexAt
-
-  TODO 일단 구현할 메소드들은 구현함. 테스트 해볼것.
-
   TODO String 모듈의 매개변수 이름 통일
 */
 
@@ -35,13 +28,15 @@ main(int argc, char const* argv[])
   // Application.ProcessEvent[ProcessEvent_Awake].AddListener(test);
   Application.ApplicationStart();
 
-  StringAry ary = StringAry(3, String("ABC"), String("GEF"), String("HIJ"));
-  String str = toString(ary, String(" \n"));
+  FILE* file = fopen("./test.txt", "r+");
+  // StringAry ary = StringAry(3, String("ABC"), String("GEF"), String("HIJ"));
+  StringAry ary22 = StringLibMethod.FileAllRead(file);
+  int i;
+  for (i = 0; i < ary22->Length; i++) {
+    printf("%S\n", StringAryMethod.Get(ary22, i)->Value);
+  }
 
-  Exception(ERROR, "테스트");
-
-  printf("%S", str->Value);
-
+  fclose(file);
   Application.ApplicationQuit();
   return 0;
 }

@@ -11,6 +11,8 @@
 StringAry
 String_FileAllRead(FILE* pfile)
 {
+  fseek(pfile, 0, SEEK_SET);
+
   StringAry ary = StringAry(0);
 
   wcs temp = __WcsCreate(MAXLINE);
@@ -28,7 +30,7 @@ String_FileAllRead(FILE* pfile)
       pos = 0;
       continue;
     }
-    if (in == '\0') {
+    if (in == EOF) {
       StringAry_Push(ary, String(temp));
       break;
     }

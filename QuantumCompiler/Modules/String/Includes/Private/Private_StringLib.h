@@ -3,45 +3,27 @@
 
 #include <StringLib.h>
 
-String
-String_Format(String Format, ...);
-bool
-String_Pattern(String Self, String Format);
-String
-String_Extract(String Self, Index_t Start, Index_t End);
-String
-String_Notation(int64_t Value, int notation);
-String
-String_Reverse(String Self);
-String
-String_Prettier(double Value);
-StringAry
-String_FileAllRead(FILE* pfile);
-bool
-String_FileAllWrite(StringAry Self, FILE* pFile);
+// clang-format off
 
-bool
-String_IsAlpha(String Self);
-bool
-String_IsLower(String Self);
-bool
-String_IsUpper(String Self);
-bool
-String_IsDecimal(String Self);
-bool
-String_IsDigit(String Self);
-bool
-String_IsSpace(String Self);
-bool
-String_IsAlphaDigit(String Self);
-bool
-String_IsHex(String Self);
-bool
-String_IsControl(String Self);
+String String_Format          (String pFormat, ...);
+bool String_Pattern           (String pSelf, String pFormat);
+String String_Extract         (String pSelf, Index_t pStart, Index_t pEnd);
+String String_Notation        (int64_t pValue, int pNotation);
+String String_Reverse         (String pSelf);
+String String_Prettier        (double pValue);
+StringAry String_FileAllRead  (FILE* pfile);
+bool String_FileAllWrite      (StringAry pSelf, FILE* pFile);
 
-bool
-String_IsOctal(String Self);
-bool
-String_IsBinary(String Self);
+bool String_IsAlpha           (String pSelf);
+bool String_IsLower           (String pSelf);
+bool String_IsUpper           (String pSelf);
+bool String_IsDecimal         (String pSelf);
+bool String_IsDigit           (String pSelf);
+bool String_IsSpace           (String pSelf);
+bool String_IsAlphaDigit      (String pSelf);
+bool String_IsHex             (String pSelf);
+bool String_IsControl         (String pSelf);
+bool String_IsOctal           (String pSelf);
+bool String_IsBinary          (String pSelf);
 
 #endif
