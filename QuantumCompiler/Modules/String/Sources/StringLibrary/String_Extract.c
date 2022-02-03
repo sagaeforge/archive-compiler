@@ -3,16 +3,16 @@
 #include <Private_StringLib.h>
 
 String
-String_Extract(String Self, Index_t Start, Index_t End)
+String_Extract(String pSelf, Index_t pStart, Index_t pEnd)
 {
-  if (Self->Length < End)
-    return String(Self);
+  if (pSelf->Length < pEnd)
+    return String(pSelf);
 
-  Length_t leng = End - Start + 1;
+  Length_t leng = pEnd - pStart + 1;
   wchar_t* temp = __WcsCreate(leng);
   int i;
-  for (i = Start; i < End; i++)
-    temp[i - Start] = Self->Value[i];
-  temp[i - Start] = '\0';
+  for (i = pStart; i < pEnd; i++)
+    temp[i - pStart] = pSelf->Value[i];
+  temp[i - pStart] = '\0';
   return String(temp);
 }

@@ -4,11 +4,11 @@
 #include <Private_StringLib.h>
 
 String
-String_Middle(String Self, Index_t Start, Index_t End)
+String_Middle(String pSelf, Index_t pStart, Index_t pEnd)
 {
-  Length_t len = End - Start + 1;
-  if (Start + len >= Self->Length)
-    return String(Self);
+  Length_t len = pEnd - pStart + 1;
+  if (pStart + len >= pSelf->Length)
+    return String(pSelf);
 
-  return String_Extract(Self, Start, End);
+  return String_Extract(pSelf, pStart, pEnd);
 }

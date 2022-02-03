@@ -3,18 +3,18 @@
 #include <Private_String.h>
 
 Length_t
-String_Count(String Self, String Value)
+String_Count(String pSelf, String pValue)
 {
-  if (Self->Length < Value->Length)
+  if (pSelf->Length < pValue->Length)
     return -1;
 
   int i;
   Length_t sum = 0;
-  for (i = 0; i < Self->Length - Value->Length + 1; i++)
-    if (Self->Value[i] == Value->Value[0])
-      if (_StringCompare(Self->Value, Value, i)) {
+  for (i = 0; i < pSelf->Length - pValue->Length + 1; i++)
+    if (pSelf->Value[i] == pValue->Value[0])
+      if (_StringCompare(pSelf->Value, pValue, i)) {
         sum++;
-        i += Value->Length - 1;
+        i += pValue->Length - 1;
       }
 
   return sum;

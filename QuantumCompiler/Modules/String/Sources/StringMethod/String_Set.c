@@ -4,17 +4,17 @@
 #include <Private_String.h>
 
 void
-String_Set(String Self, String Value)
+String_Set(String pSelf, String pValue)
 {
-  if (Self->IsNone)
-    Self->Value = Value->Value;
+  if (pSelf->IsNone)
+    pSelf->Value = pValue->Value;
   else {
-    MemoryRemove(Self->Value);
-    wcs temp = __WcsCreate(Value->Length);
-    __StrSet(temp, Value->Value, 4, Value->Length);
-    Self->Value = temp;
+    MemoryRemove(pSelf->Value);
+    wcs temp = __WcsCreate(pValue->Length);
+    __StrSet(temp, pValue->Value, 4, pValue->Length);
+    pSelf->Value = temp;
   }
 
-  Self->IsNone = Value->IsNone;
-  Self->Length = Value->Length;
+  pSelf->IsNone = pValue->IsNone;
+  pSelf->Length = pValue->Length;
 }

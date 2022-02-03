@@ -2,17 +2,17 @@
 #include <Private_String.h>
 
 Index_t
-String_IndexFor(String Self, String Value, Index_t Index)
+String_IndexFor(String pSelf, String pValue, Index_t pIndex)
 {
-  Length_t len = String_Count(Self, Value);
-  if (len == 0 || len <= Index)
+  Length_t len = String_Count(pSelf, pValue);
+  if (len == 0 || len <= pIndex)
     return -1;
 
   int i, cnt = 0;
-  for (i = 0; i < Self->Length; i++) {
-    if (Self->Value[i] == Value->Value[0])
-      if (_StringCompare(Self->Value, Value, i)) {
-        if (cnt != Index)
+  for (i = 0; i < pSelf->Length; i++) {
+    if (pSelf->Value[i] == pValue->Value[0])
+      if (_StringCompare(pSelf->Value, pValue, i)) {
+        if (cnt != pIndex)
           cnt++;
         else
           return i;

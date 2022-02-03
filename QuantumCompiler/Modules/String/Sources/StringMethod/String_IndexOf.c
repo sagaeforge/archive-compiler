@@ -2,12 +2,12 @@
 #include <Private_String.h>
 
 Index_t
-String_IndexOf(String Self, String Value)
+String_IndexOf(String pSelf, String pValue)
 {
   int i;
-  for (i = 0; i < Self->Length - Value->Length + 1; i++)
-    if (Self->Value[i] == Value->Value[0])
-      if (_StringCompare(Self->Value, Value, i))
+  for (i = 0; i < pSelf->Length - pValue->Length + 1; i++)
+    if (pSelf->Value[i] == pValue->Value[0])
+      if (_StringCompare(pSelf->Value, pValue, i))
         return i;
   return -1;
 }

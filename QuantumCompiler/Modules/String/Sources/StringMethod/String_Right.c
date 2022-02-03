@@ -4,10 +4,10 @@
 #include <Private_StringLib.h>
 
 String
-String_Right(String Self, Length_t Length)
+String_Right(String pSelf, Length_t pLength)
 {
-  if (Length >= Self->Length)
-    return String(Self);
+  if (pLength >= pSelf->Length)
+    return String(pSelf);
 
-  return String_Extract(Self, Self->Length - Length, Self->Length);
+  return String_Extract(pSelf, pSelf->Length - pLength, pSelf->Length);
 }

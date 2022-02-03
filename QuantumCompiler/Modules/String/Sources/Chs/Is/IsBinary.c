@@ -2,7 +2,7 @@
 #include <Chs.h>
 
 bool
-__IsBinary(int ch)
+__IsBinary(int pCh)
 {
-  return ch >= '0' && ch <= '1';
+  return pCh >= '0' && pCh <= '1';
 }

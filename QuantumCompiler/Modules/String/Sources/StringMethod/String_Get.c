@@ -2,7 +2,7 @@
 #include <Private_String.h>
 
 wcs
-String_Get(String Self)
+String_Get(String pSelf)
 {
-  return Self->Value;
+  return pSelf->Value;
 }

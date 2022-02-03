@@ -3,14 +3,14 @@
 #include <Private_StringLib.h>
 
 bool
-String_IsBinary(String Self)
+String_IsBinary(String pSelf)
 {
   int i;
-  if (!(Self->Value[0] == '0' &&
-        (Self->Value[1] == 'b' || Self->Value[1] == 'B')))
+  if (!(pSelf->Value[0] == '0' &&
+        (pSelf->Value[1] == 'b' || pSelf->Value[1] == 'B')))
     return false;
-  for (i = 2; i < Self->Length; i++)
-    if (!__IsBinary(Self->Value[i]))
+  for (i = 2; i < pSelf->Length; i++)
+    if (!__IsBinary(pSelf->Value[i]))
       return false;
   return true;
 }

@@ -4,12 +4,12 @@
 #include <Private_StringAry.h>
 
 Index_t
-StringAry_Search(StringAry Self, String Value)
+StringAry_Search(StringAry pSelf, String pValue)
 {
-  StringAryNode* node = Self->Values;
+  StringAryNode* node = pSelf->Values;
   int i;
   for (i = 0; node != NULL; i++)
-    if (String_Compare(node->Value, Value))
+    if (String_Compare(node->Value, pValue))
       return i;
     else
       node = node->Next;

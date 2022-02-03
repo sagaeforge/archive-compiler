@@ -6,7 +6,7 @@
 #include <stdarg.h>
 
 StringAry
-StringAryConstructor(int Cnt, ...)
+StringAryConstructor(int pCnt, ...)
 {
   StringAry Ary = MemoryCreate(sizeof(StringAry_t));
   if (Ary == NULL) {
@@ -18,13 +18,13 @@ StringAryConstructor(int Cnt, ...)
 
   Ary->Length = 0;
   Ary->Values = NULL;
-  if (Cnt == 0)
+  if (pCnt == 0)
     return Ary;
 
   va_list ap;
-  va_start(ap, Cnt);
+  va_start(ap, pCnt);
   int i;
-  for (i = 0; i < Cnt; i++) {
+  for (i = 0; i < pCnt; i++) {
     String temp = va_arg(ap, String);
     StringAry_Push(Ary, temp);
   }

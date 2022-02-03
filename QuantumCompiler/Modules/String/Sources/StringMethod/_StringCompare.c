@@ -2,11 +2,11 @@
 #include <Private_String.h>
 
 bool
-_StringCompare(wcs Ary, String FindValue, Index_t Start)
+_StringCompare(wcs pAry, String pFindValue, Index_t pStart)
 {
   int i;
-  for (i = Start; i < Start + FindValue->Length; i++)
-    if (Ary[i] != FindValue->Value[i - Start])
+  for (i = pStart; i < pStart + pFindValue->Length; i++)
+    if (pAry[i] != pFindValue->Value[i - pStart])
       return false;
   return true;
 }

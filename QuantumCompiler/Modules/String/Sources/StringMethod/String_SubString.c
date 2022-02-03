@@ -3,11 +3,11 @@
 #include <Private_StringLib.h>
 
 String
-String_SubString(String Self, String Value)
+String_SubString(String pSelf, String pValue)
 {
-  int ind = String_IndexOf(Self, Value);
+  int ind = String_IndexOf(pSelf, pValue);
   if (ind == -1)
-    return String(Self);
+    return String(pSelf);
 
-  return String_Extract(Self, 0, ind);
+  return String_Extract(pSelf, 0, ind);
 }

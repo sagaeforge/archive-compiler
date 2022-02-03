@@ -3,11 +3,11 @@
 #include <Private_StringLib.h>
 
 bool
-String_IsAlphaDigit(String Self)
+String_IsAlphaDigit(String pSelf)
 {
   int i;
-  for (i = 0; i < Self->Length; i++)
-    if (!__IsAlpha(Self->Value[i]) || !__IsDecimal(Self->Value[i]))
+  for (i = 0; i < pSelf->Length; i++)
+    if (!__IsAlpha(pSelf->Value[i]) || !__IsDecimal(pSelf->Value[i]))
       return false;
   return true;
 }

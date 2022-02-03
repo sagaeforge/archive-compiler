@@ -4,19 +4,19 @@
 #include <Private_StringAry.h>
 
 String
-StringAry_Pop(StringAry Self)
+StringAry_Pop(StringAry pSelf)
 {
-  StringAryNode* node = Self->Values;
+  StringAryNode* node = pSelf->Values;
   StringAryNode* backup = node;
-  if (Self->Length == 0) {
+  if (pSelf->Length == 0) {
     Exception(ERROR, "가지고 있는 원소가 없습니다.");
     return NULL;
   }
 
   String temp = NULL;
-  if (Self->Length == 1) {
-    temp = Self->Values->Value;
-    MemoryRemove(Self->Values);
+  if (pSelf->Length == 1) {
+    temp = pSelf->Values->Value;
+    MemoryRemove(pSelf->Values);
     return temp;
   }
 
@@ -27,6 +27,6 @@ StringAry_Pop(StringAry Self)
   temp = node->Value;
   MemoryRemove(node);
   backup->Next = NULL;
-  Self->Length--;
+  pSelf->Length--;
   return temp;
 }

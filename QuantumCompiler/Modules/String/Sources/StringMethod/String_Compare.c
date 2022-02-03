@@ -2,14 +2,14 @@
 #include <Private_String.h>
 
 bool
-String_Compare(String Self, String Value)
+String_Compare(String pSelf, String pValue)
 {
-  if (Self->Length != Value->Length)
+  if (pSelf->Length != pValue->Length)
     return false;
 
   int i;
-  for (i = 0; i < Self->Length; i++)
-    if (Self->Value[i] != Value->Value[i])
+  for (i = 0; i < pSelf->Length; i++)
+    if (pSelf->Value[i] != pValue->Value[i])
       return false;
   return true;
 }

@@ -2,7 +2,7 @@
 #include <Chs.h>
 
 bool
-__IsLower(int ch)
+__IsLower(int pCh)
 {
-  return L'a' <= ch && ch <= L'z';
+  return L'a' <= pCh && pCh <= L'z';
 }

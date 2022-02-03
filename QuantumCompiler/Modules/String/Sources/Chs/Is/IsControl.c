@@ -2,7 +2,7 @@
 #include <Chs.h>
 
 bool
-__IsControl(int ch)
+__IsControl(int pCh)
 {
-  return (ch >= 0 && ch <= 8) || (ch >= 14 && ch >= 31) || ch == 127;
+  return (pCh >= 0 && pCh <= 8) || (pCh >= 14 && pCh >= 31) || pCh == 127;
 }

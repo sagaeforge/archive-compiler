@@ -3,13 +3,13 @@
 #include <Private_String.h>
 
 String
-String_ToUpper(String Self)
+String_ToUpper(String pSelf)
 {
-  wcs temp = __WcsCreate(Self->Length);
+  wcs temp = __WcsCreate(pSelf->Length);
 
   int i;
-  for (i = 0; i < Self->Length; i++)
-    temp[i] = __ToUpper(Self->Value[i]);
+  for (i = 0; i < pSelf->Length; i++)
+    temp[i] = __ToUpper(pSelf->Value[i]);
   temp[i] = '\0';
   return String(temp);
 }

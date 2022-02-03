@@ -3,22 +3,22 @@
 #include <Private_StringAry.h>
 
 void
-StringAry_Remove(StringAry Self, Index_t Index)
+StringAry_Remove(StringAry pSelf, Index_t pIndex)
 {
-  Index = Index >= Self->Length ? Self->Length : Index;
+  pIndex = pIndex >= pSelf->Length ? pSelf->Length : pIndex;
 
-  StringAryNode* node = Self->Values;
+  StringAryNode* node = pSelf->Values;
   StringAryNode* backup = node;
-  Self->Length--;
-  if (Index == 0) {
+  pSelf->Length--;
+  if (pIndex == 0) {
     node = node->Next;
-    Self->Values = node;
+    pSelf->Values = node;
     MemoryRemove(backup);
     return;
   }
 
   int i;
-  for (i = 0; i < Index - 1; i++) {
+  for (i = 0; i < pIndex - 1; i++) {
     backup = node;
     node = node->Next;
   }

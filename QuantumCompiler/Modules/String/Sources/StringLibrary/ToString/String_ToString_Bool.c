@@ -2,7 +2,7 @@
 #include <Private_StringLib.h>
 
 String
-String_ToString_Bool(bool Value)
+String_ToString_Bool(bool pValue)
 {
-  return Value ? String("true") : String("false");
+  return pValue ? String("true") : String("false");
 }

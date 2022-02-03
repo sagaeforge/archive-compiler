@@ -2,7 +2,7 @@
 #include <Private_String.h>
 
 bool
-String_IsNone(String Self)
+String_IsNone(String pSelf)
 {
-  return Self->IsNone;
+  return pSelf->IsNone;
 }

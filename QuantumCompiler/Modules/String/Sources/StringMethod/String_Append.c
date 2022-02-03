@@ -4,13 +4,13 @@
 #include <Private_String.h>
 
 void
-String_Append(String Self, String Value)
+String_Append(String pSelf, String pValue)
 {
-  if (Value->IsNone)
+  if (pValue->IsNone)
     return;
 
-  wcs temp = __WcsCreate(Self->Length + Value->Length);
-  __WcsWcsInsert(temp, Self->Value, 0, Self->Length);
-  __WcsWcsInsert(temp, Value->Value, Self->Length, Value->Length);
-  String_Set(Self, String(temp));
+  wcs temp = __WcsCreate(pSelf->Length + pValue->Length);
+  __WcsWcsInsert(temp, pSelf->Value, 0, pSelf->Length);
+  __WcsWcsInsert(temp, pValue->Value, pSelf->Length, pValue->Length);
+  String_Set(pSelf, String(temp));
 }

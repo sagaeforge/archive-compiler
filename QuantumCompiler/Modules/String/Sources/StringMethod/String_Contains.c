@@ -2,7 +2,7 @@
 #include <Private_String.h>
 
 bool
-String_Contains(String Self, String Value)
+String_Contains(String pSelf, String pValue)
 {
-  return String_Count(Self, Value) > 0;
+  return String_Count(pSelf, pValue) > 0;
 }

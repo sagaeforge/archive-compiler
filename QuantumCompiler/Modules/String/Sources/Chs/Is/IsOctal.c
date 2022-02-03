@@ -2,7 +2,7 @@
 #include <Chs.h>
 
 bool
-__IsOctal(int ch)
+__IsOctal(int pCh)
 {
-  return ch >= '0' && ch <= '8';
+  return pCh >= '0' && pCh <= '8';
 }

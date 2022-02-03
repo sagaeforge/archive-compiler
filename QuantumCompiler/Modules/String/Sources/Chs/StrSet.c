@@ -2,26 +2,26 @@
 #include <Chs.h>
 
 static void
-__WcsSet(wcs Obj1, wcs Obj2, Length_t Length)
+__WcsSet(wcs pObj1, wcs pObj2, Length_t pLength)
 {
   int i;
-  for (i = 0; i < Length; i++)
-    Obj1[i] = Obj2[i];
+  for (i = 0; i < pLength; i++)
+    pObj1[i] = pObj2[i];
 }
 
 static void
-__ChsSet(wcs Obj1, chs Obj2, Length_t Length)
+__ChsSet(wcs pObj1, chs pObj2, Length_t pLength)
 {
   int i;
-  for (i = 0; i < Length; i++)
-    Obj1[i] = Obj2[i];
+  for (i = 0; i < pLength; i++)
+    pObj1[i] = pObj2[i];
 }
 
 void
-__StrSet(wcs Obj1, const void* Obj2, Length_t WordSize, Length_t Length)
+__StrSet(wcs pObj1, const void* pObj2, Length_t pWordSize, Length_t pLength)
 {
-  if (WordSize == 1)
-    __ChsSet(Obj1, (chs)Obj2, Length);
+  if (pWordSize == 1)
+    __ChsSet(pObj1, (chs)pObj2, pLength);
   else
-    __WcsSet(Obj1, (wcs)Obj2, Length);
+    __WcsSet(pObj1, (wcs)pObj2, pLength);
 }

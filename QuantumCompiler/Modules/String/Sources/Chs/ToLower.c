@@ -2,7 +2,7 @@
 #include <Chs.h>
 
 int
-__ToLower(int ch)
+__ToLower(int pCh)
 {
-  return __IsUpper(ch) ? 'a' + (ch - 'A') : ch;
+  return __IsUpper(pCh) ? 'a' + (pCh - 'A') : pCh;
 }

@@ -2,7 +2,7 @@
 #include <Chs.h>
 
 bool
-__IsUpper(int ch)
+__IsUpper(int pCh)
 {
-  return L'A' <= ch && ch <= L'Z';
+  return L'A' <= pCh && pCh <= L'Z';
 }

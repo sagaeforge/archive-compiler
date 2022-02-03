@@ -3,25 +3,25 @@
 #include <Private_StringLib.h>
 
 bool
-String_IsDigit(String Self)
+String_IsDigit(String pSelf)
 {
   int i, dotCount = 0, ECount = 0;
-  for (i = 0; i < Self->Length; i++) {
-    if (Self->Value[i] == '.') {
+  for (i = 0; i < pSelf->Length; i++) {
+    if (pSelf->Value[i] == '.') {
       if (dotCount != 0)
         return false;
       dotCount++;
-    } else if (Self->Value[i] == 'E') {
+    } else if (pSelf->Value[i] == 'E') {
       if (ECount != 0)
         return false;
       ECount++;
-    } else if (Self->Value[i] == '+') {
-      if (i != 0 || (i != 0 && Self->Value[i - 1] != 'E'))
+    } else if (pSelf->Value[i] == '+') {
+      if (i != 0 || (i != 0 && pSelf->Value[i - 1] != 'E'))
         return false;
-    } else if (Self->Value[i] == '-') {
-      if (i != 0 || (i != 0 && Self->Value[i - 1] != 'E'))
+    } else if (pSelf->Value[i] == '-') {
+      if (i != 0 || (i != 0 && pSelf->Value[i - 1] != 'E'))
         return false;
-    } else if (!__IsDecimal(Self->Value[i]))
+    } else if (!__IsDecimal(pSelf->Value[i]))
       return false;
   }
   return true;

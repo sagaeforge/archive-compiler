@@ -3,14 +3,14 @@
 #include <Private_StringAry.h>
 
 String
-StringAry_Get(StringAry Self, Index_t Index)
+StringAry_Get(StringAry pSelf, Index_t pIndex)
 {
-  if (Index >= Self->Length)
-    Index = Self->Length;
+  if (pIndex >= pSelf->Length)
+    pIndex = pSelf->Length;
 
-  StringAryNode* node = Self->Values;
+  StringAryNode* node = pSelf->Values;
   int i;
-  for (i = 0; i < Index; i++)
+  for (i = 0; i < pIndex; i++)
     node = node->Next;
   return node->Value;
 }

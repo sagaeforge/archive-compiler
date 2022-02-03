@@ -2,10 +2,10 @@
 #include <Chs.h>
 
 void
-__WcsWcsInsert(wcs Obj1, const_wcs Obj2, Index_t Start, Length_t Length)
+__WcsWcsInsert(wcs pObj1, const_wcs pObj2, Index_t pStart, Length_t pLength)
 {
   int i;
-  for (i = Start; i < Start + Length; i++) {
-    Obj1[i] = Obj2[i - Start];
+  for (i = pStart; i < pStart + pLength; i++) {
+    pObj1[i] = pObj2[i - pStart];
   }
 }

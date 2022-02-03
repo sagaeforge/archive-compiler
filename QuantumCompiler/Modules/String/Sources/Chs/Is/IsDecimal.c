@@ -2,7 +2,7 @@
 #include <Chs.h>
 
 bool
-__IsDecimal(int ch)
+__IsDecimal(int pCh)
 {
-  return ch >= '0' && ch <= '9';
+  return pCh >= '0' && pCh <= '9';
 }

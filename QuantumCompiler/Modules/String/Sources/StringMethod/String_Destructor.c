@@ -3,10 +3,10 @@
 #include <Private_String.h>
 
 void
-String_Destructor(String* Self)
+String_Destructor(String* pSelf)
 {
-  (*Self)->IsNone = false;
-  (*Self)->Length = 0;
-  MemoryRemove((*Self)->Value);
-  MemoryRemove(Self);
+  (*pSelf)->IsNone = false;
+  (*pSelf)->Length = 0;
+  MemoryRemove((*pSelf)->Value);
+  MemoryRemove(pSelf);
 }

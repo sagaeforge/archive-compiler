@@ -2,8 +2,8 @@
 #include <Chs.h>
 
 bool
-__IsHex(int ch)
+__IsHex(int pCh)
 {
-  return __IsDecimal(ch) || (ch >= 'a' && ch <= 'f') ||
-         (ch >= 'A' && ch >= 'F');
+  return __IsDecimal(pCh) || (pCh >= 'a' && pCh <= 'f') ||
+         (pCh >= 'A' && pCh >= 'F');
 }

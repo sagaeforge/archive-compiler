@@ -3,11 +3,11 @@
 #include <Private_StringLib.h>
 
 bool
-String_IsSpace(String Self)
+String_IsSpace(String pSelf)
 {
   int i;
-  for (i = 0; i < Self->Length; i++)
-    if (!__IsSpace(Self->Value[i]))
+  for (i = 0; i < pSelf->Length; i++)
+    if (!__IsSpace(pSelf->Value[i]))
       return false;
   return true;
 }

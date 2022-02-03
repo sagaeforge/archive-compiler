@@ -3,22 +3,22 @@
 #include <Private_StringAry.h>
 
 void
-StringAry_Push(StringAry Self, String Value)
+StringAry_Push(StringAry pSelf, String pValue)
 {
   StringAryNode* node = StringAry_NodeCreate();
   node->Next = NULL;
-  node->Value = Value;
+  node->Value = pValue;
 
-  if (Self->Values == NULL) {
-    Self->Values = node;
-    Self->Length++;
+  if (pSelf->Values == NULL) {
+    pSelf->Values = node;
+    pSelf->Length++;
     return;
   }
 
-  StringAryNode* InsertNode = Self->Values;
+  StringAryNode* InsertNode = pSelf->Values;
   while (InsertNode->Next != NULL)
     InsertNode = InsertNode->Next;
 
   InsertNode->Next = node;
-  Self->Length++;
+  pSelf->Length++;
 }

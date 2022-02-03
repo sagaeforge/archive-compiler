@@ -3,13 +3,13 @@
 #include <Private_String.h>
 
 String
-String_Loop(String Self, Length_t Length)
+String_Loop(String pSelf, Length_t pLength)
 {
-  wcs temp = __WcsCreate(Self->Length * Length);
+  wcs temp = __WcsCreate(pSelf->Length * pLength);
 
   int i, j;
-  for (i = 0; i < Length; i++)
-    __WcsWcsInsert(temp, Self->Value, Self->Length * i, Self->Length);
+  for (i = 0; i < pLength; i++)
+    __WcsWcsInsert(temp, pSelf->Value, pSelf->Length * i, pSelf->Length);
 
   return String(temp);
 }

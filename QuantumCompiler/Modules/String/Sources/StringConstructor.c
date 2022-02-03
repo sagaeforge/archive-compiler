@@ -22,17 +22,17 @@ StringConstructor_None()
 }
 
 String
-StringConstructor_Chs(const char* Value)
+StringConstructor_Chs(const char* pValue)
 {
   String temp = StringConstructor_None();
   if (temp == NULL)
     return NULL;
 
-  Length_t len = __StrLen((void*)Value, 1);
+  Length_t len = __StrLen((void*)pValue, 1);
 
   if (len != 0) {
     wcs tempValue = __WcsCreate(len);
-    __StrSet(tempValue, Value, 1, len);
+    __StrSet(tempValue, pValue, 1, len);
     temp->IsNone = false;
     temp->Length = len;
     temp->Value = tempValue;
@@ -42,16 +42,16 @@ StringConstructor_Chs(const char* Value)
 }
 
 String
-StringConstructor_Wcs(const wchar_t* Value)
+StringConstructor_Wcs(const wchar_t* pValue)
 {
   String temp = StringConstructor_None();
   if (temp == NULL)
     return NULL;
 
-  Length_t len = __StrLen((void*)Value, 4);
+  Length_t len = __StrLen((void*)pValue, 4);
   if (len != 0) {
     wcs tempValue = __WcsCreate(len);
-    __StrSet(tempValue, Value, 4, len);
+    __StrSet(tempValue, pValue, 4, len);
     temp->IsNone = false;
     temp->Length = len;
     temp->Value = tempValue;
@@ -59,13 +59,15 @@ StringConstructor_Wcs(const wchar_t* Value)
 
   return temp;
 }
+
 String
-StringConstructor_Str(String_t Value)
+StringConstructor_Str(String_t pValue)
 {
-  return StringConstructor_Wcs(Value.Value);
+  return StringConstructor_Wcs(pValue.Value);
 }
+
 String
-StringConstructor_Strp(String Value)
+StringConstructor_Strp(String pValue)
 {
-  return StringConstructor_Wcs(Value->Value);
+  return StringConstructor_Wcs(pValue->Value);
 }

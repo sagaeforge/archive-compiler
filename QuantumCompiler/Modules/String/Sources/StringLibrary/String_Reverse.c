@@ -3,12 +3,12 @@
 #include <Private_StringLib.h>
 
 String
-String_Reverse(String Self)
+String_Reverse(String pSelf)
 {
-  wchar_t* temp = __WcsCreate(Self->Length);
+  wchar_t* temp = __WcsCreate(pSelf->Length);
   int i;
-  for (i = Self->Length - 1; i >= 0; i--)
-    temp[Self->Length - (i + 1)] = Self->Value[i];
-  temp[Self->Length] = '\0';
+  for (i = pSelf->Length - 1; i >= 0; i--)
+    temp[pSelf->Length - (i + 1)] = pSelf->Value[i];
+  temp[pSelf->Length] = '\0';
   return String(temp);
 }

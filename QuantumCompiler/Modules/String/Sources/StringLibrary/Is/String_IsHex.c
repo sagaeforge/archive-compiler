@@ -3,14 +3,14 @@
 #include <Private_StringLib.h>
 
 bool
-String_IsHex(String Self)
+String_IsHex(String pSelf)
 {
   int i;
-  if (!(Self->Value[0] == '0' &&
-        (Self->Value[1] == 'x' || Self->Value[1] == 'X')))
+  if (!(pSelf->Value[0] == '0' &&
+        (pSelf->Value[1] == 'x' || pSelf->Value[1] == 'X')))
     return false;
-  for (i = 2; i < Self->Length; i++)
-    if (!__IsHex(Self->Value[i]))
+  for (i = 2; i < pSelf->Length; i++)
+    if (!__IsHex(pSelf->Value[i]))
       return false;
   return true;
 }

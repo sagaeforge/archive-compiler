@@ -4,13 +4,13 @@
 #include <Private_StringLib.h>
 
 String
-String_ToString_StringAry(StringAry Value, String ReplaceWord)
+String_ToString_StringAry(StringAry pValue, String pReplaceWord)
 {
   String str = String("");
   int i;
-  for (i = 0; i < Value->Length; i++) {
-    String_Append(str, StringAry_Get(Value, i));
-    String_Append(str, ReplaceWord);
+  for (i = 0; i < pValue->Length; i++) {
+    String_Append(str, StringAry_Get(pValue, i));
+    String_Append(str, pReplaceWord);
   }
 
   return str;

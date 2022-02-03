@@ -2,8 +2,8 @@
 #include <Private_StringLib.h>
 
 double
-String_ValueOf_Digit(String Self)
+String_ValueOf_Digit(String pSelf)
 {
   wcs EndPos = NULL;
-  return wcstold(Self->Value, &EndPos);
+  return wcstold(pSelf->Value, &EndPos);
 }

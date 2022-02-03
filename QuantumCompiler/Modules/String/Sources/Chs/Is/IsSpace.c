@@ -2,7 +2,7 @@
 #include <Chs.h>
 
 bool
-__IsSpace(int ch)
+__IsSpace(int pCh)
 {
-  return (ch >= 9 && ch <= 13) || ch == 32;
+  return (pCh >= 9 && pCh <= 13) || pCh == 32;
 }
