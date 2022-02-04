@@ -99,7 +99,7 @@ Application_Initialized(int argc, char const* argv[])
   Application.Member.DataTypeTable = g_DataTypeTable;
 
   int i;
-  StringAry Param = StringAryConstructor(0);
+  StringAry Param = StringAry_Constructor(0);
   for (i = 0; i < argc; i++) {
     StringAryMethod.Push(Param, String(argv[i]));
   }

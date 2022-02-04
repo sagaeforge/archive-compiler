@@ -6,6 +6,7 @@
 #include <Application.h>
 #include <Exception.h>
 #include <GarbageCollection.h>
+#include <Json.h>
 #include <Object.h>
 #include <Private_GarbageCollection.h>
 #include <String.h>
@@ -28,15 +29,13 @@ main(int argc, char const* argv[])
   // Application.ProcessEvent[ProcessEvent_Awake].AddListener(test);
   Application.ApplicationStart();
 
-  FILE* file = fopen("./test.txt", "r+");
-  // StringAry ary = StringAry(3, String("ABC"), String("GEF"), String("HIJ"));
-  StringAry ary22 = StringLibMethod.FileAllRead(file);
-  int i;
-  for (i = 0; i < ary22->Length; i++) {
-    printf("%S\n", StringAryMethod.Get(ary22, i)->Value);
-  }
+  String str = String("{ \"type\": \"Test\"}");
 
-  fclose(file);
+  JSONObject obj = JSON_Constructor();
+  JSON_Read(obj, str);
+
+  printf("%d", obj == NULL ? 0 : obj->m_FieldLength);
+
   Application.ApplicationQuit();
   return 0;
 }

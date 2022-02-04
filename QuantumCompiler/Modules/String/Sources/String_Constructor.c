@@ -7,7 +7,7 @@
 #include <stdio.h>
 
 static String
-StringConstructor_None()
+String_Constructor_None()
 {
   String temp = (String)MemoryCreate(sizeof(String_t));
   if (temp == NULL) {
@@ -22,9 +22,9 @@ StringConstructor_None()
 }
 
 String
-StringConstructor_Chs(const char* pValue)
+String_Constructor_Chs(const char* pValue)
 {
-  String temp = StringConstructor_None();
+  String temp = String_Constructor_None();
   if (temp == NULL)
     return NULL;
 
@@ -42,9 +42,9 @@ StringConstructor_Chs(const char* pValue)
 }
 
 String
-StringConstructor_Wcs(const wchar_t* pValue)
+String_Constructor_Wcs(const wchar_t* pValue)
 {
-  String temp = StringConstructor_None();
+  String temp = String_Constructor_None();
   if (temp == NULL)
     return NULL;
 
@@ -61,13 +61,13 @@ StringConstructor_Wcs(const wchar_t* pValue)
 }
 
 String
-StringConstructor_Str(String_t pValue)
+String_Constructor_Str(String_t pValue)
 {
-  return StringConstructor_Wcs(pValue.Value);
+  return String_Constructor_Wcs(pValue.Value);
 }
 
 String
-StringConstructor_Strp(String pValue)
+String_Constructor_Strp(String pValue)
 {
-  return StringConstructor_Wcs(pValue->Value);
+  return String_Constructor_Wcs(pValue->Value);
 }

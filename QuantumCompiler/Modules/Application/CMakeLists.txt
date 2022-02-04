@@ -23,8 +23,8 @@ add_library(
   Sources/ProcessEvent/FixedUpdate.c
 
   # [*] GarbageCollect Start
-  Sources/GarbageCollection/Object/GetObject.c
-  Sources/GarbageCollection/Object/FreeObject.c
+  Sources/Object/GetObject.c
+  Sources/Object/FreeObject.c
   
   Sources/GarbageCollection/Memory/MemoryCompare.c
   Sources/GarbageCollection/Memory/MemoryCopy.c
@@ -141,6 +141,7 @@ target_include_directories(
   PUBLIC
 
   ../String/Includes/Public/
+  ../JSON/Includes/Public/
   Includes/Public/
   Includes/Private/
 )

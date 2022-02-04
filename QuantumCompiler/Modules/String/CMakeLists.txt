@@ -8,7 +8,7 @@ add_library(
   String
 
   Sources/String.c
-  Sources/StringConstructor.c
+  Sources/String_Constructor.c
 
   Sources/Chs/StrLen.c
   Sources/Chs/StrSet.c
@@ -55,12 +55,12 @@ add_library(
   Sources/StringMethod/String_ToUpper.c
   Sources/StringMethod/_StringCompare.c
 
-  Sources/StringAry/StringAryConstructor.c
+  Sources/StringAry/StringAry_Constructor.c
   Sources/StringAry/StringAry_Contains.c
   Sources/StringAry/StringAry_Insert.c
   Sources/StringAry/StringAry_Pop.c
   Sources/StringAry/StringAry_Remove.c
-  Sources/StringAry/StringAryDestructor.c
+  Sources/StringAry/StringAry_Destructor.c
   Sources/StringAry/StringAry_Get.c
   Sources/StringAry/StringAry_NodeCreate.c
   Sources/StringAry/StringAry_Push.c
@@ -99,6 +99,10 @@ add_library(
   Sources/StringLibrary/String_FileAllWrite.c
   Sources/StringLibrary/String_ValueOfSearch.c
 
+  Sources/Object/Object_Boxing_StringAry.c
+  Sources/Object/Object_Boxing_String.c
+  Sources/Object/Object_UnBoxing_StringAry.c
+  Sources/Object/Object_UnBoxing_String.c
 )
 
 target_include_directories(

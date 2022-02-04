@@ -2,7 +2,7 @@
 #include <Json.h>
 
 bool
-JSON_AppendAry(JSONObject pSelf, const String pFieldName, Object pValue)
+JSON_AppendAry(JSONObject pSelf, const String pFieldName, const void* pValue)
 {
   return false;
 }

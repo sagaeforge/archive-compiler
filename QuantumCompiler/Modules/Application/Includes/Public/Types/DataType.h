@@ -163,6 +163,9 @@ typedef enum
   DataType_Bool,
   DataType_Ptr_Bool,
   DataType_Double_Ptr_Bool,
+  DataType_String,
+  DataType_StringAry,
+  DataType_JSONObject,
   DataType_None
 } DataTypeCode_t;
 

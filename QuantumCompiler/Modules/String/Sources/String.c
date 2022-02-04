@@ -61,7 +61,7 @@ StringModule_Initialized()
   StringLibMethod.FileAllRead = String_FileAllRead;
   StringLibMethod.FileAllWrite = String_FileAllWrite;
 
-  StringAryMethod.Destructor = StringAryDestructor;
+  StringAryMethod.Destructor = StringAry_Destructor;
   StringAryMethod.Contains = StringAry_Contains;
   StringAryMethod.Get = StringAry_Get;
   StringAryMethod.Insert = StringAry_Insert;

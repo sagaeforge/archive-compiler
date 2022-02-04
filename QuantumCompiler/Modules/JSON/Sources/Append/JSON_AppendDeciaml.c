@@ -2,7 +2,9 @@
 #include <Json.h>
 
 bool
-JSON_AppendDeciaml(JSONObject pSelf, const String pFieldName, Object pValue)
+JSON_AppendDeciaml(JSONObject pSelf,
+                   const String pFieldName,
+                   const int64_t pValue)
 {
   return false;
 }

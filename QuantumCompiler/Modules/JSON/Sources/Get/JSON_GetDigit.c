@@ -1,8 +1,8 @@
 
 #include <Json.h>
 
-Object
+double
 JSON_GetDigit(const JSONObject pSelf, const String pFieldName)
 {
-  return NULL;
+  return 0;
 }

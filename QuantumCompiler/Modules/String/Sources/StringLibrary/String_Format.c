@@ -17,7 +17,7 @@ String_Format(String pFormat, ...)
   int perper = String_Count(pFormat, String("%%"));
   int ptr_param;
 
-  StringAry Ary = StringAryConstructor(0);
+  StringAry Ary = StringAry(0);
 
   int i;
   for (i = 0; i < percent; i++) {

@@ -7,7 +7,8 @@ enable_testing()
 add_library(
   JSON
   Sources/Json.c
-  Sources/Json.c
+  Sources/JSON_Constructor.c
+  Sources/JSON_Destructor.c
   Sources/JSON_Clone.c
   Sources/JSON_Compare.c
   Sources/JSON_Export.c
@@ -19,7 +20,13 @@ add_library(
   Sources/JSON_RemoveAryAt.c
   Sources/JSON_Search.c
   Sources/JSON_Sum.c
+  Sources/JSON_NodeCreate.c
+  Sources/JSON_Contains.c
+  Sources/JSON_GetFiledLength.c
+  Sources/JSON_GetType.c
+  Sources/JSON_Object.c
 
+  Sources/Append/JSON_Append.c
   Sources/Append/JSON_AppendAry.c
   Sources/Append/JSON_AppendBool.c
   Sources/Append/JSON_AppendDeciaml.c
@@ -27,23 +34,22 @@ add_library(
   Sources/Append/JSON_AppendNULL.c
   Sources/Append/JSON_AppendObject.c
   Sources/Append/JSON_AppendString.c
-  Sources/Append/JSON_AppendAryAry.c
   Sources/Append/JSON_AppendBoolAry.c
   Sources/Append/JSON_AppendDeciamlAry.c
   Sources/Append/JSON_AppendDigitAry.c
   Sources/Append/JSON_AppendObjectAry.c
   Sources/Append/JSON_AppendStringAry.c
 
+  Sources/Get/JSON_Get.c
   Sources/Get/JSON_GetAry.c
   Sources/Get/JSON_GetBool.c
   Sources/Get/JSON_GetDeciaml.c
   Sources/Get/JSON_GetDigit.c
-  Sources/Get/JSON_GetFiledLength.c
   Sources/Get/JSON_GetNULL.c
   Sources/Get/JSON_GetObject.c
   Sources/Get/JSON_GetString.c
-  Sources/Get/JSON_GetType.c
 
+  Sources/Set/JSON_Set.c
   Sources/Set/JSON_SetAry.c
   Sources/Set/JSON_SetBool.c
   Sources/Set/JSON_SetDeciaml.c

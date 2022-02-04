@@ -6,7 +6,7 @@
 StringAry
 String_Split(String pSelf, String pValue)
 {
-  StringAry Ary = StringAryConstructor(0);
+  StringAry Ary = StringAry(0);
   Length_t Cnt = String_Count(pSelf, pValue);
 
   if (Cnt == 0) {

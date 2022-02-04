@@ -1,8 +1,8 @@
 
 #include <Json.h>
 
-JSONObject
-JSON_Read_File(const FILE* pJsonFile)
+bool
+JSON_Read_File(JSONObject pSelf, const FILE* pJsonFile)
 {
   return NULL;
 }

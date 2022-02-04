@@ -8,7 +8,6 @@
 typedef struct _StringAryNode StringAryNode;
 
 StringAryNode*  StringAry_NodeCreate  ();
-void            StringAryDestructor   (StringAry* pSelf);
 String          StringAry_Get         (StringAry pSelf, Index_t pIndex);
 void            StringAry_Insert      (StringAry pSelf, String pValue, Index_t pIndex);
 void            StringAry_Remove      (StringAry pSelf, Index_t pIndex);

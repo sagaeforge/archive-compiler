@@ -7,12 +7,6 @@
 // clang-format off
 void GarbageCollectionModule_Initialized();
 
-
-// 오브젝트에 대응하는 함수들
-Object GetObject(const DataTypeInfo_t *pInfo, const void *pValue);
-void   FreeObject(Object Ref);
-
-
 // 조건 검사하지 않고 실행하는 함수들
 __attribute__((warn_unused_result)) void*
 Excute_MemoryConstructor             (const DataTypeInfo_t* pInfo);

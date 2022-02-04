@@ -29,7 +29,6 @@ String       String_ReplaceAll    (String pSelf, String pOri, String pValue);
 String       String_Left          (String pSelf, Length_t pLength);
 String       String_Right         (String pSelf, Length_t pLength);
 String       String_Middle        (String pSelf, Index_t pStart, Index_t pEnd);
-void         String_Destructor    (String* pSelf);
 bool        _StringCompare        (wcs pAry, String pFindValue, Index_t pStart);
 
 #endif

@@ -1,8 +1,8 @@
 
 #include <Json.h>
 
-JSONObject
-JSON_Read_StrAry(const StringAry pStringAry)
+bool
+JSON_Read_StrAry(JSONObject pSelf, const StringAry pStringAry)
 {
   return NULL;
 }

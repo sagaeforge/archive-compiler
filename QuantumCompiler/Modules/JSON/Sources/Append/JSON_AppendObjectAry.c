@@ -4,7 +4,7 @@
 bool
 JSON_AppendObjectAry(JSONObject pSelf,
                      const String pFieldName,
-                     JSONObject pValue)
+                     const JSONObject pValue)
 {
   return false;
 }

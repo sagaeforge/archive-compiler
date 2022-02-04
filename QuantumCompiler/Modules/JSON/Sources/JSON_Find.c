@@ -1,7 +1,7 @@
 
 #include <Json.h>
 
-JSONObject
+Object
 JSON_Find(const JSONObject pSelf, const String pFiledName)
 {
   return NULL;

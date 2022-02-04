@@ -3,7 +3,7 @@
 #include <Private_StringAry.h>
 
 void
-StringAryDestructor(StringAry* pSelf)
+StringAry_Destructor(StringAry* pSelf)
 {
   StringAry Ary = *pSelf;
   if (Ary->Length != 0) {

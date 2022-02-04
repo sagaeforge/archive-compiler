@@ -182,5 +182,8 @@ bool Object_Compare(Object* Self, Object* Obj);
 Func_t __ObjectBoxingSearch(const char *pDataType);
 Func_t __ObjectUnBoxingSearch(const char *pDataType);
 
+Object GetObject(const DataTypeInfo_t *pInfo, const void *pValue);
+void   FreeObject(Object Ref);
+
 
 #endif

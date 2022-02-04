@@ -40,7 +40,7 @@ String_FileAllRead(FILE* pfile)
     if (pos == MAXLINE) {
       Exception(ERROR, "버퍼 공간을 다 사용했습니다. 파일 구조를 바꿔주세요.");
       MemoryRemove(temp);
-      StringAryDestructor(&ary);
+      StringAry_Destructor(&ary);
       return NULL;
     }
   }

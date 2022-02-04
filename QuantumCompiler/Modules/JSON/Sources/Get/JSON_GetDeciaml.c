@@ -1,8 +1,8 @@
 
 #include <Json.h>
 
-Object
+int64_t
 JSON_GetDeciaml(const JSONObject pSelf, const String pFieldName)
 {
-  return NULL;
+  return 0;
 }

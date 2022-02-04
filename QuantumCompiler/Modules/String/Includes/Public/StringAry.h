@@ -4,10 +4,12 @@
 
 #include <Types/DataTypes_String.h>
 
-#define StringAry(Cnt, args...) StringAryConstructor(Cnt, ##args)
+#define StringAry(Cnt, args...) StringAry_Constructor(Cnt, ##args)
 
 StringAry
-StringAryConstructor(int pCnt, ...);
+StringAry_Constructor(int pCnt, ...);
+void
+StringAry_Destructor(StringAry* pSelf);
 
 extern struct StringAryMethod StringAryMethod;
 

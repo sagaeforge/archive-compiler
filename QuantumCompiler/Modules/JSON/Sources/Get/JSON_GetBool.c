@@ -1,7 +1,7 @@
 
 #include <Json.h>
 
-Object
+bool
 JSON_GetBool(const JSONObject pSelf, const String pFieldName)
 {
   return NULL;

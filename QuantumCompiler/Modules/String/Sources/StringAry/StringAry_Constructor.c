@@ -6,7 +6,7 @@
 #include <stdarg.h>
 
 StringAry
-StringAryConstructor(int pCnt, ...)
+StringAry_Constructor(int pCnt, ...)
 {
   StringAry Ary = MemoryCreate(sizeof(StringAry_t));
   if (Ary == NULL) {
