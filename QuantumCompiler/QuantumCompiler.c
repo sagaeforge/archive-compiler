@@ -18,8 +18,6 @@
   해야할 것
 
   JSON에서 사용할 수 있는 String lib 메소드 추가
-
-  TODO String 모듈의 매개변수 이름 통일
 */
 
 int

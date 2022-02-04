@@ -67,7 +67,7 @@ JSON_Read_Str(JSONObject pSelf, const String pString)
       // 콜론 위치로 이동함.
       StartSymbolMark = StringMethod.IndexAt(_Value, String(":"), index);
 
-      Index_t gap = 0, totalPosition = 0;
+      Index_t gap = 0, totalPosition = 0, BraceStackPointer = 0;
       while (true) {
         gap++;
         totalPosition = StartSymbolMark + gap;
@@ -80,18 +80,23 @@ JSON_Read_Str(JSONObject pSelf, const String pString)
         switch (_Value->Value[totalPosition]) {
           // [+] 문자일 때
           case '\"':
+            // 시작점 설정
             i = StartSymbolMark + gap + 1;
+            // 파싱
             while (_Value->Value[i] != '\"') {
-              if (_Value->Value[i] == '\n') {
+              // 문자열이 닫히지 않은 경우
+              if (_Value->Value[i] == '\n' || _Value->Value[i] == '\0') {
                 Exception(ERROR, "문자열이 닫히지 않았습니다.");
                 return false;
               }
               i++;
             }
 
+            // 추출
             InputValue =
               StringLibMethod.Extract(_Value, StartSymbolMark + gap, i);
 
+            //대입
             MakeNode->m_DataType = JSONDataType_String;
             MakeNode->m_Value.StringValue = InputValue;
             EndSymbolMark = i;
@@ -101,7 +106,8 @@ JSON_Read_Str(JSONObject pSelf, const String pString)
           case 't':
           case 'T':
             if (!IsSpace(_Value->Value[totalPosition + 5]) &&
-                _Value->Value[totalPosition + 5] != ',') {
+                _Value->Value[totalPosition + 5] != ',' &&
+                _Value->Value[totalPosition + 5] != '\0') {
               Exception(ERROR, "알 수 없는 키워드입니다.");
               return false;
             }
@@ -124,7 +130,8 @@ JSON_Read_Str(JSONObject pSelf, const String pString)
           case 'f':
           case 'F':
             if (!IsSpace(_Value->Value[totalPosition + 6]) &&
-                _Value->Value[totalPosition + 6] != ',') {
+                _Value->Value[totalPosition + 6] != ',' &&
+                _Value->Value[totalPosition + 6] != '\0') {
               Exception(ERROR, "알 수 없는 키워드입니다.");
               return false;
             }
@@ -146,8 +153,9 @@ JSON_Read_Str(JSONObject pSelf, const String pString)
           // [+] 널일 때
           case 'n':
           case 'N':
-            if (!IsSpace(_Value->Value[totalPosition + 4]) &&
-                _Value->Value[totalPosition + 4] != ',') {
+            if (!IsSpace(_Value->Value[totalPosition + 5]) &&
+                _Value->Value[totalPosition + 5] != ',' &&
+                _Value->Value[totalPosition + 5] != '\0') {
               Exception(ERROR, "알 수 없는 키워드입니다.");
               return false;
             }
@@ -168,14 +176,43 @@ JSON_Read_Str(JSONObject pSelf, const String pString)
             break;
           // [+] 객체일 때
           case '{':
-            // TODO 임시로 무시하도록 설계함.
-            EndSymbolMark =
-              StringMethod.IndexAt(_Value, String("}"), StartSymbolMark + gap);
+            BraceStackPointer = 1;
+            i = StartSymbolMark + gap;
+            JSONObject Obj = JSON_Constructor();
+            while (_Value->Value[i] != '\0') {
+              i++;
+              if (_Value->Value[i] == '{') {
+                BraceStackPointer++;
+                continue;
+              }
 
+              if (_Value->Value[i] == '}') {
+                BraceStackPointer--;
+
+                if (BraceStackPointer == 0) {
+                  InputValue = StringLibMethod.Extract(
+                    _Value, StartSymbolMark + gap, i + 1);
+
+                  Obj->m_Parent = pSelf;
+                  JSON_Read_Str(Obj, InputValue);
+                  break;
+                }
+              }
+            }
+
+            if (BraceStackPointer != 0) {
+              Exception(ERROR, "중괄호 구성이 잘못되어 있습니다.");
+              return false;
+            }
+
+            MakeNode->m_DataType = JSONDataType_JSONObject;
+            MakeNode->m_Value.ReferenceValue = Obj;
+            EndSymbolMark = i;
             break;
           // [+] 배열일 때
           case '[':
             // TODO 임시로 무시하도록 설계함.
+            // 리스트를 통해서 n차 배열을 지원하도록 짜야할거 같긴함.
             EndSymbolMark =
               StringMethod.IndexAt(_Value, String("]"), StartSymbolMark + gap);
             break;
@@ -183,7 +220,8 @@ JSON_Read_Str(JSONObject pSelf, const String pString)
             // [+] 숫자일 때
             if (IsDecimal(_Value->Value[StartSymbolMark + gap])) {
               i = StartSymbolMark + gap;
-              while (_Value->Value[i] != ',' && !IsSpace(_Value->Value[i]))
+              while (_Value->Value[i] != ',' && !IsSpace(_Value->Value[i]) &&
+                     _Value->Value[i] != '\0')
                 i++;
 
               InputValue =
@@ -219,22 +257,6 @@ JSON_Read_Str(JSONObject pSelf, const String pString)
     index = EndSymbolMark + 1;
     NowTurnIsFieldName = !NowTurnIsFieldName;
   }
-
-  /*
-    기초는 하기 쉬움
-    String =>
-    Digit =>
-    Bool =>
-    NULL =>
-
-    근데 아래는 진짜 어려움
-    Object =>
-    Ary =>
-
-    일단 기본 로직은 필드명을 추출하고 간단한거 먼저 구현함.
-
-    그리고 배열은 배열을 지원할 수 있도록 구성하고 싶음.
-  */
 
   return true;
 }

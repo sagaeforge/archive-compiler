@@ -12,18 +12,18 @@ add_library(
   Sources/JSON_Clone.c
   Sources/JSON_Compare.c
   Sources/JSON_Export.c
-  Sources/JSON_Find.c
   Sources/JSON_IsFieldOf.c
   Sources/JSON_IsTypeOf.c
   Sources/JSON_Print.c
   Sources/JSON_Remove.c
   Sources/JSON_RemoveAryAt.c
-  Sources/JSON_Search.c
   Sources/JSON_Sum.c
   Sources/JSON_NodeCreate.c
   Sources/JSON_Contains.c
   Sources/JSON_GetFiledLength.c
   Sources/JSON_GetType.c
+  Sources/JSON_GetAryType.c
+  Sources/JSON_GetParent.c
   Sources/JSON_Object.c
 
   Sources/Append/JSON_Append.c

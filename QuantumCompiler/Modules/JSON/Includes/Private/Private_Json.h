@@ -46,11 +46,11 @@ bool          JSON_IsTypeOf           (const JSONObject pSelf, const String     
 bool          JSON_IsFieldOf          (const JSONObject pSelf, const String     pFiledName);
 bool          JSON_Compare            (const JSONObject pSelf, const JSONObject pTarget);
 JSONDataType  JSON_GetType            (const JSONObject pSelf, const String     pFiledName);
+String        JSON_GetAryType         (const JSONObject pSelf, const String     pFiledName);
 bool          JSON_Contains           (const JSONObject pSelf, const String     pFiledName);
-Object        JSON_Find               (const JSONObject pSelf, const String     pFiledName); // 자기 자신만
-Object        JSON_Search             (const JSONObject pSelf, const String     pFiledName); // 자기 자신을 포함한 모든 곳을 재귀해서 검색
 JSONObject    JSON_Sum                (const JSONObject pSelf, const JSONObject pTarget, const int Policy);
 StringAry     JSON_Export             (const JSONObject pSelf, const Length_t   TabSize);
+JSONObject    JSON_GetParent          (const JSONObject pSelf);
 Length_t      JSON_GetFiledLength     (const JSONObject pSelf);
 JSONObject    JSON_Clone              (const JSONObject pSelf);
 bool          JSON_Print              (const JSONObject pSelf);

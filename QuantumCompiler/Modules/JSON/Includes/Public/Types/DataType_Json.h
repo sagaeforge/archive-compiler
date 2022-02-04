@@ -24,7 +24,7 @@ typedef enum
 // clang-format off
 #pragma pack(push, 1)
 
-typedef struct _JSONNode_t
+typedef struct _JSONNode
 {
   String              m_Name;
   union 
@@ -35,8 +35,9 @@ typedef struct _JSONNode_t
     void* ReferenceValue;
   } m_Value;
   Length_t            m_Length;
+  String              m_AryInfo;
   JSONDataType        m_DataType;
-  struct _JSONNode_t *Next;
+  struct _JSONNode*   Next;
 } JSONNode_t, *JSONNode;
 
 typedef struct _JSONObject
@@ -91,11 +92,11 @@ struct JSONMethod {
   bool          (*IsFieldOf)                 (const JSONObject, const String);
   bool          (*Compare)                   (const JSONObject, const JSONObject);
   JSONDataType  (*GetType)                   (const JSONObject, const String);
+  String_t*     (*GetAryType)                (const JSONObject, const String);
   bool          (*Contains)                  (const JSONObject, const String);
-  Object        (*Find)                      (const JSONObject, const String);
-  Object        (*Search)                    (const JSONObject, const String);
   JSONObject    (*Sum)                       (const JSONObject, const JSONObject, const int);
   StringAry     (*Export)                    (const JSONObject, const Length_t);
+  JSONObject    (*GetParent)                 (const JSONObject);
   Length_t      (*GetFiledLength)            (const JSONObject);
   JSONObject    (*Clone)                     (const JSONObject);
   bool          (*Print)                     (const JSONObject);

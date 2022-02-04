@@ -11,5 +11,6 @@ JSON_NodeCreate()
   node->m_Name = NULL;
   node->m_Value.StringValue = NULL;
   node->Next = NULL;
+  node->m_AryInfo = String("[No DataType], No Dimension");
   return node;
 }
