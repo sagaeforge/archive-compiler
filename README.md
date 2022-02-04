@@ -2,77 +2,114 @@
 * Quantum : Compiler, Interpreter
 * QuantumVM : VM
 
-## Includes Info
-VSCode에서 사용하고 있는 Includes Cache 정보 
-
-    // System Includes
-    "${workspaceFolder}/**",
-    // ProgramManager Includes
-    "${workspaceFolder}/Includes", 
-    "${workspaceFolder}/Includes/**",
-    // ProgramManager Includes
-    "${workspaceFolder}/Modules/ProgramManager/Includes/", 
-    "${workspaceFolder}/Modules/ProgramManager/Includes/**", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/Exception/Includes/Public", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/Exception/Includes/Public/**", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/Exception/Includes/Private/", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/Exception/Includes/Private/**", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/GarbageCollection/Includes/Public", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/GarbageCollection/Includes/Public/**", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/GarbageCollection/Includes/Private", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/GarbageCollection/Includes/Private/**", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/InputSystem/Includes/Public", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/InputSystem/Includes/Public/**", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/InputSystem/Includes/Private/", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/InputSystem/Includes/Private/**", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/ProcessEvent/Includes/Public/", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/ProcessEvent/Includes/Public/**", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/ProcessEvent/Includes/Private/", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/ProcessEvent/Includes/Private/**", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/Object/Includes/Public/", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/Object/Includes/Public/**", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/Object/Includes/Private/", 
-    "${workspaceFolder}/Modules/ProgramManager/Module/Object/Includes/Private/**",
-    // String Includes
-    "${workspaceFolder}/Modules/String/Includes/Public/", 
-    "${workspaceFolder}/Modules/String/Includes/Public/**", 
-    "${workspaceFolder}/Modules/String/Includes/Private/", 
-    "${workspaceFolder}/Modules/String/Includes/Private/**" 
+<br>
+<br>
+<br>
 
 # TODO
-1. 모든 소스코드에 라이센스 파일 및 엔티티 코드 추가
-2. InputSystem 설계
-3. Exception 설계
-4. 헤더 파일 주석 추가
-5. 프로그램 매니저 - Object 모듈 추가
+1. JSON 2022-02-07까지 완성
+2. 기능 테스트 2022-02-08까지 완수
+3. GC 성능 테스트 2022-02-09까지 완수
 
+<br>
+<br>
+<br>
 
-## InputSystem 설계
-    stdin: 표준 입력에 관련된 함수들이 존재함.
-    stdout: 표준 출력에 관련된 함수들이 존재함.
-    stderr: 표준 오류 출력에 관련된 함수들이 존재함.
+# .vscode 파일 구성
+현재 사용중인 .vscode 파일 구성
+<br>
+<br>
 
-    bufSize : 각 입출력 시스템의 버퍼 공간.
+## c_cpp_properties.json
+    {
+        "configurations": [
+            {
+                "name": "Linux",
+                "includePath": [
+                    "${workspaceFolder}/**",
+                    "${workspaceFolder}/Includes/",
+                    "${workspaceFolder}/Includes/**",
+                    "${workspaceFolder}/Modules/Application/Includes/Private/",
+                    "${workspaceFolder}/Modules/Application/Includes/Private/**",
+                    "${workspaceFolder}/Modules/Application/Includes/Public/",
+                    "${workspaceFolder}/Modules/Application/Includes/Public/**",
+                    "${workspaceFolder}/Modules/String/Includes/Private/",
+                    "${workspaceFolder}/Modules/String/Includes/Private/**",
+                    "${workspaceFolder}/Modules/String/Includes/Public/",
+                    "${workspaceFolder}/Modules/String/Includes/Public/**",
+                    "${workspaceFolder}/Modules/JSON/Includes/Public/",
+                    "${workspaceFolder}/Modules/JSON/Includes/Public/**",
+                    "${workspaceFolder}/Modules/JSON/Includes/Private",
+                    "${workspaceFolder}/Modules/JSON/Includes/Private/**"
+                ],
+                "defines": [],
+                "compilerPath": "/usr/bin/clang",
+                "cStandard": "c11",
+                "cppStandard": "c++14",
+                "configurationProvider": "ms-vscode.cmake-tools"
+            }
+        ],
+        "version": 4
+    }
 
-    Console : Console 기반의 입출력 기능을 담당하는 함수가 있음.
-    NetWork : Network 기반의 입출력 기능을 담당하는 함수가 있음. <- 만들지 안 만들지는 모름. 여유가 있으면 개발
-    Serial  : Serial Port 기반의 입출력 기능을 담당하는 함수가 있음. 
+## launch.json
+    {
+        // Use IntelliSense to learn about possible attributes.
+        // Hover to view descriptions of existing attributes.
+        // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+        "version": "0.2.0",
+        "configurations": [
+            {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug",
+            "program": "${workspaceFolder}/build/QuantumCompiler",
+            "args": [],
+            "cwd": "${workspaceFolder}/build/"
+            }
+        ]
+    }
 
-## Exception 설계
+## settings.json
+    {
+        "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    }
 
-    CallException 함수를 통해 오류를 시스템에 보고
-    (ErrCode Code) 
-    CallAssert 함수를 통해 어디서 오류가 났는지 시스템에 보고
-    (ErrCode code, const_chs File, const_chs FuncName, int Line)
- 
-    ExceptionAction 특정 오류가 나면 처리되는 함수를 처리함.
+## tasks.json
+    {
+        // See https://go.microsoft.com/fwlink/?LinkId=733558
+        // for the documentation about the tasks.json format
 
-    ExceptionDefines 특정 오류가 무엇인지 정의함.
-    (const_chs Name)
-    ExceptionUnDefines 특정 오류 정의를 삭제함.
-    (const_chs Name)
+        "version": "2.0.0",
+        "tasks": [
+            {
+                "label": "Valgrind",
+                "type": "shell",
+                "command": "valgrind",
+                "args": [
+                    "--leak-check=full",
+                    "--show-leak-kinds=all",
+                    "-s",
+                    "${workspaceFolder}/build/QuantumCompiler"
+                ],
+                "problemMatcher": [],
+                "group": {
+                    "kind": "build",
+                    "isDefault": true
+                }
+            }
+        ]
+    }
 
-    Try_Catch(ExcuteFunc, Exception<err_name, CatchAction>)
-    Try_Catch_Finnaly(ExcuteFunc, Exception<err_name, CatchAction>, FinallyFunc)
+<br>
+<br>
+<br>
 
-
+# 계획
+1. 2월달 안으로 파서 끝
+2. 3월 중순 안으로 AST 개발 끝
+3. 3월 말 안으로 중간코드 생성기 개발 끝
+4. 4월 초 최적화기 개발
+5. 5월 초 전체 프로젝트 최적화
+6. 5월 말 목적 프로그램 생성기 개발
+7. 6월 라이브러리 개발
