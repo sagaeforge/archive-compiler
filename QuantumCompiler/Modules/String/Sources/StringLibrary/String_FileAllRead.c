@@ -6,7 +6,7 @@
 #include <Private_StringAry.h>
 #include <Private_StringLib.h>
 
-#define MAXLINE 2048
+#define MAXLINENUMS 2048
 
 StringAry
 String_FileAllRead(FILE* pfile)
@@ -15,7 +15,7 @@ String_FileAllRead(FILE* pfile)
 
   StringAry ary = StringAry(0);
 
-  wcs temp = __WcsCreate(MAXLINE);
+  wcs temp = __WcsCreate(MAXLINENUMS);
   int pos = 0;
   while (true) {
     int in = fgetc(pfile);
@@ -37,7 +37,7 @@ String_FileAllRead(FILE* pfile)
 
     temp[pos++] = in;
 
-    if (pos == MAXLINE) {
+    if (pos == MAXLINENUMS) {
       Exception(ERROR, "버퍼 공간을 다 사용했습니다. 파일 구조를 바꿔주세요.");
       MemoryRemove(temp);
       StringAry_Destructor(&ary);

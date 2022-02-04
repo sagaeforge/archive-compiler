@@ -27,7 +27,13 @@ typedef enum
 typedef struct _JSONNode_t
 {
   String              m_Name;
-  String              m_Value;
+  union 
+  {
+    // * 기본 형식[type: null, digit, boolean, String] 만 저장함. 
+    String StringValue;
+    // * 참조 형식[type: JSONObject, Ary] 만 저장함. 
+    void* ReferenceValue;
+  } m_Value;
   Length_t            m_Length;
   JSONDataType        m_DataType;
   struct _JSONNode_t *Next;

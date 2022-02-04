@@ -8,6 +8,7 @@
 // clang-format off
 
 JSONObject    JSON_Constructor        ();
+JSONObject    JSON_Constructor_Parent (JSONObject pParent);
 bool          JSON_Destructor         (const JSONObject *pSelf);
 
 #define JSON_Read(Self, Instance)                     \

@@ -5,5 +5,5 @@
 Length_t
 JSON_GetFiledLength(const JSONObject pSelf)
 {
-  return 0;
+  return pSelf->m_FieldLength;
 }

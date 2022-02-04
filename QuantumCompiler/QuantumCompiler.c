@@ -29,10 +29,11 @@ main(int argc, char const* argv[])
   // Application.ProcessEvent[ProcessEvent_Awake].AddListener(test);
   Application.ApplicationStart();
 
-  String str = String("{ \"type\": \"Test\"}");
+  // String str = String("{ \"type\": \"Test\"}");
+  FILE* fp = fopen("./test.txt", "r+");
 
   JSONObject obj = JSON_Constructor();
-  JSON_Read(obj, str);
+  JSON_Read(obj, fp);
 
   printf("%d", obj == NULL ? 0 : obj->m_FieldLength);
 

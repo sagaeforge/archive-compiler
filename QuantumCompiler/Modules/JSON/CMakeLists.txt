@@ -80,6 +80,13 @@ target_include_directories(
 add_compile_definitions(
   DEBUG
 )
+target_compile_options(
+  JSON
+  PUBLIC
+  
+  # -v
+)
+
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

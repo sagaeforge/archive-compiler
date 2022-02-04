@@ -4,10 +4,10 @@
 
 #include <Types/DataType.h>
 
-#define Constructor(DataType)                                                  \
+#define ConstructorCall(DataType)                                              \
   (DataType*)MemoryConstructor(DataType_Find(#DataType))
 
-#define Destructor(DataType, Instance)                                         \
+#define DestructorCall(DataType, Instance)                                     \
   MemoryDestructor(DataType_Find(#DataType), Instance)
 
 // clang-format off

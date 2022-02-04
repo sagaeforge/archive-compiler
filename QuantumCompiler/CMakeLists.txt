@@ -14,8 +14,8 @@ add_executable(
 )
 
 add_subdirectory(Modules/Application/)
-add_subdirectory(Modules/String/)
 add_subdirectory(Modules/JSON/)
+add_subdirectory(Modules/String/)
 add_dependencies(String Application)
 add_dependencies(JSON String)
 
@@ -24,8 +24,8 @@ target_link_libraries(
   PUBLIC
   
   Application
-  String
   JSON
+  String
 )
 target_include_directories(
   QuantumCompiler
