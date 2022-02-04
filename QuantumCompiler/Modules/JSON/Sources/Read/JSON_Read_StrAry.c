@@ -1,9 +1,11 @@
 
 #include <Json.h>
 #include <Private_Json.h>
+#include <StringLib.h>
 
 bool
 JSON_Read_StrAry(JSONObject pSelf, const StringAry pStringAry)
 {
-  return NULL;
+  String str = toString(pStringAry, String("\n"));
+  return JSON_Read_Str(pSelf, str);
 }

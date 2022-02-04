@@ -24,12 +24,13 @@ typedef enum
 // clang-format off
 #pragma pack(push, 1)
 
-typedef struct
+typedef struct _JSONNode_t
 {
   String              m_Name;
   String              m_Value;
   Length_t            m_Length;
   JSONDataType        m_DataType;
+  struct _JSONNode_t *Next;
 } JSONNode_t, *JSONNode;
 
 typedef struct _JSONObject

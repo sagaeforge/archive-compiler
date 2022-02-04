@@ -1,6 +1,6 @@
 
-#ifndef __CHARSTRING__
-#define __CHARSTRING__
+#ifndef __PRIVATE_STRING_CHARSTRING__
+#define __PRIVATE_STRING_CHARSTRING__
 
 #include <String.h>
 
