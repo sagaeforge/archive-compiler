@@ -4,5 +4,6 @@
 bool
 JSON_SetParent(JSONObject pSelf, const JSONObject pParent)
 {
-  return false;
+  pSelf->m_Parent = pParent;
+  return true;
 }

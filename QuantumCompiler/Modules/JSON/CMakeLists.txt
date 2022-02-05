@@ -7,6 +7,9 @@ enable_testing()
 add_library(
   JSON
   Sources/Json.c
+  Sources/JSON_Object.c
+
+
   Sources/JSON/JSON_Constructor.c
   Sources/JSON/JSON_Destructor.c
   Sources/JSON/JSON_NodeCreate.c
@@ -24,7 +27,6 @@ add_library(
   Sources/JSON/JSON_Destructor.c
   Sources/JSON/JSON_FieldOf.c
   Sources/JSON/JSON_Get.c
-  Sources/JSON/JSON_Object.c
   Sources/JSON/JSON_Print.c
   Sources/JSON/JSON_Type.c
   Sources/JSON/JSON_Set.c

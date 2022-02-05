@@ -4,5 +4,5 @@
 Length_t
 JSONAry_Length(const JSONAry pSelf)
 {
-  return 0;
+  return pSelf->m_Length;
 }

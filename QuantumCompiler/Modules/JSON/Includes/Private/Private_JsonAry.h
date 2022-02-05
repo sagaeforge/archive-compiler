@@ -17,7 +17,7 @@ Object        JSONAry_Pop                (      JSONAry  pSelf);
 bool          JSONAry_Compare            (const JSONAry  pSelf, const JSONAry pTarget);
 bool          JSONAry_Contains           (const JSONAry  pSelf, const JSONAry pTarget);
 bool          JSONAry_Clear              (      JSONAry  pSelf);
-bool          JSONAry_Object             (const JSONAry  pSelf);
+JSONObject    JSONAry_Object             (const JSONAry  pSelf);
 bool          JSONAry_SetObject          (const JSONAry  pSelf, const JSONObject pObject);
 Length_t      JSONAry_Length             (const JSONAry  pSelf);
 

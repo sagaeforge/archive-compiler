@@ -1,8 +1,8 @@
 
 #include <Private_JsonAry.h>
 
-bool
+JSONObject
 JSONAry_Object(const JSONAry pSelf)
 {
-  return false;
+  return pSelf->m_Object;
 }

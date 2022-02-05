@@ -4,5 +4,5 @@
 JSONObject
 JSON_Parent(const JSONObject pSelf)
 {
-  return false;
+  return pSelf->m_Parent;
 }

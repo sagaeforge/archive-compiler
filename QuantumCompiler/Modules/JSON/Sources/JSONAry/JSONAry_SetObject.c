@@ -4,5 +4,6 @@
 bool
 JSONAry_SetObject(const JSONAry pSelf, const JSONObject pObject)
 {
-  return false;
+  pSelf->m_Object = pObject;
+  return true;
 }
