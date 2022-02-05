@@ -184,7 +184,7 @@ typedef enum
 typedef struct
 {
   char*             m_Name;
-  int               m_Code;
+  DataTypeCode_t    m_Code;
   Length_t          m_WordSize;
   DataTypeOption_t  m_Type;
   Constructor_t     m_Constructor;

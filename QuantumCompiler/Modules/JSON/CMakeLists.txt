@@ -42,12 +42,13 @@ add_library(
   Sources/JSONAry/JSONAry_Insert.c
   Sources/JSONAry/JSONAry_Length.c
   Sources/JSONAry/JSONAry_NodeCreate.c
-  Sources/JSONAry/JSONAry_Object.c
+  Sources/JSONAry/JSONAry_Parent.c
   Sources/JSONAry/JSONAry_Pop.c
   Sources/JSONAry/JSONAry_Push.c
   Sources/JSONAry/JSONAry_Remove.c
   Sources/JSONAry/JSONAry_Set.c
-  Sources/JSONAry/JSONAry_SetObject.c
+  Sources/JSONAry/JSONAry_SetParent.c
+  Sources/JSONAry/JSONAry_ParentType.c
 
   Sources/JSON/Read/JSON_Read_File.c
   Sources/JSON/Read/JSON_Read_StrAry.c

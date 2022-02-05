@@ -30,7 +30,6 @@ typedef struct _JSONNode
     // * 참조 형식[type: JSONObject, Ary] 만 저장함. 
     void* ReferenceValue;
   } m_Value;
-  Length_t            m_Length;
   JSONDataType        m_DataType;
   struct _JSONNode*   Next;
 } JSONNode_t, *JSONNode;
@@ -44,12 +43,28 @@ typedef struct _JSONObject
 } JSONObject_t, *JSONObject;
 
 typedef struct _JSONAryNode {
-  JSONNode_t            m_Value;
+  struct {
+    union 
+    {
+      // * 기본 형식[type: null, digit, boolean, String] 만 저장함. 
+      String StringValue;
+      // * 참조 형식[type: JSONObject, Ary] 만 저장함. 
+      void* ReferenceValue;
+    } m_Value;
+    JSONDataType        m_DataType;
+  } m_Value;
   struct _JSONAryNode*  Next;
 } JSONAryNode_t, *JSONAryNode;
 
 typedef struct _JSONAry {
-  JSONObject  m_Object;
+  struct {
+    union
+    {
+      JSONObject        m_Object;
+      struct _JSONAry*  m_Ary;
+    };
+    bool IsObject;
+  } m_Parent;
   Length_t    m_Length;
   JSONAryNode m_Nodes;
 } JSONAry_t, *JSONAry;

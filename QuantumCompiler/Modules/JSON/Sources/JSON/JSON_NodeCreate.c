@@ -7,7 +7,6 @@ JSON_NodeCreate()
 {
   JSONNode node = MemoryCreate(sizeof(JSONNode_t));
   node->m_DataType = JSONDataType_None;
-  node->m_Length = 0;
   node->m_Name = NULL;
   node->m_Value.StringValue = NULL;
   node->Next = NULL;

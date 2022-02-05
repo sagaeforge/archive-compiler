@@ -10,6 +10,7 @@
   int                 : String_ToString_Decimal,                 \
   unsigned int        : String_ToString_Decimal_Unsigned,        \
   long                : String_ToString_Decimal,                 \
+  unsigned long       : String_ToString_Decimal_Unsigned,        \
   long long           : String_ToString_Decimal,                 \
   unsigned long long  : String_ToString_Decimal_Unsigned,        \
   double              : String_ToString_Digit,                   \

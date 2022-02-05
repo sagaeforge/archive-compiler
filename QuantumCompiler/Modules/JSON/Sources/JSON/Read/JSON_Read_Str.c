@@ -3,7 +3,9 @@
 #include <Exception.h>
 #include <GarbageCollection.h>
 #include <Json.h>
+#include <JsonAry.h>
 #include <Private_Json.h>
+#include <Private_JsonAry.h>
 #include <StringAry.h>
 #include <StringLib.h>
 
@@ -14,6 +16,9 @@ GetField(JSONObject pSelf,
          Index_t pStart,
          Index_t* out_pEndSymbolMark)
 {
+  if (pString->Length <= pStart)
+    return true;
+
   // index를 기준으로 첫번째 "를 읽음
   Index_t i, StartSymbolMark = 0, EndSymbolMark = 0;
   char findCh = '\0';
@@ -56,9 +61,17 @@ GetField(JSONObject pSelf,
           return false;
         }
       }
-    } else if (!IsSpace(pString->Value[i])) {
-      Exception(ERROR, "JSON안에 이상한 문자열이 있습니다.");
-      return true;
+      // 필터
+    } else if (IsSpace(pString->Value[i]) || pString->Value[i] == ',') {
+      continue;
+    } else {
+      if (pString->Value[i] != '\0') {
+        Exception(ERROR,
+                  "JSON안에 이상한 문자열이 있습니다. [ch:%C,index:%u]",
+                  pString->Value[i],
+                  i);
+        return true;
+      }
     }
   }
 
@@ -66,7 +79,12 @@ GetField(JSONObject pSelf,
   return true;
 }
 
-// 탐색할게 없으면 true
+static bool
+GetAry_Excute()
+{
+  return false;
+}
+
 static bool
 GetAry(JSONObject pSelf,
        String pString,
@@ -89,6 +107,10 @@ GetAry(JSONObject pSelf,
 
       if (BraceStackPointer == 0) {
         String InputValue = StringLibMethod.Extract(pString, pStart, i + 1);
+        JSONAry Ary = JSONAry_Constructor();
+        Ary->m_Parent.m_Object = pSelf;
+        Ary->m_Parent.IsObject = true;
+        (*out_pEndSymbolMark) = i + 1;
 
         break;
       }
@@ -127,7 +149,6 @@ JSON_Read_Str(JSONObject pSelf, const String pString)
       // 값을 저장할 노드를 생성함.
       JSONNode MakeNode = JSON_NodeCreate();
       MakeNode->m_Name = FieldName;
-      MakeNode->m_Length = 1;
       MakeNode->Next = NULL;
 
       // 콜론 위치로 이동함.

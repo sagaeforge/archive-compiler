@@ -28,7 +28,9 @@ main(int argc, char const* argv[])
   Application.ApplicationStart();
 
   // String str = String("{ \"type\": \"Test\"}");
-  FILE* fp = fopen("./test.txt", "r+");
+  FILE* fp = fopen("./test.json", "r+");
+  if (fp == NULL)
+    return -1;
 
   JSONObject obj = JSON_Constructor();
   JSON_Read(obj, fp);

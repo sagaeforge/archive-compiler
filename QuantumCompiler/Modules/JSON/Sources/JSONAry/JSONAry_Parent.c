@@ -1,8 +1,8 @@
 
 #include <Private_JsonAry.h>
 
-JSONObject
+void*
 JSONAry_Object(const JSONAry pSelf)
 {
-  return pSelf->m_Object;
+  return pSelf->m_Parent.m_Object;
 }
