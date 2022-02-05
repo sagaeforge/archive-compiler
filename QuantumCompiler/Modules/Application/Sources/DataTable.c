@@ -1,5 +1,6 @@
 
 #include <Json.h>
+#include <JsonAry.h>
 #include <Object.h>
 #include <String.h>
 #include <StringAry.h>
@@ -65,5 +66,6 @@ const DataTypeInfo_t g_DataTypeTable[] = {
   { "String",                 DataType_String,                  sizeof(void *),               1,            (Constructor_t) String_Constructor_Wcs, (Destructor_t) String_Destructor,         (Func_t)__Object_Boxing_String,                     (Func_t)__Object_UnBoxing_String },
   { "StringAry",              DataType_StringAry,               sizeof(void *),               1,            (Constructor_t) StringAry_Constructor,  (Destructor_t) StringAry_Destructor,      (Func_t)__Object_Boxing_StringAry,                  (Func_t)__Object_UnBoxing_StringAry },
   { "JSONObject",             DataType_JSONObject,              sizeof(void *),               1,            (Constructor_t) JSON_Constructor,       (Destructor_t) JSON_Destructor,           (Func_t)__Object_Boxing_JSONObject,                 (Func_t)__Object_UnBoxing_JSONObject },
+  { "JSONAry",                DataType_JSONAry,                 sizeof(void *),               1,            (Constructor_t) JSONAry_Constructor,    (Destructor_t) JSONAry_Destructor,        (Func_t)__Object_Boxing_JSONAry,                    (Func_t)__Object_UnBoxing_JSONAry },
   { "Unknown",                DataType_None,                    0,                            0,            NULL,                                   NULL,                                     NULL,                                               NULL},
 };

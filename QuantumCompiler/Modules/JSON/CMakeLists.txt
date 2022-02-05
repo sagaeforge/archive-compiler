@@ -7,64 +7,53 @@ enable_testing()
 add_library(
   JSON
   Sources/Json.c
-  Sources/JSON_Constructor.c
-  Sources/JSON_Destructor.c
-  Sources/JSON_Clone.c
-  Sources/JSON_Compare.c
-  Sources/JSON_Export.c
-  Sources/JSON_IsFieldOf.c
-  Sources/JSON_IsTypeOf.c
-  Sources/JSON_Print.c
-  Sources/JSON_Remove.c
-  Sources/JSON_RemoveAryAt.c
-  Sources/JSON_Sum.c
-  Sources/JSON_NodeCreate.c
-  Sources/JSON_Contains.c
-  Sources/JSON_GetFiledLength.c
-  Sources/JSON_GetType.c
-  Sources/JSON_GetAryType.c
-  Sources/JSON_GetParent.c
-  Sources/JSON_Object.c
+  Sources/JSON/JSON_Constructor.c
+  Sources/JSON/JSON_Destructor.c
+  Sources/JSON/JSON_NodeCreate.c
+  Sources/JSON/JSON_Append.c
+  Sources/JSON/JSON_Clone.c
+  Sources/JSON/JSON_Constructor.c
+  Sources/JSON/JSON_Export.c
+  Sources/JSON/JSON_FiledLength.c
+  Sources/JSON/JSON_Parent.c
+  Sources/JSON/JSON_Remove.c
+  Sources/JSON/JSON_SetParent.c
+  Sources/JSON/JSON_TypeOf.c
+  Sources/JSON/JSON_Clear.c
+  Sources/JSON/JSON_Compare.c
+  Sources/JSON/JSON_Destructor.c
+  Sources/JSON/JSON_FieldOf.c
+  Sources/JSON/JSON_Get.c
+  Sources/JSON/JSON_Object.c
+  Sources/JSON/JSON_Print.c
+  Sources/JSON/JSON_Type.c
+  Sources/JSON/JSON_Set.c
 
-  Sources/Append/JSON_Append.c
-  Sources/Append/JSON_AppendAry.c
-  Sources/Append/JSON_AppendBool.c
-  Sources/Append/JSON_AppendDeciaml.c
-  Sources/Append/JSON_AppendDigit.c
-  Sources/Append/JSON_AppendNULL.c
-  Sources/Append/JSON_AppendObject.c
-  Sources/Append/JSON_AppendString.c
-  Sources/Append/JSON_AppendBoolAry.c
-  Sources/Append/JSON_AppendDeciamlAry.c
-  Sources/Append/JSON_AppendDigitAry.c
-  Sources/Append/JSON_AppendObjectAry.c
-  Sources/Append/JSON_AppendStringAry.c
+  Sources/JSONAry/JSONAry_Constructor.c
+  Sources/JSONAry/JSONAry_Destructor.c
+  Sources/JSONAry/JSONAry_Clear.c
+  Sources/JSONAry/JSONAry_Compare.c
+  Sources/JSONAry/JSONAry_Constructor.c
+  Sources/JSONAry/JSONAry_Contains.c
+  Sources/JSONAry/JSONAry_Destructor.c
+  Sources/JSONAry/JSONAry_Get.c
+  Sources/JSONAry/JSONAry_Insert.c
+  Sources/JSONAry/JSONAry_Length.c
+  Sources/JSONAry/JSONAry_NodeCreate.c
+  Sources/JSONAry/JSONAry_Object.c
+  Sources/JSONAry/JSONAry_Pop.c
+  Sources/JSONAry/JSONAry_Push.c
+  Sources/JSONAry/JSONAry_Remove.c
+  Sources/JSONAry/JSONAry_Set.c
+  Sources/JSONAry/JSONAry_SetObject.c
 
-  Sources/Get/JSON_Get.c
-  Sources/Get/JSON_GetAry.c
-  Sources/Get/JSON_GetBool.c
-  Sources/Get/JSON_GetDeciaml.c
-  Sources/Get/JSON_GetDigit.c
-  Sources/Get/JSON_GetNULL.c
-  Sources/Get/JSON_GetObject.c
-  Sources/Get/JSON_GetString.c
+  Sources/JSON/Read/JSON_Read_File.c
+  Sources/JSON/Read/JSON_Read_StrAry.c
+  Sources/JSON/Read/JSON_Read_Str.c
+  Sources/JSON/Write/JSON_Write_File.c
+  Sources/JSON/Write/JSON_Write_StrAry.c
+  Sources/JSON/Write/JSON_Write_Str.c
 
-  Sources/Set/JSON_Set.c
-  Sources/Set/JSON_SetAry.c
-  Sources/Set/JSON_SetBool.c
-  Sources/Set/JSON_SetDeciaml.c
-  Sources/Set/JSON_SetDigit.c
-  Sources/Set/JSON_SetNULL.c
-  Sources/Set/JSON_SetObject.c
-  Sources/Set/JSON_SetString.c
-
-  Sources/Read/JSON_Read_File.c
-  Sources/Read/JSON_Read_StrAry.c
-  Sources/Read/JSON_Read_Str.c
-
-  Sources/Write/JSON_Write_File.c
-  Sources/Write/JSON_Write_StrAry.c
-  Sources/Write/JSON_Write_Str.c
 )
 
 target_include_directories(

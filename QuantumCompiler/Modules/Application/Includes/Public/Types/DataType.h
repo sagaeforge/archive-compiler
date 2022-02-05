@@ -166,6 +166,7 @@ typedef enum
   DataType_String,
   DataType_StringAry,
   DataType_JSONObject,
+  DataType_JSONAry,
   DataType_None
 } DataTypeCode_t;
 

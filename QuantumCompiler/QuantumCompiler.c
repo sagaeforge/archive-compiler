@@ -1,17 +1,17 @@
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
+// #include <stdlib.h>
+// #include <unistd.h>
 
 #include <Application.h>
-#include <Exception.h>
-#include <GarbageCollection.h>
+// #include <Exception.h>
+// #include <GarbageCollection.h>
 #include <Json.h>
-#include <Object.h>
+// #include <Object.h>
 #include <Private_GarbageCollection.h>
-#include <String.h>
-#include <StringAry.h>
-#include <StringLib.h>
+// #include <String.h>
+// #include <StringAry.h>
+// #include <StringLib.h>
 #include <Types/DataType.h>
 
 /*
@@ -32,6 +32,7 @@ main(int argc, char const* argv[])
 
   JSONObject obj = JSON_Constructor();
   JSON_Read(obj, fp);
+  // JSONObject obj2 = obj->m_Nodes->m_Value.ReferenceValue;
 
   printf("%d", obj == NULL ? 0 : obj->m_FieldLength);
 

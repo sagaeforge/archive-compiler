@@ -9,7 +9,7 @@
 
 JSONObject    JSON_Constructor        ();
 JSONObject    JSON_Constructor_Parent (JSONObject pParent);
-bool          JSON_Destructor         (const JSONObject *pSelf);
+bool          JSON_Destructor         (JSONObject *pSelf);
 
 #define JSON_Read(Self, Instance)                     \
   _Generic((Instance),                                \
@@ -34,6 +34,10 @@ bool          JSON_Write_StrAry       (StringAry *pStringAry, const JSONObject p
 bool          JSON_Write_File         (FILE *     pJsonFile,  const JSONObject pSelf);
 
 __attribute__((warn_unused_result)) const Object          __Object_Boxing_JSONObject           (const JSONObject  pValue);
+__attribute__((warn_unused_result)) const Object          __Object_Boxing_JSONAry              (const JSONAry     pValue);
                                     JSONObject            __Object_UnBoxing_JSONObject         (const Object      pSelf);
+                                    JSONAry               __Object_UnBoxing_JSONAry            (const Object      pSelf);
+
+extern struct _JSONMethod JSONMethod; 
 
 #endif
