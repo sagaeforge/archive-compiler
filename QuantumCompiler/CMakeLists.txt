@@ -13,19 +13,20 @@ add_executable(
   Sources/Parser.c
 )
 
-add_subdirectory(Modules/Application/)
-add_subdirectory(Modules/JSON/)
-add_subdirectory(Modules/String/)
-add_dependencies(String Application)
-add_dependencies(JSON String)
+# add_subdirectory(Modules/Application/)
+# add_subdirectory(Modules/JSON/)
+# add_subdirectory(Modules/String/)
+# add_dependencies(String Application)
+# add_dependencies(JSON String)
+
+add_subdirectory(Modules/)
 
 target_link_libraries(
   QuantumCompiler
-  PUBLIC
+
+PUBLIC
+  QuantumModule
   
-  Application
-  JSON
-  String
 )
 target_include_directories(
   QuantumCompiler

@@ -4,6 +4,7 @@
 #include <GarbageCollection.h>
 #include <Json.h>
 #include <JsonAry.h>
+#include <Object.h>
 #include <Private_Json.h>
 #include <Private_JsonAry.h>
 #include <StringAry.h>
@@ -80,8 +81,175 @@ GetField(JSONObject pSelf,
 }
 
 static bool
-GetAry_Excute()
+GetAry_Excute(String pString, JSONAry pAry)
 {
+  // 워드를 추출한다음. 그걸 ary에 집어넣음
+  String _Value = StringMethod.Trim(pString);
+  String Optimization = StringLibMethod.Extract(_Value, 1, _Value->Length - 1);
+  StringMethod.Destructor(&_Value);
+  _Value = StringMethod.Trim(Optimization);
+  StringMethod.Destructor(&Optimization);
+
+  Index_t i, j, BraceStackPointer;
+  String Keyword;
+  for (i = 0; _Value->Value[i] != '\0'; i++) {
+    if (IsSpace(_Value->Value[i]))
+      continue;
+
+    char ch;
+    switch (_Value->Value[i]) {
+      // [+] 문자일 때
+      case '\"':
+      case '\'':
+        ch = '\0';
+        if (_Value->Value[i] == '\'')
+          ch = '\'';
+        else
+          ch = '\"';
+
+        j = i;
+        while (_Value->Value[j] != ch) {
+          // 문자열이 닫히지 않은 경우
+          if (_Value->Value[j] == '\n' || _Value->Value[j] == '\0') {
+            Exception(ERROR, "문자열이 닫히지 않았습니다.");
+            return false;
+          }
+          j++;
+        }
+        JSONAry_Push(pAry, Object(StringLibMethod.Extract(pString, i, j)));
+        i = j;
+        break;
+      // [+] 키워드일 때
+      case 't':
+      case 'T':
+      case 'f':
+      case 'F':
+      case 'n':
+      case 'N':
+        j = i;
+        while (IsAlpha(_Value->Value[j]))
+          j++;
+
+        Keyword = StringLibMethod.Extract(_Value, i, j);
+        if (!(StringMethod.ToUpper(Keyword) == String("TRUE") ||
+              StringMethod.ToUpper(Keyword) == String("FALSE") ||
+              StringMethod.ToUpper(Keyword) == String("NULL"))) {
+          Exception(
+            ERROR, "알 수 없는 키워드입니다. [word:%S]", Keyword->Value);
+          return false;
+        }
+
+        if (ToUpper(_Value->Value[i]) == 'T')
+          JSONAry_Push(pAry, Object(true));
+        else if (ToUpper(_Value->Value[i]) == 'F')
+          JSONAry_Push(pAry, Object(false));
+        else {
+          void* temp = NULL;
+          JSONAry_Push(pAry, Object(temp));
+        }
+        i = j;
+        break;
+      // [+] 객체일 때
+      case '{':
+        BraceStackPointer = 1;
+        JSONObject Obj = JSON_Constructor();
+        j = i;
+        while (_Value->Value[j] != '\0') {
+          j++;
+          if (_Value->Value[j] == '{') {
+            BraceStackPointer++;
+            continue;
+          }
+
+          if (_Value->Value[j] == '}') {
+            BraceStackPointer--;
+
+            if (BraceStackPointer == 0) {
+              Keyword = StringLibMethod.Extract(_Value, i, j);
+              break;
+            }
+          }
+        }
+
+        if (BraceStackPointer != 0) {
+          Exception(ERROR, "중괄호 구성이 잘못되어 있습니다.");
+          return false;
+        }
+
+        // 부모 찾기
+        void* parent = pAry;
+        bool isObject = false;
+        while (true) {
+          isObject = JSONAry_ParentType((JSONAry)parent);
+          parent = JSONAry_Parent((JSONAry)parent);
+
+          if (isObject) {
+            break;
+          }
+        }
+        Obj->m_Parent = parent;
+        if (!JSON_Read_Str(Obj, Keyword))
+          return false;
+
+        break;
+      // [+] 배열일 때
+      case '[':
+        BraceStackPointer = 1;
+        JSONAry Ary = JSONAry_Constructor();
+        j = i;
+        while (_Value->Value[j] != '\0') {
+          j++;
+          if (_Value->Value[j] == '[') {
+            BraceStackPointer++;
+            continue;
+          }
+
+          if (_Value->Value[j] == ']') {
+            BraceStackPointer--;
+
+            if (BraceStackPointer == 0) {
+              Keyword = StringLibMethod.Extract(_Value, i, j);
+              break;
+            }
+          }
+        }
+
+        if (BraceStackPointer != 0) {
+          Exception(ERROR, "중괄호 구성이 잘못되어 있습니다.");
+          return false;
+        }
+
+        Ary->m_Parent.IsObject = false;
+        Ary->m_Parent.m_Ary = pAry;
+        if (!GetAry_Excute(Keyword, Ary))
+          return false;
+
+        break;
+      default:
+        // [+] 숫자일 때
+        if (IsDecimal(_Value->Value[0])) {
+          j = i;
+          while (_Value->Value[i] != '\0' && !IsSpace(_Value->Value[i]))
+            j++;
+
+          Keyword = StringLibMethod.Extract(_Value, i, j);
+          if (!StringLibMethod.IsDigit(Keyword)) {
+            Exception(ERROR, "숫자가 아닙니다. [word:%S]", Keyword->Value);
+            return false;
+          }
+
+          if (StringLibMethod.IsDecimal(Keyword))
+            JSONAry_Push(pAry, Object(ValueOf(long long)(Keyword)));
+          else
+            JSONAry_Push(pAry, Object(ValueOf(double)(Keyword)));
+
+        } else {
+          Exception(ERROR, "값 형식이 잘못되었습니다.");
+          return false;
+        }
+    }
+  }
+
   return false;
 }
 
@@ -108,13 +276,20 @@ GetAry(JSONObject pSelf,
       if (BraceStackPointer == 0) {
         String InputValue = StringLibMethod.Extract(pString, pStart, i + 1);
         JSONAry Ary = JSONAry_Constructor();
-        Ary->m_Parent.m_Object = pSelf;
-        Ary->m_Parent.IsObject = true;
+        JSONAry_SetParent(Ary, pSelf, true);
         (*out_pEndSymbolMark) = i + 1;
+
+        if (!GetAry_Excute(InputValue, Ary))
+          return false;
 
         break;
       }
     }
+  }
+
+  if (BraceStackPointer != 0) {
+    Exception(ERROR, "대괄호 구성이 잘못되어 있습니다.");
+    return false;
   }
   return true;
 }
@@ -321,10 +496,8 @@ JSON_Read_Str(JSONObject pSelf, const String pString)
             break;
           // [+] 배열일 때
           case '[':
-            // [*] 무시하는 코드
-            EndSymbolMark =
-              StringMethod.IndexAt(_Value, String("]"), StartSymbolMark + gap);
-
+            if (!GetAry(pSelf, _Value, StartSymbolMark + gap, &EndSymbolMark))
+              return false;
             break;
           default:
             // [+] 숫자일 때

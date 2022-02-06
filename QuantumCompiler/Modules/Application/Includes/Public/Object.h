@@ -4,7 +4,7 @@
 
 #include <Types/DataType_Object.h>
 
-#define __SystemObject(Instance)                                               \
+#define Object(Instance)                                                       \
   _Generic((Instance),                                                         \
   char                        : __Object_Boxing_Char,                          \
   unsigned char               : __Object_Boxing_U_Char,                        \
@@ -71,13 +71,17 @@
   void***                     : __Object_Boxing_Triple_Ptr_Void,               \
   const void*                 : __Object_Boxing_Ptr_Void,                      \
   const void**                : __Object_Boxing_Double_Ptr_Void,               \
-  const void***               : __Object_Boxing_Triple_Ptr_Void                \
+  const void***               : __Object_Boxing_Triple_Ptr_Void,               \
   _Bool                       : __Object_Boxing_Bool,                          \
   _Bool*                      : __Object_Boxing_Ptr_Bool,                      \
   _Bool**                     : __Object_Boxing_Double_Ptr_Bool,               \
   const _Bool*                : __Object_Boxing_Ptr_Bool,                      \
   const _Bool**               : __Object_Boxing_Double_Ptr_Bool,               \
-  )
+  String                      : __Object_Boxing_String,                        \
+  StringAry                   : __Object_Boxing_StringAry,                     \
+  JSONObject                  : __Object_Boxing_JSONObject,                    \
+  JSONAry                     : __Object_Boxing_JSONAry                        \
+  ) (Instance)
 
 // clang-format off
 __attribute__((warn_unused_result)) const Object          __Object_Boxing_Char                      (const char                 pValue);
@@ -164,19 +168,12 @@ __attribute__((warn_unused_result)) const Object          __Object_Boxing_Double
                                     bool                  __Object_UnBoxing_Bool                    (const Object               pSelf);
                                     bool*                 __Object_UnBoxing_Ptr_Bool                (const Object               pSelf);
                                     bool**                __Object_UnBoxing_Double_Ptr_Bool         (const Object               pSelf);
-// clang-format on
 
 #define Object_GetData(DataType, Instance)                                     \
   _Generic((Instance), Object : *((DataType*)(Instance)->m_Value.m_Value1d))
 
-// clang-format off
-#define Obj(Instance)                                                          \
-  _Generic((Instance),                                                         \
-  default  : __SystemObject(Instance))                                         \
-  (Instance)
-
-#define Boxing(DataType) ((Object (*)(DataType)) __ObjectBoxingSearch(#DataType))
-#define UnBoxing(DataType) ((DataType (*)(Object)) __ObjectUnBoxingSearch(#DataType))
+#define Boxing(DataType) ((Object_t* (*)(DataType)) __ObjectBoxingSearch(#DataType))
+#define UnBoxing(DataType) ((DataType (*)(Object_t*)) __ObjectUnBoxingSearch(#DataType))
 
 bool Object_Compare(Object* Self, Object* Obj);
 Func_t __ObjectBoxingSearch(const char *pDataType);

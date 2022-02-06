@@ -7,7 +7,7 @@ String_Loop(String pSelf, Length_t pLength)
 {
   wcs temp = __WcsCreate(pSelf->Length * pLength);
 
-  int i, j;
+  int i;
   for (i = 0; i < pLength; i++)
     __WcsWcsInsert(temp, pSelf->Value, pSelf->Length * i, pSelf->Length);
 

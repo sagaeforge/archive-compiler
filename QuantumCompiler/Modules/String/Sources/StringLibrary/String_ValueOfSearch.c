@@ -14,7 +14,7 @@ String_ValueOfSearch(const char* pDataType)
     return (Func_t)&String_ValueOf_Decimal;
   else if (strstr("long", pDataType))
     return (Func_t)&String_ValueOf_Decimal;
-  else if (strstr("longlong", pDataType))
+  else if (strstr("long long", pDataType))
     return (Func_t)&String_ValueOf_Decimal;
   else if (strstr("unsigned short", pDataType))
     return (Func_t)&String_ValueOf_Decimal_Unsigned;

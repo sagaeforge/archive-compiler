@@ -1,0 +1,310 @@
+cmake_minimum_required(VERSION 3.0.0)
+
+include(CTest)
+enable_testing()
+
+set ( APPLICATION_SRC 
+  Application/Sources/Application.c
+  Application/Sources/ProcessEvent.c
+  Application/Sources/Object.c
+  Application/Sources/GarbageCollection.c
+  Application/Sources/DataTable.c
+  Application/Sources/DataType.c 
+  Application/Sources/ProcessEvent/Awake.c
+  Application/Sources/ProcessEvent/Init.c
+  Application/Sources/ProcessEvent/Start.c
+  Application/Sources/ProcessEvent/Main.c
+  Application/Sources/ProcessEvent/Quit.c
+  Application/Sources/ProcessEvent/Update.c
+  Application/Sources/ProcessEvent/FixedUpdate.c
+  Application/Sources/Object/GetObject.c
+  Application/Sources/Object/FreeObject.c
+  Application/Sources/GarbageCollection/Memory/MemoryCompare.c
+  Application/Sources/GarbageCollection/Memory/MemoryCopy.c
+  Application/Sources/GarbageCollection/Memory/MemoryLength.c
+  Application/Sources/GarbageCollection/Memory/MemoryDestructor.c
+  Application/Sources/GarbageCollection/Memory/MemorySwap.c
+  Application/Sources/GarbageCollection/Memory/MemoryConstructor.c
+  Application/Sources/GarbageCollection/Memory/MemoryCreate.c
+  Application/Sources/GarbageCollection/Memory/MemoryRemove.c
+  Application/Sources/GarbageCollection/Memory/MemoryMove.c
+  Application/Sources/GarbageCollection/Memory/MemorySet.c
+  Application/Sources/GarbageCollection/GarbageCollection_Append.c
+  Application/Sources/GarbageCollection/GarbageCollection_PageGet.c
+  Application/Sources/GarbageCollection/GarbageCollection_EmptyPageGet.c
+  Application/Sources/GarbageCollection/GarbageCollection_Remove.c
+  Application/Sources/GarbageCollection/GarbageCollection_Find.c
+  Application/Sources/Object/Object_Boxing_Int.c
+  Application/Sources/Object/Object_Boxing_Bool.c
+  Application/Sources/Object/Object_Boxing_Ptr_Bool.c
+  Application/Sources/Object/Object_Boxing_Double_Ptr_Bool.c
+  Application/Sources/Object/Object_Boxing_Double_Ptr_U_Short.c
+  Application/Sources/Object/Object_Boxing_Ptr_U_Int.c
+  Application/Sources/Object/Object_Boxing_Char.c
+  Application/Sources/Object/Object_Boxing_Double_Ptr_Void.c
+  Application/Sources/Object/Object_Boxing_Ptr_U_Long.c       
+  Application/Sources/Object/Object_Boxing_Double.c
+  Application/Sources/Object/Object_Boxing_Float.c
+  Application/Sources/Object/Object_Boxing_Ptr_U_Long_Long.c
+  Application/Sources/Object/Object_Boxing_Double_Ptr_Char.c
+  Application/Sources/Object/Object_Boxing_Int.c
+  Application/Sources/Object/Object_Boxing_Ptr_U_Short.c
+  Application/Sources/Object/Object_Boxing_Double_Ptr_Double.c
+  Application/Sources/Object/Object_Boxing_Long.c
+  Application/Sources/Object/Object_Boxing_Ptr_Void.c
+  Application/Sources/Object/Object_Boxing_Double_Ptr_Float.c
+  Application/Sources/Object/Object_Boxing_LongLong.c
+  Application/Sources/Object/Object_Boxing_Short.c
+  Application/Sources/Object/Object_Boxing_Double_Ptr_Int.c
+  Application/Sources/Object/Object_Boxing_Ptr_Char.c
+  Application/Sources/Object/Object_Boxing_Triple_Ptr_Void.c
+  Application/Sources/Object/Object_Boxing_Double_Ptr_Long.c
+  Application/Sources/Object/Object_Boxing_Ptr_Double.c
+  Application/Sources/Object/Object_Boxing_U_Char.c
+  Application/Sources/Object/Object_Boxing_Double_Ptr_Long_Long.c
+  Application/Sources/Object/Object_Boxing_Ptr_Float.c
+  Application/Sources/Object/Object_Boxing_U_Int.c
+  Application/Sources/Object/Object_Boxing_Double_Ptr_Short.c
+  Application/Sources/Object/Object_Boxing_Ptr_Int.c
+  Application/Sources/Object/Object_Boxing_U_Long.c
+  Application/Sources/Object/Object_Boxing_Double_Ptr_U_Char.c
+  Application/Sources/Object/Object_Boxing_Ptr_Long.c
+  Application/Sources/Object/Object_Boxing_U_LongLong.c
+  Application/Sources/Object/Object_Boxing_Double_Ptr_U_Int.c
+  Application/Sources/Object/Object_Boxing_Ptr_Long_Long.c
+  Application/Sources/Object/Object_Boxing_U_Short.c
+  Application/Sources/Object/Object_Boxing_Double_Ptr_U_Long.c
+  Application/Sources/Object/Object_Boxing_Ptr_Short.c
+  Application/Sources/Object/Object_Boxing_Double_Ptr_U_Long_Long.c
+  Application/Sources/Object/Object_Boxing_Ptr_U_Char.c
+  Application/Sources/Object/Object_UnBoxing_Int.c
+  Application/Sources/Object/Object_UnBoxing_Double.c
+  Application/Sources/Object/Object_UnBoxing_Float.c
+  Application/Sources/Object/Object_UnBoxing_Ptr_U_Long_Long.c
+  Application/Sources/Object/Object_UnBoxing_Double_Ptr_Char.c
+  Application/Sources/Object/Object_UnBoxing_Int.c
+  Application/Sources/Object/Object_UnBoxing_Ptr_U_Short.c
+  Application/Sources/Object/Object_UnBoxing_Double_Ptr_Double.c
+  Application/Sources/Object/Object_UnBoxing_Long.c
+  Application/Sources/Object/Object_UnBoxing_Ptr_Void.c
+  Application/Sources/Object/Object_UnBoxing_Double_Ptr_Float.c
+  Application/Sources/Object/Object_UnBoxing_LongLong.c
+  Application/Sources/Object/Object_UnBoxing_Short.c
+  Application/Sources/Object/Object_UnBoxing_Double_Ptr_Int.c
+  Application/Sources/Object/Object_UnBoxing_Ptr_Char.c
+  Application/Sources/Object/Object_UnBoxing_Triple_Ptr_Void.c
+  Application/Sources/Object/Object_UnBoxing_Double_Ptr_Long.c
+  Application/Sources/Object/Object_UnBoxing_Ptr_Double.c
+  Application/Sources/Object/Object_UnBoxing_U_Char.c
+  Application/Sources/Object/Object_UnBoxing_Double_Ptr_Long_Long.c
+  Application/Sources/Object/Object_UnBoxing_Ptr_Float.c
+  Application/Sources/Object/Object_UnBoxing_U_Int.c
+  Application/Sources/Object/Object_UnBoxing_Double_Ptr_Short.c
+  Application/Sources/Object/Object_UnBoxing_Ptr_Int.c
+  Application/Sources/Object/Object_UnBoxing_U_Long.c
+  Application/Sources/Object/Object_UnBoxing_Double_Ptr_U_Char.c
+  Application/Sources/Object/Object_UnBoxing_Ptr_Long.c
+  Application/Sources/Object/Object_UnBoxing_U_LongLong.c
+  Application/Sources/Object/Object_UnBoxing_Double_Ptr_U_Int.c
+  Application/Sources/Object/Object_UnBoxing_Ptr_Long_Long.c
+  Application/Sources/Object/Object_UnBoxing_U_Short.c
+  Application/Sources/Object/Object_UnBoxing_Double_Ptr_U_Long.c
+  Application/Sources/Object/Object_UnBoxing_Ptr_Short.c
+  Application/Sources/Object/Object_UnBoxing_Double_Ptr_U_Long_Long.c
+  Application/Sources/Object/Object_UnBoxing_Ptr_U_Char.c
+  Application/Sources/Object/Object_UnBoxing_Bool.c
+  Application/Sources/Object/Object_UnBoxing_Ptr_Bool.c
+  Application/Sources/Object/Object_UnBoxing_Double_Ptr_Bool.c
+  Application/Sources/Object/Object_UnBoxing_Double_Ptr_U_Short.c
+  Application/Sources/Object/Object_UnBoxing_Ptr_U_Int.c
+  Application/Sources/Object/Object_UnBoxing_Char.c
+  Application/Sources/Object/Object_UnBoxing_Double_Ptr_Void.c
+  Application/Sources/Object/Object_UnBoxing_Ptr_U_Long.c
+)
+set ( STRING_SRC 
+  String/Sources/String.c
+  String/Sources/String_Constructor.c
+  String/Sources/Chs/StrLen.c
+  String/Sources/Chs/StrSet.c
+  String/Sources/Chs/WcsCreate.c
+  String/Sources/Chs/WcsWcsInsert.c
+  String/Sources/Chs/ToUpper.c
+  String/Sources/Chs/ToLower.c
+  String/Sources/Chs/Is/IsAlpha.c
+  String/Sources/Chs/Is/IsBinary.c
+  String/Sources/Chs/Is/IsControl.c
+  String/Sources/Chs/Is/IsDecimal.c
+  String/Sources/Chs/Is/IsHex.c
+  String/Sources/Chs/Is/IsLower.c
+  String/Sources/Chs/Is/IsOctal.c
+  String/Sources/Chs/Is/IsSpace.c
+  String/Sources/Chs/Is/IsUpper.c
+  String/Sources/StringMethod/String_Append.c
+  String/Sources/StringMethod/String_Contains.c
+  String/Sources/StringMethod/String_Get.c
+  String/Sources/StringMethod/String_Join.c
+  String/Sources/StringMethod/String_Length.c
+  String/Sources/StringMethod/String_Replace.c
+  String/Sources/StringMethod/String_Right.c
+  String/Sources/StringMethod/String_SubString.c
+  String/Sources/StringMethod/String_Trim.c
+  String/Sources/StringMethod/String_Compare.c
+  String/Sources/StringMethod/String_Count.c
+  String/Sources/StringMethod/String_IndexAt.c
+  String/Sources/StringMethod/String_IndexOf.c
+  String/Sources/StringMethod/String_IndexFor.c
+  String/Sources/StringMethod/String_LastOfIndex.c 
+  String/Sources/StringMethod/String_Loop.c
+  String/Sources/StringMethod/String_ReplaceAll.c
+  String/Sources/StringMethod/String_Set.c
+  String/Sources/StringMethod/String_ToLower.c
+  String/Sources/StringMethod/String_Destructor.c
+  String/Sources/StringMethod/String_IsNone.c
+  String/Sources/StringMethod/String_Left.c
+  String/Sources/StringMethod/String_Middle.c
+  String/Sources/StringMethod/String_ReplaceFor.c
+  String/Sources/StringMethod/String_Split.c
+  String/Sources/StringMethod/String_ToUpper.c
+  String/Sources/StringMethod/_StringCompare.c
+  String/Sources/StringAry/StringAry_Constructor.c
+  String/Sources/StringAry/StringAry_Contains.c
+  String/Sources/StringAry/StringAry_Insert.c
+  String/Sources/StringAry/StringAry_Pop.c
+  String/Sources/StringAry/StringAry_Remove.c
+  String/Sources/StringAry/StringAry_Destructor.c
+  String/Sources/StringAry/StringAry_Get.c
+  String/Sources/StringAry/StringAry_NodeCreate.c
+  String/Sources/StringAry/StringAry_Push.c
+  String/Sources/StringAry/StringAry_Search.c
+  String/Sources/StringLibrary/Is/String_IsAlpha.c
+  String/Sources/StringLibrary/Is/String_IsAlphaDigit.c
+  String/Sources/StringLibrary/Is/String_IsBinary.c
+  String/Sources/StringLibrary/Is/String_IsControl.c
+  String/Sources/StringLibrary/Is/String_IsDecimal.c
+  String/Sources/StringLibrary/Is/String_IsDigit.c
+  String/Sources/StringLibrary/Is/String_IsHex.c
+  String/Sources/StringLibrary/Is/String_IsLower.c
+  String/Sources/StringLibrary/Is/String_IsOctal.c
+  String/Sources/StringLibrary/Is/String_IsSpace.c
+  String/Sources/StringLibrary/Is/String_IsUpper.c
+  String/Sources/StringLibrary/ToString/String_ToString_Bool.c
+  String/Sources/StringLibrary/ToString/String_ToString_Decimal.c
+  String/Sources/StringLibrary/ToString/String_ToString_Decimal_Unsigned.c
+  String/Sources/StringLibrary/ToString/String_ToString_Digit.c
+  String/Sources/StringLibrary/ToString/String_ToString_StringAry.c
+  String/Sources/StringLibrary/ValueOf/String_ValueOf_Bool.c
+  String/Sources/StringLibrary/ValueOf/String_ValueOf_Decimal.c
+  String/Sources/StringLibrary/ValueOf/String_ValueOf_Decimal_Unsigned.c
+  String/Sources/StringLibrary/ValueOf/String_ValueOf_Digit.c
+  String/Sources/StringLibrary/String_Extract.c
+  String/Sources/StringLibrary/String_Format.c
+  String/Sources/StringLibrary/String_Notation.c
+  String/Sources/StringLibrary/String_Pattern.c
+  String/Sources/StringLibrary/String_Reverse.c
+  String/Sources/StringLibrary/String_Prettier.c
+  String/Sources/StringLibrary/String_FileAllRead.c
+  String/Sources/StringLibrary/String_FileAllWrite.c
+  String/Sources/StringLibrary/String_ValueOfSearch.c
+  String/Sources/Object/Object_Boxing_StringAry.c
+  String/Sources/Object/Object_Boxing_String.c
+  String/Sources/Object/Object_UnBoxing_StringAry.c
+  String/Sources/Object/Object_UnBoxing_String.c
+)
+set ( JSON_SRC 
+  JSON/Sources/Json.c
+  JSON/Sources/JSON_Object.c
+
+  JSON/Sources/JSON/JSON_Constructor.c
+  JSON/Sources/JSON/JSON_Destructor.c
+  JSON/Sources/JSON/JSON_NodeCreate.c
+  JSON/Sources/JSON/JSON_Append.c
+  JSON/Sources/JSON/JSON_Clone.c
+  JSON/Sources/JSON/JSON_Constructor.c
+  JSON/Sources/JSON/JSON_Export.c
+  JSON/Sources/JSON/JSON_FiledLength.c
+  JSON/Sources/JSON/JSON_Parent.c
+  JSON/Sources/JSON/JSON_Remove.c
+  JSON/Sources/JSON/JSON_SetParent.c
+  JSON/Sources/JSON/JSON_TypeOf.c
+  JSON/Sources/JSON/JSON_Clear.c
+  JSON/Sources/JSON/JSON_Compare.c
+  JSON/Sources/JSON/JSON_Destructor.c
+  JSON/Sources/JSON/JSON_FieldOf.c
+  JSON/Sources/JSON/JSON_Get.c
+  JSON/Sources/JSON/JSON_Print.c
+  JSON/Sources/JSON/JSON_Type.c
+  JSON/Sources/JSON/JSON_Set.c
+
+  JSON/Sources/JSONAry/JSONAry_Constructor.c
+  JSON/Sources/JSONAry/JSONAry_Destructor.c
+  JSON/Sources/JSONAry/JSONAry_Clear.c
+  JSON/Sources/JSONAry/JSONAry_Compare.c
+  JSON/Sources/JSONAry/JSONAry_Constructor.c
+  JSON/Sources/JSONAry/JSONAry_Contains.c
+  JSON/Sources/JSONAry/JSONAry_Destructor.c
+  JSON/Sources/JSONAry/JSONAry_Get.c
+  JSON/Sources/JSONAry/JSONAry_Insert.c
+  JSON/Sources/JSONAry/JSONAry_Length.c
+  JSON/Sources/JSONAry/JSONAry_NodeCreate.c
+  JSON/Sources/JSONAry/JSONAry_Parent.c
+  JSON/Sources/JSONAry/JSONAry_Pop.c
+  JSON/Sources/JSONAry/JSONAry_Push.c
+  JSON/Sources/JSONAry/JSONAry_Remove.c
+  JSON/Sources/JSONAry/JSONAry_Set.c
+  JSON/Sources/JSONAry/JSONAry_SetParent.c
+  JSON/Sources/JSONAry/JSONAry_ParentType.c
+
+  JSON/Sources/JSON/Read/JSON_Read_File.c
+  JSON/Sources/JSON/Read/JSON_Read_StrAry.c
+  JSON/Sources/JSON/Read/JSON_Read_Str.c
+  
+  JSON/Sources/JSON/Write/JSON_Write_File.c
+  JSON/Sources/JSON/Write/JSON_Write_StrAry.c
+  JSON/Sources/JSON/Write/JSON_Write_Str.c
+)
+
+add_library(
+  QuantumModule
+ 
+  ${APPLICATION_SRC}
+  ${STRING_SRC}
+  ${JSON_SRC}
+)
+
+target_include_directories(
+  QuantumModule
+
+PUBLIC
+  Application/Includes/Public/
+  String/Includes/Public/
+  JSON/Includes/Public/
+PRIVATE
+  Application/Includes/Private/
+  String/Includes/Private/
+  JSON/Includes/Private/
+
+)
+
+target_link_libraries(
+  QuantumModule
+
+PRIVATE
+  pthread
+)
+
+target_compile_options(
+  QuantumModule
+PUBLIC
+  
+  # 특정 함수에서 값을 안사용하는 경우 컴파일 중지
+  # -W
+  -Wall -Wunused-result
+
+  # 표준을 따를 것임을 알림
+  -std=gnu17
+
+)
+
+add_compile_definitions(
+  DEBUG
+)

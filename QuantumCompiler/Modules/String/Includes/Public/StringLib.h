@@ -18,7 +18,7 @@
   StringAry           : String_ToString_StringAry)               \
   (Instance, ##args)
 
-#define ValueOf(DataType) (DataType(*)(String)) String_ValueOfSearch(#DataType)
+#define ValueOf(DataType) ((DataType(*)(String)) String_ValueOfSearch(#DataType))
 
 Func_t String_ValueOfSearch(const char* DataType);
 

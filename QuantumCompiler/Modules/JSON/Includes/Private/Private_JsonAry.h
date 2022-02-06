@@ -15,7 +15,7 @@ bool        JSONAry_Remove             (      JSONAry  pSelf, const Index_t pInd
 bool        JSONAry_Push               (      JSONAry  pSelf, const Object  pValue);
 Object      JSONAry_Pop                (      JSONAry  pSelf);
 bool        JSONAry_Compare            (const JSONAry  pSelf, const JSONAry pTarget);
-bool        JSONAry_Contains           (const JSONAry  pSelf, const JSONAry pTarget);
+bool        JSONAry_Contains           (const JSONAry  pSelf, Object pTarget);
 bool        JSONAry_Clear              (      JSONAry  pSelf);
 void*       JSONAry_Parent             (const JSONAry  pSelf);
 bool        JSONAry_ParentType         (const JSONAry  pSelf);

@@ -2,8 +2,8 @@
 #ifndef __PUBLIC_JSON_DATATYPE_JSON__
 #define __PUBLIC_JSON_DATATYPE_JSON__
 
-#include <Object.h>
-#include <String.h>
+#include <Types/DataType_Object.h>
+#include <Types/DataTypes_String.h>
 
 typedef enum
 {
@@ -73,7 +73,7 @@ typedef struct _JSONAry {
 struct _JSONMethod {
   JSONObject    (*Constructor)            ();
   bool          (*Destructor)             (      JSONObject*);
-  Object        (*Get)                    (const JSONObject, const String);
+  Object_t*     (*Get)                    (const JSONObject, const String);
   bool          (*Set)                    (      JSONObject, const String, const Object);
   bool          (*Append)                 (      JSONObject, const String, const Object);
   bool          (*Remove)                 (      JSONObject, const String);
@@ -92,12 +92,12 @@ struct _JSONMethod {
 struct _JSONAryMethod {
   JSONAry       (*Constructor)            ();
   bool          (*Destructor)             (      JSONAry*);
-  Object        (*Get)                    (const JSONAry, const Index_t);
+  Object_t*     (*Get)                    (const JSONAry, const Index_t);
   bool          (*Set)                    (      JSONAry, const Index_t, const Object);
   bool          (*Insert)                 (      JSONAry, const Index_t, const Object);
   bool          (*Remove)                 (      JSONAry, const Index_t);
   bool          (*Push)                   (      JSONAry, const Object);
-  Object        (*Pop)                    (      JSONAry);
+  Object_t*     (*Pop)                    (      JSONAry);
   bool          (*Compare)                (const JSONAry, const JSONAry);
   bool          (*Contains)               (const JSONAry, const JSONAry);
   bool          (*Clear)                  (      JSONAry);
