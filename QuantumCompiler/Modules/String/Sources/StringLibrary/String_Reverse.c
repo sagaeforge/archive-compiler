@@ -5,10 +5,10 @@
 String
 String_Reverse(String pSelf)
 {
-  wchar_t* temp = __WcsCreate(pSelf->Length);
+  wchar_t* temp = __WcsCreate(pSelf->m_Length);
   int i;
-  for (i = pSelf->Length - 1; i >= 0; i--)
-    temp[pSelf->Length - (i + 1)] = pSelf->Value[i];
-  temp[pSelf->Length] = '\0';
+  for (i = pSelf->m_Length - 1; i >= 0; i--)
+    temp[pSelf->m_Length - (i + 1)] = pSelf->m_Value[i];
+  temp[pSelf->m_Length] = '\0';
   return String(temp);
 }

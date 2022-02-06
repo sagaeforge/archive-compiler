@@ -4,5 +4,5 @@
 Length_t
 String_Length(String pSelf)
 {
-  return pSelf->Length;
+  return pSelf->m_Length;
 }

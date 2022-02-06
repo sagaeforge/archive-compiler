@@ -6,15 +6,15 @@
 void
 String_Set(String pSelf, String pValue)
 {
-  if (pSelf->IsNone)
-    pSelf->Value = pValue->Value;
+  if (pSelf->m_IsNone)
+    pSelf->m_Value = pValue->m_Value;
   else {
-    MemoryRemove(pSelf->Value);
-    wcs temp = __WcsCreate(pValue->Length);
-    __StrSet(temp, pValue->Value, 4, pValue->Length);
-    pSelf->Value = temp;
+    MemoryRemove(pSelf->m_Value);
+    wcs temp = __WcsCreate(pValue->m_Length);
+    __StrSet(temp, pValue->m_Value, 4, pValue->m_Length);
+    pSelf->m_Value = temp;
   }
 
-  pSelf->IsNone = pValue->IsNone;
-  pSelf->Length = pValue->Length;
+  pSelf->m_IsNone = pValue->m_IsNone;
+  pSelf->m_Length = pValue->m_Length;
 }

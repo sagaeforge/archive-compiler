@@ -4,5 +4,5 @@
 bool
 String_IsNone(String pSelf)
 {
-  return pSelf->IsNone;
+  return pSelf->m_IsNone;
 }

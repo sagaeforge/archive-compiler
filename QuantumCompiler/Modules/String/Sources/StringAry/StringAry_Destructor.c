@@ -6,23 +6,23 @@ void
 StringAry_Destructor(StringAry* pSelf)
 {
   StringAry Ary = *pSelf;
-  if (Ary->Length != 0) {
+  if (Ary->m_Length != 0) {
     StringAryNode** ptr =
-      (StringAryNode**)MemoryCreate(sizeof(StringAryNode*) * Ary->Length);
+      (StringAryNode**)MemoryCreate(sizeof(StringAryNode*) * Ary->m_Length);
 
-    StringAryNode* node = Ary->Values;
+    StringAryNode* node = Ary->m_Values;
     int i;
     for (i = 0; node != NULL; i++) {
       ptr[i] = node;
       node = node->Next;
     }
-    for (i = 0; i < Ary->Length; i++)
+    for (i = 0; i < Ary->m_Length; i++)
       MemoryRemove(ptr[i]);
     MemoryRemove(ptr);
   }
 
-  (*pSelf)->Values = NULL;
-  (*pSelf)->Length = 0;
+  (*pSelf)->m_Values = NULL;
+  (*pSelf)->m_Length = 0;
 
   MemoryRemove(pSelf);
   (*pSelf) = NULL;

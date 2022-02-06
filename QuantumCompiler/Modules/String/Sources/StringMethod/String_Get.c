@@ -4,5 +4,5 @@
 wcs
 String_Get(String pSelf)
 {
-  return pSelf->Value;
+  return pSelf->m_Value;
 }

@@ -15,9 +15,9 @@ String_Constructor_None()
       ERROR, "문자열 객체를 생성할 수 없습니다. [size:%lu]", sizeof(String_t));
     return NULL;
   }
-  temp->IsNone = true;
-  temp->Length = 0;
-  temp->Value = NULL;
+  temp->m_IsNone = true;
+  temp->m_Length = 0;
+  temp->m_Value = NULL;
   return temp;
 }
 
@@ -33,9 +33,9 @@ String_Constructor_Chs(const char* pValue)
   if (len != 0) {
     wcs tempValue = __WcsCreate(len);
     __StrSet(tempValue, pValue, 1, len);
-    temp->IsNone = false;
-    temp->Length = len;
-    temp->Value = tempValue;
+    temp->m_IsNone = false;
+    temp->m_Length = len;
+    temp->m_Value = tempValue;
   }
 
   return temp;
@@ -52,9 +52,9 @@ String_Constructor_Wcs(const wchar_t* pValue)
   if (len != 0) {
     wcs tempValue = __WcsCreate(len);
     __StrSet(tempValue, pValue, 4, len);
-    temp->IsNone = false;
-    temp->Length = len;
-    temp->Value = tempValue;
+    temp->m_IsNone = false;
+    temp->m_Length = len;
+    temp->m_Value = tempValue;
   }
 
   return temp;
@@ -63,11 +63,11 @@ String_Constructor_Wcs(const wchar_t* pValue)
 String
 String_Constructor_Str(String_t pValue)
 {
-  return String_Constructor_Wcs(pValue.Value);
+  return String_Constructor_Wcs(pValue.m_Value);
 }
 
 String
 String_Constructor_Strp(String pValue)
 {
-  return String_Constructor_Wcs(pValue->Value);
+  return String_Constructor_Wcs(pValue->m_Value);
 }

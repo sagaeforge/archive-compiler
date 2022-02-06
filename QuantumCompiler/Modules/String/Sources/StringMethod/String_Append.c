@@ -6,11 +6,11 @@
 void
 String_Append(String pSelf, String pValue)
 {
-  if (pValue->IsNone)
+  if (pValue->m_IsNone)
     return;
 
-  wcs temp = __WcsCreate(pSelf->Length + pValue->Length);
-  __WcsWcsInsert(temp, pSelf->Value, 0, pSelf->Length);
-  __WcsWcsInsert(temp, pValue->Value, pSelf->Length, pValue->Length);
+  wcs temp = __WcsCreate(pSelf->m_Length + pValue->m_Length);
+  __WcsWcsInsert(temp, pSelf->m_Value, 0, pSelf->m_Length);
+  __WcsWcsInsert(temp, pValue->m_Value, pSelf->m_Length, pValue->m_Length);
   String_Set(pSelf, String(temp));
 }

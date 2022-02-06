@@ -16,8 +16,8 @@ StringAry_Constructor(int pCnt, ...)
     return NULL;
   }
 
-  Ary->Length = 0;
-  Ary->Values = NULL;
+  Ary->m_Length = 0;
+  Ary->m_Values = NULL;
   if (pCnt == 0)
     return Ary;
 

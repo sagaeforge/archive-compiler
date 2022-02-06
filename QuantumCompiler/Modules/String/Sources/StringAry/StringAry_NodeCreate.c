@@ -9,6 +9,6 @@ StringAry_NodeCreate()
   if (node == NULL)
     return NULL;
   node->Next = NULL;
-  node->Value = NULL;
+  node->m_Value = NULL;
   return node;
 }

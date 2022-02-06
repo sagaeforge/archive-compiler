@@ -5,10 +5,10 @@
 String
 String_Join(String pSelf, String pValue)
 {
-  wcs temp = __WcsCreate(pSelf->Length + pValue->Length);
+  wcs temp = __WcsCreate(pSelf->m_Length + pValue->m_Length);
 
-  __WcsWcsInsert(temp, pSelf->Value, 0, pSelf->Length);
-  __WcsWcsInsert(temp, pValue->Value, pSelf->Length - 1, pValue->Length);
+  __WcsWcsInsert(temp, pSelf->m_Value, 0, pSelf->m_Length);
+  __WcsWcsInsert(temp, pValue->m_Value, pSelf->m_Length - 1, pValue->m_Length);
 
   return String(temp);
 }

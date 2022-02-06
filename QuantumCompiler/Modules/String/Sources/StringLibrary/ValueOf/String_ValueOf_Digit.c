@@ -5,5 +5,5 @@ double
 String_ValueOf_Digit(String pSelf)
 {
   wcs EndPos = NULL;
-  return wcstold(pSelf->Value, &EndPos);
+  return wcstold(pSelf->m_Value, &EndPos);
 }

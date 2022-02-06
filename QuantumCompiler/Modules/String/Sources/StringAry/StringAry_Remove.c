@@ -5,14 +5,14 @@
 void
 StringAry_Remove(StringAry pSelf, Index_t pIndex)
 {
-  pIndex = pIndex >= pSelf->Length ? pSelf->Length : pIndex;
+  pIndex = pIndex >= pSelf->m_Length ? pSelf->m_Length : pIndex;
 
-  StringAryNode* node = pSelf->Values;
+  StringAryNode* node = pSelf->m_Values;
   StringAryNode* backup = node;
-  pSelf->Length--;
+  pSelf->m_Length--;
   if (pIndex == 0) {
     node = node->Next;
-    pSelf->Values = node;
+    pSelf->m_Values = node;
     MemoryRemove(backup);
     return;
   }

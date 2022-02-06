@@ -5,17 +5,17 @@
 void
 StringAry_Insert(StringAry pSelf, String pValue, Index_t pIndex)
 {
-  if (pIndex >= pSelf->Length - 1)
+  if (pIndex >= pSelf->m_Length - 1)
     StringAry_Push(pSelf, pValue);
 
   StringAryNode* node = StringAry_NodeCreate();
-  node->Value = pValue;
+  node->m_Value = pValue;
   node->Next = NULL;
-  pSelf->Length++;
+  pSelf->m_Length++;
 
-  StringAryNode* insertNode = pSelf->Values;
+  StringAryNode* insertNode = pSelf->m_Values;
   if (pIndex == 0) {
-    pSelf->Values = node;
+    pSelf->m_Values = node;
     node->Next = insertNode;
     return;
   }

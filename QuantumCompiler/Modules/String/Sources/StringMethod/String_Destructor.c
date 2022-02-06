@@ -5,8 +5,8 @@
 void
 String_Destructor(String* pSelf)
 {
-  MemoryRemove((*pSelf)->Value);
-  (*pSelf)->IsNone = false;
-  (*pSelf)->Length = 0;
+  MemoryRemove((*pSelf)->m_Value);
+  (*pSelf)->m_IsNone = false;
+  (*pSelf)->m_Length = 0;
   MemoryRemove((*pSelf));
 }

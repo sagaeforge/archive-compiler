@@ -14,19 +14,19 @@ typedef const wchar_t* const_wcs;
 #pragma pack(push, 1)
 typedef struct _String
 {
-  bool IsNone;
-  wcs Value;
-  Length_t Length;
+  bool m_IsNone;
+  wcs m_Value;
+  Length_t m_Length;
 } String_t, *String;
 
 typedef struct _StringAry
 {
   struct _StringAryNode
   {
-    String Value;
+    String m_Value;
     struct _StringAryNode* Next;
-  } * Values;
-  Length_t Length;
+  } * m_Values;
+  Length_t m_Length;
 } StringAry_t, *StringAry;
 
 struct StringMethod

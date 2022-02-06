@@ -26,7 +26,7 @@ String_Format(String pFormat, ...)
     int64_t temp_d;
     double temp_f;
     // clang-format off
-    switch (pFormat->Value[ptr_param + 1]) {
+    switch (pFormat->m_Value[ptr_param + 1]) {
     case 's': StringAry_Push(Ary, va_arg(ap, String)); break;
     case 'S': StringAry_Push(Ary, String(va_arg(ap, char *))); break;
     case 'w': case 'W': StringAry_Push(Ary, String(va_arg(ap, wchar_t *))); break;
@@ -46,42 +46,42 @@ String_Format(String pFormat, ...)
     case 'g': case 'G': temp_f = va_arg(ap, double);
                         StringAry_Push(Ary, String_Prettier(temp_f)); 
                         break;
-    case '%': if(pFormat->Value[ptr_param - 1] != '%')
+    case '%': if(pFormat->m_Value[ptr_param - 1] != '%')
               {
                 ch[0] = '%'; ch[1] = '\0';
                 StringAry_Push(Ary, String(ch));
               }
               break;
     default:
-        Exception(ERROR, "지원하는 형식이 아닙니다. [ch:%%%C]", pFormat->Value[ptr_param + 1]);
+        Exception(ERROR, "지원하는 형식이 아닙니다. [ch:%%%C]", pFormat->m_Value[ptr_param + 1]);
       break;
     }
     // clang-format on
   }
 
   Length_t Leng = 0;
-  for (i = 0; i < Ary->Length; i++)
-    Leng += StringAry_Get(Ary, i)->Length;
+  for (i = 0; i < Ary->m_Length; i++)
+    Leng += StringAry_Get(Ary, i)->m_Length;
 
-  Leng += pFormat->Length - ((percent - perper) * 2);
+  Leng += pFormat->m_Length - ((percent - perper) * 2);
   ptr_param = 0;
 
   int gap = 0;
   wcs temp = __WcsCreate(Leng);
-  for (i = 0; i < pFormat->Length; i++) {
-    if (pFormat->Value[i] == '%') {
+  for (i = 0; i < pFormat->m_Length; i++) {
+    if (pFormat->m_Value[i] == '%') {
       i++;
       gap -= 1;
 
       String str;
       // clang-format off
-      switch (pFormat->Value[i]) {
+      switch (pFormat->m_Value[i]) {
         case 's': case 'S': case 'w': case 'W': case 'c': 
         case 'C': case 'd': case 'D': case 'l': case 'L': 
         case 'f': case 'F': case '%': case 'g': case 'G':
           str = StringAry_Get(Ary, ptr_param++);
-          __WcsWcsInsert(temp, str->Value, i + gap, str->Length);
-          gap += str->Length - 1;
+          __WcsWcsInsert(temp, str->m_Value, i + gap, str->m_Length);
+          gap += str->m_Length - 1;
           break;
         default:
           break;
@@ -90,7 +90,7 @@ String_Format(String pFormat, ...)
       continue;
     }
 
-    temp[i + gap] = pFormat->Value[i];
+    temp[i + gap] = pFormat->m_Value[i];
   }
   va_end(ap);
   return String(temp);

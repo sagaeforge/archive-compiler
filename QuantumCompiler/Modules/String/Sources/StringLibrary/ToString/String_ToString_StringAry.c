@@ -8,7 +8,7 @@ String_ToString_StringAry(StringAry pValue, String pReplaceWord)
 {
   String str = String("");
   int i;
-  for (i = 0; i < pValue->Length; i++) {
+  for (i = 0; i < pValue->m_Length; i++) {
     String_Append(str, StringAry_Get(pValue, i));
     String_Append(str, pReplaceWord);
   }

@@ -5,12 +5,12 @@
 String
 StringAry_Get(StringAry pSelf, Index_t pIndex)
 {
-  if (pIndex >= pSelf->Length)
-    pIndex = pSelf->Length;
+  if (pIndex >= pSelf->m_Length)
+    pIndex = pSelf->m_Length - 1;
 
-  StringAryNode* node = pSelf->Values;
+  StringAryNode* node = pSelf->m_Values;
   int i;
   for (i = 0; i < pIndex; i++)
     node = node->Next;
-  return node->Value;
+  return node->m_Value;
 }

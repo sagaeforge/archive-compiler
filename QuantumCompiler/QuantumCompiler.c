@@ -34,7 +34,7 @@ main(int argc, char const* argv[])
 
   JSONObject obj = JSON_Constructor();
   JSON_Read(obj, fp);
-  // JSONObject obj2 = obj->m_Nodes->m_Value.ReferenceValue;
+  // JSONAry obj2 = obj->m_Nodes->m_Value.ReferenceValue;
 
   printf("%d", obj == NULL ? 0 : obj->m_FieldLength);
 

@@ -11,5 +11,5 @@ __IsLower(int pCh)
 bool
 IsLower(int pCh)
 {
-  return IsLower(pCh);
+  return __IsLower(pCh);
 }

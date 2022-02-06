@@ -10,21 +10,21 @@ String_Replace(String pSelf, String pOri, String pValue)
     return String(pSelf);
 
   bool IsNull = String_IsNone(pValue);
-  Length_t leng = pSelf->Length - pOri->Length + pValue->Length;
+  Length_t leng = pSelf->m_Length - pOri->m_Length + pValue->m_Length;
   wcs temp = __WcsCreate(leng);
   int i, j, temp_Pos = 0;
   for (i = 0; i < leng; i++)
     if (i == ind) {
       if (!IsNull) {
-        for (j = 0; j < pValue->Length; j++)
-          temp[i + j + temp_Pos] = pValue->Value[j];
-        i += pOri->Length;
+        for (j = 0; j < pValue->m_Length; j++)
+          temp[i + j + temp_Pos] = pValue->m_Value[j];
+        i += pOri->m_Length;
       } else {
         temp_Pos--;
         continue;
       }
     } else
-      temp[i + temp_Pos] = pSelf->Value[i];
+      temp[i + temp_Pos] = pSelf->m_Value[i];
   temp[i] = L'\0';
   return String(temp);
 }

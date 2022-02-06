@@ -6,10 +6,10 @@
 Index_t
 StringAry_Search(StringAry pSelf, String pValue)
 {
-  StringAryNode* node = pSelf->Values;
+  StringAryNode* node = pSelf->m_Values;
   int i;
   for (i = 0; node != NULL; i++)
-    if (String_Compare(node->Value, pValue))
+    if (String_Compare(node->m_Value, pValue))
       return i;
     else
       node = node->Next;

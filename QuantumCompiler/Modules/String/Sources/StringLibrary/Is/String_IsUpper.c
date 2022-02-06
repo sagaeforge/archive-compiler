@@ -6,8 +6,8 @@ bool
 String_IsUpper(String pSelf)
 {
   int i;
-  for (i = 0; i < pSelf->Length; i++)
-    if (!__IsUpper(pSelf->Value[i]))
+  for (i = 0; i < pSelf->m_Length; i++)
+    if (!__IsUpper(pSelf->m_Value[i]))
       return false;
   return true;
 }
