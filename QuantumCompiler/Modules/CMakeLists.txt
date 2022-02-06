@@ -254,13 +254,13 @@ set ( JSON_SRC
   JSON/Sources/JSONAry/JSONAry_SetParent.c
   JSON/Sources/JSONAry/JSONAry_ParentType.c
 
-  JSON/Sources/JSON/Read/JSON_Read_File.c
-  JSON/Sources/JSON/Read/JSON_Read_StrAry.c
-  JSON/Sources/JSON/Read/JSON_Read_Str.c
+  JSON/Sources/Read/JSON_Read_File.c
+  JSON/Sources/Read/JSON_Read_StrAry.c
+  JSON/Sources/Read/JSON_Read_Str.c
   
-  JSON/Sources/JSON/Write/JSON_Write_File.c
-  JSON/Sources/JSON/Write/JSON_Write_StrAry.c
-  JSON/Sources/JSON/Write/JSON_Write_Str.c
+  JSON/Sources/Write/JSON_Write_File.c
+  JSON/Sources/Write/JSON_Write_StrAry.c
+  JSON/Sources/Write/JSON_Write_Str.c
 )
 
 add_library(

@@ -7,9 +7,9 @@
 // #include <Exception.h>
 // #include <GarbageCollection.h>
 #include <Json.h>
-// #include <Object.h>
+#include <Object.h>
 // #include <Private_GarbageCollection.h>
-// #include <String.h>
+#include <String.h>
 // #include <StringAry.h>
 // #include <StringLib.h>
 #include <Types/DataType.h>
@@ -32,11 +32,16 @@ main(int argc, char const* argv[])
   if (fp == NULL)
     return -1;
 
-  JSONObject obj = JSON_Constructor();
-  JSON_Read(obj, fp);
+  Object ob = Object(56);
+  int te = UnBoxing(int)(ob);
+
+  // JSONObject obj = JSON_Constructor();
+  // JSON_Read(obj, fp);
   // JSONAry obj2 = obj->m_Nodes->m_Value.ReferenceValue;
 
-  printf("%d", obj == NULL ? 0 : obj->m_FieldLength);
+  // printf("%d", obj == NULL ? 0 : obj->m_FieldLength);
+
+  fclose(fp);
 
   Application.ApplicationQuit();
   return 0;

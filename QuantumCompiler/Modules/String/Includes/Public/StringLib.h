@@ -13,6 +13,7 @@
   unsigned long       : String_ToString_Decimal_Unsigned,        \
   long long           : String_ToString_Decimal,                 \
   unsigned long long  : String_ToString_Decimal_Unsigned,        \
+  float               : String_ToString_Digit,                   \
   double              : String_ToString_Digit,                   \
   const StringAry     : String_ToString_StringAry,               \
   StringAry           : String_ToString_StringAry)               \

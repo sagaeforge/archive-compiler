@@ -25,8 +25,7 @@ __Object_Boxing_JSONAry(const JSONAry pValue)
 {
   JSONAry Value = MemoryCreate(sizeof(void*));
   Value = (JSONAry)pValue;
-  // TODO 처리
-  return GetObject(&g_DataTypeTable[DataType_JSONObject], Value);
+  return GetObject(&g_DataTypeTable[DataType_JSONAry], Value);
 }
 
 JSONAry

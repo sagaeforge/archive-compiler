@@ -22,10 +22,10 @@ JSONAry_Push(JSONAry pSelf, const Object pValue)
   switch (pValue->m_Info->m_Code) {
       // clang-format off
     case DataType_Int:          value_int = UnBoxing(int)(pValue);                  DTC = DataType_Int;        break;
-    case DataType_U_Int:        value_uint = UnBoxing(unsigned int)(pValue);        DTC = DataType_Int;        break;
     case DataType_Long:         value_int = UnBoxing(long)(pValue);                 DTC = DataType_Int;        break;
-    case DataType_U_Long:       value_uint = UnBoxing(unsigned long)(pValue);       DTC = DataType_Int;        break;
     case DataType_Long_Long:    value_int = UnBoxing(long long)(pValue);            DTC = DataType_Int;        break;
+    case DataType_U_Int:        value_uint = UnBoxing(unsigned int)(pValue);        DTC = DataType_Int;        break;
+    case DataType_U_Long:       value_uint = UnBoxing(unsigned long)(pValue);       DTC = DataType_Int;        break;
     case DataType_U_Long_Long:  value_uint = UnBoxing(unsigned long long)(pValue);  DTC = DataType_Int;        break;
     case DataType_Float:        value_double = UnBoxing(float)(pValue);             DTC = DataType_Float;      break;
     case DataType_Double:       value_double = UnBoxing(double)(pValue);            DTC = DataType_Float;      break;
