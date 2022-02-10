@@ -71,7 +71,7 @@ JSONAry_Insert(JSONAry pSelf, const Index_t pIndex, const Object pValue)
         return false;
       }
       MakeNode->m_Value.m_DataType = JSONDataType_NULL;
-      MakeNode->m_Value.m_Value.ReferenceValue = NULL;
+      MakeNode->m_Value.m_Value.StringValue = String("NULL");
       break;
     default:
       Exception(

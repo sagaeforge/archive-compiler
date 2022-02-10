@@ -77,7 +77,7 @@
 
 ## tasks.json
     {
-        // See https://go.microsoft.com/fwlink/?LinkId=733558
+        // See https://go.microzsoft.com/fwlink/?LinkId=733558
         // for the documentation about the tasks.json format
 
         "version": "2.0.0",
@@ -96,7 +96,10 @@
                 "group": {
                     "kind": "build",
                     "isDefault": true
-                }
+                },
+        "options": {
+            "cwd": "${workspaceFolder}/build/"
+        }
             }
         ]
     }

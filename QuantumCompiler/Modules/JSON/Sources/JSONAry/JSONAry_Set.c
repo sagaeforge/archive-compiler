@@ -84,7 +84,7 @@ JSONAry_Set(JSONAry pSelf, const Index_t pIndex, const Object pValue)
         return false;
       }
       node->m_Value.m_DataType = JSONDataType_NULL;
-      node->m_Value.m_Value.ReferenceValue = NULL;
+      node->m_Value.m_Value.StringValue = String("NULL");
       break;
     default:
       Exception(

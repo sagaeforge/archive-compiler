@@ -70,7 +70,7 @@ JSONAry_Push(JSONAry pSelf, const Object pValue)
       return false;
     }
     MakeNode->m_Value.m_DataType = JSONDataType_NULL;
-    MakeNode->m_Value.m_Value.ReferenceValue = NULL;
+    MakeNode->m_Value.m_Value.StringValue = String("NULL");
   }
 
   JSONAryNode Node = pSelf->m_Nodes;

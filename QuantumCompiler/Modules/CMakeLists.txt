@@ -268,7 +268,7 @@ add_library(
  
   ${APPLICATION_SRC}
   ${STRING_SRC}
-  ${JSON_SRC}
+  # ${JSON_SRC}
 )
 
 target_include_directories(

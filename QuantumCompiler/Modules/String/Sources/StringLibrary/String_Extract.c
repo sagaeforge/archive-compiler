@@ -5,7 +5,7 @@
 String
 String_Extract(String pSelf, Index_t pStart, Index_t pEnd)
 {
-  if (pSelf->m_Length < pEnd)
+  if (pSelf->m_Length < pEnd - pStart)
     return String(pSelf);
 
   Length_t leng = pEnd - pStart + 1;

@@ -60,8 +60,7 @@ String_Pattern(String pSelf, String pFormat)
         gap -= 1;
         break;
       // 8진수일 때
-      case 'o':
-      case 'O':
+      case 'o': case 'O':
         if (pSelf->m_Value[i + gap] != '0' && (pSelf->m_Value[i + gap + 1] != 'o' ||
                                             pSelf->m_Value[i + gap + 1] != 'O'))
           return false;

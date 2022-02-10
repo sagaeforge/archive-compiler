@@ -80,7 +80,9 @@
   String                      : __Object_Boxing_String,                        \
   StringAry                   : __Object_Boxing_StringAry,                     \
   JSONObject                  : __Object_Boxing_JSONObject,                    \
-  JSONAry                     : __Object_Boxing_JSONAry                        \
+  const JSONObject            : __Object_Boxing_JSONObject,                    \
+  JSONAry                     : __Object_Boxing_JSONAry,                        \
+  const JSONAry               : __Object_Boxing_JSONAry                        \
   ) (Instance)
 
 // clang-format off
