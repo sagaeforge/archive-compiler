@@ -1,6 +1,8 @@
 #ifndef __NSTRING_H__
 #define __NSTRING_H__
 
+#include <stdio.h>
+
 #include <Module/Types/nString.h>
 
 // clang-format off
@@ -35,7 +37,6 @@ bool              String_Set                        (      nString_t* pSelf, con
 Length_t          String_Length                     (const nString_t* pSelf);
 nString_t*        String_ToLower                    (const nString_t* pSelf);
 nString_t*        String_ToUpper                    (const nString_t* pSelf);
-bool              String_IsNone                     (const nString_t* pSelf);
 Index_t           String_IndexOf                    (const nString_t* pSelf, const nString_t* pValue);
 Index_t           String_IndexAt                    (const nString_t* pSelf, const nString_t* pValue, const Index_t pIndex);
 Index_t           String_IndexFor                   (const nString_t* pSelf, const nString_t* pValue, const Index_t pStart);

@@ -1,7 +1,8 @@
 
 #include <Module/nStringAry.h>
-#include <Module/nStringAry.h>
 
-nStringAry_t*     StringAry_toList                  (const nStringAry_t*  pSelf) {
-
+nStringAry_t*
+StringAry_toList(const nStringAry_t* pSelf)
+{
+  return NULL;
 }
