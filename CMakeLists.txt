@@ -47,7 +47,7 @@ set (nString_SRCS
   Sources/nString/String_PrintLine.c
   Sources/nString/String_ReplaceAll.c
   Sources/nString/String_Replace.c
-  Sources/nString/String_ReplaceFor.c
+  Sources/nString/String_ReplaceAt.c
   Sources/nString/String_Reverse.c
   Sources/nString/String_Right.c
   Sources/nString/String_Search.c
@@ -83,11 +83,15 @@ set (nString_SRCS
   Sources/nString/StringAry_toAry.c
   Sources/nString/StringAry_toList.c
 )
+set (nUtility_SRCS
+)
+
 
 add_executable(nCompiler
   main.c
 
   ${nString_SRCS}
+  ${nUtility_SRCS}
 )
 
 target_include_directories(

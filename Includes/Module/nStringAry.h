@@ -9,6 +9,7 @@
 
 nStringAry_t* StringAry_Constructor        (const int pCount, ...);
 bool          StringAry_Destructor         (      nStringAry_t** pSelf);
+bool          StringAry_Clear              (      nStringAry_t*  pSelf);
 nString_t*    StringAry_Get                (const nStringAry_t*  pSelf, const Index_t pIndex);
 bool          StringAry_Insert             (      nStringAry_t*  pSelf, const nString_t* pValue, Index_t pIndex);
 bool          StringAry_Remove             (      nStringAry_t*  pSelf, const Index_t pIndex);

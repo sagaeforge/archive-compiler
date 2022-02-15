@@ -12,6 +12,7 @@ typedef uint32_t Length_t;
 typedef uint32_t Index_t;
 
 #define LOOPEND(Instance) Instance&(1 << 31)
+#define BitAndMask(n) ((1 << n) - 1)
 
 typedef void (*Func_t)();
 
