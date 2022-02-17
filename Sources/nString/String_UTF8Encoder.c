@@ -42,8 +42,8 @@ UTF8_Encoder(Wcs_t pValue, Length_t* out_pValueSize)
     // 2바이트인 경우
     // 000080-0007FF
     else if ((uint32_t)pValue[_i] >= 0x80 && (uint32_t)pValue[_i] <= 0x7FF) {
-      Temp[_LengthPointer++] = (0b110 << 5) | pValue[_i] & (BitAndMask(5) << 6);
-      Temp[_LengthPointer++] = (0b10 << 6) | pValue[_i] & BitAndMask(6);
+      Temp[_LengthPointer++] = (0b110 << 5) | (pValue[_i] & (BitAndMask(5) << 6));
+      Temp[_LengthPointer++] = (0b10 << 6) | (pValue[_i] & BitAndMask(6));
     }
     // 3바이트인 경우
     // 000800-00FFFF
