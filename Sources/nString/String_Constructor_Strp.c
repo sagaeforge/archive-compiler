@@ -4,5 +4,5 @@
 nString_t*
 String_Constructor_Strp(const nString_t* pValue)
 {
-  return NULL;
+  return String_Constructor_Wcs(pValue->m_Value);
 }

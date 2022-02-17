@@ -69,7 +69,7 @@ Func_t Debugging[] = { (Func_t)String_Constructor_Chs,
                        (Func_t)String_ValueOf_Digit,
                        (Func_t)StringAry_Constructor,
                        (Func_t)StringAry_Destructor,
-                       (Func_t)StringAry_Get,
+                       (Func_t)StringAry_get,
                        (Func_t)StringAry_Insert,
                        (Func_t)StringAry_Remove,
                        (Func_t)StringAry_Push,
@@ -78,173 +78,87 @@ Func_t Debugging[] = { (Func_t)String_Constructor_Chs,
                        (Func_t)StringAry_Contains,
                        (Func_t)StringAry_toAry,
                        (Func_t)StringAry_toList,
-                       (Func_t)StringAry_isAry,
-                       (Func_t)StringAry_isList,
-                       (Func_t)StringAry_Foreach,
                        (Func_t)StringAry_CountIf };
 #pragma endregion
 
-Length_t
-_ChsLen(Chs_t pValue, size_t pValueSize)
+static void
+preprocess_strong_suffix(int* shift, int* bpos, char* pat, int m)
 {
-  int i = 0, Length = 0;
-  for (i = 0; i < pValueSize; i++) {
-    Length++;
-    // 1바이트인 경우
-    // 0000|0000 ~ 0111|1111
-    if ((uint8_t)pValue[i] < 128) {
-      i += 0;
+  int i = m, j = m + 1;
+  bpos[i] = j;
+  while (i > 0) {
+    while (j <= m && pat[i - 1] != pat[j - 1]) {
+      if (shift[j] == 0)
+        shift[j] = j - i;
+      j = bpos[j];
     }
-    // 2바이트인 경우
-    // 1000|0000 ~ 1101|1111
-    else if ((uint8_t)pValue[i] >= 128 && (uint8_t)pValue[i] <= 223) {
-      i += 1;
-    }
-    // 3바이트인 경우
-    // 1110|0000 ~ 1110|1111
-    else if ((uint8_t)pValue[i] >= 224 && (uint8_t)pValue[i] <= 239) {
-      i += 2;
-    }
-    // 4바이트인 경우
-    // 1111|0000 ~ 1111|0111
-    else if ((uint8_t)pValue[i] >= 240 && (uint8_t)pValue[i] <= 247) {
-      i += 3;
-    }
+    i--;
+    j--;
+    bpos[i] = j;
   }
-  return Length;
 }
 
-Wcs_t
-UTF8_Decorder(Chs_t pValue, size_t pValueSize)
+static void
+preprocess_case2(int* shift, int* bpos, char* pat, int m)
 {
-  Wcs_t Temp = __WCSMAKE(_ChsLen(pValue, pValueSize));
-  if (!Temp) {
-    return NULL;
-  }
-  int i, LengthPointer = 0, garbage = 0;
-  for (i = 0; i < pValueSize; i++) {
-    // 1바이트인 경우
-    // 0000|0000 ~ 0111|1111
-    if ((uint8_t)pValue[i] < 128) {
-      Temp[LengthPointer++] = pValue[i];
-    }
-    // 2바이트인 경우
-    // 1000|0000 ~ 1101|1111
-    else if ((uint8_t)pValue[i] >= 128 && (uint8_t)pValue[i] <= 223) {
-      garbage = pValue[i] & 0b1111;
-      garbage <<= 6;
-      garbage += pValue[i + 1] & 0b111111;
-      Temp[LengthPointer++] = garbage;
-      i += 1;
-    }
-    // 3바이트인 경우
-    // 1110|0000 ~ 1110|1111
-    else if ((uint8_t)pValue[i] >= 224 && (uint8_t)pValue[i] <= 239) {
-      garbage = pValue[i] & 0b1111;
-      garbage <<= 6;
-      garbage += pValue[i + 1] & 0b111111;
-      garbage <<= 6;
-      garbage += pValue[i + 2] & 0b111111;
-      Temp[LengthPointer++] = garbage;
-      i += 2;
-    }
-    // 4바이트인 경우
-    // 1111|0000 ~ 1111|0111
-    else if ((uint8_t)pValue[i] >= 240 && (uint8_t)pValue[i] <= 247) {
-      garbage = pValue[i] & 0b1111;
-      garbage <<= 6;
-      garbage += pValue[i + 1] & 0b111111;
-      garbage <<= 6;
-      garbage += pValue[i + 2] & 0b111111;
-      garbage <<= 6;
-      garbage += pValue[i + 3] & 0b111111;
-      Temp[LengthPointer++] = garbage;
-      i += 3;
-    }
-  }
+  int i, j;
+  j = bpos[0];
+  for (i = 0; i <= m; i++) {
+    if (shift[i] == 0)
+      shift[i] = j;
 
-  return Temp;
+    if (i == j)
+      j = bpos[j];
+  }
 }
 
-Chs_t
-UTF8_Encoder(Wcs_t pValue, size_t* out_pValueSize)
+void
+search(char* text, char* pat)
 {
-  int i = 0, Length = 0;
-  for (i = 0; i < wcslen(pValue); i++) {
-    // 1바이트인 경우
-    // 000000-00007F
-    if ((uint32_t)pValue[i] < 0x7F) {
-      Length += 1;
-    }
-    // 2바이트인 경우
-    // 000080-0007FF
-    else if ((uint32_t)pValue[i] >= 0x80 && (uint32_t)pValue[i] <= 0x7FF) {
-      Length += 2;
-    }
-    // 3바이트인 경우
-    // 000800-00FFFF
-    else if ((uint32_t)pValue[i] >= 0x800 && (uint32_t)pValue[i] <= 0xFFFF) {
-      Length += 3;
-    }
-    // 4바이트인 경우
-    // 010000-10FFFF
-    else if ((uint32_t)pValue[i] >= 0x10000 && (uint32_t)pValue[i] <= 0x10FFFF) {
-      Length += 4;
-    }
+  // s is shift of the pattern with respect to text
+  int s = 0, j;
+  int m = __STRLEN(pat);
+  int n = __STRLEN(text);
+
+  int* bpos = calloc(sizeof(int), m);
+  int* shift = calloc(sizeof(int), m);
+
+  // initialize all occurrence of shift to 0
+  for (int i = 0; i < m + 1; i++)
+    shift[i] = 0;
+
+  // do preprocessing
+  preprocess_strong_suffix(shift, bpos, pat, m);
+  preprocess_case2(shift, bpos, pat, m);
+
+  while (s <= n - m) {
+    j = m - 1;
+
+    /* Keep reducing index j of pattern while characters of
+         pattern and text are matching at this shift s*/
+    while (j >= 0 && pat[j] == text[s + j])
+      j--;
+
+    /* If the pattern is present at the current shift, then index j
+         will become -1 after the above loop */
+    if (j < 0) {
+      printf("pattern occurs at shift = %d\n", s);
+      s += shift[0];
+      return;
+    } else
+      /*pat[i] != pat[s+j] so shift the pattern
+        shift[j+1] times  */
+      s += shift[j + 1];
   }
-  (*out_pValueSize) = Length;
-  Chs_t Temp = (Chs_t)calloc(1, Length + 1);
-  if (!Temp) {
-    return NULL;
-  }
-  int LengthPointer = 0;
-  for (i = 0; i < wcslen(pValue); i++) {
-    // 1바이트인 경우
-    // 000000-00007F
-    if ((uint32_t)pValue[i] < 0x7F) {
-      Temp[LengthPointer++] = pValue[i];
-    }
-    // 2바이트인 경우
-    // 000080-0007FF
-    else if ((uint32_t)pValue[i] >= 0x80 && (uint32_t)pValue[i] <= 0x7FF) {
-      Temp[LengthPointer++] = (0b110 << 5) | pValue[i] & (BitAndMask(5) << 6);
-      Temp[LengthPointer++] = (0b10 << 6) | pValue[i] & BitAndMask(6);
-    }
-    // 3바이트인 경우
-    // 000800-00FFFF
-    else if ((uint32_t)pValue[i] >= 0x800 && (uint32_t)pValue[i] <= 0xFFFF) {
-      Temp[LengthPointer++] = (0b1110 << 4) | ((pValue[i] & (BitAndMask(4) << 12)) >> 12);
-      Temp[LengthPointer++] = (0b10 << 6) | ((pValue[i] & (BitAndMask(6) << 6)) >> 6);
-      Temp[LengthPointer++] = (0b10 << 6) | (pValue[i] & BitAndMask(6));
-    }
-    // 4바이트인 경우
-    // 010000-10FFFF
-    else if ((uint32_t)pValue[i] >= 0x10000 && (uint32_t)pValue[i] <= 0x10FFFF) {
-      Temp[LengthPointer++] = (0b11110 << 3) | ((pValue[i] & (BitAndMask(3) << 18)) >> 18);
-      Temp[LengthPointer++] = (0b10 << 6) | ((pValue[i] & (BitAndMask(6) << 12)) >> 12);
-      Temp[LengthPointer++] = (0b10 << 6) | ((pValue[i] & (BitAndMask(6) << 6)) >> 6);
-      Temp[LengthPointer++] = (0b10 << 6) | (pValue[i] & BitAndMask(6));
-    }
-  }
-  return Temp;
+  printf("Not Found ㅠㅠ");
 }
 
 int
 main(int argc, char const* argv[])
 {
   setlocale(LC_ALL, "");
-  Chs_t Debug = "가나다라adasdsdasㄴㅁ암ㄴㅇㅁ너";
-  for (size_t i = 0; i < sizeof(Debug); i++)
-    printf("ary[%2lu]=%u\n", i, (uint8_t)Debug[i]);
 
-  Wcs_t value = L"가나다라adasdsdasㄴㅁ암ㄴㅇㅁ너";
-  size_t Length = 0;
-  Chs_t ary = UTF8_Encoder(value, &Length);
-
-  // Wcs_t temp = Decorder_character(ary, sizeof(ary));
-  printf("%s\n", ary);
-
-  free(ary);
+  search("abcedefghij", "bce");
 
   return 0;
 }

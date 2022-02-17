@@ -4,5 +4,5 @@
 Wcs_t
 String_Get(const nString_t* pSelf)
 {
-  return NULL;
+  return pSelf->m_Value;
 }

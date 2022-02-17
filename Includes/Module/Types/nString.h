@@ -17,15 +17,21 @@ typedef struct nStringAryNode
   struct nStringAryNode* Next;
 } nStringAryNode_t, *nStringAryNode_ptr;
 
+typedef enum
+{
+  k_nStringAry_None = 0,
+  k_nStringAry_Ary = 1,
+  k_nStringAry_List = 2,
+} nStringAryType_t,
+  nStringAryType_ptr;
+
 typedef struct
 {
+  Length_t m_Size;
   Length_t m_Length;
-  bool m_isAry;
-  union
-  {
-    nString_ptr* m_Values;
-    nStringAryNode_ptr m_Nodes;
-  };
+  nStringAryType_t m_AryType;
+  nString_ptr* m_Arys;
+  nStringAryNode_ptr m_Lists;
 } nStringAry_t, *nStringAry_ptr;
 
 #pragma pack(pop)

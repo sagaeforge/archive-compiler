@@ -12,10 +12,9 @@
   const Chs_t       : String_Constructor_Chs,                                     \
   Wcs_t             : String_Constructor_Wcs,                                     \
   const Wcs_t       : String_Constructor_Wcs,                                     \
-  String_t          : String_Constructor_Str,                                     \
-  const String_t    : String_Constructor_Str,                                     \
-  String_ptr        : String_Constructor_Strp,                                    \
-  const String_ptr  : String_Constructor_Strp)                                    \
+  nString_t         : String_Constructor_Str,                                     \
+  nString_t*        : String_Constructor_Strp,                                    \
+  const nString_t*  : String_Constructor_Strp)                                    \
   (Instance)
 
 nString_t*        String_Constructor_Chs            (const Chs_t pValue);
@@ -42,7 +41,7 @@ Index_t           String_IndexAt                    (const nString_t*  pSelf, co
 Index_t           String_IndexFor                   (const nString_t*  pSelf, const nString_t* pValue, const Index_t pStart);
 Index_t           String_LastOfIndex                (const nString_t*  pSelf, const nString_t* pValue);
 nString_t*        String_Replace                    (const nString_t*  pSelf, const nString_t* pOri, const nString_t* pValue);
-nString_t*        String_ReplaceAt                  (const nString_t*  pSelf, const nString_t* pOri, const nString_t* pValue, const Index_t pLength);
+nString_t*        String_ReplaceAt                  (const nString_t*  pSelf, const nString_t* pOri, const nString_t* pValue, const Index_t pIndex);
 nString_t*        String_ReplaceAll                 (const nString_t*  pSelf, const nString_t* pOri, const nString_t* pValue);
 nString_t*        String_Left                       (const nString_t*  pSelf, const Length_t pLength);
 nString_t*        String_Right                      (const nString_t*  pSelf, const Length_t pLength);
@@ -81,8 +80,8 @@ nString_t*        String_PrintLine                  (const nString_t* pFormat, .
   unsigned long long  : String_ToString_Decimal_Unsigned,        \
   float               : String_ToString_Digit,                   \
   double              : String_ToString_Digit,                   \
-  const StringAry     : String_ToString_StringAry,               \
-  StringAry           : String_ToString_StringAry)               \
+  const nStringAry_t* : String_ToString_StringAry,               \
+  nStringAry_t*       : String_ToString_StringAry)               \
   (Instance, ##args)
 
 #define ValueOf(DataType) ((DataType(*)(String)) String_ValueOfSearch(#DataType))
@@ -100,9 +99,8 @@ int64_t           String_ValueOf_Decimal            (const nString_t* pSelf);
 uint64_t          String_ValueOf_Decimal_Unsigned   (const nString_t* pSelf);
 double            String_ValueOf_Digit              (const nString_t* pSelf);   
 
-
-Wcs_t             String_UTF8Decorder               (Chs_t pValue, size_t pValueSize);
-Chs_t             String_UTF8Encoder                (Wcs_t pValue, size_t* out_pValueSize);
+Wcs_t             String_UTF8Decorder               (Chs_t pValue, Length_t* out_pValueSize);
+Chs_t             String_UTF8Encoder                (Wcs_t pValue, Length_t* out_pValueSize);
 
 #define STR(_STR_) L#_STR_
 
@@ -110,14 +108,27 @@ Chs_t             String_UTF8Encoder                (Wcs_t pValue, size_t* out_p
 #define __WCSBUFMAKE(Len) Wcs_t _BUF = __WCSMAKE(Len)
 #define __FLUSHWCSBUF() free(_BUF)
 
-#define __STRLEN(Instance, args...) _Generic((Instance)             \
-  Chs_t       : __ChsLen,                                           \
-  const Chs_t : __ChsLen,                                           \
-  Wcs_t       : __WcsLen,                                           \
-  const Wcs_t : __WcsLen                                            \
-)(Instance, ##args)
-Length_t __ChsLen(Chs_t pValue, size_t pValueSize);
-Length_t __WcsLen(Chs_t pValue);
+#define __STRLEN(Instance) _Generic((Instance),            \
+  Chs_t       : __ChsLen,                                  \
+  const Chs_t : __ChsLen,                                  \
+  Wcs_t       : __WcsLen,                                  \
+  const Wcs_t : __WcsLen                                   \
+)(Instance)
+Length_t __ChsLen(const Chs_t pValue);
+Length_t __WcsLen(const Wcs_t pValue);
 
+bool              __IsAlpha                         (const int pCh);
+bool              __IsLower                         (const int pCh);
+bool              __IsUpper                         (const int pCh);
+bool              __IsDecimal                       (const int pCh);
+bool              __IsDigit                         (const int pCh);
+bool              __IsSpace                         (const int pCh);
+bool              __IsAlphaDigit                    (const int pCh);
+bool              __IsHex                           (const int pCh);
+bool              __IsControl                       (const int pCh);
+bool              __IsOctal                         (const int pCh);
+bool              __IsBinary                        (const int pCh);
+int               __ToLower                         (const int pCh);
+int               __ToUpper                         (const int pCh);
 
 #endif // __NSTRING_H__

@@ -4,5 +4,5 @@
 Length_t
 String_Length(const nString_t* pSelf)
 {
-  return 0;
+  return pSelf->m_Length;
 }
