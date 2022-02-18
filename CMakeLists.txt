@@ -5,7 +5,6 @@ include(CTest)
 enable_testing()
 
 set (nString_SRCS
-
   Sources/nString/String_Constructor_Chs.c
   Sources/nString/String_Contains.c
   Sources/nString/String_FileAllRead.c
@@ -48,14 +47,14 @@ set (nString_SRCS
   Sources/nString/String_Compare.c
   Sources/nString/String_Constructor_Wcs.c
   Sources/nString/String_Extract.c
-  Sources/nString/String_Get.c
+  Sources/nString/String_get.c
   Sources/nString/String_IsAlpha.c
   Sources/nString/String_IsDecimal.c
   Sources/nString/String_IsOctal.c
   Sources/nString/String_LastOfIndex.c
   Sources/nString/String_Middle.c
   Sources/nString/String_Replace.c
-  Sources/nString/String_Set.c
+  Sources/nString/String_set.c
   Sources/nString/String_ToUpper.c
 
   Sources/nString/STR/__ChsLen.c

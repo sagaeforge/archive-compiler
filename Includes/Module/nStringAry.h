@@ -23,4 +23,6 @@ nStringAry_t*     StringAry_toList             (const nStringAry_t*  pSelf);
 nStringAryType_t  StringAry_Type               (const nStringAry_t*  pSelf);
 Length_t          StringAry_CountIf            (const nStringAry_t*  pSelf, bool (*pExpression)(nString_t*, void *), void *pParam);
 
+nStringAryNode_ptr StringAry_MakeNode();
+
 #endif // __NSTRINGARY_H__

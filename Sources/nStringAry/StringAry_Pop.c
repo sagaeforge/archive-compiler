@@ -1,7 +1,6 @@
 
 #include <stdlib.h>
 
-#include <Module/__nStringAry.h>
 #include <Module/nStringAry.h>
 
 nString_t*

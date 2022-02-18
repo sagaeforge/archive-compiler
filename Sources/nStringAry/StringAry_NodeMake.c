@@ -1,7 +1,7 @@
 
 #include <stdlib.h>
 
-#include <Module/__nStringAry.h>
+#include <Module/nStringAry.h>
 
 nStringAryNode_ptr
 StringAry_MakeNode()

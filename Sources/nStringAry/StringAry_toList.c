@@ -3,7 +3,6 @@
 #include <stdlib.h>
 
 #include <Exception.h>
-#include <Module/__nStringAry.h>
 #include <Module/nStringAry.h>
 
 nStringAry_t*

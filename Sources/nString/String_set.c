@@ -5,7 +5,7 @@
 #include <Module/nString.h>
 
 bool
-String_Set(nString_t* pSelf, const nString_t* pValue)
+String_set(nString_t* pSelf, const nString_t* pValue)
 {
   Index_t _i;
   if (pSelf->m_Length == pValue->m_Length) {
