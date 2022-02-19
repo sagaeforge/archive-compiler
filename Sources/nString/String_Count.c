@@ -40,12 +40,12 @@ preprocess_case2(int* shift, int* bpos, Wcs_t pat, int m)
 #pragma endregion
 
 Length_t
-String_Count(const nString_t* pSelf, const nString_t* pValue)
+String_Count(const nString_t* pSelf, const nString_t* pKeyWord)
 {
   int c = 0;
   int s = 0, j;
   int m = pSelf->m_Length;
-  int n = pValue->m_Length;
+  int n = pKeyWord->m_Length;
 
   int* bpos = calloc(sizeof(int), m);
   int* shift = calloc(sizeof(int), m);
@@ -53,13 +53,13 @@ String_Count(const nString_t* pSelf, const nString_t* pValue)
   for (int i = 0; i < m + 1; i++)
     shift[i] = 0;
 
-  preprocess_strong_suffix(shift, bpos, pValue->m_Value, m);
-  preprocess_case2(shift, bpos, pValue->m_Value, m);
+  preprocess_strong_suffix(shift, bpos, pKeyWord->m_Value, m);
+  preprocess_case2(shift, bpos, pKeyWord->m_Value, m);
 
   while (s <= n - m) {
     j = m - 1;
 
-    while (j >= 0 && pValue->m_Value[j] == pSelf->m_Value[s + j])
+    while (j >= 0 && pKeyWord->m_Value[j] == pSelf->m_Value[s + j])
       j--;
 
     if (j < 0) {

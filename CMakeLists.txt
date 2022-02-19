@@ -83,7 +83,27 @@ set (nString_SRCS
   Sources/nString/ValueOf/String_ValueOf_Decimal.c
   Sources/nString/ValueOf/String_ValueOf_Decimal_Unsigned.c
   Sources/nString/ValueOf/String_ValueOf_Digit.c
-
+)
+set( nRegExp_SRCS
+  Sources/nRegExp/RegExp_Analysis.c
+  Sources/nRegExp/RegExp_Constructor_Clone.c
+  Sources/nRegExp/RegExp_Constructor_Str.c
+  Sources/nRegExp/RegExp_Contains.c
+  Sources/nRegExp/RegExp_Count.c
+  Sources/nRegExp/RegExp_Destructor.c
+  Sources/nRegExp/RegExp_IndexAll.c
+  Sources/nRegExp/RegExp_IndexAt.c
+  Sources/nRegExp/RegExp_IndexFor.c
+  Sources/nRegExp/RegExp_IndexOf.c
+  Sources/nRegExp/RegExp_LastOfIndex.c
+  Sources/nRegExp/RegExp_Pattern.c
+  Sources/nRegExp/RegExp_ReplaceAll.c
+  Sources/nRegExp/RegExp_ReplaceAt.c
+  Sources/nRegExp/RegExp_Replace.c
+  Sources/nRegExp/RegExp_Split.c
+  Sources/nRegExp/RegExp_SubString.c
+)
+set( nStringAry_SRCS
   Sources/nStringAry/StringAry_Constructor.c
   Sources/nStringAry/StringAry_Contains.c
   Sources/nStringAry/StringAry_Clear.c
@@ -100,20 +120,20 @@ set (nString_SRCS
   Sources/nStringAry/StringAry_toList.c
   Sources/nStringAry/StringAry_getType.c
   Sources/nStringAry/StringAry_NodeMake.c
-
 )
-set (nUtility_SRCS
+set ( nUtility_SRCS
   Sources/nPrint/nPrint.c
   Sources/nPrint/nPrintLine.c
   Sources/nPrint/nPrintErr.c
 )
-
 
 add_executable(nCompiler
   main.c
 
   ${nString_SRCS}
   ${nUtility_SRCS}
+  ${nRegExp_SRCS}
+  ${nStringAry_SRCS}
 )
 
 target_include_directories(

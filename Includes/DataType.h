@@ -13,6 +13,7 @@ typedef uint32_t Index_t;
 
 #define LOOPEND(Instance) (Instance & (1 << 31))
 #define BitAndMask(n) ((1 << n) - 1)
+#define BitFlagCheck(Instance, Flag) ((Instance) & ~(Flag))
 
 typedef void (*Func_t)();
 

@@ -40,7 +40,7 @@ preprocess_case2(int* shift, int* bpos, Wcs_t pat, int m)
 #pragma endregion
 
 nString_t*
-String_ReplaceAll(const nString_t* pSelf, const nString_t* pOri, const nString_t* pValue)
+String_ReplaceAll(const nString_t* pSelf, const nString_t* pKeyWord, const nString_t* pValue)
 {
   int s = 0, j;
   int m = pSelf->m_Length;

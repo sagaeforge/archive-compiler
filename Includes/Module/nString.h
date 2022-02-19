@@ -39,18 +39,43 @@ nString_t*        String_Reverse                    (const nString_t*  pSelf);
 nString_t*        String_ToLower                    (const nString_t*  pSelf);
 nString_t*        String_ToUpper                    (const nString_t*  pSelf);
 
-bool              String_Contains                   (const nString_t*  pSelf, const nString_t* pValue);
-Length_t          String_Count                      (const nString_t*  pSelf, const nString_t* pValue);
-Index_t           String_IndexOf                    (const nString_t*  pSelf, const nString_t* pValue);
-Index_t           String_IndexAt                    (const nString_t*  pSelf, const nString_t* pValue, const Index_t pIndex);
-Index_t           String_IndexFor                   (const nString_t*  pSelf, const nString_t* pValue, const Index_t pStart);
-Index_t           String_LastOfIndex                (const nString_t*  pSelf, const nString_t* pValue);
-nString_t*        String_Replace                    (const nString_t*  pSelf, const nString_t* pOri, const nString_t* pValue);
-nString_t*        String_ReplaceAt                  (const nString_t*  pSelf, const nString_t* pOri, const nString_t* pValue, const Index_t pIndex);
-nString_t*        String_ReplaceAll                 (const nString_t*  pSelf, const nString_t* pOri, const nString_t* pValue);
-nStringAry_t*     String_Split                      (const nString_t*  pSelf, const nString_t* pValue);
-nString_t*        String_SubString                  (const nString_t*  pSelf, const nString_t* pValue);
-bool              String_Pattern                    (const nString_t*  pSelf, const nString_t* pFormat);
+bool              String_Contains                   (const nString_t*  pSelf, const nString_t* pKeyWord);
+Length_t          String_Count                      (const nString_t*  pSelf, const nString_t* pKeyWord);
+Index_t           String_IndexOf                    (const nString_t*  pSelf, const nString_t* pKeyWord);
+Index_t           String_IndexAt                    (const nString_t*  pSelf, const nString_t* pKeyWord, const Index_t pIndex);
+Index_t           String_IndexFor                   (const nString_t*  pSelf, const nString_t* pKeyWord, const Index_t pStart);
+Index_t           String_LastOfIndex                (const nString_t*  pSelf, const nString_t* pKeyWord);
+nString_t*        String_Replace                    (const nString_t*  pSelf, const nString_t* pKeyWord, const nString_t* pValue);
+nString_t*        String_ReplaceAt                  (const nString_t*  pSelf, const nString_t* pKeyWord, const nString_t* pValue, const Index_t pIndex);
+nString_t*        String_ReplaceAll                 (const nString_t*  pSelf, const nString_t* pKeyWord, const nString_t* pValue);
+nStringAry_t*     String_Split                      (const nString_t*  pSelf, const nString_t* pKeyWord);
+nString_t*        String_SubString                  (const nString_t*  pSelf, const nString_t* pKeyWord);
+bool              String_Pattern                    (const nString_t*  pSelf, const nString_t* pKeyWord);
+
+#define           nRegExp(RegExp, args...) _Generic((Instance),                                    \
+  nString_t         : RegExp_Constructor_Str,                                                      \
+  nString_t*        : RegExp_Constructor_Str,                                                      \
+  const nString_t*  : RegExp_Constructor_Str,                                                      \
+  nRegExp_t         : RegExp_Constructor_Clone,                                                    \
+  nRegExp_t*        : RegExp_Constructor_Clone,                                                    \
+  const nRegExp_t*  : RegExp_Constructor_Clone)                                                    \
+  (RegExp, ##args)
+
+nRegExp_t*        RegExp_Constructor_Str            (nString_t* pRegExp, nString_t* pFlag);
+nRegExp_t*        RegExp_Constructor_Clone          (const nRegExp_t*  pSelf);
+bool              RegExp_Destructor                 (      nRegExp_t** pSelf);
+nRegExpResult_t*  RegExp_Analysis                   (const nString_t*  pSelf, const nRegExp_t* pRegExp);
+Length_t          RegExp_Count                      (const nString_t*  pSelf, const nRegExp_t* pRegExp);
+Index_t           RegExp_IndexOf                    (const nString_t*  pSelf, const nRegExp_t* pRegExp);
+Index_t           RegExp_IndexAt                    (const nString_t*  pSelf, const nRegExp_t* pRegExp, const Index_t pIndex);
+Index_t           RegExp_IndexFor                   (const nString_t*  pSelf, const nRegExp_t* pRegExp, const Index_t pStart);
+Index_t*          RegExp_IndexAll                   (const nString_t*  pSelf, const nRegExp_t* pRegExp);
+Index_t           RegExp_LastOfIndex                (const nString_t*  pSelf, const nRegExp_t* pRegExp);
+nString_t*        RegExp_Replace                    (const nString_t*  pSelf, const nRegExp_t* pRegExp, const nString_t* pValue);
+nString_t*        RegExp_ReplaceAt                  (const nString_t*  pSelf, const nRegExp_t* pRegExp, const nString_t* pValue, const Index_t pIndex);
+nString_t*        RegExp_ReplaceAll                 (const nString_t*  pSelf, const nRegExp_t* pRegExp, const nString_t* pValue);
+nStringAry_t*     RegExp_Split                      (const nString_t*  pSelf, const nRegExp_t* pRegExp);
+nString_t*        RegExp_SubString                  (const nString_t*  pSelf, const nRegExp_t* pRegExp);
 
 bool              String_IsAlpha                    (const nString_t*  pSelf);
 bool              String_IsLower                    (const nString_t*  pSelf);

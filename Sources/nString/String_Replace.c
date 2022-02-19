@@ -4,13 +4,13 @@
 #include <Module/nString.h>
 
 nString_t*
-String_Replace(const nString_t* pSelf, const nString_t* pOri, const nString_t* pValue)
+String_Replace(const nString_t* pSelf, const nString_t* pKeyWord, const nString_t* pValue)
 {
-  Index_t _Find = String_IndexOf(pSelf, pOri);
+  Index_t _Find = String_IndexOf(pSelf, pKeyWord);
   if (_Find == -1)
     return nString(pSelf);
 
-  Length_t _Length = pSelf->m_Length - pOri->m_Length + pValue->m_Length;
+  Length_t _Length = pSelf->m_Length - pKeyWord->m_Length + pValue->m_Length;
   __WCSBUFMAKE(_Length);
   Index_t _i, _gap = 0;
   for (_i = 0; _i < _Length; _i++) {
@@ -24,7 +24,7 @@ String_Replace(const nString_t* pSelf, const nString_t* pOri, const nString_t* p
         for (_j = 0; _j < pValue->m_Length; _j++)
           _BUF[_i + _j] = pValue->m_Value[_j];
         _i += pValue->m_Length - 1;
-        _gap = pValue->m_Length - pOri->m_Length;
+        _gap = pValue->m_Length - pKeyWord->m_Length;
       }
     }
   }

@@ -34,6 +34,44 @@ typedef struct
   nStringAryNode_ptr m_Lists;
 } nStringAry_t, *nStringAry_ptr;
 
+typedef enum
+{
+  k_nRegExpFlag_None = 0,
+  k_nRegExpFlag_Global = (1 << 0),
+  k_nRegExpFlag_HasIndices = (1 << 1),
+  k_nRegExpFlag_IgnoreCase = (1 << 2),
+  k_nRegExpFlag_Multiline = (1 << 3),
+  k_nRegExpFlag_DotAll = (1 << 4),
+  k_nRegExpFlag_Unicode = (1 << 5),
+  k_nRegExpFlag_Sticky = (1 << 6)
+} nRegExpFlag_t,
+  nRegExpFlag_enum;
+
+typedef struct
+{
+  nRegExpFlag_t m_Flag;
+  nString_ptr m_Pattern;
+} nRegExp_t, *nRegExp_ptr;
+
+typedef struct nRegExpResultNode
+{
+  Index_t StartIndex;
+  Index_t LastIndex;
+  struct nRegExpResultNode* Next;
+} nRegExpResultNode_t, *nRegExpResultNode_ptr;
+
+typedef struct
+{
+  nString_ptr m_OrignalText;
+  nRegExp_ptr m_RegExp;
+  bool isFound;
+  struct
+  {
+    Length_t m_Count;
+    nRegExpResultNode_ptr m_Nodes;
+  } m_Result;
+} nRegExpResult_t, *nRegExpResult_ptr;
+
 #pragma pack(pop)
 
 #endif // __NSTRING_H__
