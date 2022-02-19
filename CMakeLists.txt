@@ -4,7 +4,7 @@ project(nCompiler VERSION 0.1.0)
 include(CTest)
 enable_testing()
 
-set (nString_SRCS
+set ( nString_SRCS
   Sources/nString/String_Constructor_Chs.c
   Sources/nString/String_Contains.c
   Sources/nString/String_FileAllRead.c
@@ -121,11 +121,27 @@ set( nStringAry_SRCS
   Sources/nStringAry/StringAry_getType.c
   Sources/nStringAry/StringAry_NodeMake.c
 )
+set ( mDigitAry_SRCS 
+  Sources/nDigitAry/DigitAry_Constructor.c
+  Sources/nDigitAry/DigitAry_Destructor.c
+  Sources/nDigitAry/DigitAry_get.c
+  Sources/nDigitAry/DigitAry_Insert.c
+  Sources/nDigitAry/DigitAry_Remove.c
+  Sources/nDigitAry/DigitAry_Join.c
+  Sources/nDigitAry/DigitAry_Pop.c
+  Sources/nDigitAry/DigitAry_Push.c
+  Sources/nDigitAry/DigitAry_set.c
+  Sources/nDigitAry/DigitAry_Split.c
+  Sources/nDigitAry/DigitAry_MakeNode.c
+)
+
 set ( nUtility_SRCS
   Sources/nPrint/nPrint.c
   Sources/nPrint/nPrintLine.c
   Sources/nPrint/nPrintErr.c
 )
+
+
 
 add_executable(nCompiler
   main.c
@@ -133,6 +149,7 @@ add_executable(nCompiler
   ${nString_SRCS}
   ${nUtility_SRCS}
   ${nRegExp_SRCS}
+  ${mDigitAry_SRCS}
   ${nStringAry_SRCS}
 )
 

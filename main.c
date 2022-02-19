@@ -1,4 +1,5 @@
 
+#include <Module/nDigitAry.h>
 #include <Module/nString.h>
 #include <Module/nStringAry.h>
 #include <locale.h>

@@ -6,6 +6,9 @@
 bool
 StringAry_Remove(nStringAry_t* pSelf, const Index_t pIndex)
 {
+  if (pSelf->m_Length == 0)
+    return false;
+
   Index_t _index = pIndex >= pSelf->m_Length ? pSelf->m_Length - 1 : pIndex;
 
   Index_t _i;

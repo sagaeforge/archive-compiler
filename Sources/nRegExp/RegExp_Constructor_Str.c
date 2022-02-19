@@ -8,13 +8,17 @@
 nRegExp_t*
 RegExp_Constructor_Str(nString_t* pRegExp, nString_t* pFlag)
 {
-  nRegExp_ptr _Exp = malloc(sizeof(nRegExp_t));
+  nRegExp_ptr _Exp = (nRegExp_ptr)malloc(sizeof(nRegExp_t));
   if (!_Exp) {
     Exception(ERROR, "정규식 객체를 만들수 없습니다.");
     return NULL;
   }
 
-  _Exp->m_Pattern = nString(pRegExp);
+  if (pRegExp->m_Value[0] == '/')
+    _Exp->m_Pattern = String_Extract(pRegExp, 1, pRegExp->m_Length - 1);
+  else
+    _Exp->m_Pattern = nString(pRegExp);
+
   _Exp->m_Flag = k_nRegExpFlag_None;
 
   Index_t _i;
