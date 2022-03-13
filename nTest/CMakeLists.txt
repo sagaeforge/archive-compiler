@@ -23,8 +23,7 @@ PUBLIC
 
 target_include_directories ( nCX_TEST
 PUBLIC
-  ${CMAKE_SOURCE_DIR}/../nCX_Library/Includes/nString/
-  ${CMAKE_SOURCE_DIR}/../nCX_Library/Includes/nGarbageCollection/
+  ${CMAKE_SOURCE_DIR}/../nCX_Library/Includes/
 )
 
 set ( CPACK_PROJECT_NAME ${PROJECT_NAME} )

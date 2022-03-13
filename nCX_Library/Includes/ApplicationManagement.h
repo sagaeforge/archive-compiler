@@ -1,0 +1,4 @@
+#ifndef __APPLICATIONMODULE_H__
+#define __APPLICATIONMODULE_H__
+
+#endif // __APPLICATIONMODULE_H__
