@@ -203,14 +203,14 @@ extern struct nChs_Method ChsMethod[];
 #pragma endregion
 #pragma region 함수 선언
 
-#define nString(Instance) _Generic((Instance),                                    \
-  Chs_t             : String_Constructor_Chs,                                     \
-  const Chs_t       : String_Constructor_Chs,                                     \
-  Wcs_t             : String_Constructor_Wcs,                                     \
-  const Wcs_t       : String_Constructor_Wcs,                                     \
-  nString_t         : String_Constructor_Str,                                     \
-  nString_ptr       : String_Constructor_Strp,                                    \
-  const nString_ptr : String_Constructor_Strp)                                    \
+#define nString(Instance) _Generic((Instance),                \
+  Chs_t             : String_Constructor_Chs,                 \
+  const Chs_t       : String_Constructor_Chs,                 \
+  Wcs_t             : String_Constructor_Wcs,                 \
+  const Wcs_t       : String_Constructor_Wcs,                 \
+  nString_t         : String_Constructor_Str,                 \
+  nString_ptr       : String_Constructor_Strp,                \
+  const nString_ptr : String_Constructor_Strp)                \
   (Instance)
 
 nString_ptr        String_Constructor_Chs            (const Chs_t pValue);
@@ -298,27 +298,16 @@ Length_t           StringAry_Length                  (const nStringAry_ptr  pSel
   const nStringAry_t  : StringAry_Length                      \
   ) (Instance)
 
-// nString_ptr        String_toString_Bool              (const bool pValue);
-// nString_ptr        String_toString_Decimal           (const int64_t pValue);
-// nString_ptr        String_toString_Decimal_Unsigned  (const uint64_t pValue);
-// nString_ptr        String_toString_Digit             (const double pValue, const int numDigit);
-// nString_ptr        String_toString_StringAry         (const nStringAry_ptr pValue, const nString_ptr pReplaceWord);
-
-// bool               String_valueOf_Bool               (const nString_ptr pSelf);
-// int64_t            String_valueOf_Decimal            (const nString_ptr pSelf);
-// uint64_t           String_valueOf_Decimal_Unsigned   (const nString_ptr pSelf);
-// double             String_valueOf_Digit              (const nString_ptr pSelf);
-
 Wcs_t              String_UTF8Decoder                 (Chs_t pValue, Length_t* out_pValueSize);
 Chs_t              String_UTF8Encoder                 (Wcs_t pValue, Length_t* out_pValueSize);
 
-#define nRegExp(RegExp, args...) _Generic((Instance),   \
-  nString_t         : RegExp_Constructor_Str,           \
-  nString_ptr       : RegExp_Constructor_Str,           \
-  const nString_ptr : RegExp_Constructor_Str,           \
-  nRegExp_t         : RegExp_Constructor_Clone,         \
-  nRegExp_ptr       : RegExp_Constructor_Clone,         \
-  const nRegExp_ptr : RegExp_Constructor_Clone)         \
+#define nRegExp(RegExp, args...) _Generic((Instance),         \
+  nString_t         : RegExp_Constructor_Str,                 \
+  nString_ptr       : RegExp_Constructor_Str,                 \
+  const nString_ptr : RegExp_Constructor_Str,                 \
+  nRegExp_t         : RegExp_Constructor_Clone,               \
+  nRegExp_ptr       : RegExp_Constructor_Clone,               \
+  const nRegExp_ptr : RegExp_Constructor_Clone)               \
   (RegExp, ##args)
 
 nRegExp_ptr        RegExp_Constructor_Str             (nString_ptr pRegExp, nString_ptr pFlag);
