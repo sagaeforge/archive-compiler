@@ -71,7 +71,6 @@ struct nStringAry_Method {
   bool              (*Contains)          (const nStringAry_ptr, const nString_ptr);
   nStringAry_ptr    (*toAry)             (const nStringAry_ptr);
   nStringAry_ptr    (*toList)            (const nStringAry_ptr);
-  nStringAryType_t  (*Type)              (const nStringAry_ptr);
   Length_t          (*CountIf)           (const nStringAry_ptr, bool (*)(nString_ptr, void *), void *);
   Length_t          (*Length)            (const nStringAry_ptr);
 };
@@ -197,7 +196,6 @@ Index_t            nStringAry_Search                  (const nStringAry_ptr  pSe
 bool               nStringAry_Contains                (const nStringAry_ptr  pSelf, const nString_ptr pValue);
 nStringAry_ptr     nStringAry_toAry                   (const nStringAry_ptr  pSelf);
 nStringAry_ptr     nStringAry_toList                  (const nStringAry_ptr  pSelf);
-nStringAryType_t   nStringAry_Type                    (const nStringAry_ptr  pSelf);
 Length_t           nStringAry_CountIf                 (const nStringAry_ptr  pSelf, bool (*pExpression)(nString_ptr, void *), void *pParam);
 Length_t           nStringAry_Length                  (const nStringAry_ptr  pSelf);
 

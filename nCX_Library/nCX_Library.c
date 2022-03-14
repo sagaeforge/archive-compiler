@@ -1,8 +1,5 @@
 
-#include <DataStructure/nArray.h>
-#include <DataStructure/nLists.h>
-#include <DataStructure/nQueue.h>
-#include <DataStructure/nStack.h>
+#include <DataStructure/DataStructure.h>
 
 #include <ApplicationManagement.h>
 #include <ApplicationModule.h>

@@ -2,8 +2,10 @@
 #define __NOBJECT_H__
 
 #include <DataType/Global.h>
+#include <DataType/nString.h>
 
-typedef union {
+typedef struct {
+  nString_ptr m_DataType;
   union {
     bool Value_bool;
     char Value_char;
@@ -12,7 +14,6 @@ typedef union {
     double Value_float;
     void *Value_pointer;
   };
-  uint64_t m_Garbage;
 } Object_t, *Object_ptr;
 
 #endif // __NOBJECT_H__

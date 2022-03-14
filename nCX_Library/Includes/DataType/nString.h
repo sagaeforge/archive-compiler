@@ -3,6 +3,8 @@
 
 #include <DataType/Global.h>
 
+#include <DataStructure/DataType/nList.h>
+
 #pragma pack(push, 1)
 
 typedef char *Chs_t;
@@ -18,21 +20,9 @@ typedef struct nStringAryNode {
   struct nStringAryNode *Next;
 } nStringAryNode_t, *nStringAryNode_ptr;
 
-typedef enum {
-  k_nStringAry_None = 0,
-  k_nStringAry_Ary = 1,
-  k_nStringAry_List = 2,
-} nStringAryType_t,
-    nStringAryType_enum;
-
 typedef struct {
-  Length_t m_Size;
   Length_t m_Length;
-  nStringAryType_t m_AryType;
-  union {
-    nString_ptr *m_Arys;
-    nStringAryNode_ptr m_Lists;
-  };
+  nLinkedList_ptr m_Nodes;
 } nStringAry_t, *nStringAry_ptr;
 
 typedef enum {

@@ -1,4 +1,0 @@
-#ifndef __DATASTRUCTURE_NLISTS_H__
-#define __DATASTRUCTURE_NLISTS_H__
-
-#endif // __NLISTS_H__

@@ -56,8 +56,7 @@ struct nStringAry_Method StringAryMethod[] = {
     nStringAry_get,         nStringAry_set,        nStringAry_Insert,
     nStringAry_Remove,      nStringAry_Push,       nStringAry_Pop,
     nStringAry_Search,      nStringAry_Contains,   nStringAry_toAry,
-    nStringAry_toList,      nStringAry_Type,       nStringAry_CountIf,
-    nStringAry_Length};
+    nStringAry_toList,      nStringAry_CountIf,    nStringAry_Length};
 struct nRegExp_Method RegExpMethod[] = {
     nRegExp_Constructor_Str, nRegExp_Constructor_Clone,
     nRegExp_Destructor,      nRegExp_Analysis,
