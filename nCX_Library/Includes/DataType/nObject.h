@@ -9,6 +9,12 @@ typedef union {
   uint64_t Value_uint;
   double Value_float;
   void *Value_pointer;
-} Object_t, *Object_ptr;
+} nObject_t, *nObject_ptr;
+
+typedef struct {
+  Chs_t m_DataType;
+  Func_t m_Boxing;
+  Func_t m_UnBoxing;
+} nObjectDataTypeTableNode_t, *nObjectDataTypeTableNode_ptr;
 
 #endif // __NOBJECT_H__

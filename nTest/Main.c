@@ -1,19 +1,14 @@
 
+#include <locale.h>
 #include <nString.h>
 #include <stdio.h>
 
-int
-main(int argc, char const* argv[])
-{
+Length_t nChs_WcsLen(const Wcs_t pValue) { return 4; }
 
-  char str1[20];
-  char str2[20];
-
-  scanf("%s\n", str1);
-  fgets(str2, 12, stdin);
-
-  printf("%s\n", str1);
-  printf("%s\n", str2);
+int main(int argc, char const *argv[]) {
+  setlocale(LC_ALL, "");
+  nString_t Value2 = String(L"시발");
+  printf("%S", Value2.m_Value);
 
   return 0;
 }

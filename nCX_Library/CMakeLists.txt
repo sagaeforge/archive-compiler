@@ -18,6 +18,7 @@ set ( nString_SRCS
 
 add_library ( nCX_Lib
   nCX_Library.c
+  nObjectTable.c
 
   ${nGarbageCollection_SRCS}
   ${nString_SRCS}

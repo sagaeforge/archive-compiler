@@ -114,15 +114,16 @@ extern struct nStringAry_Method StringAryMethod[];
 extern struct nRegExp_Method RegExpMethod[];
 extern struct nChs_Method ChsMethod[];
 
+#define String(Instance) { Instance, strLen(Instance) }
 
-#define nString(Instance) _Generic((Instance),                \
+#define nString(Instance) (_Generic((Instance),               \
   Chs_t             : nString_Constructor_Chs,                \
   const Chs_t       : nString_Constructor_Chs,                \
   Wcs_t             : nString_Constructor_Wcs,                \
   const Wcs_t       : nString_Constructor_Wcs,                \
   nString_t         : nString_Constructor_Str,                \
   nString_ptr       : nString_Constructor_Strp,               \
-  const nString_ptr : nString_Constructor_Strp)               \
+  const nString_ptr : nString_Constructor_Strp))              \
   (Instance)
 
 nString_ptr        nString_Constructor_Chs            (const Chs_t pValue);
@@ -199,16 +200,16 @@ nStringAry_ptr     nStringAry_toList                  (const nStringAry_ptr  pSe
 Length_t           nStringAry_CountIf                 (const nStringAry_ptr  pSelf, bool (*pExpression)(nString_ptr, void *), void *pParam);
 Length_t           nStringAry_Length                  (const nStringAry_ptr  pSelf);
 
-#define strLen(Instance) _Generic((Instance),                 \
-  Chs_t               : __ChsLen,                             \
-  const Chs_t         : __ChsLen,                             \
-  Wcs_t               : __WcsLen,                             \
-  const Wcs_t         : __WcsLen,                             \
+#define strLen(Instance) (_Generic((Instance),                \
+  Chs_t               : nChs_ChsLen,                          \
+  const Chs_t         : nChs_ChsLen,                          \
+  Wcs_t               : nChs_WcsLen,                          \
+  const Wcs_t         : nChs_WcsLen,                          \
   nString_ptr         : nString_Length,                       \
   const nString_ptr   : nString_Length,                       \
   nStringAry_t        : nStringAry_Length,                    \
   const nStringAry_t  : nStringAry_Length                     \
-  ) (Instance)
+  )) (Instance)
 
 #define nRegExp(RegExp, args...) _Generic((Instance),         \
   nString_t         : nRegExp_Constructor_Str,                \
