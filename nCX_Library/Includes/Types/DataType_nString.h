@@ -1,50 +1,47 @@
 #ifndef __DATATYPE_NSTRING_H__
 #define __DATATYPE_NSTRING_H__
 
+#include <Types/DataType_Global.h>
+
 #pragma pack(push, 1)
 
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <wchar.h>
+typedef char* Chs_t;
+typedef wchar_t* Wcs_t;
 
-#ifndef __DEFAULT_DATATYPES
-typedef uint32_t Length_t;
-typedef uint32_t Index_t;
-typedef void (*Func_t)(void);
-#endif // !__DEFAULT_DATATYPES
-
-typedef char *Chs_t;
-typedef wchar_t *Wcs_t;
-
-typedef struct {
+typedef struct
+{
   Wcs_t m_Value;
   Length_t m_Length;
 } nString_t, *nString_ptr;
 
-typedef struct nStringAryNode {
+typedef struct nStringAryNode
+{
   nString_ptr m_Value;
-  struct nStringAryNode *Next;
+  struct nStringAryNode* Next;
 } nStringAryNode_t, *nStringAryNode_ptr;
 
-typedef enum {
+typedef enum
+{
   k_nStringAry_None = 0,
   k_nStringAry_Ary = 1,
   k_nStringAry_List = 2,
 } nStringAryType_t,
-    nStringAryType_enum;
+  nStringAryType_enum;
 
-typedef struct {
+typedef struct
+{
   Length_t m_Size;
   Length_t m_Length;
   nStringAryType_t m_AryType;
-  union {
-    nString_ptr *m_Arys;
+  union
+  {
+    nString_ptr* m_Arys;
     nStringAryNode_ptr m_Lists;
   };
 } nStringAry_t, *nStringAry_ptr;
 
-typedef enum {
+typedef enum
+{
   k_nRegExpFlag_None = 0,
   k_nRegExpFlag_Global = (1 << 0),
   k_nRegExpFlag_HasIndices = (1 << 1),
@@ -54,24 +51,28 @@ typedef enum {
   k_nRegExpFlag_Unicode = (1 << 5),
   k_nRegExpFlag_Sticky = (1 << 6)
 } nRegExpFlag_t,
-    nRegExpFlag_enum;
+  nRegExpFlag_enum;
 
-typedef struct {
+typedef struct
+{
   nRegExpFlag_t m_Flag;
   nString_ptr m_Pattern;
 } nRegExp_t, *nRegExp_ptr;
 
-typedef struct nRegExpResultNode {
+typedef struct nRegExpResultNode
+{
   Index_t StartIndex;
   Index_t LastIndex;
-  struct nRegExpResultNode *Next;
+  struct nRegExpResultNode* Next;
 } nRegExpResultNode_t, *nRegExpResultNode_ptr;
 
-typedef struct {
+typedef struct
+{
   nString_ptr m_OrignalText;
   nRegExp_ptr m_RegExp;
   bool isFound;
-  struct {
+  struct
+  {
     Length_t m_Count;
     nRegExpResultNode_ptr m_Nodes;
   } m_Result;

@@ -49,7 +49,6 @@ struct nString_Method {
   bool              (*isControl)         (const nString_ptr);
   bool              (*isOctal)           (const nString_ptr);
   bool              (*isBinary)          (const nString_ptr);
-  bool              (*Search)            (const nString_ptr, const nStringAry_ptr);
   bool              (*Check)             (const wchar_t, const nString_ptr);
   nString_ptr       (*Format)            (const nString_ptr, ...);
   nString_ptr       (*Notation)          (const int64_t, const int);
@@ -116,7 +115,6 @@ extern struct nStringAry_Method StringAryMethod[];
 extern struct nRegExp_Method RegExpMethod[];
 extern struct nChs_Method ChsMethod[];
 
-#pragma region 함수 선언 
 
 #define nString(Instance) _Generic((Instance),                \
   Chs_t             : nString_Constructor_Chs,                \
@@ -255,5 +253,4 @@ bool               nChs_IsBinary                      (const int pCh);
 int                nChs_ToLower                       (const int pCh);
 int                nChs_ToUpper                       (const int pCh);
 
-#pragma endregion
 #endif // __NSTRING_H__
