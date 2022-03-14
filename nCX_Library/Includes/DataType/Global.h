@@ -10,4 +10,4 @@ typedef uint32_t Length_t;
 typedef uint32_t Index_t;
 typedef void (*Func_t)(void);
 
-#endif // __DATATYPE_GLOBAL_H__
+#endif // __GLOBAL_H__

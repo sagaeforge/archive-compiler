@@ -1,8 +1,0 @@
-
-#include <nString.h>
-
-Length_t
-nString_Count(const nString_ptr pSelf, const nString_ptr pKeyWord)
-{
-  return 0;
-}

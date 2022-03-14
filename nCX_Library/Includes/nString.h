@@ -3,7 +3,7 @@
 
 // clang-format off
 
-#include <Types/DataType_nString.h>
+#include <DataType/nString.h>
 
 struct nString_Method {
   nString_ptr       (*Constructor_Chs)   (const Chs_t);

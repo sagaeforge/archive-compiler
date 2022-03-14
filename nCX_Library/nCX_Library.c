@@ -1,16 +1,8 @@
 
-
-#include <DataStructure/nDyanmicArray.h>
-#include <DataStructure/nHashMap.h>
-#include <DataStructure/nLinkedLists.h>
+#include <DataStructure/nArray.h>
+#include <DataStructure/nLists.h>
 #include <DataStructure/nQueue.h>
 #include <DataStructure/nStack.h>
-
-#include <DataStructure/nxDyanmicArray.h>
-#include <DataStructure/nxHashMap.h>
-#include <DataStructure/nxLinkedLists.h>
-#include <DataStructure/nxQueue.h>
-#include <DataStructure/nxStack.h>
 
 #include <ApplicationManagement.h>
 #include <ApplicationModule.h>
