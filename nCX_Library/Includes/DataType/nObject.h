@@ -4,14 +4,14 @@
 #include <DataType/Global.h>
 #include <DataType/nString.h>
 
-typedef union {
-  int64_t Value_int;
-  uint64_t Value_uint;
-  double Value_float;
-  void *Value_pointer;
+typedef union
+{
+  int64_t m_Garbage;
+  void* m_Value;
 } nObject_t, *nObject_ptr;
 
-typedef struct {
+typedef struct
+{
   Chs_t m_DataType;
   Func_t m_Boxing;
   Func_t m_UnBoxing;
