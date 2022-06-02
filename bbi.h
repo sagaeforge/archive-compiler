@@ -49,7 +49,7 @@ struct Token {                /* 토큰 관리     */
 enum SymKind { noId, varId, fncId, paraId };  /* 심볼 테이블 등록 이름의 종류 */
 enum DtType  { NON_T, DBL_T };                /* 타입 이름 */
 
-struct SymTbl {               /* 심볼 테이블 구성        */
+struct Symbol {               /* 심볼 테이블 구성        */
   string  name;               /* 변수나 함수의 이름      */
   SymKind nmKind;             /* 종류                    */
   char    dtTyp;              /* 변수형(NON_T,DBL_T)     */
@@ -57,7 +57,7 @@ struct SymTbl {               /* 심볼 테이블 구성        */
   short   args;               /* 함수의 인수 개수        */
   int     adrs;               /* 변수, 함수의 주소       */
   int     frame;              /* 함수용 프레임 크기      */
-  SymTbl() { clear(); }
+  Symbol() { clear(); }
   void clear() {
     name=""; nmKind=noId; dtTyp=NON_T;
     aryLen=0; args=0; adrs=0; frame=0;
