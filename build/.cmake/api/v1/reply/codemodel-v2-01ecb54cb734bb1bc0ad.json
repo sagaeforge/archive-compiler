@@ -1,0 +1,87 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"jsonFile" : "directory-.-Debug-d0094a50bb2071803777.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.25"
+					},
+					"projectIndex" : 0,
+					"source" : "."
+				},
+				{
+					"build" : "compiler",
+					"jsonFile" : "directory-compiler-Debug-7d94d3bb03a357646b7b.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.25"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 1,
+					"source" : "compiler",
+					"targetIndexes" : 
+					[
+						0
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"childIndexes" : 
+					[
+						1
+					],
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "nugdev::compiler"
+				},
+				{
+					"directoryIndexes" : 
+					[
+						1
+					],
+					"name" : "nugdev_compiler",
+					"parentIndex" : 0,
+					"targetIndexes" : 
+					[
+						0
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 1,
+					"id" : "nugdev_compiler::@c6676b97ddf0cc8f270c",
+					"jsonFile" : "target-nugdev_compiler-Debug-19f45d657d9d04ec7fa3.json",
+					"name" : "nugdev_compiler",
+					"projectIndex" : 1
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "C:/Users/nugde/Desktop/Compiler/build",
+		"source" : "C:/Users/nugde/Desktop/Compiler"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 7
+	}
+}
