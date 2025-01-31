@@ -1,9 +1,0 @@
-# ninja log v6
-429	436	7600107131313938	clean	5e14217568c7b91c
-1	103	7600164307442745	build.ninja	5282cc37f8d30d8
-14	1659	7600145669017573	compiler/CMakeFiles/nugdev_compiler.dir/src/00_app/main.cpp.obj	8c6b69850035d98b
-381	939	7600146154304986	compiler/nugdev_compiler.exe	e1b42336291c06d3
-14	380	7600146150639590	compiler/CMakeFiles/nugdev_compiler.dir/src/00_app/repl/repl.cpp.obj	b5da88fdebc4d17d
-20	509	7600164377543728	compiler/CMakeFiles/nugdev_compiler.dir/src/00_app/repl/repl.cpp.obj	2f06d10f5e7bdd23
-17	588	7600164377503569	compiler/CMakeFiles/nugdev_compiler.dir/src/00_app/main.cpp.obj	88d1e13e13e26e5d
-588	1095	7600164383225716	compiler/nugdev_compiler.exe	5ec96508495c1195

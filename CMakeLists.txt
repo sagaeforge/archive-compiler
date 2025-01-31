@@ -9,9 +9,10 @@ set(CMAKE_CXX_EXTENSIONS ON)
 # clangd
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+# add cmake module path
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/cmake")
 
 # vcpkg
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/vcpkg.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/external/cmake/vcpkg.cmake)
 
 add_subdirectory(compiler)
