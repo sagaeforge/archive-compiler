@@ -14,5 +14,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/cmake")
 
 # vcpkg
 include(${CMAKE_CURRENT_SOURCE_DIR}/external/cmake/vcpkg.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/external/cmake/test_utils.cmake)
 
+enable_testing()
 add_subdirectory(compiler)

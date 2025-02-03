@@ -21,3 +21,9 @@
 ./setup.py
 ```
 
+# vscode에서 실행 방법
+1. target 정의
+```ctrl + shift + p
+>cmake: setlaunch/debug target
+```
+2. f5

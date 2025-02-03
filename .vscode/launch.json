@@ -8,7 +8,6 @@
       "program": "${command:cmake.launchTargetPath}",
       "args": [],
       "cwd": "${workspaceFolder}",
-      "internalConsoleOptions": "neverOpen",
       "terminal": "integrated",
       "console": "integratedTerminal",
     }
