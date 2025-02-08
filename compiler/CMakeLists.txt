@@ -9,6 +9,15 @@ add_library(
     src/00_app/lib/DontCopyable.h
     src/00_app/lib/PointerHelper.hpp
     src/00_app/lib/Singleton.h
+
+    src/01_tokenize/Tokenizer.h
+    src/01_tokenize/Tokenizer.cpp
+    src/01_tokenize/Token.h
+    src/01_tokenize/TokenFactory.h
+    src/01_tokenize/identifier/IdentifierToken.h
+    src/01_tokenize/identifier/IdentifierToken.cpp
+    src/01_tokenize/identifier/IdentifierTokenFactory.h
+    src/01_tokenize/identifier/IdentifierTokenFactory.cpp
 )
 
 add_executable(
@@ -21,6 +30,7 @@ add_executable(
     ${PROJECT_NAME}_test
 
     test/test.cpp
+    test/01_tokenize/identifier_test.cpp
 )
 
 target_include_directories(
@@ -36,13 +46,13 @@ PRIVATE
 target_include_directories(
     ${PROJECT_NAME}_test
 PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/test
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${GTEST_INCLUDE_DIRS}
 )
 
 target_link_libraries(
     ${PROJECT_NAME}_lib
-PRIVATE
+PUBLIC
     ICU::uc
     ICU::i18n
     ICU::data
@@ -51,6 +61,7 @@ PRIVATE
 target_link_libraries(
     ${PROJECT_NAME}_test
 PRIVATE
+    ${PROJECT_NAME}_lib
     GTest::gtest_main
 )
 
