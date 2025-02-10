@@ -5,17 +5,18 @@
 #include <unicode/unistr.h>
 #include <vector>
 
+#include "Token.h"
+
 namespace nugdev::compiler::tokenize {
 
 class TokenFactory;
-class Token;
 
 class Tokenizer {
   public:
     Tokenizer();
 
   public:
-    std::vector<std::shared_ptr<Token>> tokenize(std::wistream &stream);
+    std::vector<Token> tokenize(std::wistream &stream);
 
   private:
     std::vector<std::shared_ptr<TokenFactory>> factories;

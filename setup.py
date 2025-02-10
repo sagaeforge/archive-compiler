@@ -7,9 +7,11 @@ from pathlib import Path
 
 def run_command(cmd, cwd=None):
     try:
-        if platform.system().lower() == "windows":
+        # cmd가 문자열이면 shell=True 필요
+        if isinstance(cmd, str):
             subprocess.run(cmd, cwd=cwd, check=True, shell=True)
         else:
+            # cmd가 리스트면 shell=False로 실행
             subprocess.run(cmd, cwd=cwd, check=True)
     except subprocess.CalledProcessError as e:
         print(f"Error executing command: {cmd}")

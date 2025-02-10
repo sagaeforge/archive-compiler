@@ -1,13 +1,10 @@
 #include "IdentifierTokenFactory.h"
 
-#include "IdentifierToken.h"
-#include <cwctype>
-
 namespace nugdev::compiler::tokenize {
 
 bool IdentifierTokenFactory::canHandle(wchar_t ch) { return iswalpha(ch) || ch == L'_'; }
 
-std::shared_ptr<Token> IdentifierTokenFactory::createToken(std::wistream &stream) {
+Token IdentifierTokenFactory::createToken(std::wistream &stream) {
     icu::UnicodeString value;
     while (stream && !stream.eof()) {
         auto ch = stream.get();
@@ -17,7 +14,7 @@ std::shared_ptr<Token> IdentifierTokenFactory::createToken(std::wistream &stream
         value += ch;
     }
 
-    return std::make_shared<IdentifierToken>(value);
+    return Token::from(TokenType::Ident, value);
 }
 
 bool IdentifierTokenFactory::isIdentifierChar(wchar_t ch) {

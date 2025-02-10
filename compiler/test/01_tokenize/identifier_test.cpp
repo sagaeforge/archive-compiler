@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
+#include <unicode/unistr.h>
 
-#include "01_tokenize/Token.h"
 #include "01_tokenize/Tokenizer.h"
 
 TEST(IdentifierTokenFactory, canHandle) {
@@ -9,7 +9,7 @@ TEST(IdentifierTokenFactory, canHandle) {
     auto tokenizer = nugdev::compiler::tokenize::Tokenizer();
     auto token = tokenizer.tokenize(stream);
     EXPECT_EQ(token.size(), 1);
-    EXPECT_EQ(token[0]->to_str(), L"test");
+    EXPECT_EQ(token[0].to_str(), icu::UnicodeString::fromUTF8("test"));
 }
 
 TEST(IdentifierTokenFactory, canNotHandle) {
@@ -26,6 +26,6 @@ TEST(IdentifierTokenFactory, canHandleMultipleWords) {
     auto tokenizer = nugdev::compiler::tokenize::Tokenizer();
     auto token = tokenizer.tokenize(stream);
     EXPECT_EQ(token.size(), 2);
-    EXPECT_EQ(token[0]->to_str(), L"test");
-    EXPECT_EQ(token[1]->to_str(), L"test");
+    EXPECT_EQ(token[0].to_str(), icu::UnicodeString::fromUTF8("test"));
+    EXPECT_EQ(token[1].to_str(), icu::UnicodeString::fromUTF8("test"));
 }

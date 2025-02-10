@@ -3,19 +3,21 @@
 #include <unicode/unistr.h>
 
 #include "Token.h"
-#include "TokenFactory.h"
-
-#include "identifier/IdentifierTokenFactory.h"
+#include "factory/IdentifierTokenFactory.h"
 
 namespace nugdev::compiler::tokenize {
-Tokenizer::Tokenizer() { factories.push_back(std::make_shared<IdentifierTokenFactory>()); }
 
-std::vector<std::shared_ptr<Token>> Tokenizer::tokenize(std::wistream &stream) {
+Tokenizer::Tokenizer() {
+    factories.push_back(std::make_shared<IdentifierTokenFactory>());
+    // factories.push_back(std::make_shared<OperatorTokenFactory>());
+}
+
+std::vector<Token> Tokenizer::tokenize(std::wistream &stream) {
     if (!stream || stream.eof()) {
         return {};
     }
 
-    std::vector<std::shared_ptr<Token>> tokens;
+    std::vector<Token> tokens;
     while (stream && !stream.eof()) {
         auto ch = stream.peek();
         if (::iswspace(ch)) {
@@ -32,8 +34,12 @@ std::vector<std::shared_ptr<Token>> Tokenizer::tokenize(std::wistream &stream) {
             if (factory->canHandle(ch)) {
                 auto token = factory->createToken(stream);
                 tokens.push_back(token);
+                continue;
             }
         }
+
+        // 원래는 이상한 케이스라, 예외가 나야하지만, 현재는 개발 상황이고, 이상한 케이스들이 많이 나올 예정이라.
+        stream.ignore();
     }
 
     return tokens;
