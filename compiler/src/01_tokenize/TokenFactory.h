@@ -1,6 +1,7 @@
 #pragma once
 
 #include <istream>
+#include <unicode/unistr.h>
 
 #include "Token.h"
 

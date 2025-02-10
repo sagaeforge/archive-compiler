@@ -19,6 +19,12 @@ add_library(
     src/01_tokenize/factory/IdentifierTokenFactory.cpp
     src/01_tokenize/factory/OperatorTokenFactory.h
     src/01_tokenize/factory/OperatorTokenFactory.cpp
+    src/01_tokenize/factory/KeywordTokenFactory.h
+    src/01_tokenize/factory/KeywordTokenFactory.cpp
+    src/01_tokenize/factory/NumberTokenFactory.h
+    src/01_tokenize/factory/NumberTokenFactory.cpp
+    src/01_tokenize/factory/StringTokenFactory.h
+    src/01_tokenize/factory/StringTokenFactory.cpp
 )
 
 add_executable(
@@ -33,6 +39,9 @@ add_executable(
     test/test.cpp
     test/01_tokenize/identifier_test.cpp
     test/01_tokenize/operator_test.cpp
+    test/01_tokenize/keyword_test.cpp
+    test/01_tokenize/string_test.cpp
+    test/01_tokenize/number_test.cpp
 )
 
 target_include_directories(

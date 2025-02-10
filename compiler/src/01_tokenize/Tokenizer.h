@@ -14,6 +14,7 @@ class TokenFactory;
 class Tokenizer {
   public:
     Tokenizer();
+    Tokenizer(std::vector<std::shared_ptr<TokenFactory>> factories);
 
   public:
     std::vector<Token> tokenize(std::wistream &stream);

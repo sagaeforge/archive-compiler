@@ -23,6 +23,10 @@ OperatorTokenFactory::OperatorTokenFactory() {
 
 bool OperatorTokenFactory::canHandle(wchar_t ch) { return operatorMap.find(ch) != operatorMap.end(); }
 
-Token OperatorTokenFactory::createToken(std::wistream &stream) { return Token::from(operatorMap[stream.get()], stream.get()); }
+Token OperatorTokenFactory::createToken(std::wistream &stream) {
+    auto ch = stream.get();
+    stream.get();
+    return Token::from(operatorMap[ch], ch);
+}
 
 } // namespace nugdev::compiler::tokenize
