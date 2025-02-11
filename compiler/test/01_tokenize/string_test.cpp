@@ -5,24 +5,24 @@
 #include "01_tokenize/factory/StringTokenFactory.h"
 
 TEST(StringTokenFactory, canHandle) {
-    std::wstring data = L"\"test\"";
-    auto stream = std::wistringstream(data);
+    icu::UnicodeString data = icu::UnicodeString::fromUTF8("\"test\"");
     auto tokenizer = nugdev::compiler::tokenize::Tokenizer({std::make_shared<nugdev::compiler::tokenize::StringTokenFactory>()});
-    auto token = tokenizer.tokenize(stream);
+    auto token = tokenizer.tokenize(data);
     EXPECT_EQ(token.size(), 1);
     EXPECT_EQ(token[0].to_str(), icu::UnicodeString::fromUTF8("test"));
 }
 
 TEST(StringTokenFactory, canNotHandle) {
-    std::wstring data = L"test";
-    auto stream = std::wistringstream(data);
+    icu::UnicodeString data = icu::UnicodeString::fromUTF8("test");
     auto tokenizer = nugdev::compiler::tokenize::Tokenizer({std::make_shared<nugdev::compiler::tokenize::StringTokenFactory>()});
-    auto token = tokenizer.tokenize(stream);
-    EXPECT_EQ(token.size(), 0);
+    EXPECT_THROW(tokenizer.tokenize(data), std::runtime_error);
 }
 
 TEST(StringTokenFactory, canHandleMultipleQuotes) {
-    std::wstring data = L"\"test\"\"test\"";
-    auto stream = std::wistringstream(data);
+    icu::UnicodeString data = icu::UnicodeString::fromUTF8("\"test\"\"test\"");
     auto tokenizer = nugdev::compiler::tokenize::Tokenizer({std::make_shared<nugdev::compiler::tokenize::StringTokenFactory>()});
+    auto token = tokenizer.tokenize(data);
+    EXPECT_EQ(token.size(), 2);
+    EXPECT_EQ(token[0].to_str(), icu::UnicodeString::fromUTF8("test"));
+    EXPECT_EQ(token[1].to_str(), icu::UnicodeString::fromUTF8("test"));
 }

@@ -1,8 +1,9 @@
 #include "Tokenizer.h"
 
-#include <cstdio>
+#include <ranges>
 #include <unicode/unistr.h>
 
+#include "00_app/stream/Stream.hpp"
 #include "factory/IdentifierTokenFactory.h"
 #include "factory/KeywordTokenFactory.h"
 #include "factory/NumberTokenFactory.h"
@@ -21,50 +22,51 @@ Tokenizer::Tokenizer() {
 
 Tokenizer::Tokenizer(std::vector<std::shared_ptr<TokenFactory>> factories) { this->factories = factories; }
 
-std::vector<Token> Tokenizer::tokenize(std::wistream &stream) {
-    if (!stream || stream.eof()) {
-        return {};
-    }
+std::vector<Token> Tokenizer::tokenize(const icu::UnicodeString &str) {
+    stream::Stream stream(str);
 
     std::vector<Token> tokens;
-    while (stream && !stream.eof() && stream.peek() != EOF) {
-        auto ch = stream.peek();
-        if (::iswspace(ch)) {
-            stream.ignore();
+    do {
+        const auto &checkpoint = stream.checkpoint();
+        if (!stream.is_vaild(checkpoint)) {
+            break;
+        }
+
+        // 화이트 스페이스도 씹어야 함.
+        if (::iswspace(*checkpoint)) {
+            stream.advance();
             continue;
         }
 
-        // comment 처리
-        if (ch == L'#') {
-            stream.ignore(std::numeric_limits<std::streamsize>::max(), L'\n');
+        // 주석의 경우 씹어주는 과정이 필요함.
+        if (*checkpoint == u'#') {
+            auto it = stream.find_first_of({u'\n'});
+            stream.commit(it);
             continue;
         }
 
-        auto pos = stream.tellg();
-        bool continueSignal = false;
-        for (auto &factory : factories) {
-            if (factory->canHandle(ch)) {
-                try {
-                    auto token = factory->createToken(stream);
-                    tokens.push_back(token);
-                    stream.seekg(-1, std::ios::cur);
-                    continueSignal = true;
-                    break;
-                } catch (const std::exception &e) {
-                    // 예외가 나면, 현재 포지션으로 돌아가기.
-                    stream.seekg(pos);
-                    continue;
-                }
+        auto matchingFactories = factories | std::views::filter([checkpoint](const auto &factory) { return factory->canHandle(checkpoint); });
+        if (std::ranges::empty(matchingFactories)) {
+            throw std::runtime_error("token factory is not defined");
+        }
+
+        auto tokenProcessed = false;
+        for (auto &factory : matchingFactories) {
+            try {
+                auto [token, next] = factory->createToken(checkpoint);
+                tokens.push_back(token);
+                stream.commit(next);
+                tokenProcessed = true;
+                break;
+            } catch (const std::exception &e) {
+                continue;
             }
         }
 
-        if (continueSignal) {
-            continue;
+        if (!tokenProcessed) {
+            throw std::runtime_error("infinite loop detected - parser not advancing");
         }
-
-        // 원래는 이상한 케이스라, 예외가 나야하지만, 현재는 개발 상황이고, 이상한 케이스들이 많이 나올 예정이라.
-        stream.ignore();
-    }
+    } while (true);
 
     return tokens;
 }

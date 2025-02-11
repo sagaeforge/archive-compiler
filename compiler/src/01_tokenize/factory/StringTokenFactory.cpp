@@ -2,21 +2,26 @@
 
 namespace nugdev::compiler::tokenize {
 
-bool StringTokenFactory::canHandle(wchar_t ch) { return ch == L'"' || ch == L'\''; }
+bool StringTokenFactory::canHandle(const stream::StringStreamIterator &it) {
+    auto ch = *it;
+    return ch == L'"' || ch == L'\'';
+}
 
-Token StringTokenFactory::createToken(std::wistream &stream) {
+std::tuple<Token, stream::StringStreamIterator> StringTokenFactory::createToken(const stream::StringStreamIterator &it) {
     icu::UnicodeString value;
-    auto quote = stream.get();
-    while (stream && !stream.eof()) {
-        auto ch = stream.get();
+    auto quote = *it;
+    auto itr = it + 1;
+    while (itr.vaild()) {
+        auto ch = *itr;
         if (ch == quote) {
-            stream.get();
+            itr++;
             break;
         }
+        itr++;
         value += ch;
     }
 
-    return Token::from(TokenType::String, value);
+    return std::make_tuple(Token::from(TokenType::String, value), itr);
 }
 
 } // namespace nugdev::compiler::tokenize

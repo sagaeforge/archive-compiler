@@ -1,6 +1,5 @@
 #pragma once
 
-#include <istream>
 #include <memory>
 #include <unicode/unistr.h>
 #include <vector>
@@ -17,7 +16,7 @@ class Tokenizer {
     Tokenizer(std::vector<std::shared_ptr<TokenFactory>> factories);
 
   public:
-    std::vector<Token> tokenize(std::wistream &stream);
+    std::vector<Token> tokenize(const icu::UnicodeString &str);
 
   private:
     std::vector<std::shared_ptr<TokenFactory>> factories;

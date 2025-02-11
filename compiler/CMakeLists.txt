@@ -9,6 +9,7 @@ add_library(
     src/00_app/lib/DontCopyable.h
     src/00_app/lib/PointerHelper.hpp
     src/00_app/lib/Singleton.h
+    src/00_app/stream/Stream.hpp
 
     src/01_tokenize/Tokenizer.h
     src/01_tokenize/Tokenizer.cpp

@@ -12,16 +12,16 @@ KeywordTokenFactory::KeywordTokenFactory() {
     keywordMap.insert({icu::UnicodeString::fromUTF8("return"), TokenType::Return});
 }
 
-bool KeywordTokenFactory::canHandle(wchar_t ch) { return ::iswalpha(ch); }
+bool KeywordTokenFactory::canHandle(const stream::StringStreamIterator &it) {
+    auto ch = *it;
+    return ::iswalpha(ch);
+}
 
-Token KeywordTokenFactory::createToken(std::wistream &stream) {
+std::tuple<Token, stream::StringStreamIterator> KeywordTokenFactory::createToken(const stream::StringStreamIterator &it) {
     icu::UnicodeString value;
-    while (stream && !stream.eof()) {
-        auto ch = stream.get();
-        if (!::iswalnum(ch)) {
-            break;
-        }
-        value += ch;
+    auto itr = it;
+    for (; canHandle(itr); itr++) {
+        value += *itr;
     }
 
     auto keyword = keywordMap.find(value);
@@ -29,7 +29,7 @@ Token KeywordTokenFactory::createToken(std::wistream &stream) {
         throw std::runtime_error("Invalid keyword");
     }
 
-    return Token::from(keyword->second, value);
+    return std::make_tuple(Token::from(keyword->second, value), itr);
 }
 
 } // namespace nugdev::compiler::tokenize

@@ -2,19 +2,19 @@
 
 namespace nugdev::compiler::tokenize {
 
-bool NumberTokenFactory::canHandle(wchar_t ch) { return ::iswdigit(ch); }
+bool NumberTokenFactory::canHandle(const stream::StringStreamIterator &it) {
+    auto ch = *it;
+    return ::iswdigit(ch);
+}
 
-Token NumberTokenFactory::createToken(std::wistream &stream) {
+std::tuple<Token, stream::StringStreamIterator> NumberTokenFactory::createToken(const stream::StringStreamIterator &it) {
     icu::UnicodeString value;
-    while (stream && !stream.eof()) {
-        auto ch = stream.get();
-        if (!::iswdigit(ch)) {
-            break;
-        }
-        value += ch;
+    auto itr = it;
+    for (; canHandle(itr); itr++) {
+        value += *itr;
     }
 
-    return Token::from(TokenType::Digit, value);
+    return std::make_tuple(Token::from(TokenType::Digit, value), itr);
 }
 
 } // namespace nugdev::compiler::tokenize

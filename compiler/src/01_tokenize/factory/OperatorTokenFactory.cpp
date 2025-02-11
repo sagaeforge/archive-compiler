@@ -21,12 +21,14 @@ OperatorTokenFactory::OperatorTokenFactory() {
     operatorMap[L':'] = TokenType::Colon;
 }
 
-bool OperatorTokenFactory::canHandle(wchar_t ch) { return operatorMap.find(ch) != operatorMap.end(); }
+bool OperatorTokenFactory::canHandle(const stream::StringStreamIterator &it) {
+    auto ch = *it;
+    return operatorMap.find(ch) != operatorMap.end();
+}
 
-Token OperatorTokenFactory::createToken(std::wistream &stream) {
-    auto ch = stream.get();
-    stream.get();
-    return Token::from(operatorMap[ch], ch);
+std::tuple<Token, stream::StringStreamIterator> OperatorTokenFactory::createToken(const stream::StringStreamIterator &it) {
+    auto ch = *it;
+    return std::make_tuple(Token::from(operatorMap[ch], ch), it + 1);
 }
 
 } // namespace nugdev::compiler::tokenize
