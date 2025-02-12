@@ -14,30 +14,32 @@ enum class TokenType {
     String, // "foobar"
 
     // Operators
-    Assign,
-    Plus,
-    Minus,
-    Bang,
-    Asterisk,
-    Slash,
+    Assign = '=',
+    Plus = '+',
+    Minus = '-',
+    Bang = '!',
+    Asterisk = '*',
+    Slash = '/',
 
-    LessThan,
-    GreaterThan,
-
-    Eq,
-    NotEq,
+    LessThan = '<',
+    GreaterThan = '>',
 
     // Delimiters
-    Comma,
-    SemiColon,
-    Colon,
+    Comma = ',',
+    SemiColon = ';',
+    Colon = ':',
 
-    LParen,
-    RParen,
-    LBrace,
-    RBrace,
-    LBracket,
-    RBracket,
+    LParen = '(',
+    RParen = ')',
+    LBrace = '{',
+    RBrace = '}',
+    LBracket = '[',
+    RBracket = ']',
+
+    Eq = 129,
+    NotEq,
+    Inc,
+    Dec,
 
     // Keywords
     Function,
@@ -45,8 +47,13 @@ enum class TokenType {
     True,
     False,
     If,
+    Elif,
     Else,
     Return,
+    For,
+    Break,
+    Continue,
+
 };
 
 class Token {

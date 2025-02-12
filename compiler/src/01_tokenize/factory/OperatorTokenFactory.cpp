@@ -28,6 +28,35 @@ bool OperatorTokenFactory::canHandle(const stream::StringStreamIterator &it) {
 
 std::tuple<Token, stream::StringStreamIterator> OperatorTokenFactory::createToken(const stream::StringStreamIterator &it) {
     auto ch = *it;
+
+    if (ch == L'=') {
+        auto nextCh = *(it + 1);
+        if (nextCh == L'=') {
+            return std::make_tuple(Token::from(TokenType::Eq, icu::UnicodeString::fromUTF8("==")), it + 2);
+        }
+    }
+
+    if (ch == L'!') {
+        auto nextCh = *(it + 1);
+        if (nextCh == L'=') {
+            return std::make_tuple(Token::from(TokenType::NotEq, icu::UnicodeString::fromUTF8("!=")), it + 2);
+        }
+    }
+
+    if (ch == L'+') {
+        auto nextCh = *(it + 1);
+        if (nextCh == L'+') {
+            return std::make_tuple(Token::from(TokenType::Inc, icu::UnicodeString::fromUTF8("++")), it + 2);
+        }
+    }
+
+    if (ch == L'-') {
+        auto nextCh = *(it + 1);
+        if (nextCh == L'-') {
+            return std::make_tuple(Token::from(TokenType::Dec, icu::UnicodeString::fromUTF8("--")), it + 2);
+        }
+    }
+
     return std::make_tuple(Token::from(operatorMap[ch], ch), it + 1);
 }
 
