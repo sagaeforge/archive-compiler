@@ -68,6 +68,7 @@ PUBLIC
     ICU::uc
     ICU::i18n
     ICU::data
+    rapidjson
 )
 
 target_link_libraries(

@@ -12,3 +12,4 @@ elseif(UNIX)
 endif()
 
 find_package(ICU REQUIRED COMPONENTS uc i18n data)
+find_package(RapidJSON CONFIG REQUIRED)

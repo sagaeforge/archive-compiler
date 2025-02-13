@@ -39,7 +39,7 @@ def install_packages(vcpkg_root, platform_name, packages):
     
     triplet = {
         "windows": "x64-windows",
-        "darwin": "x64-osx",
+        "darwin": "arm64-osx",
         "linux": "x64-linux"
     }[platform_name]
     
