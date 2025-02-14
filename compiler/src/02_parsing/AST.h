@@ -4,7 +4,7 @@
 
 #include <unicode/unistr.h>
 
-namespace nugdev::compiler::parsing {
+namespace nugdev::compiler::ast {
 
 class ASTNode : public lib::PointerHelper<ASTNode> {
   public:
@@ -18,4 +18,4 @@ class Expression : public ASTNode {};
 class Statement : public ASTNode {};
 class Module : public ASTNode {};
 
-} // namespace nugdev::compiler::parsing
+} // namespace nugdev::compiler::ast
