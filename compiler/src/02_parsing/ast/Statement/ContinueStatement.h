@@ -1,7 +1,7 @@
 #pragma once
 
+#include "02_parsing/AST.h"
 #include "02_parsing/ASTAspect.h"
-#include "02_parsing/ast.h"
 
 namespace nugdev::compiler::ast::statement {
 
