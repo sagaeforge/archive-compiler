@@ -1,9 +1,7 @@
 #pragma once
 
-#include <unicode/unistr.h>
-
-#include "02_parsing/AST.h"
-#include "02_parsing/ASTAspect.h"
+#include "02_parsing/ast/AST.h"
+#include "02_parsing/ast/ASTNodeAspect.h"
 
 namespace nugdev::compiler::ast::expression {
 

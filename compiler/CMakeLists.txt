@@ -27,8 +27,10 @@ add_library(
     src/01_tokenize/factory/StringTokenFactory.h
     src/01_tokenize/factory/StringTokenFactory.cpp
 
-    src/02_parsing/AST.h
-    src/02_parsing/ASTAspect.h
+    src/02_parsing/ast/AST.h
+    src/02_parsing/ast/AST.cpp
+    src/02_parsing/ast/ASTNodeAspect.h
+    src/02_parsing/ast/ASTNodeVisitor.h
     
 )
 
