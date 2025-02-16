@@ -4,6 +4,6 @@
 
 namespace nugdev::compiler::ast {
 
-void ASTNode::accept(std::shared_ptr<ASTNodeVisitor> &visitor) { visitor->visit(self()); }
+std::shared_ptr<ASTNode> ASTNode::accept(std::shared_ptr<ASTNodeVisitor> &visitor) { return visitor->visit(self()); }
 
 } // namespace nugdev::compiler::ast

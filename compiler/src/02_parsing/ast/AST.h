@@ -16,7 +16,7 @@ class ASTNode : public lib::PointerHelper<ASTNode> {
     virtual ~ASTNode() = default;
 
   public:
-    virtual void accept(std::shared_ptr<ASTNodeVisitor> &visitor);
+    virtual std::shared_ptr<ASTNode> accept(std::shared_ptr<ASTNodeVisitor> &visitor) = 0;
 
   public:
     virtual icu::UnicodeString to_str() const = 0;
