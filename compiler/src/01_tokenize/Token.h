@@ -10,7 +10,7 @@ enum class TokenType {
 
     // Identifiers + literals
     Ident,  // add, foobar, x, y, ...
-    Digit,  // 1343456
+    Number, // 1343456
     String, // "foobar"
 
     // Operators
