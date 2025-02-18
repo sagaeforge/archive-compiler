@@ -1,5 +1,6 @@
 #pragma once
 
+#include <exception>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -8,7 +9,9 @@
 #include "01_tokenize/Token.h"
 #include "02_parsing/ast/AST.h"
 
-namespace nugdev::compiler::parsing {
+namespace nugdev::compiler {
+
+namespace parsing {
 
 enum class Precedence {
     Lowest = 1,
@@ -36,23 +39,26 @@ class Parser {
     Parser(const TokenStream &tokens);
 
   public:
+    tokenize::Token get_cur_token() const;
+    tokenize::Token get_peek_token() const;
     void nextToken();
     bool curTokenIs(tokenize::TokenType type);
     bool peekTokenIs(tokenize::TokenType type);
     bool expectPeek(tokenize::TokenType type);
-    std::vector<std::wstring> getErrors() const;
-    void peekErrors(tokenize::TokenType type);
+    std::vector<std::exception_ptr> getErrors() const;
     void noPrefixParseFnError(tokenize::TokenType type);
-    int peekPrecedence();
-    int curPrecedence();
+    Precedence peekPrecedence();
+    Precedence curPrecedence();
 
   public: // parse
-    std::shared_ptr<ast::Module> parseModule();
+    std::shared_ptr<ast::Module> parseProgram();
     std::shared_ptr<ast::Statement> parseStatement();
     std::shared_ptr<ast::Statement> parseLetStatement();
     std::shared_ptr<ast::Statement> parseReturnStatement();
+    std::shared_ptr<ast::Statement> parseBreakStatement();
+    std::shared_ptr<ast::Statement> parseContinueStatement();
     std::shared_ptr<ast::Statement> parseExpressionStatement();
-    std::shared_ptr<ast::Expression> parseExpression(int precedence);
+    std::shared_ptr<ast::Expression> parseExpression(const Precedence precedence);
     std::shared_ptr<ast::Expression> parseIdentifier();
     std::shared_ptr<ast::Expression> parseNumberLiteral();
     std::shared_ptr<ast::Expression> parsePrefixExpression();
@@ -68,12 +74,13 @@ class Parser {
     std::shared_ptr<ast::Expression> parseArrayLiteral();
     std::optional<std::vector<std::shared_ptr<ast::Expression>>> parseExpressionList(tokenize::TokenType end);
     std::shared_ptr<ast::Expression> parseIndexExpression(std::shared_ptr<ast::Expression> left);
-    std::shared_ptr<ast::Expression> parseHashLiteral();
 
   private:
     TokenStream stream;
     std::unordered_map<tokenize::TokenType, prefixParseFn> prefixParseFns;
     std::unordered_map<tokenize::TokenType, infixParseFn> infixParseFns;
+    std::vector<std::exception_ptr> errors;
 };
 
-} // namespace nugdev::compiler::parsing
+} // namespace parsing
+} // namespace nugdev::compiler

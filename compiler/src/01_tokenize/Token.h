@@ -67,6 +67,10 @@ class Token {
   private:
     Token(TokenType type, icu::UnicodeString literal);
 
+  public:
+    TokenType get_type() const;
+    icu::UnicodeString get_literal() const;
+
   private:
     TokenType type;
     icu::UnicodeString literal;

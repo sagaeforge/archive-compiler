@@ -65,6 +65,8 @@ template <typename T = char16_t> class Stream {
         const_iterator prev() const { return const_iterator(stream, index - 1); }
         bool vaild() const { return index < stream.str.length(); }
 
+        Stream<R>::elem_t value_or(Stream<R>::elem_t &&default_value) const { return vaild() ? *this : default_value; }
+
       private:
         const Stream<R> &stream;
         size_t index;

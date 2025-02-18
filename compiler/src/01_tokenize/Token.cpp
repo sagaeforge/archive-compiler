@@ -22,4 +22,8 @@ icu::UnicodeString Token::to_str() {
     return icu::UnicodeString::fromUTF8(ss.str());
 }
 
+TokenType Token::get_type() const { return this->type; }
+
+icu::UnicodeString Token::get_literal() const { return this->literal; }
+
 } // namespace nugdev::compiler::tokenize
