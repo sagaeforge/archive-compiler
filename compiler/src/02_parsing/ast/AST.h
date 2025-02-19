@@ -1,13 +1,16 @@
 #pragma once
 
 #include "00_app/lib/PointerHelper.hpp"
+#include "01_tokenize/Token.h"
 
 #include <memory>
 #include <vector>
 
 #include <unicode/unistr.h>
 
-namespace nugdev::compiler::ast {
+namespace nugdev::compiler {
+
+namespace ast {
 
 class ASTNodeVisitor;
 
@@ -20,10 +23,13 @@ class ASTNode : public lib::PointerHelper<ASTNode> {
 
   public:
     virtual icu::UnicodeString to_str() const = 0;
+    virtual tokenize::Token &get_token() const = 0;
 };
 
 class Expression : public ASTNode {};
 class Statement : public ASTNode {};
 class Module : public ASTNode {};
 
-} // namespace nugdev::compiler::ast
+} // namespace ast
+
+} // namespace nugdev::compiler

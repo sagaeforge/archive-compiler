@@ -14,7 +14,7 @@ std::tuple<Token, stream::StringStreamIterator> NumberTokenFactory::createToken(
         value += *itr;
     }
 
-    return std::make_tuple(Token::from(TokenType::Digit, value), itr);
+    return std::make_tuple(Token::from(TokenType::Number, value), itr);
 }
 
 } // namespace nugdev::compiler::tokenize

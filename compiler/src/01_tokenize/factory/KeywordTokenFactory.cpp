@@ -1,5 +1,7 @@
 #include "KeywordTokenFactory.h"
 
+#include "00_app/exception/TokenizeException.hpp"
+
 namespace nugdev::compiler::tokenize {
 
 KeywordTokenFactory::KeywordTokenFactory() {
@@ -14,6 +16,9 @@ KeywordTokenFactory::KeywordTokenFactory() {
     keywordMap.insert({icu::UnicodeString::fromUTF8("for"), TokenType::For});
     keywordMap.insert({icu::UnicodeString::fromUTF8("break"), TokenType::Break});
     keywordMap.insert({icu::UnicodeString::fromUTF8("continue"), TokenType::Continue});
+    keywordMap.insert({icu::UnicodeString::fromUTF8("struct"), TokenType::Struct});
+    keywordMap.insert({icu::UnicodeString::fromUTF8("when"), TokenType::When});
+    keywordMap.insert({icu::UnicodeString::fromUTF8("override"), TokenType::Override});
 }
 
 bool KeywordTokenFactory::canHandle(const stream::StringStreamIterator &it) {
@@ -30,7 +35,7 @@ std::tuple<Token, stream::StringStreamIterator> KeywordTokenFactory::createToken
 
     auto keyword = keywordMap.find(value);
     if (keyword == keywordMap.end()) {
-        throw std::runtime_error("Invalid keyword");
+        throw exception::InvalidKeywordException(value);
     }
 
     return std::make_tuple(Token::from(keyword->second, value), itr);
