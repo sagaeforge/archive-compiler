@@ -1,0 +1,16 @@
+if a > b { 123 }
+if a > b { 123 } else { 456 }
+if a > b { 123 } elif a < b { 456 } else { 789 }
+if a > b { 123 } elif a < b { 456 } elif a == c { 789 } else { 1000 }
+if a > b { 123 } elif a < b { 456 } elif a == c { 789 }
+when {
+    a > b ->  123 
+    a < b -> 456
+    a == c -> 789
+    else -> 1000
+}
+when (a) {
+    123 -> 456
+    789 -> 1000
+    else -> 1234
+}
