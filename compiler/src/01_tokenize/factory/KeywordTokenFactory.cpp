@@ -21,15 +21,15 @@ KeywordTokenFactory::KeywordTokenFactory() {
     keywordMap.insert({icu::UnicodeString::fromUTF8("override"), TokenType::Override});
 }
 
-bool KeywordTokenFactory::canHandle(const stream::StringStreamIterator &it) {
+bool KeywordTokenFactory::can_handle(const stream::StringStreamIterator &it) {
     auto ch = *it;
     return ::iswalpha(ch);
 }
 
-std::tuple<Token, stream::StringStreamIterator> KeywordTokenFactory::createToken(const stream::StringStreamIterator &it) {
+std::tuple<Token, stream::StringStreamIterator> KeywordTokenFactory::create_token(const stream::StringStreamIterator &it) {
     icu::UnicodeString value;
     auto itr = it;
-    for (; canHandle(itr); itr++) {
+    for (; can_handle(itr); itr++) {
         value += *itr;
     }
 

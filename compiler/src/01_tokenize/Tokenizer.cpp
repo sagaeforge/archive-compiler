@@ -45,15 +45,17 @@ std::vector<Token> Tokenizer::tokenize(const icu::UnicodeString &str) {
             continue;
         }
 
-        auto matchingFactories = factories | std::views::filter([checkpoint](const auto &factory) { return factory->canHandle(checkpoint); });
+        auto matchingFactories = factories | std::views::filter([checkpoint](const auto &factory) { return factory->can_handle(checkpoint); });
         if (std::ranges::empty(matchingFactories)) {
-            throw std::runtime_error("token factory is not defined");
+            std::string stdStr;
+            str.toUTF8String(stdStr);
+            throw std::runtime_error("token factory is not defined: " + stdStr);
         }
 
         auto tokenProcessed = false;
         for (auto &factory : matchingFactories) {
             try {
-                auto [token, next] = factory->createToken(checkpoint);
+                auto [token, next] = factory->create_token(checkpoint);
                 tokens.push_back(token);
                 stream.commit(next);
                 tokenProcessed = true;

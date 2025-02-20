@@ -8,7 +8,7 @@ TEST(OperatorTokenFactory, canHandle) {
     auto tokenizer = nugdev::compiler::tokenize::Tokenizer({std::make_shared<nugdev::compiler::tokenize::OperatorTokenFactory>()});
     auto token = tokenizer.tokenize(data);
     EXPECT_EQ(token.size(), 1);
-    EXPECT_EQ(token[0].to_str(), icu::UnicodeString::fromUTF8("+"));
+    EXPECT_EQ(token[0].get_literal(), icu::UnicodeString::fromUTF8("+"));
 }
 
 TEST(OperatorTokenFactory, canNotHandle) {
@@ -18,10 +18,10 @@ TEST(OperatorTokenFactory, canNotHandle) {
 }
 
 TEST(OperatorTokenFactory, canHandleMultipleOperators) {
-    icu::UnicodeString data = icu::UnicodeString::fromUTF8("++");
+    icu::UnicodeString data = icu::UnicodeString::fromUTF8("+ +");
     auto tokenizer = nugdev::compiler::tokenize::Tokenizer({std::make_shared<nugdev::compiler::tokenize::OperatorTokenFactory>()});
     auto token = tokenizer.tokenize(data);
     EXPECT_EQ(token.size(), 2);
-    EXPECT_EQ(token[0].to_str(), icu::UnicodeString::fromUTF8("+"));
-    EXPECT_EQ(token[1].to_str(), icu::UnicodeString::fromUTF8("+"));
+    EXPECT_EQ(token[0].get_literal(), icu::UnicodeString::fromUTF8("+"));
+    EXPECT_EQ(token[1].get_literal(), icu::UnicodeString::fromUTF8("+"));
 }

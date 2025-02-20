@@ -44,13 +44,17 @@ add_executable(
     ${PROJECT_NAME}_test
 
     test/test.cpp
+    
     test/01_tokenize/token_test_case.h
     test/01_tokenize/token_test_case.cpp
+
     test/01_tokenize/factory_test/identifier_test.cpp
     test/01_tokenize/factory_test/operator_test.cpp
     test/01_tokenize/factory_test/keyword_test.cpp
     test/01_tokenize/factory_test/string_test.cpp
     test/01_tokenize/factory_test/number_test.cpp
+
+    test/01_tokenize/01_init_token/tokenizer_test.cpp
 )
 
 target_include_directories(

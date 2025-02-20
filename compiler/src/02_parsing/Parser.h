@@ -25,7 +25,7 @@ enum class Precedence {
     Unknown,
 };
 
-Precedence getPrecedence(tokenize::TokenType type);
+Precedence get_precedence(tokenize::TokenType type);
 using prefixParseFn = std::function<std::shared_ptr<ast::Expression>()>;
 using infixParseFn = std::function<std::shared_ptr<ast::Expression>(std::shared_ptr<ast::Expression>)>;
 
@@ -41,39 +41,39 @@ class Parser {
   public:
     tokenize::Token get_cur_token() const;
     tokenize::Token get_peek_token() const;
-    void nextToken();
-    bool curTokenIs(tokenize::TokenType type);
-    bool peekTokenIs(tokenize::TokenType type);
-    bool expectPeek(tokenize::TokenType type);
-    std::vector<std::exception_ptr> getErrors() const;
-    void noPrefixParseFnError(tokenize::TokenType type);
-    Precedence peekPrecedence();
-    Precedence curPrecedence();
+    void next_token();
+    bool cur_token_is(tokenize::TokenType type);
+    bool peek_token_is(tokenize::TokenType type);
+    bool expect_peek(tokenize::TokenType type);
+    std::vector<std::exception_ptr> get_errors() const;
+    void no_prefix_parse_fn_error(tokenize::TokenType type);
+    Precedence peek_precedence();
+    Precedence cur_precedence();
 
   public: // parse
-    std::shared_ptr<ast::Module> parseProgram();
-    std::shared_ptr<ast::Statement> parseStatement();
-    std::shared_ptr<ast::Statement> parseLetStatement();
-    std::shared_ptr<ast::Statement> parseReturnStatement();
-    std::shared_ptr<ast::Statement> parseBreakStatement();
-    std::shared_ptr<ast::Statement> parseContinueStatement();
-    std::shared_ptr<ast::Statement> parseExpressionStatement();
-    std::shared_ptr<ast::Expression> parseExpression(const Precedence precedence);
-    std::shared_ptr<ast::Expression> parseIdentifier();
-    std::shared_ptr<ast::Expression> parseNumberLiteral();
-    std::shared_ptr<ast::Expression> parsePrefixExpression();
-    std::shared_ptr<ast::Expression> parseInfixExpression(std::shared_ptr<ast::Expression> left);
-    std::shared_ptr<ast::Expression> parseBoolean();
-    std::shared_ptr<ast::Expression> parseGroupedExpression();
-    std::shared_ptr<ast::Expression> parseIfExpression();
-    std::shared_ptr<ast::Statement> parseBlockStatement();
-    std::shared_ptr<ast::Expression> parseFunctionLiteral();
-    std::optional<std::vector<std::shared_ptr<ast::Expression>>> parseFunctionParameters();
-    std::shared_ptr<ast::Expression> parseCallExpression(std::shared_ptr<ast::Expression> function);
-    std::shared_ptr<ast::Expression> parseStringLiteral();
-    std::shared_ptr<ast::Expression> parseArrayLiteral();
-    std::optional<std::vector<std::shared_ptr<ast::Expression>>> parseExpressionList(tokenize::TokenType end);
-    std::shared_ptr<ast::Expression> parseIndexExpression(std::shared_ptr<ast::Expression> left);
+    std::shared_ptr<ast::Module> parse_program();
+    std::shared_ptr<ast::Statement> parse_statement();
+    std::shared_ptr<ast::Statement> parse_let_statement();
+    std::shared_ptr<ast::Statement> parse_return_statement();
+    std::shared_ptr<ast::Statement> parse_break_statement();
+    std::shared_ptr<ast::Statement> parse_continue_statement();
+    std::shared_ptr<ast::Statement> parse_expression_statement();
+    std::shared_ptr<ast::Expression> parse_expression(const Precedence precedence);
+    std::shared_ptr<ast::Expression> parse_identifier();
+    std::shared_ptr<ast::Expression> parse_number_literal();
+    std::shared_ptr<ast::Expression> parse_prefix_expression();
+    std::shared_ptr<ast::Expression> parse_infix_expression(std::shared_ptr<ast::Expression> left);
+    std::shared_ptr<ast::Expression> parse_boolean();
+    std::shared_ptr<ast::Expression> parse_grouped_expression();
+    std::shared_ptr<ast::Expression> parse_if_expression();
+    std::shared_ptr<ast::Statement> parse_block_statement();
+    std::shared_ptr<ast::Expression> parse_function_literal();
+    std::optional<std::vector<std::shared_ptr<ast::Expression>>> parse_function_parameters();
+    std::shared_ptr<ast::Expression> parse_call_expression(std::shared_ptr<ast::Expression> function);
+    std::shared_ptr<ast::Expression> parse_string_literal();
+    std::shared_ptr<ast::Expression> parse_array_literal();
+    std::optional<std::vector<std::shared_ptr<ast::Expression>>> parse_expression_list(tokenize::TokenType end);
+    std::shared_ptr<ast::Expression> parse_index_expression(std::shared_ptr<ast::Expression> left);
 
   private:
     TokenStream stream;

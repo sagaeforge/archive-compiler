@@ -2,12 +2,12 @@
 
 namespace nugdev::compiler::tokenize {
 
-bool IdentifierTokenFactory::canHandle(const stream::StringStreamIterator &it) {
+bool IdentifierTokenFactory::can_handle(const stream::StringStreamIterator &it) {
     auto ch = *it;
     return iswalpha(ch) || ch == L'_';
 }
 
-std::tuple<Token, stream::StringStreamIterator> IdentifierTokenFactory::createToken(const stream::StringStreamIterator &it) {
+std::tuple<Token, stream::StringStreamIterator> IdentifierTokenFactory::create_token(const stream::StringStreamIterator &it) {
     icu::UnicodeString value;
 
     auto itr = it;

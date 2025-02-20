@@ -86,7 +86,7 @@ class Token {
     icu::UnicodeString to_str();
 
   public:
-    static Token Empty();
+    static Token empty();
     static Token from(TokenType type, icu::UnicodeString literal);
 
   private:
@@ -102,3 +102,7 @@ class Token {
 };
 
 } // namespace nugdev::compiler::tokenize
+
+namespace std {
+std::string to_string(const nugdev::compiler::tokenize::TokenType &type);
+} // namespace std

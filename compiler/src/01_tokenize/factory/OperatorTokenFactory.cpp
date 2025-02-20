@@ -29,14 +29,16 @@ OperatorTokenFactory::OperatorTokenFactory() {
     operatorMap[L'{'] = TokenType::LBrace;
     operatorMap[L'|'] = TokenType::Pipe;
     operatorMap[L'}'] = TokenType::RBrace;
+    operatorMap[L'~'] = TokenType::Tilde;
+    operatorMap[L'='] = TokenType::Assign;
 }
 
-bool OperatorTokenFactory::canHandle(const stream::StringStreamIterator &it) {
+bool OperatorTokenFactory::can_handle(const stream::StringStreamIterator &it) {
     auto ch = *it;
     return operatorMap.find(ch) != operatorMap.end();
 }
 
-std::tuple<Token, stream::StringStreamIterator> OperatorTokenFactory::createToken(const stream::StringStreamIterator &it) {
+std::tuple<Token, stream::StringStreamIterator> OperatorTokenFactory::create_token(const stream::StringStreamIterator &it) {
     auto ch = *it;
 
     if (ch == L'=') {
@@ -69,12 +71,13 @@ std::tuple<Token, stream::StringStreamIterator> OperatorTokenFactory::createToke
         if (nextCh == L'-') {
             return std::make_tuple(Token::from(TokenType::Dec, icu::UnicodeString::fromUTF8("--")), it + 2);
         }
-    }
 
-    if (ch == L'-') {
-        auto nextCh = *(it + 1);
         if (nextCh == L'>') {
             return std::make_tuple(Token::from(TokenType::LeftArrow, icu::UnicodeString::fromUTF8("<-")), it + 2);
+        }
+
+        if (nextCh == L'=') {
+            return std::make_tuple(Token::from(TokenType::MinusEqual, icu::UnicodeString::fromUTF8("-=")), it + 2);
         }
     }
 

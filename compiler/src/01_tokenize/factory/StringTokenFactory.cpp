@@ -2,12 +2,12 @@
 
 namespace nugdev::compiler::tokenize {
 
-bool StringTokenFactory::canHandle(const stream::StringStreamIterator &it) {
+bool StringTokenFactory::can_handle(const stream::StringStreamIterator &it) {
     auto ch = *it;
     return ch == L'"' || ch == L'\'';
 }
 
-std::tuple<Token, stream::StringStreamIterator> StringTokenFactory::createToken(const stream::StringStreamIterator &it) {
+std::tuple<Token, stream::StringStreamIterator> StringTokenFactory::create_token(const stream::StringStreamIterator &it) {
     icu::UnicodeString value;
     auto quote = *it;
     auto itr = it + 1;
