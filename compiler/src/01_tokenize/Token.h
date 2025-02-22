@@ -2,6 +2,8 @@
 
 #include <unicode/unistr.h>
 
+#include "00_app/stream/Stream.hpp"
+
 namespace nugdev::compiler::tokenize {
 
 enum class TokenType {
@@ -101,6 +103,8 @@ class Token {
     icu::UnicodeString literal;
 };
 
+using TokenStream = stream::Stream<tokenize::Token>;
+using TokenStreamIterator = typename TokenStream::const_iterator<tokenize::Token>;
 } // namespace nugdev::compiler::tokenize
 
 namespace std {

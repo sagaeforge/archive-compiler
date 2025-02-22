@@ -4,7 +4,6 @@
 #include "01_tokenize/Token.h"
 
 #include <memory>
-#include <vector>
 
 #include <unicode/unistr.h>
 
@@ -19,10 +18,11 @@ class ASTNode : public lib::PointerHelper<ASTNode> {
     virtual ~ASTNode() = default;
 
   public:
-    virtual std::shared_ptr<ASTNode> accept(std::shared_ptr<ASTNodeVisitor> &visitor) = 0;
+    virtual std::shared_ptr<ASTNode> accept(std::shared_ptr<ASTNodeVisitor> &visitor);
 
   public:
     virtual icu::UnicodeString to_str() const = 0;
+    virtual icu::UnicodeString get_type() const = 0;
     virtual tokenize::Token &get_token() const = 0;
 };
 

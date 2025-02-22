@@ -23,29 +23,29 @@ Tokenizer::Tokenizer() {
 Tokenizer::Tokenizer(std::vector<std::shared_ptr<TokenFactory>> factories) { this->factories = factories; }
 
 std::vector<Token> Tokenizer::tokenize(const icu::UnicodeString &str) {
-    stream::Stream stream(str);
+    auto stream = stream::make_stream(str);
 
     std::vector<Token> tokens;
     do {
-        const auto &checkpoint = stream.checkpoint();
-        if (!stream.is_vaild(checkpoint)) {
+        const auto &current = stream.current();
+        if (!stream.is_vaild(current)) {
             break;
         }
 
         // 화이트 스페이스도 씹어야 함.
-        if (::iswspace(*checkpoint)) {
+        if (::iswspace(*current)) {
             stream.advance();
             continue;
         }
 
         // 주석의 경우 씹어주는 과정이 필요함.
-        if (*checkpoint == u'#') {
-            auto it = stream.find_first_of({u'\n'});
-            stream.commit(it);
+        if (*current == u'#') {
+            auto it = find_first_of(stream, {u'\n'});
+            stream.move(it);
             continue;
         }
 
-        auto matchingFactories = factories | std::views::filter([checkpoint](const auto &factory) { return factory->can_handle(checkpoint); });
+        auto matchingFactories = factories | std::views::filter([current](const auto &factory) { return factory->can_handle(current); });
         if (std::ranges::empty(matchingFactories)) {
             std::string stdStr;
             str.toUTF8String(stdStr);
@@ -55,9 +55,9 @@ std::vector<Token> Tokenizer::tokenize(const icu::UnicodeString &str) {
         auto tokenProcessed = false;
         for (auto &factory : matchingFactories) {
             try {
-                auto [token, next] = factory->create_token(checkpoint);
+                auto [token, next] = factory->create_token(current);
                 tokens.push_back(token);
-                stream.commit(next);
+                stream.move(next);
                 tokenProcessed = true;
                 break;
             } catch (const std::exception &e) {
@@ -73,4 +73,12 @@ std::vector<Token> Tokenizer::tokenize(const icu::UnicodeString &str) {
     return tokens;
 }
 
+stream::StringStreamIterator Tokenizer::find_first_of(const stream::StringStream &stream, const std::vector<char16_t> &chars) {
+    for (auto it = stream.current(); it != stream.end(); ++it) {
+        if (std::ranges::find(chars, *it) != chars.end()) {
+            return it;
+        }
+    }
+    return stream.end();
+}
 } // namespace nugdev::compiler::tokenize

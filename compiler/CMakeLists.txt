@@ -10,7 +10,8 @@ add_library(
     src/00_app/lib/PointerHelper.hpp
     src/00_app/lib/Singleton.h
     src/00_app/stream/Stream.hpp
-
+    src/00_app/stream/Stream.cpp
+    
     src/01_tokenize/Tokenizer.h
     src/01_tokenize/Tokenizer.cpp
     src/01_tokenize/Token.h
@@ -27,11 +28,16 @@ add_library(
     src/01_tokenize/factory/StringTokenFactory.h
     src/01_tokenize/factory/StringTokenFactory.cpp
 
+    src/02_parsing/Parser.h
+    src/02_parsing/ParseStrategy.h
     src/02_parsing/ast/AST.h
     src/02_parsing/ast/AST.cpp
     src/02_parsing/ast/ASTNodeAspect.h
     src/02_parsing/ast/ASTNodeVisitor.h
-    
+    src/02_parsing/ast/module/program/ProgramNode.h
+    src/02_parsing/ast/module/program/ProgramNode.cpp
+    src/02_parsing/ast/module/program/ProgramNodeParseStrategy.h
+    src/02_parsing/ast/module/program/ProgramNodeParseStrategy.cpp
 )
 
 add_executable(
@@ -55,6 +61,8 @@ add_executable(
     test/01_tokenize/factory_test/number_test.cpp
 
     test/01_tokenize/01_init_token/tokenizer_test.cpp
+
+    src/02_parsing/ast/module/program/test/create_test.cpp
 )
 
 target_include_directories(

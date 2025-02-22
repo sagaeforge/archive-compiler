@@ -57,13 +57,16 @@ template <typename T = char16_t> class Stream {
 
         const_iterator operator+(size_t n) const { return const_iterator(stream, index + n); }
         const_iterator operator-(size_t n) const { return const_iterator(stream, index - n); }
+        std::uint32_t operator-(const const_iterator &other) const { return distance(other); }
 
-        Stream<R>::elem_t operator*() const { return stream.str[index]; }
+        Stream<R>::elem_t operator*() const { return stream.m_elems[index]; }
 
       public:
         const_iterator next() const { return const_iterator(stream, index + 1); }
         const_iterator prev() const { return const_iterator(stream, index - 1); }
-        bool vaild() const { return index < stream.str.length(); }
+        bool vaild() const { return index < stream.m_elems.size(); }
+        std::uint32_t distance() const { return index; }
+        std::uint32_t distance(const const_iterator &other) const { return index - other.index; }
 
         Stream<R>::elem_t value_or(Stream<R>::elem_t &&default_value) const { return vaild() ? *this : default_value; }
 
@@ -74,41 +77,39 @@ template <typename T = char16_t> class Stream {
 
   public:
     using elem_t = T;
+    using self_t = Stream<elem_t>;
 
   public:
-    Stream(icu::UnicodeString str) : str(str), current(const_iterator<elem_t>(*this, 0)) {}
+    Stream(const std::vector<elem_t> &_elems) : m_elems(_elems), m_current(const_iterator<elem_t>(*this, 0)) {}
+    Stream(const std::initializer_list<elem_t> &_elems) : m_elems(_elems), m_current(const_iterator<elem_t>(*this, 0)) {}
+    Stream(const self_t &_other) : m_elems(_other.m_elems), m_current(begin() + (_other.m_current.distance())) {}
 
   public:
     const_iterator<elem_t> begin() const { return const_iterator<elem_t>(*this, 0); }
-    const_iterator<elem_t> end() const { return const_iterator<elem_t>(*this, str.length()); }
+    const_iterator<elem_t> end() const { return const_iterator<elem_t>(*this, m_elems.size()); }
+    const_iterator<elem_t> current() const { return m_current; }
 
-    const_iterator<elem_t> checkpoint() const { return const_iterator<elem_t>(current); }
-    void rollback() {
-        current = checkpoints.back();
-        checkpoints.pop_back();
-    }
-    void commit(const const_iterator<elem_t> &checkpoint) {
-        checkpoints.push_back(checkpoint);
-        current = checkpoint;
-    }
     bool is_vaild(const const_iterator<elem_t> &it) const { return it.vaild(); }
-    const_iterator<elem_t> find_first_of(const std::vector<elem_t> &chars) {
-        for (auto it = current; it != end(); ++it) {
-            if (std::ranges::find(chars, *it) != chars.end()) {
-                return it;
-            }
-        }
-        return end();
+    self_t &advance() {
+        m_current++;
+        return *this;
     }
-    void advance() { current++; }
+    self_t clone() const { return self_t(m_elems); }
+    self_t move(const const_iterator<elem_t> &it) {
+        m_current = it;
+        return *this;
+    }
 
   private:
-    icu::UnicodeString str;
-    std::deque<const_iterator<elem_t>> checkpoints;
-    const_iterator<elem_t> current;
+    std::vector<elem_t> m_elems;
+    const_iterator<elem_t> m_current;
 };
 
 using StringStream = Stream<char16_t>;
 using StringStreamIterator = StringStream::const_iterator<StringStream::elem_t>;
+
+template <typename T> Stream<T> make_stream(const std::vector<T> &elems) { return Stream<T>(elems); }
+template <typename T> Stream<T> make_stream(const std::initializer_list<T> &elems) { return Stream<T>(elems); }
+StringStream make_stream(const icu::UnicodeString &str);
 
 } // namespace nugdev::compiler::stream
