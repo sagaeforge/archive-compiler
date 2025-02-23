@@ -1,5 +1,6 @@
 #pragma once
 
+#include "00_app/json/Json.hpp"
 #include "00_app/lib/PointerHelper.hpp"
 #include "01_tokenize/Token.h"
 
@@ -22,8 +23,8 @@ class ASTNode : public lib::PointerHelper<ASTNode> {
 
   public:
     virtual icu::UnicodeString to_str() const = 0;
-    virtual icu::UnicodeString get_type() const = 0;
-    virtual tokenize::Token &get_token() const = 0;
+    virtual json::JsonValue to_json(json::JsonAllocator &allocator) const = 0;
+    virtual const tokenize::Token &get_token() const = 0;
 };
 
 class Expression : public ASTNode {};

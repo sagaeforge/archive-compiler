@@ -28,11 +28,11 @@ template <typename T> class PointerHelper : public std::enable_shared_from_this<
 
     std::shared_ptr<T> self() { return this->shared_from_this(); }
 
-    bool isValid() const {
-        return this->isValid([](auto ptr) { return ptr != nullptr; });
+    bool is_valid() const {
+        return this->is_valid([](auto ptr) { return ptr != nullptr; });
     }
 
-    template <typename Func> bool isValid(Func condition) const { return condition(this->shared_from_this()); }
+    template <typename Func> bool is_valid(Func condition) const { return condition(this->shared_from_this()); }
 };
 
 } // namespace nugdev::compiler::lib

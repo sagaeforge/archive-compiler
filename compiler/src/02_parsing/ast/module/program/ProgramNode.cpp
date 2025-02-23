@@ -3,23 +3,17 @@
 
 namespace nugdev::compiler::ast::module {
 
-ProgramNode::ProgramNode(stream::Stream<std::shared_ptr<Statement>> statements) : statements(statements) {}
+ProgramNode::ProgramNode(stream::Stream<std::shared_ptr<Statement>> statements) : m_statements(statements) {}
 
-json::JsonValue ProgramNode::create_debug_info(json::JsonAllocator &allocator) const {
+json::JsonValue ProgramNode::to_json(json::JsonAllocator &allocator) const {
     json::JsonValue value(json::Type::kArrayType);
-    for (const auto &statement : statements) {
-        auto astDebugInfo = std::dynamic_pointer_cast<ASTNodeDebugAspect>(statement);
-        if (astDebugInfo == nullptr) {
-            continue;
-        }
-
-        value.PushBack(astDebugInfo->create_debug_info(allocator), allocator);
+    for (const auto &statement : m_statements) {
+        value.PushBack(statement->to_json(allocator), allocator);
     }
     return value;
 }
 
-icu::UnicodeString ProgramNode::get_type() const { return u"Program"; }
 icu::UnicodeString ProgramNode::to_str() const { return u"Program"; }
-tokenize::Token &ProgramNode::get_token() const { return (*statements.current())->get_token(); }
+const tokenize::Token &ProgramNode::get_token() const { return (*m_statements.current())->get_token(); }
 
 } // namespace nugdev::compiler::ast::module

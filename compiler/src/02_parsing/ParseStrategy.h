@@ -12,6 +12,7 @@ struct ParseStrategyResult {
 
 class ParseStrategy {
   public:
+    virtual bool can_parse(const tokenize::TokenStream &tokens) = 0;
     virtual ParseStrategyResult parse(const tokenize::TokenStream &tokens) = 0;
 };
 

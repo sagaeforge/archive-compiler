@@ -1,0 +1,22 @@
+#pragma once
+
+#include "01_tokenize/Token.h"
+#include "02_parsing/ast/AST.h"
+
+namespace nugdev::compiler::ast::statement {
+
+class ContinueNode : public Statement {
+  public:
+    ContinueNode(tokenize::Token &token, std::shared_ptr<Expression> label);
+
+  public:
+    virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
+    virtual icu::UnicodeString to_str() const override;
+    virtual const tokenize::Token &get_token() const override;
+
+  private:
+    tokenize::Token m_token;
+    std::shared_ptr<Expression> m_label;
+};
+
+} // namespace nugdev::compiler::ast::statement

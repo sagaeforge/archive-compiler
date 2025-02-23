@@ -34,10 +34,38 @@ add_library(
     src/02_parsing/ast/AST.cpp
     src/02_parsing/ast/ASTNodeAspect.h
     src/02_parsing/ast/ASTNodeVisitor.h
+
     src/02_parsing/ast/module/program/ProgramNode.h
     src/02_parsing/ast/module/program/ProgramNode.cpp
     src/02_parsing/ast/module/program/ProgramNodeParseStrategy.h
     src/02_parsing/ast/module/program/ProgramNodeParseStrategy.cpp
+
+    src/02_parsing/ast/statement/StatementParseStrategy.h
+    src/02_parsing/ast/statement/StatementParseStrategy.cpp
+    src/02_parsing/ast/statement/break/BreakNode.h
+    src/02_parsing/ast/statement/break/BreakNode.cpp
+    src/02_parsing/ast/statement/break/BreakNodeParseStrategy.h
+    src/02_parsing/ast/statement/break/BreakNodeParseStrategy.cpp
+    src/02_parsing/ast/statement/continue/ContinueNode.h
+    src/02_parsing/ast/statement/continue/ContinueNode.cpp
+    src/02_parsing/ast/statement/continue/ContinueNodeParseStrategy.h
+    src/02_parsing/ast/statement/continue/ContinueNodeParseStrategy.cpp
+    src/02_parsing/ast/statement/return/ReturnNode.h
+    src/02_parsing/ast/statement/return/ReturnNode.cpp
+    src/02_parsing/ast/statement/return/ReturnNodeParseStrategy.h
+    src/02_parsing/ast/statement/return/ReturnNodeParseStrategy.cpp
+    src/02_parsing/ast/statement/let/LetNode.h
+    src/02_parsing/ast/statement/let/LetNode.cpp
+    src/02_parsing/ast/statement/let/LetNodeParseStrategy.h
+    src/02_parsing/ast/statement/let/LetNodeParseStrategy.cpp
+    src/02_parsing/ast/statement/expression/ExpressionStatementNode.h
+    src/02_parsing/ast/statement/expression/ExpressionStatementNode.cpp
+    src/02_parsing/ast/statement/expression/ExpressionStatementNodeParseStrategy.h
+    src/02_parsing/ast/statement/expression/ExpressionStatementNodeParseStrategy.cpp
+    src/02_parsing/ast/statement/block/BlockStatementNode.h
+    src/02_parsing/ast/statement/block/BlockStatementNode.cpp
+    src/02_parsing/ast/statement/block/BlockStatementNodeParseStrategy.h
+    src/02_parsing/ast/statement/block/BlockStatementNodeParseStrategy.cpp
 )
 
 add_executable(

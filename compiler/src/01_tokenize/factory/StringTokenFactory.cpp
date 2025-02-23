@@ -11,7 +11,7 @@ std::tuple<Token, stream::StringStreamIterator> StringTokenFactory::create_token
     icu::UnicodeString value;
     auto quote = *it;
     auto itr = it + 1;
-    while (itr.vaild()) {
+    while (itr.valid()) {
         auto ch = *itr;
         if (ch == quote) {
             itr++;

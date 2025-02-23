@@ -64,11 +64,12 @@ template <typename T = char16_t> class Stream {
       public:
         const_iterator next() const { return const_iterator(stream, index + 1); }
         const_iterator prev() const { return const_iterator(stream, index - 1); }
-        bool vaild() const { return index < stream.m_elems.size(); }
+        bool valid() const { return index < stream.m_elems.size(); }
         std::uint32_t distance() const { return index; }
         std::uint32_t distance(const const_iterator &other) const { return index - other.index; }
 
-        Stream<R>::elem_t value_or(Stream<R>::elem_t &&default_value) const { return vaild() ? *this : default_value; }
+        Stream<R>::elem_t value() const { return stream.m_elems[index]; }
+        Stream<R>::elem_t value_or(Stream<R>::elem_t &&default_value) const { return valid() ? *this : default_value; }
 
       private:
         const Stream<R> &stream;
@@ -89,7 +90,7 @@ template <typename T = char16_t> class Stream {
     const_iterator<elem_t> end() const { return const_iterator<elem_t>(*this, m_elems.size()); }
     const_iterator<elem_t> current() const { return m_current; }
 
-    bool is_vaild(const const_iterator<elem_t> &it) const { return it.vaild(); }
+    bool is_valid(const const_iterator<elem_t> &it) const { return it.valid(); }
     self_t &advance() {
         m_current++;
         return *this;
@@ -97,6 +98,10 @@ template <typename T = char16_t> class Stream {
     self_t clone() const { return self_t(m_elems); }
     self_t move(const const_iterator<elem_t> &it) {
         m_current = it;
+        return *this;
+    }
+    self_t move(int dir) {
+        m_current += dir;
         return *this;
     }
 

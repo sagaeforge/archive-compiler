@@ -28,7 +28,7 @@ std::vector<Token> Tokenizer::tokenize(const icu::UnicodeString &str) {
     std::vector<Token> tokens;
     do {
         const auto &current = stream.current();
-        if (!stream.is_vaild(current)) {
+        if (!stream.is_valid(current)) {
             break;
         }
 
