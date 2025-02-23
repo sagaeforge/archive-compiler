@@ -23,7 +23,7 @@ parsing::ParseStrategyResult BlockStatementNodeParseStrategy::parse(const tokeni
         itr = itr.next();
     }
 
-    return parsing::ParseStrategyResult(std::make_shared<BlockStatementNode>(tokens.current(), statements), tokens.current() + itr.distance());
+    return parsing::ParseStrategyResult(std::make_shared<BlockStatementNode>(tokens.current().value(), statements), tokens.current() + itr.distance());
 }
 
 } // namespace nugdev::compiler::ast::statement

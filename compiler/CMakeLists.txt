@@ -66,6 +66,7 @@ add_library(
     src/02_parsing/ast/statement/block/BlockStatementNode.cpp
     src/02_parsing/ast/statement/block/BlockStatementNodeParseStrategy.h
     src/02_parsing/ast/statement/block/BlockStatementNodeParseStrategy.cpp
+    
 )
 
 add_executable(
