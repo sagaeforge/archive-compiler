@@ -61,6 +61,13 @@ template <typename T = char16_t> class Stream {
 
         Stream<R>::elem_t operator*() const { return stream.m_elems[index]; }
 
+        const Stream<R>::elem_t *operator->() const {
+            if (valid()) {
+                return &stream.m_elems[index];
+            }
+            return nullptr;
+        }
+
       public:
         const_iterator next() const { return const_iterator(stream, index + 1); }
         const_iterator prev() const { return const_iterator(stream, index - 1); }

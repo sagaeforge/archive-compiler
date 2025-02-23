@@ -66,7 +66,53 @@ add_library(
     src/02_parsing/ast/statement/block/BlockStatementNode.cpp
     src/02_parsing/ast/statement/block/BlockStatementNodeParseStrategy.h
     src/02_parsing/ast/statement/block/BlockStatementNodeParseStrategy.cpp
-    
+
+    src/02_parsing/ast/expression/ExpressionParseStrategy.h
+    src/02_parsing/ast/expression/ExpressionParseStrategy.cpp
+    src/02_parsing/ast/expression/array/ArrayLiteralNode.h
+    src/02_parsing/ast/expression/array/ArrayLiteralNode.cpp
+    src/02_parsing/ast/expression/array/ArrayLiteralNodeParseStrategy.h
+    src/02_parsing/ast/expression/array/ArrayLiteralNodeParseStrategy.cpp
+    src/02_parsing/ast/expression/boolean/BooleanLiteralNode.h
+    src/02_parsing/ast/expression/boolean/BooleanLiteralNode.cpp
+    src/02_parsing/ast/expression/boolean/BooleanLiteralNodeParseStrategy.h
+    src/02_parsing/ast/expression/boolean/BooleanLiteralNodeParseStrategy.cpp
+    src/02_parsing/ast/expression/identifier/IdentifierLiteralNode.h
+    src/02_parsing/ast/expression/identifier/IdentifierLiteralNode.cpp
+    src/02_parsing/ast/expression/identifier/IdentifierLiteralNodeParseStrategy.h
+    src/02_parsing/ast/expression/identifier/IdentifierLiteralNodeParseStrategy.cpp
+    src/02_parsing/ast/expression/number/NumberLiteralNode.h
+    src/02_parsing/ast/expression/number/NumberLiteralNode.cpp
+    src/02_parsing/ast/expression/number/NumberLiteralParseStrategy.h
+    src/02_parsing/ast/expression/number/NumberLiteralParseStrategy.cpp
+    src/02_parsing/ast/expression/string/StringLiteralNode.h
+    src/02_parsing/ast/expression/string/StringLiteralNode.cpp
+    src/02_parsing/ast/expression/string/StringLiteralNodeParseStrategy.h
+    src/02_parsing/ast/expression/string/StringLiteralNodeParseStrategy.cpp
+    src/02_parsing/ast/expression/call/CallExpressionNode.h
+    src/02_parsing/ast/expression/call/CallExpressionNode.cpp
+    src/02_parsing/ast/expression/call/CallExpressionNodeParseStrategy.h
+    src/02_parsing/ast/expression/call/CallExpressionNodeParseStrategy.cpp
+    src/02_parsing/ast/expression/function/FunctionLiteralNode.h
+    src/02_parsing/ast/expression/function/FunctionLiteralNode.cpp
+    src/02_parsing/ast/expression/function/FunctionLiteralNodeParseStrategy.h
+    src/02_parsing/ast/expression/function/FunctionLiteralNodeParseStrategy.cpp
+    src/02_parsing/ast/expression/if/IfExpressionNode.h
+    src/02_parsing/ast/expression/if/IfExpressionNode.cpp
+    src/02_parsing/ast/expression/if/IfExpressionNodeParseStrategy.h
+    src/02_parsing/ast/expression/if/IfExpressionNodeParseStrategy.cpp
+    src/02_parsing/ast/expression/index/IndexExpressionNode.h
+    src/02_parsing/ast/expression/index/IndexExpressionNode.cpp
+    src/02_parsing/ast/expression/index/IndexExpressionNodeParseStrategy.h
+    src/02_parsing/ast/expression/index/IndexExpressionNodeParseStrategy.cpp
+    src/02_parsing/ast/expression/infix/InfixExpressionNode.h
+    src/02_parsing/ast/expression/infix/InfixExpressionNode.cpp
+    src/02_parsing/ast/expression/infix/InfixExpressionNodeParseStrategy.h
+    src/02_parsing/ast/expression/infix/InfixExpressionNodeParseStrategy.cpp
+    src/02_parsing/ast/expression/prefix/PrefixExpressionNode.h
+    src/02_parsing/ast/expression/prefix/PrefixExpressionNode.cpp
+    src/02_parsing/ast/expression/prefix/PrefixExpressionNodeParseStrategy.h
+    src/02_parsing/ast/expression/prefix/PrefixExpressionNodeParseStrategy.cpp
 )
 
 add_executable(

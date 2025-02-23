@@ -1,0 +1,21 @@
+#pragma once
+
+#include "02_parsing/ast/AST.h"
+
+namespace nugdev::compiler::ast::expression {
+
+class CallExpressionNode : public Expression {
+  public:
+    CallExpressionNode(const tokenize::Token &token, std::shared_ptr<Expression> callee, std::vector<std::shared_ptr<Expression>> arguments);
+
+  public:
+    virtual icu::UnicodeString to_str() const override;
+    virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
+    virtual const tokenize::Token &get_token() const override;
+
+  private:
+    tokenize::Token m_token;
+    std::shared_ptr<Expression> m_callee;
+    std::vector<std::shared_ptr<Expression>> m_arguments;
+};
+} // namespace nugdev::compiler::ast::expression
