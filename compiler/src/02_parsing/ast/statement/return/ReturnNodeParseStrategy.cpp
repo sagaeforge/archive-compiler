@@ -2,6 +2,8 @@
 
 #include <stdexcept>
 
+#include "02_parsing/ast/expression/ExpressionParseStrategy.h"
+#include "02_parsing/ast/expression/identifier/IdentifierLiteralNodeParseStrategy.h"
 #include "02_parsing/ast/statement/return/ReturnNode.h"
 
 namespace nugdev::compiler::ast::statement {
@@ -9,23 +11,29 @@ namespace nugdev::compiler::ast::statement {
 bool ReturnNodeParseStrategy::can_parse(const tokenize::TokenStream &tokens) { return tokens.current().value().get_type() == tokenize::TokenType::Return; }
 
 parsing::ParseStrategyResult ReturnNodeParseStrategy::parse(const tokenize::TokenStream &tokens) {
-    auto itr = tokens.current();
-    auto token = itr.value();
+    static expression::ExpressionParseStrategy expressionStrategy{};
+    static expression::IdentifierLiteralNodeParseStrategy identifierStrategy{};
 
-    auto return_node = std::make_shared<ReturnNode>(token, nullptr, nullptr);
+    auto workbench = tokens.clone(); // current : return
+    workbench.next();
 
-    if (itr.next().value().get_type() == tokenize::TokenType::At) {
-        itr = itr.next().next();
-        if (itr.valid() == false) {
+    auto return_node = std::make_shared<ReturnNode>(workbench.current().value(), static_cast<std::shared_ptr<Expression>>(nullptr),
+                                                    static_cast<std::shared_ptr<Expression>>(nullptr));
+    if (contains(workbench.current(), {tokenize::TokenType::At})) {
+        workbench.next();
+        if (workbench.current().valid() == false) {
             throw std::runtime_error("Invalid token stream");
         }
 
-        // TODO: 레이블 파싱하는 전략을 부르고 해당 전략을 호출해야함.
-        // auto labelExpression = Strategy
+        auto [label, itr] = identifierStrategy.parse(workbench);
+        workbench.move_at(itr);
+        return_node->set_label(label->as<Expression>());
     }
 
-    // TODO 여기는 return_value를 표현하기 위한
+    auto [return_expression, itr] = expressionStrategy.parse(workbench);
+    workbench.move_at(itr);
+    return_node->set_return_expression(return_expression->as<Expression>());
 
-    return parsing::ParseStrategyResult(return_node, itr.next());
+    return {return_node, tokens.begin() + workbench.current().distance()};
 }
 } // namespace nugdev::compiler::ast::statement

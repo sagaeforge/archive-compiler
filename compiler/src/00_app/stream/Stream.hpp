@@ -1,6 +1,7 @@
 #pragma once
 
-#include <deque>
+#include <vector>
+
 #include <unicode/unistr.h>
 
 namespace nugdev::compiler::stream {
@@ -72,8 +73,8 @@ template <typename T = char16_t> class Stream {
         const_iterator next() const { return const_iterator(stream, index + 1); }
         const_iterator prev() const { return const_iterator(stream, index - 1); }
         bool valid() const { return index < stream.m_elems.size(); }
-        std::uint32_t distance() const { return index; }
-        std::uint32_t distance(const const_iterator &other) const { return index - other.index; }
+        Stream<R>::distance_t distance() const { return index; }
+        Stream<R>::distance_t distance(const const_iterator &other) const { return index - other.index; }
 
         Stream<R>::elem_t value() const { return stream.m_elems[index]; }
         Stream<R>::elem_t value_or(Stream<R>::elem_t &&default_value) const { return valid() ? *this : default_value; }
@@ -86,6 +87,8 @@ template <typename T = char16_t> class Stream {
   public:
     using elem_t = T;
     using self_t = Stream<elem_t>;
+    using distance_t = std::uint32_t;
+    using direction_t = int;
 
   public:
     Stream(const std::vector<elem_t> &_elems) : m_elems(_elems), m_current(const_iterator<elem_t>(*this, 0)) {}
@@ -103,12 +106,24 @@ template <typename T = char16_t> class Stream {
         return *this;
     }
     self_t clone() const { return self_t(m_elems); }
-    self_t move(const const_iterator<elem_t> &it) {
+    self_t move(const direction_t &dir) {
+        m_current += dir;
+        return *this;
+    }
+    self_t move_at(const const_iterator<elem_t> &it) {
         m_current = it;
         return *this;
     }
-    self_t move(int dir) {
-        m_current += dir;
+    self_t move_at(const distance_t &dist) {
+        m_current = dist;
+        return *this;
+    }
+    self_t next() {
+        m_current++;
+        return *this;
+    }
+    self_t prev() {
+        m_current--;
         return *this;
     }
 

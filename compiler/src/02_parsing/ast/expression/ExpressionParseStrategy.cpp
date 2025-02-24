@@ -41,30 +41,27 @@ bool ExpressionParseStrategy::can_parse(const tokenize::TokenStream &tokens) { r
 parsing::ParseStrategyResult ExpressionParseStrategy::parse(const tokenize::TokenStream &tokens) { return parse(tokens, Precedence::Lowest); }
 
 parsing::ParseStrategyResult ExpressionParseStrategy::parse(const tokenize::TokenStream &tokens, Precedence precedence) {
-    auto stream = tokens.clone();
-    auto itr = stream.current();
-    auto prefix = m_prefixParseFns.find(itr->get_type());
+    auto workbench = tokens.clone();
+    auto prefix = m_prefixParseFns.find(workbench.current().value().get_type());
     if (prefix == m_prefixParseFns.end()) {
-        return parsing::ParseStrategyResult{nullptr, tokens.current()};
+        throw std::runtime_error("Invalid token stream");
     }
 
-    auto [leftExpr, leftMoveItr] = prefix->second(stream);
-    stream.move(leftMoveItr);
-    itr = stream.current();
-    while (precedence < get_precedence(itr->get_type())) {
-        auto infix = m_infixParseFns.find(itr->get_type());
+    auto [leftExpr, leftMoveItr] = prefix->second(workbench);
+    workbench.move_at(leftMoveItr);
+    while (precedence < get_precedence(workbench.current()->get_type())) {
+        auto infix = m_infixParseFns.find(workbench.current()->get_type());
         if (infix == m_infixParseFns.end()) {
             return parsing::ParseStrategyResult{leftExpr, tokens.current()};
         }
 
-        itr = itr.next();
-        auto [rightExpr, rightMoveItr] = infix->second(stream, leftExpr->as<ast::Expression>());
-        stream.move(rightMoveItr);
-        itr = stream.current();
+        workbench.next();
+        auto [rightExpr, rightMoveItr] = infix->second(workbench, leftExpr->as<ast::Expression>());
+        workbench.move_at(rightMoveItr);
         leftExpr = rightExpr;
     }
 
-    return parsing::ParseStrategyResult{leftExpr, stream.current() + itr.distance()};
+    return parsing::ParseStrategyResult{leftExpr, workbench.current() + workbench.current().distance()};
 }
 
 } // namespace nugdev::compiler::ast::expression

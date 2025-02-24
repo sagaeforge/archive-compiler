@@ -2,7 +2,7 @@
 
 namespace nugdev::compiler::ast::statement {
 
-ReturnNode::ReturnNode(tokenize::Token &token, std::shared_ptr<Expression> label, std::shared_ptr<Expression> return_expression)
+ReturnNode::ReturnNode(const tokenize::Token &token, std::shared_ptr<Expression> label, std::shared_ptr<Expression> return_expression)
     : m_token(token), m_label(label), m_returnExpression(return_expression) {}
 
 json::JsonValue ReturnNode::to_json(json::JsonAllocator &allocator) const {
@@ -15,6 +15,17 @@ json::JsonValue ReturnNode::to_json(json::JsonAllocator &allocator) const {
 }
 
 icu::UnicodeString ReturnNode::to_str() const { return u"Return"; }
+
 const tokenize::Token &ReturnNode::get_token() const { return m_token; }
+
+ReturnNode::self_t ReturnNode::set_label(std::shared_ptr<Expression> label) {
+    m_label = label;
+    return this;
+}
+
+ReturnNode::self_t ReturnNode::set_return_expression(std::shared_ptr<Expression> return_expression) {
+    m_returnExpression = return_expression;
+    return this;
+}
 
 } // namespace nugdev::compiler::ast::statement

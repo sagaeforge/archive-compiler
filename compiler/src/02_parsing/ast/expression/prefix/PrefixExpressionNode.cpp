@@ -2,7 +2,7 @@
 
 namespace nugdev::compiler::ast::expression {
 
-PrefixExpressionNode::PrefixExpressionNode(const tokenize::Token &token, icu::UnicodeString &opCode, std::shared_ptr<Expression> right)
+PrefixExpressionNode::PrefixExpressionNode(const tokenize::Token &token, const icu::UnicodeString &opCode, std::shared_ptr<Expression> right)
     : m_token(token), m_operator(opCode), m_right(right) {}
 
 icu::UnicodeString PrefixExpressionNode::to_str() const { return m_token.get_literal(); }

@@ -6,7 +6,7 @@ namespace nugdev::compiler::ast::expression {
 
 class PrefixExpressionNode : public Expression {
   public:
-    PrefixExpressionNode(const tokenize::Token &token, icu::UnicodeString &opCode, std::shared_ptr<Expression> right);
+    PrefixExpressionNode(const tokenize::Token &token, const icu::UnicodeString &opCode, std::shared_ptr<Expression> right);
 
   public:
     virtual icu::UnicodeString to_str() const override;

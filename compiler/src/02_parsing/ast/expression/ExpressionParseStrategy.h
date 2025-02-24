@@ -3,6 +3,9 @@
 #include "01_tokenize/Token.h"
 #include "02_parsing/ParseStrategy.h"
 
+#include <functional>
+#include <unordered_map>
+
 namespace nugdev::compiler::ast::expression {
 
 class ExpressionParseStrategy : public parsing::ParseStrategy {

@@ -14,6 +14,8 @@ class ParseStrategy {
   public:
     virtual bool can_parse(const tokenize::TokenStream &tokens) = 0;
     virtual ParseStrategyResult parse(const tokenize::TokenStream &tokens) = 0;
+
+    bool contains(const tokenize::TokenStreamIterator &itr, const std::vector<tokenize::TokenType> &types);
 };
 
 } // namespace nugdev::compiler::parsing

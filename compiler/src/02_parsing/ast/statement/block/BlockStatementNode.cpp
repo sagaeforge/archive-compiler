@@ -3,7 +3,7 @@
 
 namespace nugdev::compiler::ast::statement {
 
-BlockStatementNode::BlockStatementNode(const tokenize::Token &token, std::vector<std::shared_ptr<Statement>> statements) : m_statements(statements) {}
+BlockStatementNode::BlockStatementNode(std::vector<std::shared_ptr<Statement>> statements) : m_statements(statements) {}
 
 json::JsonValue BlockStatementNode::to_json(json::JsonAllocator &allocator) const {
     json::JsonValue json(json::Type::kObjectType);

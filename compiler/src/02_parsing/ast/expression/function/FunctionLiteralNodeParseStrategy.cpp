@@ -1,47 +1,55 @@
 #include "FunctionLiteralNodeParseStrategy.h"
 
+#include "02_parsing/ast/expression/ExpressionParseStrategy.h"
+#include "02_parsing/ast/expression/function/FunctionLiteralNode.h"
 #include "02_parsing/ast/expression/identifier/IdentifierLiteralNodeParseStrategy.h"
-#include "FunctionLiteralNode.h"
+#include "02_parsing/ast/statement/block/BlockStatementNodeParseStrategy.h"
 
 namespace nugdev::compiler::ast::expression {
 
 bool FunctionLiteralNodeParseStrategy::can_parse(const tokenize::TokenStream &tokens) { return tokens.current()->get_type() == tokenize::TokenType::Function; }
 
 parsing::ParseStrategyResult FunctionLiteralNodeParseStrategy::parse(const tokenize::TokenStream &tokens) {
-    auto stream = tokens.clone();
-    auto itr = stream.current().next();
+    static IdentifierLiteralNodeParseStrategy identifierStrategy{};
+    static ExpressionParseStrategy expressionStrategy{};
+    static statement::BlockStatementNodeParseStrategy blockStrategy{};
 
-    if (itr->get_type() != tokenize::TokenType::LParen) {
-        throw std::runtime_error("Expected '('");
-    }
-
-    if (itr.next()->get_type() == tokenize::TokenType::RParen) {
-        return parsing::ParseStrategyResult{std::make_shared<FunctionLiteralNode>(*itr, std::vector<std::shared_ptr<Expression>>(), nullptr),
-                                            stream.current() + itr.distance()};
-    }
-
-    stream.move(itr.next());
-    itr = stream.current();
-
-    auto identifiers = std::vector<std::shared_ptr<Expression>>();
-    auto [firstArg, moveItr] = IdentifierLiteralNodeParseStrategy().parse(stream);
-    if (firstArg != nullptr) {
-        identifiers.push_back(firstArg->as<ast::Expression>());
-    }
-
-    while (itr.next()->get_type() == tokenize::TokenType::Comma) {
-        stream.move(itr.next().next());
-        auto [arg, moveItr] = IdentifierLiteralNodeParseStrategy().parse(stream);
-        if (arg != nullptr) {
-            identifiers.push_back(arg->as<ast::Expression>());
-        }
-    }
-
-    if (itr.next()->get_type() != tokenize::TokenType::RParen) {
+    auto workbench = tokens.clone();
+    if (!contains(workbench.current(), {tokenize::TokenType::RParen})) {
         throw std::runtime_error("Expected ')'");
     }
+    workbench.next();
 
-    return parsing::ParseStrategyResult{std::make_shared<FunctionLiteralNode>(*itr, identifiers, nullptr), stream.current() + itr.distance()};
+    if (contains(workbench.current(), {tokenize::TokenType::RParen})) {
+        return {std::make_shared<FunctionLiteralNode>(workbench.current().value(), std::vector<std::shared_ptr<Expression>>(), nullptr),
+                tokens.current().next()};
+    }
+    workbench.next();
+
+    auto identifiers = std::vector<std::shared_ptr<Expression>>();
+    do {
+        auto [element, identifierItr] = identifierStrategy.parse(workbench);
+        workbench.move_at(identifierItr);
+        identifiers.push_back(element->as<ast::Expression>());
+
+        if (!contains(workbench.current(), {tokenize::TokenType::Colon})) {
+            throw std::runtime_error("Expected ':'");
+        }
+        workbench.next();
+
+        auto [type, typeItr] = expressionStrategy.parse(workbench);
+        workbench.move_at(typeItr);
+        identifiers.push_back(type->as<ast::Expression>());
+    } while (contains(workbench.current(), {tokenize::TokenType::Comma}));
+
+    if (!contains(workbench.current(), {tokenize::TokenType::RParen})) {
+        throw std::runtime_error("Expected ')'");
+    }
+    workbench.next();
+
+    auto [body, bodyItr] = blockStrategy.parse(workbench);
+    workbench.move_at(bodyItr);
+    return {std::make_shared<FunctionLiteralNode>(workbench.current().value(), identifiers, body->as<ast::Statement>()), tokens.current().next()};
 }
 
 } // namespace nugdev::compiler::ast::expression

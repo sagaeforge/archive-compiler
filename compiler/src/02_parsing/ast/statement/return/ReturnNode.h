@@ -7,12 +7,19 @@ namespace nugdev::compiler::ast::statement {
 
 class ReturnNode : public Statement {
   public:
-    ReturnNode(tokenize::Token &token, std::shared_ptr<Expression> label, std::shared_ptr<Expression> return_expression);
+    using self_t = ReturnNode *;
+
+  public:
+    ReturnNode(const tokenize::Token &token, std::shared_ptr<Expression> label, std::shared_ptr<Expression> return_expression);
 
   public:
     json::JsonValue to_json(json::JsonAllocator &allocator) const override;
     icu::UnicodeString to_str() const override;
     const tokenize::Token &get_token() const override;
+
+  public:
+    self_t set_label(std::shared_ptr<Expression> label);
+    self_t set_return_expression(std::shared_ptr<Expression> return_expression);
 
   private:
     tokenize::Token m_token;

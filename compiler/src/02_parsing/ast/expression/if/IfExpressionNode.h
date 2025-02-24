@@ -6,8 +6,8 @@ namespace nugdev::compiler::ast::expression {
 
 class IfExpressionNode : public Expression {
   public:
-    IfExpressionNode(const tokenize::Token &token, std::shared_ptr<Expression> condition, std::shared_ptr<Expression> consequence,
-                     std::shared_ptr<Expression> alternative);
+    IfExpressionNode(const tokenize::Token &token, std::shared_ptr<Expression> condition, std::shared_ptr<Statement> consequence,
+                     std::shared_ptr<Statement> alternative);
 
   public:
     virtual icu::UnicodeString to_str() const override;
@@ -17,8 +17,8 @@ class IfExpressionNode : public Expression {
   private:
     tokenize::Token m_token;
     std::shared_ptr<Expression> m_condition;
-    std::shared_ptr<Expression> m_consequence;
-    std::shared_ptr<Expression> m_alternative;
+    std::shared_ptr<Statement> m_consequence;
+    std::shared_ptr<Statement> m_alternative;
 };
 
 } // namespace nugdev::compiler::ast::expression

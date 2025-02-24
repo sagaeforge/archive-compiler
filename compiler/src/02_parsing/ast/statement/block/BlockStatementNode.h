@@ -6,7 +6,7 @@ namespace nugdev::compiler::ast::statement {
 
 class BlockStatementNode : public Statement {
   public:
-    BlockStatementNode(const tokenize::Token &token, std::vector<std::shared_ptr<Statement>> statements);
+    BlockStatementNode(std::vector<std::shared_ptr<Statement>> statements);
 
   public:
     virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;

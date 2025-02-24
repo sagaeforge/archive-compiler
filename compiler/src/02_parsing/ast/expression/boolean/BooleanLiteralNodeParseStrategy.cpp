@@ -11,7 +11,7 @@ bool BooleanLiteralNodeParseStrategy::can_parse(const tokenize::TokenStream &tok
 parsing::ParseStrategyResult BooleanLiteralNodeParseStrategy::parse(const tokenize::TokenStream &tokens) {
     auto itr = tokens.current();
     auto value = itr->get_literal() == "true";
-    return parsing::ParseStrategyResult{std::make_shared<BooleanLiteralNode>(*itr, value), tokens.current().next()};
+    return {std::make_shared<BooleanLiteralNode>(*itr, value), tokens.current().next()};
 }
 
 } // namespace nugdev::compiler::ast::expression

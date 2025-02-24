@@ -7,12 +7,18 @@ namespace nugdev::compiler::ast::statement {
 
 class ContinueNode : public Statement {
   public:
-    ContinueNode(tokenize::Token &token, std::shared_ptr<Expression> label);
+    using self_t = ContinueNode;
+
+  public:
+    ContinueNode(const tokenize::Token &token, std::shared_ptr<Expression> label);
 
   public:
     virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
     virtual icu::UnicodeString to_str() const override;
     virtual const tokenize::Token &get_token() const override;
+
+  public:
+    self_t set_label(std::shared_ptr<Expression> label);
 
   private:
     tokenize::Token m_token;

@@ -3,28 +3,31 @@
 #include <stdexcept>
 
 #include "01_tokenize/Token.h"
+#include "02_parsing/ast/expression/identifier/IdentifierLiteralNodeParseStrategy.h"
 #include "02_parsing/ast/statement/break/BreakNode.h"
 
 namespace nugdev::compiler::ast::statement {
 
-bool BreakNodeParseStrategy::can_parse(const tokenize::TokenStream &tokens) { return tokens.current().value().get_type() == tokenize::TokenType::Break; }
+bool BreakNodeParseStrategy::can_parse(const tokenize::TokenStream &tokens) { return contains(tokens.current(), {tokenize::TokenType::Break}); }
 
 parsing::ParseStrategyResult BreakNodeParseStrategy::parse(const tokenize::TokenStream &tokens) {
-    auto itr = tokens.current();
-    auto token = itr.value();
+    static expression::IdentifierLiteralNodeParseStrategy strategy{};
 
-    auto break_node = std::make_shared<BreakNode>(token, nullptr);
-    if (itr.next().value().get_type() == tokenize::TokenType::At) {
-        itr = itr.next().next();
-        if (itr.valid() == false) {
-            throw std::runtime_error("유효하지 않는 구문");
+    auto workbench = tokens.clone(); // current : break
+
+    auto breakNode = std::make_shared<BreakNode>(workbench.current().value(), static_cast<std::shared_ptr<Expression>>(nullptr));
+    if (contains(workbench.next().current(), {tokenize::TokenType::At})) {
+        workbench.next();
+        if (workbench.current().valid() == false) {
+            throw std::runtime_error("invalid break statement");
         }
 
-        // TODO: 레이블 파싱하는 전략을 부르고 해당 전략을 호출해야함.
-        // auto labelExpression = Strategy
+        auto [label, itr] = strategy.parse(workbench);
+        workbench.move_at(itr);
+        breakNode->set_label(label->as<Expression>());
     }
 
-    return parsing::ParseStrategyResult(break_node, itr);
+    return {breakNode, tokens.begin() + workbench.current().distance()};
 }
 
 } // namespace nugdev::compiler::ast::statement

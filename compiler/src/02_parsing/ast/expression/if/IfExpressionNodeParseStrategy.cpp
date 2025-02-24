@@ -7,67 +7,56 @@
 
 namespace nugdev::compiler::ast::expression {
 
-bool IfExpressionNodeParseStrategy::can_parse(const tokenize::TokenStream &tokens) { return tokens.current()->get_type() == tokenize::TokenType::If; }
+bool IfExpressionNodeParseStrategy::can_parse(const tokenize::TokenStream &tokens) { return contains(tokens.current(), {tokenize::TokenType::If}); }
 
 parsing::ParseStrategyResult IfExpressionNodeParseStrategy::parse(const tokenize::TokenStream &tokens) {
-    auto stream = tokens.clone();
-    auto itr = stream.current().next();
+    static ExpressionParseStrategy expressionStrategy{};
+    static statement::BlockStatementNodeParseStrategy blockStrategy{};
 
-    if (itr->get_type() != tokenize::TokenType::LParen) {
+    auto workbench = tokens.clone().next(); // current: 'if' | 'elif'
+    if (!contains(workbench.current(), {tokenize::TokenType::LParen})) {
         throw std::runtime_error("Expected '('");
     }
+    workbench.next();
 
-    stream.move(itr.next());
-    itr = stream.current();
+    auto [condition, conditionItr] = expressionStrategy.parse(workbench);
+    workbench.move_at(conditionItr);
 
-    auto [condition, conditionItr] = ExpressionParseStrategy().parse(stream);
-    if (condition == nullptr) {
-        throw std::runtime_error("Expected condition");
-    }
-
-    stream.move(conditionItr);
-    itr = stream.current();
-
-    if (itr->get_type() != tokenize::TokenType::RParen) {
+    if (!contains(workbench.current(), {tokenize::TokenType::RParen})) {
         throw std::runtime_error("Expected ')'");
     }
+    workbench.next();
 
-    if (itr.next()->get_type() != tokenize::TokenType::LBrace) {
+    if (workbench.current()->get_type() != tokenize::TokenType::LBrace) {
         throw std::runtime_error("Expected '{'");
     }
+    workbench.next();
 
-    auto [consequence, consequenceItr] = statement::BlockStatementNodeParseStrategy().parse(stream);
-    if (consequence == nullptr) {
-        throw std::runtime_error("Expected consequence");
+    auto [consequence, consequenceItr] = blockStrategy.parse(workbench);
+    workbench.move_at(consequenceItr.next());
+
+    // ealiy-return elif else case
+    if (!contains(workbench.current(), {tokenize::TokenType::Else, tokenize::TokenType::Elif})) {
+        return {std::make_shared<IfExpressionNode>(*tokens.current(), condition->as<Expression>(), consequence->as<Statement>(), nullptr),
+                tokens.current() + workbench.current().distance()};
     }
 
-    if (consequenceItr.next()->get_type() != tokenize::TokenType::RBrace) {
-        throw std::runtime_error("Expected '}'");
+    if (contains(workbench.current(), {tokenize::TokenType::Elif})) {
+        auto [alternative, alternativeItr] = parse(workbench);
+        workbench.move_at(alternativeItr);
+        return {std::make_shared<IfExpressionNode>(*tokens.current(), condition->as<Expression>(), consequence->as<Statement>(), alternative->as<Statement>()),
+                tokens.current() + workbench.current().distance()};
     }
 
-    if (itr.next()->get_type() != tokenize::TokenType::Else) {
-        return parsing::ParseStrategyResult{std::make_shared<IfExpressionNode>(*itr, condition->as<Expression>(), consequence->as<Expression>(), nullptr),
-                                            stream.current() + itr.distance()};
+    if (contains(workbench.current(), {tokenize::TokenType::Else})) {
+        auto [alternative, alternativeItr] = blockStrategy.parse(workbench);
+        workbench.move_at(alternativeItr.next());
+        return {std::make_shared<IfExpressionNode>(*tokens.current(), condition->as<Expression>(), consequence->as<Statement>(), alternative->as<Statement>()),
+                tokens.current() + workbench.current().distance()};
     }
 
-    stream.move(itr.next().next());
-    itr = stream.current();
-
-    auto [alternative, alternativeItr] = statement::BlockStatementNodeParseStrategy().parse(stream);
-    if (alternative == nullptr) {
-        throw std::runtime_error("Expected alternative");
-    }
-
-    if (alternativeItr.next()->get_type() != tokenize::TokenType::RBrace) {
-        throw std::runtime_error("Expected '}'");
-    }
-
-    stream.move(alternativeItr.next());
-    itr = stream.current();
-
-    return parsing::ParseStrategyResult{
-        std::make_shared<IfExpressionNode>(*itr, condition->as<Expression>(), consequence->as<Expression>(), alternative->as<Expression>()),
-        stream.current() + itr.distance()};
+    return {std::make_shared<IfExpressionNode>(*tokens.current(), condition->as<Expression>(), consequence->as<Statement>(), nullptr),
+            tokens.current() + workbench.current().distance()};
 }
 
 } // namespace nugdev::compiler::ast::expression

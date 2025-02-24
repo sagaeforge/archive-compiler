@@ -2,7 +2,7 @@
 
 namespace nugdev::compiler::ast::expression {
 
-FunctionLiteralNode::FunctionLiteralNode(const tokenize::Token &token, std::vector<std::shared_ptr<Expression>> parameters, std::shared_ptr<Expression> body)
+FunctionLiteralNode::FunctionLiteralNode(const tokenize::Token &token, std::vector<std::shared_ptr<Expression>> parameters, std::shared_ptr<Statement> body)
     : m_token(token), m_parameters(parameters), m_body(body) {}
 
 icu::UnicodeString FunctionLiteralNode::to_str() const { return m_token.get_literal(); }

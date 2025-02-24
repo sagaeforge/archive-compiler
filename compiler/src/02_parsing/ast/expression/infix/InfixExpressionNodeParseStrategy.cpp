@@ -10,19 +10,14 @@ bool InfixExpressionNodeParseStrategy::can_parse(const tokenize::TokenStream &to
 parsing::ParseStrategyResult InfixExpressionNodeParseStrategy::parse(const tokenize::TokenStream &tokens) { throw std::runtime_error("Not implemented"); }
 
 parsing::ParseStrategyResult InfixExpressionNodeParseStrategy::parse(const tokenize::TokenStream &tokens, std::shared_ptr<Expression> left) {
-    auto stream = tokens.clone();
-    auto itr = stream.current();
-    auto op = itr->get_literal();
-    auto precedence = ExpressionParseStrategy::get_precedence(itr->get_type());
+    static ExpressionParseStrategy expressionStrategy{};
 
-    stream = stream.move(itr.next());
+    auto workbench = tokens.clone(); // current: '+' | '-' | '*' | '/' | '%' | '==' | '!=' | '<' | '>' | '<=' | '>='
+    auto [right, rightItr] = expressionStrategy.parse(workbench, ExpressionParseStrategy::get_precedence(workbench.current()->get_type()));
+    workbench.move_at(rightItr);
 
-    auto [right, rightItr] = ExpressionParseStrategy().parse(stream, precedence);
-    if (right == nullptr) {
-        throw std::runtime_error("Expected right expression");
-    }
-
-    return parsing::ParseStrategyResult{std::make_shared<InfixExpressionNode>(*itr, left, op, right->as<Expression>()), rightItr};
+    return {std::make_shared<InfixExpressionNode>(*tokens.current(), left->as<Expression>(), tokens.current()->get_literal(), right->as<Expression>()),
+            tokens.current() + workbench.current().distance()};
 }
 
 } // namespace nugdev::compiler::ast::expression

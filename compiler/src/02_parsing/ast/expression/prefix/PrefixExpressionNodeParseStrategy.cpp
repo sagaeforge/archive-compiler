@@ -8,20 +8,14 @@ namespace nugdev::compiler::ast::expression {
 bool PrefixExpressionNodeParseStrategy::can_parse(const tokenize::TokenStream &tokens) { return true; }
 
 parsing::ParseStrategyResult PrefixExpressionNodeParseStrategy::parse(const tokenize::TokenStream &tokens) {
-    auto stream = tokens.clone();
-    auto itr = stream.current();
+    static ExpressionParseStrategy expressionStrategy{};
 
-    auto op = itr->get_literal();
-    auto precedence = ExpressionParseStrategy::get_precedence(itr->get_type());
+    auto workbench = tokens.clone().next(); // current: '-' | '!'
+    auto [right, rightItr] = expressionStrategy.parse(workbench, ExpressionParseStrategy::get_precedence(workbench.current()->get_type()));
+    workbench.move_at(rightItr);
 
-    stream = stream.move(itr.next());
-
-    auto [right, rightItr] = ExpressionParseStrategy().parse(stream, precedence);
-    if (right == nullptr) {
-        throw std::runtime_error("Expected right expression");
-    }
-
-    return parsing::ParseStrategyResult{std::make_shared<PrefixExpressionNode>(*itr, op, right->as<Expression>()), stream.current() + itr.distance()};
+    return {std::make_shared<PrefixExpressionNode>(*tokens.current(), tokens.current()->get_literal(), right->as<Expression>()),
+            tokens.current() + workbench.current().distance()};
 }
 
 } // namespace nugdev::compiler::ast::expression

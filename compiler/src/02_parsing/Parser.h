@@ -29,16 +29,8 @@ class Parser {
     Parser() = default;
     ~Parser() = default;
 
-    /*
-        root -> statements -> expression
-     */
-
   public:
-    std::shared_ptr<ast::Module> parse_root(const TokenStream &tokens);
-
-    std::shared_ptr<ast::Statement> parse_statement();
-
-    std::shared_ptr<ast::Expression> parse_expression();
+    std::shared_ptr<ast::Module> parse(const TokenStream &tokens);
 };
 
 } // namespace parsing

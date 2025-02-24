@@ -3,7 +3,7 @@
 
 namespace nugdev::compiler::ast::statement {
 
-BreakNode::BreakNode(tokenize::Token &token, std::shared_ptr<Expression> label) : m_token(token), m_label(label) {}
+BreakNode::BreakNode(const tokenize::Token &token, std::shared_ptr<Expression> label) : m_token(token), m_label(label) {}
 
 json::JsonValue BreakNode::to_json(json::JsonAllocator &allocator) const {
     json::JsonValue value(json::Type::kObjectType);
@@ -13,6 +13,12 @@ json::JsonValue BreakNode::to_json(json::JsonAllocator &allocator) const {
 }
 
 icu::UnicodeString BreakNode::to_str() const { return u"Break"; }
+
 const tokenize::Token &BreakNode::get_token() const { return m_token; }
+
+BreakNode::self_t BreakNode::set_label(std::shared_ptr<Expression> label) {
+    m_label = label;
+    return *this;
+}
 
 } // namespace nugdev::compiler::ast::statement

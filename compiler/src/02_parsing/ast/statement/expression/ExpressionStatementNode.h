@@ -6,7 +6,7 @@ namespace nugdev::compiler::ast::statement {
 
 class ExpressionStatementNode : public Statement {
   public:
-    ExpressionStatementNode(const tokenize::Token &token, std::shared_ptr<Expression> expression);
+    ExpressionStatementNode(std::shared_ptr<Expression> expression);
 
   public:
     virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
@@ -14,7 +14,6 @@ class ExpressionStatementNode : public Statement {
     virtual const tokenize::Token &get_token() const override;
 
   private:
-    tokenize::Token m_token;
     std::shared_ptr<Expression> m_expression;
 };
 

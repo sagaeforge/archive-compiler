@@ -41,7 +41,7 @@ std::vector<Token> Tokenizer::tokenize(const icu::UnicodeString &str) {
         // 주석의 경우 씹어주는 과정이 필요함.
         if (*current == u'#') {
             auto it = find_first_of(stream, {u'\n'});
-            stream.move(it);
+            stream.move_at(it);
             continue;
         }
 
@@ -57,7 +57,7 @@ std::vector<Token> Tokenizer::tokenize(const icu::UnicodeString &str) {
             try {
                 auto [token, next] = factory->create_token(current);
                 tokens.push_back(token);
-                stream.move(next);
+                stream.move_at(next);
                 tokenProcessed = true;
                 break;
             } catch (const std::exception &e) {

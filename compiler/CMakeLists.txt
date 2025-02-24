@@ -34,6 +34,8 @@ add_library(
     src/02_parsing/ast/AST.cpp
     src/02_parsing/ast/ASTNodeAspect.h
     src/02_parsing/ast/ASTNodeVisitor.h
+    src/02_parsing/ParseStrategy.h
+    src/02_parsing/ParseStrategy.cpp
 
     src/02_parsing/ast/module/program/ProgramNode.h
     src/02_parsing/ast/module/program/ProgramNode.cpp
