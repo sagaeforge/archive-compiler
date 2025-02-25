@@ -29,6 +29,7 @@ add_library(
     src/01_tokenize/factory/StringTokenFactory.cpp
 
     src/02_parsing/Parser.h
+    src/02_parsing/Parser.cpp
     src/02_parsing/ParseStrategy.h
     src/02_parsing/ast/AST.h
     src/02_parsing/ast/AST.cpp
@@ -71,6 +72,8 @@ add_library(
 
     src/02_parsing/ast/expression/ExpressionParseStrategy.h
     src/02_parsing/ast/expression/ExpressionParseStrategy.cpp
+    src/02_parsing/ast/expression/GroupExpressionParseStrategy.h
+    src/02_parsing/ast/expression/GroupExpressionParseStrategy.cpp
     src/02_parsing/ast/expression/array/ArrayLiteralNode.h
     src/02_parsing/ast/expression/array/ArrayLiteralNode.cpp
     src/02_parsing/ast/expression/array/ArrayLiteralNodeParseStrategy.h
@@ -85,8 +88,8 @@ add_library(
     src/02_parsing/ast/expression/identifier/IdentifierLiteralNodeParseStrategy.cpp
     src/02_parsing/ast/expression/number/NumberLiteralNode.h
     src/02_parsing/ast/expression/number/NumberLiteralNode.cpp
-    src/02_parsing/ast/expression/number/NumberLiteralParseStrategy.h
-    src/02_parsing/ast/expression/number/NumberLiteralParseStrategy.cpp
+    src/02_parsing/ast/expression/number/NumberLiteralNodeParseStrategy.h
+    src/02_parsing/ast/expression/number/NumberLiteralNodeParseStrategy.cpp
     src/02_parsing/ast/expression/string/StringLiteralNode.h
     src/02_parsing/ast/expression/string/StringLiteralNode.cpp
     src/02_parsing/ast/expression/string/StringLiteralNodeParseStrategy.h
@@ -139,7 +142,7 @@ add_executable(
 
     test/01_tokenize/01_init_token/tokenizer_test.cpp
 
-    src/02_parsing/ast/module/program/test/create_test.cpp
+    test/02_parsing/parser/parser_test.cpp
 )
 
 target_include_directories(

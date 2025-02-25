@@ -105,7 +105,7 @@ template <typename T = char16_t> class Stream {
         m_current++;
         return *this;
     }
-    self_t clone() const { return self_t(m_elems); }
+    self_t clone() const { return self_t(*this); }
     self_t move(const direction_t &dir) {
         m_current += dir;
         return *this;

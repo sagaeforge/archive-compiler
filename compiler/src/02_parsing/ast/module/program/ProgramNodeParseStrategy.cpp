@@ -13,14 +13,11 @@ parsing::ParseStrategyResult ProgramNodeParseStrategy::parse(const tokenize::Tok
     std::vector<std::shared_ptr<Statement>> statements;
 
     auto workbench = tokens.clone();
-    auto itr = workbench.current();
     do {
-        itr = workbench.current();
-
-        auto [statement, nextItr] = strategy.parse(workbench.move(itr.distance()));
+        auto [statement, nextItr] = strategy.parse(workbench);
         workbench.move_at(nextItr);
         statements.push_back(statement->as<Statement>());
-    } while (itr.valid() && itr.value().get_type() != tokenize::TokenType::EoF);
+    } while (workbench.current().valid() && !contains(workbench.current(), {tokenize::TokenType::EoF}));
 
     return {std::make_shared<ProgramNode>(statements), tokens.begin() + workbench.current().distance()};
 }

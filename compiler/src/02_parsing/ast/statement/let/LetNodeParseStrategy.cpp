@@ -12,13 +12,14 @@ parsing::ParseStrategyResult LetNodeParseStrategy::parse(const tokenize::TokenSt
     static expression::IdentifierLiteralNodeParseStrategy identifierStrategy{};
     static expression::ExpressionParseStrategy expressionStrategy{};
 
+    auto letToken = tokens.current();
     auto workbench = tokens.clone(); // current : let
     workbench.next();
 
     auto [name, identifierItr] = identifierStrategy.parse(workbench);
     workbench.move_at(identifierItr);
 
-    auto letNode = std::make_shared<LetNode>(workbench.current().value(), name->as<Expression>(), nullptr, nullptr);
+    auto letNode = std::make_shared<LetNode>(letToken.value(), name->as<Expression>(), nullptr, nullptr);
     if (contains(workbench.current(), {tokenize::TokenType::Colon})) {
         workbench.next();
         auto [type, expressionItr] = expressionStrategy.parse(workbench);
@@ -26,7 +27,7 @@ parsing::ParseStrategyResult LetNodeParseStrategy::parse(const tokenize::TokenSt
         letNode->set_type(type->as<Expression>());
     }
 
-    if (contains(workbench.current(), {tokenize::TokenType::Equal})) {
+    if (contains(workbench.current(), {tokenize::TokenType::Assign})) {
         workbench.next();
         auto [value, expressionItr] = expressionStrategy.parse(workbench);
         workbench.move_at(expressionItr);
