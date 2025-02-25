@@ -7,7 +7,18 @@ FunctionLiteralNode::FunctionLiteralNode(const tokenize::Token &token, std::vect
 
 icu::UnicodeString FunctionLiteralNode::to_str() const { return m_token.get_literal(); }
 
-json::JsonValue FunctionLiteralNode::to_json(json::JsonAllocator &allocator) const { return json::JsonValue(""); }
+json::JsonValue FunctionLiteralNode::to_json(json::JsonAllocator &allocator) const {
+    json::JsonValue value(json::Type::kObjectType);
+    value.AddMember("type", json::JsonValue("FunctionLiteral"), allocator);
+    value.AddMember("parameters", json::JsonValue(json::Type::kArrayType), allocator);
+    value.AddMember("body", m_body->to_json(allocator), allocator);
+
+    for (const auto &parameter : m_parameters) {
+        value["parameters"].PushBack(parameter->to_json(allocator), allocator);
+    }
+
+    return value;
+}
 
 const tokenize::Token &FunctionLiteralNode::get_token() const { return m_token; }
 

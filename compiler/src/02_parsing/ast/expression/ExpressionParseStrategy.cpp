@@ -70,7 +70,7 @@ ExpressionParseStrategy::Precedence ExpressionParseStrategy::get_precedence(toke
     case tokenize::TokenType::LBracket:
         return Precedence::Index;
     default:
-        return Precedence::Unknown;
+        return Precedence::Lowest;
     }
 }
 
@@ -92,7 +92,6 @@ parsing::ParseStrategyResult ExpressionParseStrategy::parse(const tokenize::Toke
         if (infix == m_infixParseFns.end()) {
             return parsing::ParseStrategyResult{leftExpr, tokens.current()};
         }
-        workbench.next();
 
         auto infixParseStrategy = std::dynamic_pointer_cast<InfixExpressionNodeParseStrategy>(infix->second);
         auto [rightExpr, rightMoveItr] = infixParseStrategy->parse(workbench, leftExpr->as<ast::Expression>());
@@ -100,7 +99,7 @@ parsing::ParseStrategyResult ExpressionParseStrategy::parse(const tokenize::Toke
         leftExpr = rightExpr;
     }
 
-    return parsing::ParseStrategyResult{leftExpr, workbench.current() + workbench.current().distance()};
+    return parsing::ParseStrategyResult{leftExpr, workbench.begin() + workbench.current().distance()};
 }
 
 } // namespace nugdev::compiler::ast::expression

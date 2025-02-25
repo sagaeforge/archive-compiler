@@ -6,7 +6,7 @@ ContinueNode::ContinueNode(const tokenize::Token &token, std::shared_ptr<Express
 
 json::JsonValue ContinueNode::to_json(json::JsonAllocator &allocator) const {
     json::JsonValue value(json::Type::kObjectType);
-    value.AddMember("type", json::JsonValue(json::Type::kStringType).SetString("Continue"), allocator);
+    value.AddMember("type", json::JsonValue("Continue"), allocator);
     value.AddMember("label", m_label->is_valid() ? m_label->to_json(allocator) : json::JsonValue(json::Type::kNullType), allocator);
     return value;
 }

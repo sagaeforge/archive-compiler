@@ -8,10 +8,11 @@ icu::UnicodeString ArrayLiteralNode::to_str() const { return icu::UnicodeString(
 
 json::JsonValue ArrayLiteralNode::to_json(json::JsonAllocator &allocator) const {
     json::JsonValue json(json::Type::kObjectType);
-
     json.AddMember("type", json::JsonValue("ArrayLiteral"), allocator);
+    json.AddMember("elements", json::JsonValue(json::Type::kArrayType), allocator);
+
     for (const auto &element : m_elements) {
-        json.AddMember("elements", element->to_json(allocator), allocator);
+        json["elements"].PushBack(element->to_json(allocator), allocator);
     }
 
     return json;

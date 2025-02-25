@@ -6,7 +6,7 @@ ExpressionStatementNode::ExpressionStatementNode(std::shared_ptr<Expression> exp
 
 json::JsonValue ExpressionStatementNode::to_json(json::JsonAllocator &allocator) const {
     json::JsonValue value(json::Type::kObjectType);
-    value.AddMember("type", json::JsonValue(json::Type::kStringType).SetString("ExpressionStatement"), allocator);
+    value.AddMember("type", json::JsonValue("ExpressionStatement"), allocator);
     value.AddMember("expression", m_expression->to_json(allocator), allocator);
     return value;
 }

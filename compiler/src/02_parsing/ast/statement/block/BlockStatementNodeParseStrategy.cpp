@@ -13,12 +13,13 @@ parsing::ParseStrategyResult BlockStatementNodeParseStrategy::parse(const tokeni
 
     std::vector<std::shared_ptr<Statement>> statements;
 
-    auto workbench = tokens.clone(); // current : '{'
+    auto workbench = tokens.clone().next(); // current : '{'
     do {
         auto [statement, itr] = strategy.parse(workbench);
         workbench.move_at(itr);
         statements.push_back(statement->as<Statement>());
-    } while (workbench.current().valid() && contains(workbench.current(), {tokenize::TokenType::RBrace, tokenize::TokenType::EoF}));
+    } while (workbench.current().valid() && !contains(workbench.current(), {tokenize::TokenType::RBrace}));
+    workbench.next();
 
     return {std::make_shared<BlockStatementNode>(statements), tokens.begin() + workbench.current().distance()};
 }

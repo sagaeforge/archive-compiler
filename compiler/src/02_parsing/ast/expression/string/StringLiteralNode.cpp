@@ -6,7 +6,16 @@ StringLiteralNode::StringLiteralNode(const tokenize::Token &token, icu::UnicodeS
 
 icu::UnicodeString StringLiteralNode::to_str() const { return m_token.get_literal(); }
 
-json::JsonValue StringLiteralNode::to_json(json::JsonAllocator &allocator) const { return json::JsonValue(""); }
+json::JsonValue StringLiteralNode::to_json(json::JsonAllocator &allocator) const {
+    json::JsonValue value(json::Type::kObjectType);
+    value.AddMember("type", json::JsonValue("StringLiteral"), allocator);
+    std::string value_str;
+    m_value.toUTF8String(value_str);
+    json::JsonValue value_json(json::Type::kStringType);
+    value_json.SetString(value_str.c_str(), allocator);
+    value.AddMember("value", value_json, allocator);
+    return value;
+}
 
 const tokenize::Token &StringLiteralNode::get_token() const { return m_token; }
 

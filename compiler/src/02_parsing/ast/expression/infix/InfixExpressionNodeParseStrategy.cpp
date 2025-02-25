@@ -13,11 +13,11 @@ parsing::ParseStrategyResult InfixExpressionNodeParseStrategy::parse(const token
     static ExpressionParseStrategy expressionStrategy{};
 
     auto workbench = tokens.clone(); // current: '+' | '-' | '*' | '/' | '%' | '==' | '!=' | '<' | '>' | '<=' | '>='
-    auto [right, rightItr] = expressionStrategy.parse(workbench, ExpressionParseStrategy::get_precedence(workbench.current()->get_type()));
+    auto [right, rightItr] = expressionStrategy.parse(workbench.next(), ExpressionParseStrategy::get_precedence(workbench.current()->get_type()));
     workbench.move_at(rightItr);
 
     return {std::make_shared<InfixExpressionNode>(*tokens.current(), left->as<Expression>(), tokens.current()->get_literal(), right->as<Expression>()),
-            tokens.current() + workbench.current().distance()};
+            tokens.begin() + workbench.current().distance()};
 }
 
 } // namespace nugdev::compiler::ast::expression

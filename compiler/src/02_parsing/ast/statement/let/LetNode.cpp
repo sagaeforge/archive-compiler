@@ -7,9 +7,10 @@ LetNode::LetNode(const tokenize::Token &token, std::shared_ptr<Expression> name,
 
 json::JsonValue LetNode::to_json(json::JsonAllocator &allocator) const {
     json::JsonValue root = json::JsonValue(json::Type::kObjectType);
+    root.AddMember("type", json::JsonValue("Let"), allocator);
     root.AddMember("name", m_name->to_json(allocator), allocator);
-    root.AddMember("type", m_type->to_json(allocator), allocator);
-    root.AddMember("value", m_value->to_json(allocator), allocator);
+    root.AddMember("type_expression", m_type != nullptr ? m_type->to_json(allocator) : json::JsonValue(json::Type::kNullType), allocator);
+    root.AddMember("value", m_value != nullptr ? m_value->to_json(allocator) : json::JsonValue(json::Type::kNullType), allocator);
     return root;
 }
 

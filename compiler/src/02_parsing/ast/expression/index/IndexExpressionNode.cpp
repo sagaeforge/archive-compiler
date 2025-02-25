@@ -7,7 +7,13 @@ IndexExpressionNode::IndexExpressionNode(const tokenize::Token &token, std::shar
 
 icu::UnicodeString IndexExpressionNode::to_str() const { return icu::UnicodeString(u""); }
 
-json::JsonValue IndexExpressionNode::to_json(json::JsonAllocator &allocator) const { return json::JsonValue(""); }
+json::JsonValue IndexExpressionNode::to_json(json::JsonAllocator &allocator) const {
+    json::JsonValue value(json::Type::kObjectType);
+    value.AddMember("type", json::JsonValue("IndexExpression"), allocator);
+    value.AddMember("left", m_left->to_json(allocator), allocator);
+    value.AddMember("index", m_index->to_json(allocator), allocator);
+    return value;
+}
 
 const tokenize::Token &IndexExpressionNode::get_token() const { return m_token; }
 
