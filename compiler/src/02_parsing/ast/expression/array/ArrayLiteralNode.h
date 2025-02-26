@@ -7,7 +7,7 @@ namespace nugdev::compiler::ast::expression {
 
 class ArrayLiteralNode : public Expression {
   public:
-    ArrayLiteralNode(const tokenize::Token &token, std::vector<std::shared_ptr<Expression>> &elements);
+    ArrayLiteralNode(const tokenize::Token &token, const std::vector<std::shared_ptr<Expression>> &elements);
 
   public:
     virtual icu::UnicodeString to_str() const override;

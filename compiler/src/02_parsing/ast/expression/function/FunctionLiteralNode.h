@@ -6,7 +6,9 @@ namespace nugdev::compiler::ast::expression {
 
 class FunctionLiteralNode : public Expression {
   public:
-    FunctionLiteralNode(const tokenize::Token &token, std::vector<std::shared_ptr<Expression>> parameters, std::shared_ptr<Statement> body);
+    FunctionLiteralNode(const tokenize::Token &token,
+                        const std::vector<std::tuple<std::shared_ptr<Expression>, std::shared_ptr<Expression>, std::shared_ptr<Expression>>> &parameters,
+                        std::shared_ptr<Statement> body);
 
   public:
     virtual icu::UnicodeString to_str() const override;
@@ -15,7 +17,7 @@ class FunctionLiteralNode : public Expression {
 
   private:
     tokenize::Token m_token;
-    std::vector<std::shared_ptr<Expression>> m_parameters;
+    std::vector<std::tuple<std::shared_ptr<Expression>, std::shared_ptr<Expression>, std::shared_ptr<Expression>>> m_parameters;
     std::shared_ptr<Statement> m_body;
 };
 } // namespace nugdev::compiler::ast::expression

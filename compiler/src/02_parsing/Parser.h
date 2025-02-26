@@ -33,6 +33,7 @@ class Parser {
   public:
     std::shared_ptr<ast::Module> parse(const TokenStream &tokens);
     json::JsonDocument to_json(const std::shared_ptr<ast::Module> &module);
+    std::string to_string(const std::shared_ptr<ast::Module> &module);
 };
 
 } // namespace parsing

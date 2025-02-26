@@ -1,6 +1,8 @@
-#include "../parser_test_case.h"
+#include "02_parsing/parser_test_case.h"
 
-TEST_F(ParserTestCase, let_define) {
+class LetTestCase : public ParserTestCase {};
+
+TEST_F(LetTestCase, let_define) {
     EXPECT_TRUE(LOAD_SAMPLE(let_define));
 
     auto tokens = tokenizer.tokenize(u"let a");
@@ -9,7 +11,7 @@ TEST_F(ParserTestCase, let_define) {
     expect_ast(parser.to_json(ast));
 }
 
-TEST_F(ParserTestCase, let_set_value) {
+TEST_F(LetTestCase, let_set_value) {
     EXPECT_TRUE(LOAD_SAMPLE(let_set_value));
 
     auto tokens = tokenizer.tokenize(u"let a = 10");
@@ -18,7 +20,7 @@ TEST_F(ParserTestCase, let_set_value) {
     expect_ast(parser.to_json(ast));
 }
 
-TEST_F(ParserTestCase, let_define_with_type) {
+TEST_F(LetTestCase, let_define_with_type) {
     EXPECT_TRUE(LOAD_SAMPLE(let_define_with_type));
 
     auto tokens = tokenizer.tokenize(u"let a: int");
@@ -27,7 +29,7 @@ TEST_F(ParserTestCase, let_define_with_type) {
     expect_ast(parser.to_json(ast));
 }
 
-TEST_F(ParserTestCase, let_set_value_with_type) {
+TEST_F(LetTestCase, let_set_value_with_type) {
     EXPECT_TRUE(LOAD_SAMPLE(let_set_value_with_type));
 
     auto tokens = tokenizer.tokenize(u"let a: int = 10");

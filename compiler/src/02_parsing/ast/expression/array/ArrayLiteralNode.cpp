@@ -2,7 +2,8 @@
 
 namespace nugdev::compiler::ast::expression {
 
-ArrayLiteralNode::ArrayLiteralNode(const tokenize::Token &token, std::vector<std::shared_ptr<Expression>> &elements) : m_token(token), m_elements(elements) {}
+ArrayLiteralNode::ArrayLiteralNode(const tokenize::Token &token, const std::vector<std::shared_ptr<Expression>> &elements)
+    : m_token(token), m_elements(elements) {}
 
 icu::UnicodeString ArrayLiteralNode::to_str() const { return icu::UnicodeString(u"["); }
 

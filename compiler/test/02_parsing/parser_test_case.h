@@ -2,7 +2,6 @@
 
 #include <gtest/gtest.h>
 
-#include <fstream>
 #include <string_view>
 #include <unicode/unistr.h>
 

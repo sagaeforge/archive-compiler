@@ -142,11 +142,15 @@ add_executable(
 
     test/01_tokenize/01_init_token/tokenizer_test.cpp
 
-    test/02_parsing/parser/parser_test.cpp
-
     test/02_parsing/parser_test_case.h
     test/02_parsing/parser_test_case.cpp
     test/02_parsing/let/let_test.cpp
+    test/02_parsing/call/call_test.cpp
+    test/02_parsing/literal/boolean/boolean_test.cpp
+    test/02_parsing/literal/number/number_test.cpp
+    test/02_parsing/literal/string/string_test.cpp
+    test/02_parsing/literal/array/array_test.cpp
+    test/02_parsing/literal/function/function_test.cpp
 )
 
 target_include_directories(
@@ -163,6 +167,7 @@ target_include_directories(
     ${PROJECT_NAME}_test
 PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/test
     ${GTEST_INCLUDE_DIRS}
 )
 

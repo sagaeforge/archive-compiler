@@ -1,0 +1,49 @@
+{
+    "root": {
+        "type": "Program",
+        "statements": [
+            {
+                "type": "ExpressionStatement",
+                "expression": {
+                    "type": "FunctionLiteral",
+                    "parameters": [
+                        {
+                            "name": {
+                                "type": "IdentifierLiteral",
+                                "value": "a"
+                            },
+                            "type": {
+                                "type": "IdentifierLiteral",
+                                "value": "Int"
+                            },
+                            "defaultValue": null
+                        },
+                        {
+                            "name": {
+                                "type": "IdentifierLiteral",
+                                "value": "b"
+                            },
+                            "type": {
+                                "type": "IdentifierLiteral",
+                                "value": "Int"
+                            },
+                            "defaultValue": null
+                        }
+                    ],
+                    "body": {
+                        "type": "BlockStatement",
+                        "statements": [
+                            {
+                                "type": "ExpressionStatement",
+                                "expression": {
+                                    "type": "NumberLiteral",
+                                    "value": "123"
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        ]
+    }
+}

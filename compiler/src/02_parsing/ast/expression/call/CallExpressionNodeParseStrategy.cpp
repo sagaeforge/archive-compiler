@@ -14,13 +14,18 @@ parsing::ParseStrategyResult CallExpressionNodeParseStrategy::parse(const tokeni
     static ExpressionParseStrategy strategy{};
 
     auto workbench = tokens.clone();
-    if (contains(workbench.current(), {tokenize::TokenType::RParen})) {
-        return {std::make_shared<CallExpressionNode>(workbench.current().value(), callee, std::vector<std::shared_ptr<ast::Expression>>()),
-                tokens.current().next()};
-    }
 
     std::vector<std::shared_ptr<ast::Expression>> list;
     do {
+        workbench.next();
+
+        if (contains(workbench.current(), {tokenize::TokenType::RParen})) {
+            workbench.next();
+
+            return {std::make_shared<CallExpressionNode>(workbench.current().value(), callee, std::vector<std::shared_ptr<ast::Expression>>()),
+                    tokens.begin() + workbench.current().distance()};
+        }
+
         auto [element, moveItr] = strategy.parse(workbench, ast::expression::ExpressionParseStrategy::Precedence::Lowest);
         workbench.move_at(moveItr);
         list.push_back(element->as<ast::Expression>());
@@ -29,8 +34,9 @@ parsing::ParseStrategyResult CallExpressionNodeParseStrategy::parse(const tokeni
     if (!contains(workbench.current(), {tokenize::TokenType::RParen})) {
         throw std::runtime_error("Expected ')'");
     }
+    workbench.next();
 
-    return {std::make_shared<CallExpressionNode>(workbench.current().value(), callee, list), tokens.current().next()};
+    return {std::make_shared<CallExpressionNode>(workbench.current().value(), callee, list), tokens.begin() + workbench.current().distance()};
 }
 
 } // namespace nugdev::compiler::ast::expression

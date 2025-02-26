@@ -14,23 +14,26 @@ parsing::ParseStrategyResult FunctionLiteralNodeParseStrategy::parse(const token
     static ExpressionParseStrategy expressionStrategy{};
     static statement::BlockStatementNodeParseStrategy blockStrategy{};
 
-    auto workbench = tokens.clone();
-    if (!contains(workbench.current(), {tokenize::TokenType::RParen})) {
-        throw std::runtime_error("Expected ')'");
-    }
+    auto workbench = tokens.clone(); // current: 'fn'
     workbench.next();
 
-    if (contains(workbench.current(), {tokenize::TokenType::RParen})) {
-        return {std::make_shared<FunctionLiteralNode>(workbench.current().value(), std::vector<std::shared_ptr<Expression>>(), nullptr),
-                tokens.current().next()};
-    }
-    workbench.next();
+    auto [identifier, identifierItr] = identifierStrategy.parse(workbench);
+    workbench.move_at(identifierItr);
 
-    auto identifiers = std::vector<std::shared_ptr<Expression>>();
+    if (!contains(workbench.current(), {tokenize::TokenType::LParen})) {
+        throw std::runtime_error("Expected '('");
+    }
+
+    auto parameters = std::vector<std::tuple<std::shared_ptr<Expression>, std::shared_ptr<Expression>, std::shared_ptr<Expression>>>();
     do {
+        workbench.next();
+
+        if (contains(workbench.current(), {tokenize::TokenType::RParen})) {
+            break;
+        }
+
         auto [element, identifierItr] = identifierStrategy.parse(workbench);
         workbench.move_at(identifierItr);
-        identifiers.push_back(element->as<ast::Expression>());
 
         if (!contains(workbench.current(), {tokenize::TokenType::Colon})) {
             throw std::runtime_error("Expected ':'");
@@ -39,17 +42,29 @@ parsing::ParseStrategyResult FunctionLiteralNodeParseStrategy::parse(const token
 
         auto [type, typeItr] = expressionStrategy.parse(workbench);
         workbench.move_at(typeItr);
-        identifiers.push_back(type->as<ast::Expression>());
+
+        // 만약에 = 이 있다면, 기본 값을 추가해서 대응한다.
+        if (contains(workbench.current(), {tokenize::TokenType::Assign})) {
+            workbench.next();
+            auto [defaultValue, defaultValueItr] = expressionStrategy.parse(workbench);
+            workbench.move_at(defaultValueItr);
+            parameters.push_back(std::make_tuple(element->as<ast::Expression>(), type->as<ast::Expression>(), defaultValue->as<ast::Expression>()));
+            continue;
+        }
+
+        parameters.push_back(std::make_tuple(element->as<ast::Expression>(), type->as<ast::Expression>(), nullptr));
+
     } while (contains(workbench.current(), {tokenize::TokenType::Comma}));
 
-    if (!contains(workbench.current(), {tokenize::TokenType::RParen})) {
+    if (workbench.current()->get_type() != tokenize::TokenType::RParen) {
         throw std::runtime_error("Expected ')'");
     }
     workbench.next();
 
     auto [body, bodyItr] = blockStrategy.parse(workbench);
     workbench.move_at(bodyItr);
-    return {std::make_shared<FunctionLiteralNode>(workbench.current().value(), identifiers, body->as<ast::Statement>()), tokens.current().next()};
+    return {std::make_shared<FunctionLiteralNode>(workbench.current().value(), parameters, body->as<ast::Statement>()),
+            tokens.begin() + workbench.current().distance()};
 }
 
 } // namespace nugdev::compiler::ast::expression

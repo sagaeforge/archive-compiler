@@ -1,6 +1,7 @@
 #include "parser_test_case.h"
 
 #include <filesystem>
+#include <fstream>
 
 #include "00_app/json/Json.hpp"
 #include <rapidjson/prettywriter.h>

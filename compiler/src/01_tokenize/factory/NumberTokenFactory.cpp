@@ -4,14 +4,45 @@ namespace nugdev::compiler::tokenize {
 
 bool NumberTokenFactory::can_handle(const stream::StringStreamIterator &it) {
     auto ch = *it;
-    return ::iswdigit(ch);
+    return ::iswdigit(ch) || ch == '-';
 }
 
 std::tuple<Token, stream::StringStreamIterator> NumberTokenFactory::create_token(const stream::StringStreamIterator &it) {
     icu::UnicodeString value;
     auto itr = it;
-    for (; can_handle(itr); itr++) {
-        value += *itr;
+    bool has_decimal = false;
+    bool has_exponent = false;
+
+    if (*itr == '-') {
+        value += *itr++;
+    }
+
+    while (::iswdigit(*itr)) {
+        value += *itr++;
+    }
+
+    if (*itr == '.') {
+        has_decimal = true;
+        value += *itr++;
+        while (::iswdigit(*itr)) {
+            value += *itr++;
+        }
+    }
+
+    if (*itr == 'e' || *itr == 'E') {
+        has_exponent = true;
+        value += *itr++;
+
+        if (*itr == '+' || *itr == '-') {
+            value += *itr++;
+        }
+
+        if (!::iswdigit(*itr)) {
+            throw std::runtime_error("Invalid number format: exponent without digits");
+        }
+        while (::iswdigit(*itr)) {
+            value += *itr++;
+        }
     }
 
     return std::make_tuple(Token::from(TokenType::Number, value), itr);

@@ -21,7 +21,7 @@ ExpressionParseStrategy::ExpressionParseStrategy() {
         {tokenize::TokenType::Ident, std::make_shared<IdentifierLiteralNodeParseStrategy>()},
         {tokenize::TokenType::Number, std::make_shared<NumberLiteralNodeParseStrategy>()},
         {tokenize::TokenType::String, std::make_shared<StringLiteralNodeParseStrategy>()},
-        {tokenize::TokenType::ExclamationMark, std::make_shared<BooleanLiteralNodeParseStrategy>()},
+        {tokenize::TokenType::ExclamationMark, std::make_shared<PrefixExpressionNodeParseStrategy>()},
         {tokenize::TokenType::Minus, std::make_shared<PrefixExpressionNodeParseStrategy>()},
         {tokenize::TokenType::True, std::make_shared<BooleanLiteralNodeParseStrategy>()},
         {tokenize::TokenType::False, std::make_shared<BooleanLiteralNodeParseStrategy>()},
@@ -93,13 +93,13 @@ parsing::ParseStrategyResult ExpressionParseStrategy::parse(const tokenize::Toke
             return parsing::ParseStrategyResult{leftExpr, tokens.current()};
         }
 
-        auto infixParseStrategy = std::dynamic_pointer_cast<InfixExpressionNodeParseStrategy>(infix->second);
+        auto infixParseStrategy = std::dynamic_pointer_cast<parsing::InfixParseStrategy>(infix->second);
         auto [rightExpr, rightMoveItr] = infixParseStrategy->parse(workbench, leftExpr->as<ast::Expression>());
         workbench.move_at(rightMoveItr);
         leftExpr = rightExpr;
     }
 
-    return parsing::ParseStrategyResult{leftExpr, workbench.begin() + workbench.current().distance()};
+    return parsing::ParseStrategyResult{leftExpr, tokens.begin() + workbench.current().distance()};
 }
 
 } // namespace nugdev::compiler::ast::expression

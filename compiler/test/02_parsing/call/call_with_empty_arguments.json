@@ -1,0 +1,18 @@
+{
+    "root": {
+        "type": "Program",
+        "statements": [
+            {
+                "type": "ExpressionStatement",
+                "expression": {
+                    "type": "CallExpression",
+                    "callee": {
+                        "type": "IdentifierLiteral",
+                        "value": "add"
+                    },
+                    "arguments": []
+                }
+            }
+        ]
+    }
+}

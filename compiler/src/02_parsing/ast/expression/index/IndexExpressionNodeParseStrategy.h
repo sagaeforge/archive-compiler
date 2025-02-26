@@ -4,11 +4,11 @@
 
 namespace nugdev::compiler::ast::expression {
 
-class IndexExpressionNodeParseStrategy : public parsing::ParseStrategy {
+class IndexExpressionNodeParseStrategy : public parsing::InfixParseStrategy {
   public:
     virtual bool can_parse(const tokenize::TokenStream &tokens) override;
     virtual parsing::ParseStrategyResult parse(const tokenize::TokenStream &tokens) override;
-    parsing::ParseStrategyResult parse(const tokenize::TokenStream &tokens, std::shared_ptr<Expression> left);
+    virtual parsing::ParseStrategyResult parse(const tokenize::TokenStream &tokens, std::shared_ptr<Expression> left) override;
 };
 
 } // namespace nugdev::compiler::ast::expression

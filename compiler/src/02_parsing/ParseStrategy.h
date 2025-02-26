@@ -18,4 +18,9 @@ class ParseStrategy {
     bool contains(const tokenize::TokenStreamIterator &itr, const std::vector<tokenize::TokenType> &types);
 };
 
+class InfixParseStrategy : public ParseStrategy {
+  public:
+    virtual ParseStrategyResult parse(const tokenize::TokenStream &tokens, std::shared_ptr<ast::Expression> left) = 0;
+};
+
 } // namespace nugdev::compiler::parsing
