@@ -1,5 +1,6 @@
 #pragma once
 
+#include "00_app/json/Json.hpp"
 #include "01_tokenize/Token.h"
 #include "02_parsing/ast/AST.h"
 
@@ -31,6 +32,7 @@ class Parser {
 
   public:
     std::shared_ptr<ast::Module> parse(const TokenStream &tokens);
+    json::JsonDocument to_json(const std::shared_ptr<ast::Module> &module);
 };
 
 } // namespace parsing

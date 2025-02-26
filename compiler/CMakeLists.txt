@@ -143,6 +143,10 @@ add_executable(
     test/01_tokenize/01_init_token/tokenizer_test.cpp
 
     test/02_parsing/parser/parser_test.cpp
+
+    test/02_parsing/parser_test_case.h
+    test/02_parsing/parser_test_case.cpp
+    test/02_parsing/let/let_test.cpp
 )
 
 target_include_directories(

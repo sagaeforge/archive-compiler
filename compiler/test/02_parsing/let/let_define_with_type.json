@@ -1,0 +1,19 @@
+{
+    "root": {
+        "type": "Program",
+        "statements": [
+            {
+                "type": "Let",
+                "name": {
+                    "type": "IdentifierLiteral",
+                    "value": "a"
+                },
+                "type_expression": {
+                    "type": "IdentifierLiteral",
+                    "value": "int"
+                },
+                "value": null
+            }
+        ]
+    }
+}
