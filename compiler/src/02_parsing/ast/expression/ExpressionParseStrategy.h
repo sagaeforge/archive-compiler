@@ -11,6 +11,7 @@ class ExpressionParseStrategy : public parsing::ParseStrategy {
   public:
     enum class Precedence {
         Lowest = 1,
+        In,
         Equals,      // ==
         LessGreater, // > or <
         Sum,         // +

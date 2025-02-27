@@ -12,7 +12,7 @@ parsing::ParseStrategyResult InfixExpressionNodeParseStrategy::parse(const token
 parsing::ParseStrategyResult InfixExpressionNodeParseStrategy::parse(const tokenize::TokenStream &tokens, std::shared_ptr<Expression> left) {
     static ExpressionParseStrategy expressionStrategy{};
 
-    auto workbench = tokens.clone(); // current: '+' | '-' | '*' | '/' | '%' | '==' | '!=' | '<' | '>' | '<=' | '>='
+    auto workbench = tokens.clone(); // current: '+' | '-' | '*' | '/' | '%' | '==' | '!=' | '<' | '>' | '<=' | '>=' | 'in'
     auto [right, rightItr] = expressionStrategy.parse(workbench.next(), ExpressionParseStrategy::get_precedence(workbench.current()->get_type()));
     workbench.move_at(rightItr);
 

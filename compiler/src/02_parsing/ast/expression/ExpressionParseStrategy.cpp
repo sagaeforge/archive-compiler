@@ -40,6 +40,7 @@ ExpressionParseStrategy::ExpressionParseStrategy() {
         {tokenize::TokenType::NotEqual, std::make_shared<InfixExpressionNodeParseStrategy>()},
         {tokenize::TokenType::LessThan, std::make_shared<InfixExpressionNodeParseStrategy>()},
         {tokenize::TokenType::GreaterThan, std::make_shared<InfixExpressionNodeParseStrategy>()},
+        {tokenize::TokenType::In, std::make_shared<InfixExpressionNodeParseStrategy>()},
 
         {tokenize::TokenType::LParen, std::make_shared<CallExpressionNodeParseStrategy>()},
         {tokenize::TokenType::LBracket, std::make_shared<IndexExpressionNodeParseStrategy>()},
@@ -54,6 +55,8 @@ ExpressionParseStrategy::ExpressionParseStrategy(std::unordered_map<tokenize::To
 
 ExpressionParseStrategy::Precedence ExpressionParseStrategy::get_precedence(tokenize::TokenType type) {
     switch (type) {
+    case tokenize::TokenType::In:
+        return Precedence::In;
     case tokenize::TokenType::Equal:
     case tokenize::TokenType::NotEqual:
         return Precedence::Equals;
@@ -75,7 +78,14 @@ ExpressionParseStrategy::Precedence ExpressionParseStrategy::get_precedence(toke
     }
 }
 
-bool ExpressionParseStrategy::can_parse(const tokenize::TokenStream &tokens) { return true; }
+bool ExpressionParseStrategy::can_parse(const tokenize::TokenStream &tokens) {
+    for (auto &[type, parseFn] : m_prefixParseFns) {
+        if (type == tokens.current()->get_type()) {
+            return true;
+        }
+    }
+    return false;
+}
 
 parsing::ParseStrategyResult ExpressionParseStrategy::parse(const tokenize::TokenStream &tokens) { return parse(tokens, Precedence::Lowest); }
 

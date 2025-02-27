@@ -69,6 +69,10 @@ add_library(
     src/02_parsing/ast/statement/block/BlockStatementNode.cpp
     src/02_parsing/ast/statement/block/BlockStatementNodeParseStrategy.h
     src/02_parsing/ast/statement/block/BlockStatementNodeParseStrategy.cpp
+    src/02_parsing/ast/statement/for/ForNode.h
+    src/02_parsing/ast/statement/for/ForNode.cpp
+    src/02_parsing/ast/statement/for/ForNodeParseStrategy.h
+    src/02_parsing/ast/statement/for/ForNodeParseStrategy.cpp
 
     src/02_parsing/ast/expression/ExpressionParseStrategy.h
     src/02_parsing/ast/expression/ExpressionParseStrategy.cpp

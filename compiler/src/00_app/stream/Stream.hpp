@@ -60,13 +60,13 @@ template <typename T = char16_t> class Stream {
         const_iterator operator-(size_t n) const { return const_iterator(stream, index - n); }
         std::uint32_t operator-(const const_iterator &other) const { return distance(other); }
 
-        Stream<R>::elem_t operator*() const { return stream.m_elems[index]; }
+        Stream<R>::elem_t operator*() const { return value(); }
 
         const Stream<R>::elem_t *operator->() const {
-            if (valid()) {
-                return &stream.m_elems[index];
+            if (!valid()) {
+                throw std::runtime_error("Invalid iterator");
             }
-            return nullptr;
+            return &stream.m_elems[index];
         }
 
       public:
@@ -76,7 +76,12 @@ template <typename T = char16_t> class Stream {
         Stream<R>::distance_t distance() const { return index; }
         Stream<R>::distance_t distance(const const_iterator &other) const { return index - other.index; }
 
-        Stream<R>::elem_t value() const { return stream.m_elems[index]; }
+        Stream<R>::elem_t value() const {
+            if (!valid()) {
+                throw std::runtime_error("Invalid iterator");
+            }
+            return stream.m_elems[index];
+        }
         Stream<R>::elem_t value_or(Stream<R>::elem_t &&default_value) const { return valid() ? *this : default_value; }
 
       private:

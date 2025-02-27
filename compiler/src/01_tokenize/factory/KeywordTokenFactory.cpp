@@ -19,6 +19,7 @@ KeywordTokenFactory::KeywordTokenFactory() {
     keywordMap.insert({icu::UnicodeString::fromUTF8("struct"), TokenType::Struct});
     keywordMap.insert({icu::UnicodeString::fromUTF8("when"), TokenType::When});
     keywordMap.insert({icu::UnicodeString::fromUTF8("override"), TokenType::Override});
+    keywordMap.insert({icu::UnicodeString::fromUTF8("in"), TokenType::In});
 }
 
 bool KeywordTokenFactory::can_handle(const stream::StringStreamIterator &it) {

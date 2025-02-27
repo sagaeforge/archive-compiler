@@ -81,6 +81,8 @@ enum class TokenType {
     Struct,
     When,
     Override,
+
+    In,
 };
 
 class Token {
