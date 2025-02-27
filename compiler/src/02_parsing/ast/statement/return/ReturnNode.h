@@ -10,7 +10,7 @@ class ReturnNode : public Statement {
     using self_t = ReturnNode *;
 
   public:
-    ReturnNode(const tokenize::Token &token, std::shared_ptr<Expression> label, std::shared_ptr<Expression> return_expression);
+    ReturnNode(const tokenize::Token &token, std::shared_ptr<Expression> label, std::shared_ptr<Expression> value);
 
   public:
     json::JsonValue to_json(json::JsonAllocator &allocator) const override;
@@ -19,12 +19,12 @@ class ReturnNode : public Statement {
 
   public:
     self_t set_label(std::shared_ptr<Expression> label);
-    self_t set_return_expression(std::shared_ptr<Expression> return_expression);
+    self_t set_value(std::shared_ptr<Expression> value);
 
   private:
     tokenize::Token m_token;
     std::shared_ptr<Expression> m_label;
-    std::shared_ptr<Expression> m_returnExpression;
+    std::shared_ptr<Expression> m_value;
 };
 
 } // namespace nugdev::compiler::ast::statement

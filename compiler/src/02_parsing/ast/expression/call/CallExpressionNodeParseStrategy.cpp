@@ -36,7 +36,7 @@ parsing::ParseStrategyResult CallExpressionNodeParseStrategy::parse(const tokeni
     }
     workbench.next();
 
-    return {std::make_shared<CallExpressionNode>(workbench.current().value(), callee, list), tokens.begin() + workbench.current().distance()};
+    return {std::make_shared<CallExpressionNode>(tokens.current().value(), callee, list), tokens.begin() + workbench.current().distance()};
 }
 
 } // namespace nugdev::compiler::ast::expression

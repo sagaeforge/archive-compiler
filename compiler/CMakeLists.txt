@@ -151,6 +151,14 @@ add_executable(
     test/02_parsing/literal/string/string_test.cpp
     test/02_parsing/literal/array/array_test.cpp
     test/02_parsing/literal/function/function_test.cpp
+    test/02_parsing/literal/identifier/identifier_test.cpp
+    test/02_parsing/if/if_test.cpp
+    test/02_parsing/index/index_test.cpp
+    test/02_parsing/infix/infix_test.cpp
+    test/02_parsing/prefix/prefix_test.cpp
+    test/02_parsing/break/break_test.cpp
+    test/02_parsing/continue/continue_test.cpp
+    test/02_parsing/return/return_test.cpp
 )
 
 target_include_directories(

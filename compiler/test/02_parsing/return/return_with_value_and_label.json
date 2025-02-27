@@ -1,0 +1,18 @@
+{
+    "root": {
+        "type": "Program",
+        "statements": [
+            {
+                "type": "Return",
+                "label": {
+                    "type": "IdentifierLiteral",
+                    "value": "label"
+                },
+                "value": {
+                    "type": "NumberLiteral",
+                    "value": "1"
+                }
+            }
+        ]
+    }
+}

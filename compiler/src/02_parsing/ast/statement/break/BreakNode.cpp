@@ -8,7 +8,7 @@ BreakNode::BreakNode(const tokenize::Token &token, std::shared_ptr<Expression> l
 json::JsonValue BreakNode::to_json(json::JsonAllocator &allocator) const {
     json::JsonValue value(json::Type::kObjectType);
     value.AddMember("type", json::JsonValue("Break"), allocator);
-    value.AddMember("label", m_label->is_valid() ? m_label->to_json(allocator) : json::JsonValue(json::Type::kNullType), allocator);
+    value.AddMember("label", m_label != nullptr ? m_label->to_json(allocator) : json::JsonValue(json::Type::kNullType), allocator);
     return value;
 }
 

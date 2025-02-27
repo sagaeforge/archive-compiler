@@ -21,6 +21,7 @@ ExpressionParseStrategy::ExpressionParseStrategy() {
         {tokenize::TokenType::Ident, std::make_shared<IdentifierLiteralNodeParseStrategy>()},
         {tokenize::TokenType::Number, std::make_shared<NumberLiteralNodeParseStrategy>()},
         {tokenize::TokenType::String, std::make_shared<StringLiteralNodeParseStrategy>()},
+        {tokenize::TokenType::Plus, std::make_shared<PrefixExpressionNodeParseStrategy>()},
         {tokenize::TokenType::ExclamationMark, std::make_shared<PrefixExpressionNodeParseStrategy>()},
         {tokenize::TokenType::Minus, std::make_shared<PrefixExpressionNodeParseStrategy>()},
         {tokenize::TokenType::True, std::make_shared<BooleanLiteralNodeParseStrategy>()},
@@ -80,6 +81,10 @@ parsing::ParseStrategyResult ExpressionParseStrategy::parse(const tokenize::Toke
 
 parsing::ParseStrategyResult ExpressionParseStrategy::parse(const tokenize::TokenStream &tokens, Precedence precedence) {
     auto workbench = tokens.clone();
+    if (workbench.current().valid() == false) {
+        throw std::runtime_error("Invalid token stream");
+    }
+
     auto prefix = m_prefixParseFns.find(workbench.current()->get_type());
     if (prefix == m_prefixParseFns.end()) {
         throw std::runtime_error("Invalid token stream");

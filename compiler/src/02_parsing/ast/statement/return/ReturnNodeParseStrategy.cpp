@@ -1,5 +1,6 @@
 #include "ReturnNodeParseStrategy.h"
 
+#include <exception>
 #include <stdexcept>
 
 #include "02_parsing/ast/expression/ExpressionParseStrategy.h"
@@ -30,9 +31,13 @@ parsing::ParseStrategyResult ReturnNodeParseStrategy::parse(const tokenize::Toke
         return_node->set_label(label->as<Expression>());
     }
 
-    auto [return_expression, itr] = expressionStrategy.parse(workbench);
-    workbench.move_at(itr);
-    return_node->set_return_expression(return_expression->as<Expression>());
+    try {
+        auto [value, itr] = expressionStrategy.parse(workbench);
+        workbench.move_at(itr);
+        return_node->set_value(value->as<Expression>());
+    } catch (...) {
+        return {return_node, tokens.begin() + workbench.current().distance()};
+    }
 
     return {return_node, tokens.begin() + workbench.current().distance()};
 }

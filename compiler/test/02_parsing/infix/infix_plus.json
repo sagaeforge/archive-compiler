@@ -1,0 +1,22 @@
+{
+    "root": {
+        "type": "Program",
+        "statements": [
+            {
+                "type": "ExpressionStatement",
+                "expression": {
+                    "type": "InfixExpression",
+                    "left": {
+                        "type": "NumberLiteral",
+                        "value": "1"
+                    },
+                    "operator": "+",
+                    "right": {
+                        "type": "NumberLiteral",
+                        "value": "2"
+                    }
+                }
+            }
+        ]
+    }
+}

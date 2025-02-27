@@ -1,0 +1,14 @@
+{
+    "root": {
+        "type": "Program",
+        "statements": [
+            {
+                "type": "ExpressionStatement",
+                "expression": {
+                    "type": "IdentifierLiteral",
+                    "value": "a"
+                }
+            }
+        ]
+    }
+}
