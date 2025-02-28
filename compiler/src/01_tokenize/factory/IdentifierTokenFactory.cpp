@@ -2,10 +2,7 @@
 
 namespace nugdev::compiler::tokenize {
 
-bool IdentifierTokenFactory::can_handle(const stream::StringStreamIterator &it) {
-    auto ch = *it;
-    return iswalpha(ch) || ch == L'_';
-}
+bool IdentifierTokenFactory::can_handle(const stream::StringStreamIterator &it) { return it.valid() && (::iswalpha(*it) || *it == L'_'); }
 
 std::tuple<Token, stream::StringStreamIterator> IdentifierTokenFactory::create_token(const stream::StringStreamIterator &it) {
     icu::UnicodeString value;
@@ -20,8 +17,7 @@ std::tuple<Token, stream::StringStreamIterator> IdentifierTokenFactory::create_t
 
 bool IdentifierTokenFactory::isIdentifierChar(const stream::StringStreamIterator &it) {
     // 문자 혹은 숫자 혹은 언더바임, 단 유니코드도 지원하기에.
-    auto ch = *it;
-    return ::iswalnum(ch) || ch == L'_';
+    return it.valid() && (::iswalnum(*it) || *it == L'_');
 }
 
 } // namespace nugdev::compiler::tokenize

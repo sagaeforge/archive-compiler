@@ -1,0 +1,44 @@
+{
+    "root": {
+        "type": "Program",
+        "statements": [
+            {
+                "type": "For",
+                "label": null,
+                "init": null,
+                "condition": {
+                    "type": "InfixExpression",
+                    "left": {
+                        "type": "IdentifierLiteral",
+                        "value": "i"
+                    },
+                    "operator": "<",
+                    "right": {
+                        "type": "NumberLiteral",
+                        "value": "10"
+                    }
+                },
+                "post": {
+                    "type": "PostfixExpression",
+                    "left": {
+                        "type": "IdentifierLiteral",
+                        "value": "i"
+                    },
+                    "operator": "++"
+                },
+                "consequence": {
+                    "type": "BlockStatement",
+                    "statements": [
+                        {
+                            "type": "ExpressionStatement",
+                            "expression": {
+                                "type": "IdentifierLiteral",
+                                "value": "statements"
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+}

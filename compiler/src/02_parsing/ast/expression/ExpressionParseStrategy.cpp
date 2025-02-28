@@ -11,6 +11,7 @@
 #include "02_parsing/ast/expression/index/IndexExpressionNodeParseStrategy.h"
 #include "02_parsing/ast/expression/infix/InfixExpressionNodeParseStrategy.h"
 #include "02_parsing/ast/expression/number/NumberLiteralNodeParseStrategy.h"
+#include "02_parsing/ast/expression/post/PostNodeParseStrategy.h"
 #include "02_parsing/ast/expression/prefix/PrefixExpressionNodeParseStrategy.h"
 #include "02_parsing/ast/expression/string/StringLiteralNodeParseStrategy.h"
 #include "02_parsing/ast/expression/when/WhenNodeParseStrategy.h"
@@ -32,6 +33,8 @@ ExpressionParseStrategy::ExpressionParseStrategy() {
         {tokenize::TokenType::Function, std::make_shared<FunctionLiteralNodeParseStrategy>()},
         {tokenize::TokenType::LBracket, std::make_shared<ArrayLiteralNodeParseStrategy>()},
         {tokenize::TokenType::When, std::make_shared<WhenNodeParseStrategy>()},
+        {tokenize::TokenType::Inc, std::make_shared<PrefixExpressionNodeParseStrategy>()},
+        {tokenize::TokenType::Dec, std::make_shared<PrefixExpressionNodeParseStrategy>()},
     };
     m_infixParseFns = {
         {tokenize::TokenType::Plus, std::make_shared<InfixExpressionNodeParseStrategy>()},
@@ -46,6 +49,9 @@ ExpressionParseStrategy::ExpressionParseStrategy() {
 
         {tokenize::TokenType::LParen, std::make_shared<CallExpressionNodeParseStrategy>()},
         {tokenize::TokenType::LBracket, std::make_shared<IndexExpressionNodeParseStrategy>()},
+
+        {tokenize::TokenType::Inc, std::make_shared<PostNodeParseStrategy>()},
+        {tokenize::TokenType::Dec, std::make_shared<PostNodeParseStrategy>()},
     };
 }
 
@@ -71,6 +77,9 @@ ExpressionParseStrategy::Precedence ExpressionParseStrategy::get_precedence(toke
     case tokenize::TokenType::Asterisk:
     case tokenize::TokenType::Slash:
         return Precedence::Product;
+    case tokenize::TokenType::Inc:
+    case tokenize::TokenType::Dec:
+        return Precedence::Postfix;
     case tokenize::TokenType::LParen:
         return Precedence::Call;
     case tokenize::TokenType::LBracket:

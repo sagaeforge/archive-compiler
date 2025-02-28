@@ -1,5 +1,6 @@
 #include "Tokenizer.h"
 
+#include <iostream>
 #include <ranges>
 #include <unicode/unistr.h>
 
@@ -45,15 +46,12 @@ std::vector<Token> Tokenizer::tokenize(const icu::UnicodeString &str) {
             continue;
         }
 
-        auto matchingFactories = factories | std::views::filter([current](const auto &factory) { return factory->can_handle(current); });
-        if (std::ranges::empty(matchingFactories)) {
-            std::string stdStr;
-            str.toUTF8String(stdStr);
-            throw std::runtime_error("token factory is not defined: " + stdStr);
-        }
-
         auto tokenProcessed = false;
-        for (auto &factory : matchingFactories) {
+        for (auto &factory : factories) {
+            if (!factory->can_handle(current)) {
+                continue;
+            }
+
             try {
                 auto [token, next] = factory->create_token(current);
                 tokens.push_back(token);
@@ -68,7 +66,7 @@ std::vector<Token> Tokenizer::tokenize(const icu::UnicodeString &str) {
         if (!tokenProcessed) {
             throw std::runtime_error("infinite loop detected - parser not advancing");
         }
-    } while (true);
+    } while (stream.is_valid(stream.current()));
 
     return tokens;
 }

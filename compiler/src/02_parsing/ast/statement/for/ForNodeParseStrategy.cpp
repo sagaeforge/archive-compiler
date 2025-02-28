@@ -22,7 +22,8 @@ bool ForNodeParseStrategy::can_parse(const tokenize::TokenStream &tokens) {
     // identifier@for 이렇게 시작하는 케이스
     // for 이렇게 시작하는 케이스
     auto workbench = tokens.clone();
-    bool isLabel = contains(workbench.current(), {tokenize::TokenType::Ident}) && contains(workbench.next().current(), {tokenize::TokenType::At});
+    bool isLabel = contains(workbench.current(), {tokenize::TokenType::Ident}) && contains(workbench.next().current(), {tokenize::TokenType::At}) &&
+                   contains(workbench.next().next().current(), {tokenize::TokenType::For});
     bool isFor = contains(workbench.current(), {tokenize::TokenType::For});
     return isLabel || isFor;
 }
@@ -76,6 +77,7 @@ parsing::ParseStrategyResult ForNodeParseStrategy::parse(const tokenize::TokenSt
         condition = conditionNode->as<Expression>();
 
         if (contains(workbench.current(), {tokenize::TokenType::SemiColon})) {
+            workbench.next();
             // current: post!
             auto [postNode, postMoveItr] = expressionStrategy.parse(workbench);
             workbench.move_at(postMoveItr);
@@ -87,7 +89,6 @@ parsing::ParseStrategyResult ForNodeParseStrategy::parse(const tokenize::TokenSt
         }
         workbench.next();
     }
-    workbench.next();
 
     auto [consequence, consequenceMoveItr] = blockStatementStrategy.parse(workbench);
     workbench.move_at(consequenceMoveItr);

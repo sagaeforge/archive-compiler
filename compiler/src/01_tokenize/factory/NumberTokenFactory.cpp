@@ -2,10 +2,7 @@
 
 namespace nugdev::compiler::tokenize {
 
-bool NumberTokenFactory::can_handle(const stream::StringStreamIterator &it) {
-    auto ch = *it;
-    return ::iswdigit(ch) || ch == '-';
-}
+bool NumberTokenFactory::can_handle(const stream::StringStreamIterator &it) { return it.valid() && (::iswdigit(*it) || *it == '-'); }
 
 std::tuple<Token, stream::StringStreamIterator> NumberTokenFactory::create_token(const stream::StringStreamIterator &it) {
     icu::UnicodeString value;

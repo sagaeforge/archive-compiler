@@ -33,10 +33,7 @@ OperatorTokenFactory::OperatorTokenFactory() {
     operatorMap[L'='] = TokenType::Assign;
 }
 
-bool OperatorTokenFactory::can_handle(const stream::StringStreamIterator &it) {
-    auto ch = *it;
-    return operatorMap.find(ch) != operatorMap.end();
-}
+bool OperatorTokenFactory::can_handle(const stream::StringStreamIterator &it) { return it.valid() && operatorMap.find(*it) != operatorMap.end(); }
 
 std::tuple<Token, stream::StringStreamIterator> OperatorTokenFactory::create_token(const stream::StringStreamIterator &it) {
     auto ch = *it;

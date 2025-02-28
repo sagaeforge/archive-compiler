@@ -17,6 +17,7 @@ class ExpressionParseStrategy : public parsing::ParseStrategy {
         Sum,         // +
         Product,     // *
         Prefix,      // -X or !X
+        Postfix,     // x++, x--
         Call,        // myFunction(X)
         Index,       // array[index]
         Unknown,

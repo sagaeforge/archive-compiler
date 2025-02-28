@@ -13,12 +13,8 @@ bool StatementParseStrategy::can_parse(const tokenize::TokenStream &tokens) { re
 
 parsing::ParseStrategyResult StatementParseStrategy::parse(const tokenize::TokenStream &tokens) {
     std::vector<std::shared_ptr<parsing::ParseStrategy>> strategies{
-        std::make_shared<BreakNodeParseStrategy>(),
-        std::make_shared<ContinueNodeParseStrategy>(),
-        std::make_shared<ReturnNodeParseStrategy>(),
-        std::make_shared<LetNodeParseStrategy>(),
-        std::make_shared<ExpressionStatementNodeParseStrategy>(),
-        std::make_shared<ForNodeParseStrategy>(),
+        std::make_shared<BreakNodeParseStrategy>(), std::make_shared<ContinueNodeParseStrategy>(), std::make_shared<ReturnNodeParseStrategy>(),
+        std::make_shared<LetNodeParseStrategy>(),   std::make_shared<ForNodeParseStrategy>(),      std::make_shared<ExpressionStatementNodeParseStrategy>(),
     };
 
     for (auto &strategy : strategies) {

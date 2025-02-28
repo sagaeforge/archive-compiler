@@ -126,6 +126,10 @@ add_library(
     src/02_parsing/ast/expression/when/WhenNode.cpp
     src/02_parsing/ast/expression/when/WhenNodeParseStrategy.h
     src/02_parsing/ast/expression/when/WhenNodeParseStrategy.cpp
+    src/02_parsing/ast/expression/post/PostNode.h
+    src/02_parsing/ast/expression/post/PostNode.cpp
+    src/02_parsing/ast/expression/post/PostNodeParseStrategy.h
+    src/02_parsing/ast/expression/post/PostNodeParseStrategy.cpp
 )
 
 add_executable(
@@ -167,6 +171,7 @@ add_executable(
     test/02_parsing/break/break_test.cpp
     test/02_parsing/continue/continue_test.cpp
     test/02_parsing/return/return_test.cpp
+    test/02_parsing/for/for_test.cpp
 )
 
 target_include_directories(

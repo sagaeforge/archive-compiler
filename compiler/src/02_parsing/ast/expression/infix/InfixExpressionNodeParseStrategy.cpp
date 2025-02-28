@@ -16,7 +16,7 @@ parsing::ParseStrategyResult InfixExpressionNodeParseStrategy::parse(const token
     auto [right, rightItr] = expressionStrategy.parse(workbench.next(), ExpressionParseStrategy::get_precedence(workbench.current()->get_type()));
     workbench.move_at(rightItr);
 
-    return {create_node(*workbench.current(), left, right->as<Expression>()), tokens.begin() + workbench.current().distance()};
+    return {create_node(*tokens.current(), left, right->as<Expression>()), tokens.begin() + workbench.current().distance()};
 }
 
 std::shared_ptr<ast::ASTNode> InfixExpressionNodeParseStrategy::create_node(const tokenize::Token &token, std::shared_ptr<Expression> left,

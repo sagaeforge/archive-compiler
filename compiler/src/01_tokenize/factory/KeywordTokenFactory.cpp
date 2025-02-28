@@ -22,10 +22,7 @@ KeywordTokenFactory::KeywordTokenFactory() {
     keywordMap.insert({icu::UnicodeString::fromUTF8("in"), TokenType::In});
 }
 
-bool KeywordTokenFactory::can_handle(const stream::StringStreamIterator &it) {
-    auto ch = *it;
-    return ::iswalpha(ch);
-}
+bool KeywordTokenFactory::can_handle(const stream::StringStreamIterator &it) { return it.valid() && ::iswalpha(*it); }
 
 std::tuple<Token, stream::StringStreamIterator> KeywordTokenFactory::create_token(const stream::StringStreamIterator &it) {
     icu::UnicodeString value;

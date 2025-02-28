@@ -2,10 +2,7 @@
 
 namespace nugdev::compiler::tokenize {
 
-bool StringTokenFactory::can_handle(const stream::StringStreamIterator &it) {
-    auto ch = *it;
-    return ch == L'"' || ch == L'\'';
-}
+bool StringTokenFactory::can_handle(const stream::StringStreamIterator &it) { return it.valid() && (*it == L'"' || *it == L'\''); }
 
 std::tuple<Token, stream::StringStreamIterator> StringTokenFactory::create_token(const stream::StringStreamIterator &it) {
     icu::UnicodeString value;
