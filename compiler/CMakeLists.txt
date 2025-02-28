@@ -122,6 +122,10 @@ add_library(
     src/02_parsing/ast/expression/prefix/PrefixExpressionNode.cpp
     src/02_parsing/ast/expression/prefix/PrefixExpressionNodeParseStrategy.h
     src/02_parsing/ast/expression/prefix/PrefixExpressionNodeParseStrategy.cpp
+    src/02_parsing/ast/expression/when/WhenNode.h
+    src/02_parsing/ast/expression/when/WhenNode.cpp
+    src/02_parsing/ast/expression/when/WhenNodeParseStrategy.h
+    src/02_parsing/ast/expression/when/WhenNodeParseStrategy.cpp
 )
 
 add_executable(

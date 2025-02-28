@@ -13,6 +13,7 @@
 #include "02_parsing/ast/expression/number/NumberLiteralNodeParseStrategy.h"
 #include "02_parsing/ast/expression/prefix/PrefixExpressionNodeParseStrategy.h"
 #include "02_parsing/ast/expression/string/StringLiteralNodeParseStrategy.h"
+#include "02_parsing/ast/expression/when/WhenNodeParseStrategy.h"
 
 namespace nugdev::compiler::ast::expression {
 
@@ -30,6 +31,7 @@ ExpressionParseStrategy::ExpressionParseStrategy() {
         {tokenize::TokenType::If, std::make_shared<IfExpressionNodeParseStrategy>()},
         {tokenize::TokenType::Function, std::make_shared<FunctionLiteralNodeParseStrategy>()},
         {tokenize::TokenType::LBracket, std::make_shared<ArrayLiteralNodeParseStrategy>()},
+        {tokenize::TokenType::When, std::make_shared<WhenNodeParseStrategy>()},
     };
     m_infixParseFns = {
         {tokenize::TokenType::Plus, std::make_shared<InfixExpressionNodeParseStrategy>()},

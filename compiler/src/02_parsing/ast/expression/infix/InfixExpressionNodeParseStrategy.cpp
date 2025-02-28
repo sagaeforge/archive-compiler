@@ -16,8 +16,12 @@ parsing::ParseStrategyResult InfixExpressionNodeParseStrategy::parse(const token
     auto [right, rightItr] = expressionStrategy.parse(workbench.next(), ExpressionParseStrategy::get_precedence(workbench.current()->get_type()));
     workbench.move_at(rightItr);
 
-    return {std::make_shared<InfixExpressionNode>(*tokens.current(), left->as<Expression>(), tokens.current()->get_literal(), right->as<Expression>()),
-            tokens.begin() + workbench.current().distance()};
+    return {create_node(*workbench.current(), left, right->as<Expression>()), tokens.begin() + workbench.current().distance()};
+}
+
+std::shared_ptr<ast::ASTNode> InfixExpressionNodeParseStrategy::create_node(const tokenize::Token &token, std::shared_ptr<Expression> left,
+                                                                            std::shared_ptr<Expression> right, std::optional<icu::UnicodeString> op) {
+    return std::make_shared<InfixExpressionNode>(token, left->as<Expression>(), op.value_or(token.get_literal()), right->as<Expression>());
 }
 
 } // namespace nugdev::compiler::ast::expression
