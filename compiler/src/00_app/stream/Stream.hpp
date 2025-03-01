@@ -94,6 +94,7 @@ template <typename T = char16_t> class Stream {
     using self_t = Stream<elem_t>;
     using distance_t = std::uint32_t;
     using direction_t = int;
+    using iterator_t = const_iterator<elem_t>;
 
   public:
     Stream(const std::vector<elem_t> &_elems) : m_elems(_elems), m_current(const_iterator<elem_t>(*this, 0)) {}
@@ -101,11 +102,11 @@ template <typename T = char16_t> class Stream {
     Stream(const self_t &_other) : m_elems(_other.m_elems), m_current(begin() + (_other.m_current.distance())) {}
 
   public:
-    const_iterator<elem_t> begin() const { return const_iterator<elem_t>(*this, 0); }
-    const_iterator<elem_t> end() const { return const_iterator<elem_t>(*this, m_elems.size()); }
-    const_iterator<elem_t> current() const { return m_current; }
+    iterator_t begin() const { return iterator_t(*this, 0); }
+    iterator_t end() const { return iterator_t(*this, m_elems.size()); }
+    iterator_t current() const { return m_current; }
 
-    bool is_valid(const const_iterator<elem_t> &it) const { return it.valid(); }
+    bool is_valid(const iterator_t &it) const { return it.valid(); }
     self_t &advance() {
         m_current++;
         return *this;
@@ -115,7 +116,7 @@ template <typename T = char16_t> class Stream {
         m_current += dir;
         return *this;
     }
-    self_t move_at(const const_iterator<elem_t> &it) {
+    self_t move_at(const iterator_t &it) {
         m_current = it;
         return *this;
     }
@@ -134,11 +135,11 @@ template <typename T = char16_t> class Stream {
 
   private:
     std::vector<elem_t> m_elems;
-    const_iterator<elem_t> m_current;
+    iterator_t m_current;
 };
 
 using StringStream = Stream<char16_t>;
-using StringStreamIterator = StringStream::const_iterator<StringStream::elem_t>;
+using StringStreamIterator = StringStream::iterator_t;
 
 template <typename T> Stream<T> make_stream(const std::vector<T> &elems) { return Stream<T>(elems); }
 template <typename T> Stream<T> make_stream(const std::initializer_list<T> &elems) { return Stream<T>(elems); }

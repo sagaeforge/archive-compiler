@@ -1,5 +1,7 @@
 #include "OperatorTokenFactory.h"
 
+#include "00_app/stream/StreamWorkbench.hpp"
+
 namespace nugdev::compiler::tokenize {
 
 OperatorTokenFactory::OperatorTokenFactory() {
@@ -33,52 +35,70 @@ OperatorTokenFactory::OperatorTokenFactory() {
     operatorMap[L'='] = TokenType::Assign;
 }
 
-bool OperatorTokenFactory::can_handle(const stream::StringStreamIterator &it) { return it.valid() && operatorMap.find(*it) != operatorMap.end(); }
-
-std::tuple<Token, stream::StringStreamIterator> OperatorTokenFactory::create_token(const stream::StringStreamIterator &it) {
-    auto ch = *it;
-
-    if (ch == L'=') {
-        auto nextCh = *(it + 1);
-        if (nextCh == L'=') {
-            return std::make_tuple(Token::from(TokenType::Equal, icu::UnicodeString::fromUTF8("==")), it + 2);
-        }
+bool OperatorTokenFactory::can_handle(const stream::StringStream &stream) {
+    if (!stream.current().valid()) {
+        return false;
     }
 
-    if (ch == L'!') {
-        auto nextCh = *(it + 1);
-        if (nextCh == L'=') {
-            return std::make_tuple(Token::from(TokenType::NotEqual, icu::UnicodeString::fromUTF8("!=")), it + 2);
-        }
-    }
+    return operatorMap.find(stream.current().value()) != operatorMap.end();
+}
 
-    if (ch == L'+') {
-        auto nextCh = *(it + 1);
-        if (nextCh == L'+') {
-            return std::make_tuple(Token::from(TokenType::Inc, icu::UnicodeString::fromUTF8("++")), it + 2);
+std::tuple<Token, stream::StringStreamIterator> OperatorTokenFactory::create_token(const stream::StringStream &stream) {
+    return stream::workbench(stream, [this](stream::StringStream &workbench) {
+        auto ch = workbench.current().value();
+        workbench.next();
+
+        if (workbench.current().valid()) {
+            if (ch == u'=') {
+                auto nextCh = workbench.current().value();
+                if (nextCh == u'=') {
+                    workbench.next();
+                    return Token::from(TokenType::Equal, icu::UnicodeString::fromUTF8("=="));
+                }
+            }
+
+            if (ch == L'!') {
+                auto nextCh = workbench.current().value();
+                if (nextCh == L'=') {
+                    workbench.next();
+                    return Token::from(TokenType::NotEqual, icu::UnicodeString::fromUTF8("!="));
+                }
+            }
+
+            if (ch == L'+') {
+                auto nextCh = workbench.current().value();
+                if (nextCh == L'+') {
+                    workbench.next();
+                    return Token::from(TokenType::Inc, icu::UnicodeString::fromUTF8("++"));
+                }
+
+                if (nextCh == L'=') {
+                    workbench.next();
+                    return Token::from(TokenType::PlusEqual, icu::UnicodeString::fromUTF8("+="));
+                }
+            }
+
+            if (ch == L'-') {
+                auto nextCh = workbench.current().value();
+                if (nextCh == L'-') {
+                    workbench.next();
+                    return Token::from(TokenType::Dec, icu::UnicodeString::fromUTF8("--"));
+                }
+
+                if (nextCh == L'>') {
+                    workbench.next();
+                    return Token::from(TokenType::LeftArrow, icu::UnicodeString::fromUTF8("<-"));
+                }
+
+                if (nextCh == L'=') {
+                    workbench.next();
+                    return Token::from(TokenType::MinusEqual, icu::UnicodeString::fromUTF8("-="));
+                }
+            }
         }
 
-        if (nextCh == L'=') {
-            return std::make_tuple(Token::from(TokenType::PlusEqual, icu::UnicodeString::fromUTF8("+=")), it + 2);
-        }
-    }
-
-    if (ch == L'-') {
-        auto nextCh = *(it + 1);
-        if (nextCh == L'-') {
-            return std::make_tuple(Token::from(TokenType::Dec, icu::UnicodeString::fromUTF8("--")), it + 2);
-        }
-
-        if (nextCh == L'>') {
-            return std::make_tuple(Token::from(TokenType::LeftArrow, icu::UnicodeString::fromUTF8("<-")), it + 2);
-        }
-
-        if (nextCh == L'=') {
-            return std::make_tuple(Token::from(TokenType::MinusEqual, icu::UnicodeString::fromUTF8("-=")), it + 2);
-        }
-    }
-
-    return std::make_tuple(Token::from(operatorMap[ch], ch), it + 1);
+        return Token::from(operatorMap[ch], ch);
+    });
 }
 
 } // namespace nugdev::compiler::tokenize

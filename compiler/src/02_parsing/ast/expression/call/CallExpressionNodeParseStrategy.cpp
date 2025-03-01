@@ -22,7 +22,7 @@ parsing::ParseStrategyResult CallExpressionNodeParseStrategy::parse(const tokeni
         if (contains(workbench.current(), {tokenize::TokenType::RParen})) {
             workbench.next();
 
-            return {std::make_shared<CallExpressionNode>(workbench.current().value(), callee, std::vector<std::shared_ptr<ast::Expression>>()),
+            return {std::make_shared<CallExpressionNode>(tokens.current().value(), callee, std::vector<std::shared_ptr<ast::Expression>>()),
                     tokens.begin() + workbench.current().distance()};
         }
 

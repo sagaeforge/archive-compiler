@@ -63,7 +63,7 @@ parsing::ParseStrategyResult FunctionLiteralNodeParseStrategy::parse(const token
 
     auto [body, bodyItr] = blockStrategy.parse(workbench);
     workbench.move_at(bodyItr);
-    return {std::make_shared<FunctionLiteralNode>(workbench.current().value(), parameters, body->as<ast::Statement>()),
+    return {std::make_shared<FunctionLiteralNode>(tokens.current().value(), parameters, body->as<ast::Statement>()),
             tokens.begin() + workbench.current().distance()};
 }
 

@@ -10,8 +10,8 @@ namespace nugdev::compiler::tokenize {
 
 class TokenFactory {
   public:
-    virtual bool can_handle(const stream::StringStreamIterator &it) = 0;
-    virtual std::tuple<Token, stream::StringStreamIterator> create_token(const stream::StringStreamIterator &it) = 0;
+    virtual bool can_handle(const stream::StringStream &stream) = 0;
+    virtual std::tuple<Token, stream::StringStreamIterator> create_token(const stream::StringStream &stream) = 0;
 };
 
 } // namespace nugdev::compiler::tokenize

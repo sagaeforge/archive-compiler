@@ -6,9 +6,9 @@ namespace nugdev::compiler::tokenize {
 
 class IdentifierTokenFactory : public TokenFactory {
   public:
-    bool can_handle(const stream::StringStreamIterator &it) override;
-    std::tuple<Token, stream::StringStreamIterator> create_token(const stream::StringStreamIterator &it) override;
-    bool isIdentifierChar(const stream::StringStreamIterator &it);
+    bool can_handle(const stream::StringStream &stream) override;
+    std::tuple<Token, stream::StringStreamIterator> create_token(const stream::StringStream &stream) override;
+    bool isIdentifierChar(const stream::StringStream &stream);
 };
 
 } // namespace nugdev::compiler::tokenize

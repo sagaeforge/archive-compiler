@@ -1,6 +1,5 @@
 #include "ReturnNodeParseStrategy.h"
 
-#include <exception>
 #include <stdexcept>
 
 #include "02_parsing/ast/expression/ExpressionParseStrategy.h"
@@ -18,9 +17,9 @@ parsing::ParseStrategyResult ReturnNodeParseStrategy::parse(const tokenize::Toke
     auto workbench = tokens.clone(); // current : return
     workbench.next();
 
-    auto return_node = std::make_shared<ReturnNode>(workbench.current().value(), static_cast<std::shared_ptr<Expression>>(nullptr),
+    auto return_node = std::make_shared<ReturnNode>(tokens.current().value(), static_cast<std::shared_ptr<Expression>>(nullptr),
                                                     static_cast<std::shared_ptr<Expression>>(nullptr));
-    if (contains(workbench.current(), {tokenize::TokenType::At})) {
+    if (workbench.current().valid() && contains(workbench.current(), {tokenize::TokenType::At})) {
         workbench.next();
         if (workbench.current().valid() == false) {
             throw std::runtime_error("Invalid token stream");

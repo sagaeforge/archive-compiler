@@ -6,7 +6,7 @@
                 "type": "For",
                 "label": null,
                 "init": {
-                    "type": "LetStatement",
+                    "type": "Let",
                     "name": {
                         "type": "IdentifierLiteral",
                         "value": "i"

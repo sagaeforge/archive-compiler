@@ -1,48 +1,65 @@
 #include "NumberTokenFactory.h"
 
+#include "00_app/stream/StreamWorkbench.hpp"
+
 namespace nugdev::compiler::tokenize {
 
-bool NumberTokenFactory::can_handle(const stream::StringStreamIterator &it) { return it.valid() && (::iswdigit(*it) || *it == '-'); }
-
-std::tuple<Token, stream::StringStreamIterator> NumberTokenFactory::create_token(const stream::StringStreamIterator &it) {
-    icu::UnicodeString value;
-    auto itr = it;
-    bool has_decimal = false;
-    bool has_exponent = false;
-
-    if (*itr == '-') {
-        value += *itr++;
+bool NumberTokenFactory::can_handle(const stream::StringStream &stream) {
+    if (!stream.current().valid()) {
+        return false;
     }
 
-    while (::iswdigit(*itr)) {
-        value += *itr++;
-    }
+    return ::iswdigit(stream.current().value()) || stream.current().value() == '-';
+}
 
-    if (*itr == '.') {
-        has_decimal = true;
-        value += *itr++;
-        while (::iswdigit(*itr)) {
-            value += *itr++;
-        }
-    }
+std::tuple<Token, stream::StringStreamIterator> NumberTokenFactory::create_token(const stream::StringStream &stream) {
+    return stream::workbench(stream, [this](stream::StringStream &workbench) {
+        icu::UnicodeString value;
+        bool has_decimal = false;
+        bool has_exponent = false;
 
-    if (*itr == 'e' || *itr == 'E') {
-        has_exponent = true;
-        value += *itr++;
+        if (*workbench.current() == '-') {
+            value += workbench.current().value();
 
-        if (*itr == '+' || *itr == '-') {
-            value += *itr++;
+            workbench.next();
         }
 
-        if (!::iswdigit(*itr)) {
-            throw std::runtime_error("Invalid number format: exponent without digits");
+        while (workbench.current().valid() && ::iswdigit(workbench.current().value())) {
+            value += workbench.current().value();
+            workbench.next();
         }
-        while (::iswdigit(*itr)) {
-            value += *itr++;
-        }
-    }
 
-    return std::make_tuple(Token::from(TokenType::Number, value), itr);
+        if (workbench.current().valid() && workbench.current().value() == '.') {
+            has_decimal = true;
+            value += workbench.current().value();
+            workbench.next();
+            while (workbench.current().valid() && ::iswdigit(workbench.current().value())) {
+                value += workbench.current().value();
+                workbench.next();
+            }
+        }
+
+        if (workbench.current().valid() && (workbench.current().value() == 'e' || workbench.current().value() == 'E')) {
+            has_exponent = true;
+            value += workbench.current().value();
+            workbench.next();
+
+            if (workbench.current().valid() && (workbench.current().value() == '+' || workbench.current().value() == '-')) {
+                value += workbench.current().value();
+                workbench.next();
+            }
+
+            if (workbench.current().valid() && !::iswdigit(workbench.current().value())) {
+                throw std::runtime_error("Invalid number format: exponent without digits");
+            }
+            while (workbench.current().valid() && ::iswdigit(workbench.current().value())) {
+                value += workbench.current().value();
+                workbench.next();
+            }
+        }
+
+        return Token::from(TokenType::Number, value);
+    });
 }
 
 } // namespace nugdev::compiler::tokenize

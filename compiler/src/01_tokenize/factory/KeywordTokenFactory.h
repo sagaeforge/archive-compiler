@@ -11,8 +11,8 @@ class KeywordTokenFactory : public TokenFactory {
     KeywordTokenFactory();
 
   public:
-    bool can_handle(const stream::StringStreamIterator &it) override;
-    std::tuple<Token, stream::StringStreamIterator> create_token(const stream::StringStreamIterator &it) override;
+    bool can_handle(const stream::StringStream &stream) override;
+    std::tuple<Token, stream::StringStreamIterator> create_token(const stream::StringStream &stream) override;
 
   private:
     std::map<icu::UnicodeString, TokenType> keywordMap;

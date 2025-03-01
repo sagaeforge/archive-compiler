@@ -5,6 +5,7 @@
 #include <unicode/unistr.h>
 
 #include "00_app/stream/Stream.hpp"
+#include "00_app/stream/StreamWorkbench.hpp"
 #include "factory/IdentifierTokenFactory.h"
 #include "factory/KeywordTokenFactory.h"
 #include "factory/NumberTokenFactory.h"
@@ -25,48 +26,44 @@ Tokenizer::Tokenizer(std::vector<std::shared_ptr<TokenFactory>> factories) { thi
 
 std::vector<Token> Tokenizer::tokenize(const icu::UnicodeString &str) {
     auto stream = stream::make_stream(str);
+    auto [tokens, _] = stream::workbench(stream, [this](stream::StringStream &workbench) {
+        std::vector<Token> tokens;
 
-    std::vector<Token> tokens;
-    do {
-        const auto &current = stream.current();
-        if (!stream.is_valid(current)) {
-            break;
-        }
+        while (workbench.current().valid()) {
+            while (::iswspace(workbench.current().value())) {
+                workbench.advance();
+            }
 
-        // 화이트 스페이스도 씹어야 함.
-        if (::iswspace(*current)) {
-            stream.advance();
-            continue;
-        }
-
-        // 주석의 경우 씹어주는 과정이 필요함.
-        if (*current == u'#') {
-            auto it = find_first_of(stream, {u'\n'});
-            stream.move_at(it);
-            continue;
-        }
-
-        auto tokenProcessed = false;
-        for (auto &factory : factories) {
-            if (!factory->can_handle(current)) {
+            if (workbench.current().value() == u'#') {
+                auto it = find_first_of(workbench, {u'\n'});
+                workbench.move_at(it);
                 continue;
             }
 
-            try {
-                auto [token, next] = factory->create_token(current);
-                tokens.push_back(token);
-                stream.move_at(next);
-                tokenProcessed = true;
-                break;
-            } catch (const std::exception &e) {
-                continue;
+            auto tokenProcessed = false;
+            for (auto &factory : factories) {
+                if (!factory->can_handle(workbench)) {
+                    continue;
+                }
+
+                try {
+                    auto [token, next] = factory->create_token(workbench);
+                    tokens.push_back(token);
+                    workbench.move_at(next);
+                    tokenProcessed = true;
+                    break;
+                } catch (const std::exception &e) {
+                    continue;
+                }
+            }
+
+            if (!tokenProcessed) {
+                throw std::runtime_error("infinite loop detected - parser not advancing");
             }
         }
 
-        if (!tokenProcessed) {
-            throw std::runtime_error("infinite loop detected - parser not advancing");
-        }
-    } while (stream.is_valid(stream.current()));
+        return tokens;
+    });
 
     return tokens;
 }

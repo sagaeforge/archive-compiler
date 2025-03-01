@@ -21,9 +21,8 @@ parsing::ParseStrategyResult ArrayLiteralNodeParseStrategy::parse(const tokenize
         if (contains(workbench.current(), {tokenize::TokenType::RBracket})) {
             workbench.next();
 
-            return parsing::ParseStrategyResult{
-                std::make_shared<ArrayLiteralNode>(workbench.current().value(), std::vector<std::shared_ptr<ast::Expression>>()),
-                tokens.begin() + workbench.current().distance()};
+            return parsing::ParseStrategyResult{std::make_shared<ArrayLiteralNode>(tokens.current().value(), std::vector<std::shared_ptr<ast::Expression>>()),
+                                                tokens.begin() + workbench.current().distance()};
         }
 
         auto [element, moveItr] = strategy.parse(workbench, ast::expression::ExpressionParseStrategy::Precedence::Lowest);
@@ -36,6 +35,6 @@ parsing::ParseStrategyResult ArrayLiteralNodeParseStrategy::parse(const tokenize
     }
     workbench.next();
 
-    return {std::make_shared<ArrayLiteralNode>(workbench.current().value(), list), tokens.begin() + workbench.current().distance()};
+    return {std::make_shared<ArrayLiteralNode>(tokens.current().value(), list), tokens.begin() + workbench.current().distance()};
 }
 } // namespace nugdev::compiler::ast::expression
