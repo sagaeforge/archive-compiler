@@ -14,12 +14,13 @@ parsing::ParseStrategyResult InfixExpressionNodeParseStrategy::parse(const token
     static ExpressionParseStrategy expressionStrategy{};
 
     auto [node, itr] = stream::workbench(tokens, [this, &tokens, left](tokenize::TokenStream &workbench) {
+        auto token = workbench.current().value();
         workbench.next();
 
         // current: '+' | '-' | '*' | '/' | '%' | '==' | '!=' | '<' | '>' | '<=' | '>=' | 'in'
-        auto [right, rightItr] = expressionStrategy.parse(workbench, ExpressionParseStrategy::get_precedence(workbench.current()->get_type()));
+        auto [right, rightItr] = expressionStrategy.parse(workbench, ExpressionParseStrategy::get_precedence(token.get_type()));
         workbench.move_at(rightItr);
-        return create_node(*tokens.current(), left->as<Expression>(), right->as<Expression>(), tokens.current()->get_literal());
+        return create_node(token, left->as<Expression>(), right->as<Expression>(), token.get_literal());
     });
 
     return {node, itr};
