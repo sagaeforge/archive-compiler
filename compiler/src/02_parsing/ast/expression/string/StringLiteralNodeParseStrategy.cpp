@@ -4,10 +4,11 @@
 
 namespace nugdev::compiler::ast::expression {
 
-bool StringLiteralNodeParseStrategy::can_parse(const tokenize::TokenStream &tokens) { return tokens.current()->get_type() == tokenize::TokenType::String; }
+bool StringLiteralNodeParseStrategy::can_parse(const tokenize::TokenStream &tokens) { return contains(tokens.current(), {tokenize::TokenType::String}); }
 
 parsing::ParseStrategyResult StringLiteralNodeParseStrategy::parse(const tokenize::TokenStream &tokens) {
-    auto itr = tokens.current();
-    return parsing::ParseStrategyResult{std::make_shared<StringLiteralNode>(*itr, itr->get_literal()), itr.next()};
+    return parsing::ParseStrategyResult{std::make_shared<StringLiteralNode>(tokens.current().value(), tokens.current()->get_literal()),
+                                        tokens.current().next()};
 }
+
 } // namespace nugdev::compiler::ast::expression

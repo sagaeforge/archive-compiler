@@ -1,8 +1,6 @@
 #include "ContinueNodeParseStrategy.h"
 
-#include <stdexcept>
-
-#include "01_tokenize/Token.h"
+#include "00_app/stream/StreamWorkbench.hpp"
 #include "02_parsing/ast/expression/identifier/IdentifierLiteralNodeParseStrategy.h"
 #include "02_parsing/ast/statement/continue/ContinueNode.h"
 
@@ -13,21 +11,25 @@ bool ContinueNodeParseStrategy::can_parse(const tokenize::TokenStream &tokens) {
 parsing::ParseStrategyResult ContinueNodeParseStrategy::parse(const tokenize::TokenStream &tokens) {
     static expression::IdentifierLiteralNodeParseStrategy strategy{};
 
-    auto workbench = tokens.clone(); // current : continue
-
-    auto continue_node = std::make_shared<ContinueNode>(workbench.current().value(), static_cast<std::shared_ptr<Expression>>(nullptr));
-    if (contains(workbench.next().current(), {tokenize::TokenType::At})) {
+    auto [node, itr] = stream::workbench(tokens, [this, &tokens](tokenize::TokenStream &workbench) {
         workbench.next();
-        if (workbench.current().valid() == false) {
-            throw std::runtime_error("invalid continue statement");
+
+        auto continueNode = std::make_shared<ContinueNode>(tokens.current().value(), static_cast<std::shared_ptr<Expression>>(nullptr));
+        if (workbench.current().valid() && contains(workbench.current(), {tokenize::TokenType::At})) {
+            workbench.next();
+            if (workbench.current().valid() == false) {
+                throw std::runtime_error("invalid continue statement");
+            }
+
+            auto [label, itr] = strategy.parse(workbench);
+            workbench.move_at(itr);
+            continueNode->set_label(label->as<Expression>());
         }
 
-        auto [label, itr] = strategy.parse(workbench);
-        workbench.move_at(itr);
-        continue_node->set_label(label->as<Expression>());
-    }
+        return continueNode;
+    });
 
-    return {continue_node, tokens.begin() + workbench.current().distance()};
+    return {node, itr};
 }
 
 } // namespace nugdev::compiler::ast::statement

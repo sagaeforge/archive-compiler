@@ -172,6 +172,7 @@ add_executable(
     test/02_parsing/continue/continue_test.cpp
     test/02_parsing/return/return_test.cpp
     test/02_parsing/for/for_test.cpp
+    test/02_parsing/when/when_test.cpp
 )
 
 target_include_directories(

@@ -1,20 +1,33 @@
 #include "GroupExpressionParseStrategy.h"
 
-#include "02_parsing/ast/AST.h"
+#include "00_app/stream/StreamWorkbench.hpp"
 #include "02_parsing/ast/expression/ExpressionParseStrategy.h"
 
 namespace nugdev::compiler::ast::expression {
 
-bool GroupExpressionParseStrategy::can_parse(const tokenize::TokenStream &tokens) { return tokens.current()->get_type() == tokenize::TokenType::LParen; }
+bool GroupExpressionParseStrategy::can_parse(const tokenize::TokenStream &tokens) { return contains(tokens.current(), {tokenize::TokenType::LParen}); }
 
 parsing::ParseStrategyResult GroupExpressionParseStrategy::parse(const tokenize::TokenStream &tokens) {
     static ExpressionParseStrategy strategy;
 
-    auto workbench = tokens.clone().next(); // current : '('
-    auto [expr, itr] = strategy.parse(workbench);
-    workbench.move_at(itr);
-    workbench.next(); // 이래야 ')'를 먹어줄수 있을 것 같은데.
-    return {expr->as<Expression>(), tokens.begin() + workbench.current().distance()};
+    auto [node, itr] = stream::workbench(tokens, [this](tokenize::TokenStream &workbench) {
+        // current: '('
+        workbench.next();
+
+        // current: expression
+        auto [expr, exprItr] = strategy.parse(workbench);
+        workbench.move_at(exprItr);
+
+        // current: ')'
+        if (!contains(workbench.current(), {tokenize::TokenType::RParen})) {
+            throw std::runtime_error("Expected ')' after expression");
+        }
+        workbench.next();
+
+        return expr;
+    });
+
+    return {node, itr};
 }
 
 } // namespace nugdev::compiler::ast::expression

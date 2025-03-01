@@ -1,0 +1,38 @@
+{
+    "root": {
+        "type": "Program",
+        "statements": [
+            {
+                "type": "ExpressionStatement",
+                "expression": {
+                    "type": "When",
+                    "target": {
+                        "type": "IdentifierLiteral",
+                        "value": "a"
+                    },
+                    "conditions": [
+                        {
+                            "condition": {
+                                "type": "InfixExpression",
+                                "left": {
+                                    "type": "IdentifierLiteral",
+                                    "value": "a"
+                                },
+                                "operator": "==",
+                                "right": {
+                                    "type": "IdentifierLiteral",
+                                    "value": "b"
+                                }
+                            },
+                            "consequence": {
+                                "type": "IdentifierLiteral",
+                                "value": "c"
+                            }
+                        }
+                    ],
+                    "alternative": null
+                }
+            }
+        ]
+    }
+}

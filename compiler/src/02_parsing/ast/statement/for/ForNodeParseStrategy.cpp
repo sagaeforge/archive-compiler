@@ -1,5 +1,6 @@
 #include "ForNodeParseStrategy.h"
 
+#include "00_app/stream/StreamWorkbench.hpp"
 #include "02_parsing/ast/AST.h"
 #include "02_parsing/ast/expression/ExpressionParseStrategy.h"
 #include "02_parsing/ast/expression/identifier/IdentifierLiteralNodeParseStrategy.h"
@@ -34,66 +35,67 @@ parsing::ParseStrategyResult ForNodeParseStrategy::parse(const tokenize::TokenSt
     static statement::BlockStatementNodeParseStrategy blockStatementStrategy{};
     static expression::IdentifierLiteralNodeParseStrategy identifierLiteralNodeParseStrategy{};
 
-    auto workbench = tokens.clone(); // current : for | ident
+    auto [node, itr] = stream::workbench(tokens, [this, &tokens](tokenize::TokenStream &workbench) {
+        std::shared_ptr<Expression> label = nullptr;
+        if (workbench.current().valid() && contains(workbench.current(), {tokenize::TokenType::Ident})) {
+            auto [labelNode, labelMoveItr] = identifierLiteralNodeParseStrategy.parse(workbench);
+            workbench.move_at(labelMoveItr);
 
-    std::shared_ptr<Expression> label = nullptr;
-    if (contains(workbench.current(), {tokenize::TokenType::Ident})) {
-        auto [labelNode, labelMoveItr] = identifierLiteralNodeParseStrategy.parse(workbench);
-        workbench.move_at(labelMoveItr);
+            if (!contains(workbench.current(), {tokenize::TokenType::At})) {
+                throw std::runtime_error("Expected '@' after identifier");
+            }
+            workbench.next();
+            label = labelNode->as<Expression>();
+        }
 
-        if (!contains(workbench.current(), {tokenize::TokenType::At})) {
-            throw std::runtime_error("Expected '@' after identifier");
+        if (!workbench.current().valid() || !contains(workbench.current(), {tokenize::TokenType::For})) {
+            throw std::runtime_error("Expected 'for' keyword");
         }
         workbench.next();
-        label = labelNode->as<Expression>();
-    }
 
-    if (!contains(workbench.current(), {tokenize::TokenType::For})) {
-        throw std::runtime_error("Expected 'for' keyword");
-    }
-    workbench.next();
+        std::shared_ptr<Expression> init = nullptr;
+        std::shared_ptr<Expression> condition = nullptr;
+        std::shared_ptr<Expression> post = nullptr;
+        if (workbench.current().valid() && contains(workbench.current(), {tokenize::TokenType::LParen})) {
+            workbench.next();
 
-    std::shared_ptr<Expression> init = nullptr;
-    std::shared_ptr<Expression> condition = nullptr;
-    std::shared_ptr<Expression> post = nullptr;
-    if (contains(workbench.current(), {tokenize::TokenType::LParen})) {
-        workbench.next();
+            // current: init?
+            if (letStrategy.can_parse(workbench)) {
+                auto [initNode, initMoveItr] = letStrategy.parse(workbench);
+                workbench.move_at(initMoveItr);
+                init = initNode->as<Expression>();
 
-        // current: init?
-        if (letStrategy.can_parse(workbench)) {
-            auto [initNode, initMoveItr] = letStrategy.parse(workbench);
-            workbench.move_at(initMoveItr);
-            init = initNode->as<Expression>();
+                if (!contains(workbench.current(), {tokenize::TokenType::SemiColon})) {
+                    throw std::runtime_error("Expected ';' after 'for' init");
+                }
+                workbench.next();
+            }
 
-            if (!contains(workbench.current(), {tokenize::TokenType::SemiColon})) {
-                throw std::runtime_error("Expected ';' after 'for' init");
+            // current: condition!
+            auto [conditionNode, conditionMoveItr] = expressionStrategy.parse(workbench);
+            workbench.move_at(conditionMoveItr);
+            condition = conditionNode->as<Expression>();
+
+            if (contains(workbench.current(), {tokenize::TokenType::SemiColon})) {
+                workbench.next();
+                // current: post!
+                auto [postNode, postMoveItr] = expressionStrategy.parse(workbench);
+                workbench.move_at(postMoveItr);
+                post = postNode->as<Expression>();
+            }
+
+            if (!contains(workbench.current(), {tokenize::TokenType::RParen})) {
+                throw std::runtime_error("Expected ')' after 'for' condition");
             }
             workbench.next();
         }
 
-        // current: condition!
-        auto [conditionNode, conditionMoveItr] = expressionStrategy.parse(workbench);
-        workbench.move_at(conditionMoveItr);
-        condition = conditionNode->as<Expression>();
+        auto [consequence, consequenceMoveItr] = blockStatementStrategy.parse(workbench);
+        workbench.move_at(consequenceMoveItr);
+        return std::make_shared<ForNode>(tokens.current().value(), label, init, condition, post, consequence->as<Statement>());
+    });
 
-        if (contains(workbench.current(), {tokenize::TokenType::SemiColon})) {
-            workbench.next();
-            // current: post!
-            auto [postNode, postMoveItr] = expressionStrategy.parse(workbench);
-            workbench.move_at(postMoveItr);
-            post = postNode->as<Expression>();
-        }
-
-        if (!contains(workbench.current(), {tokenize::TokenType::RParen})) {
-            throw std::runtime_error("Expected ')' after 'for' condition");
-        }
-        workbench.next();
-    }
-
-    auto [consequence, consequenceMoveItr] = blockStatementStrategy.parse(workbench);
-    workbench.move_at(consequenceMoveItr);
-    return parsing::ParseStrategyResult{std::make_shared<ForNode>(tokens.current().value(), label, init, condition, post, consequence->as<Statement>()),
-                                        tokens.begin() + workbench.current().distance()};
+    return {node, itr};
 }
 
 } // namespace nugdev::compiler::ast::statement

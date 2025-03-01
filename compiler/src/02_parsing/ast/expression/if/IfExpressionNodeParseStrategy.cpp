@@ -1,5 +1,6 @@
 #include "IfExpressionNodeParseStrategy.h"
 
+#include "00_app/stream/StreamWorkbench.hpp"
 #include "02_parsing/ast/AST.h"
 #include "02_parsing/ast/expression/ExpressionParseStrategy.h"
 #include "02_parsing/ast/expression/if/IfExpressionNode.h"
@@ -13,41 +14,38 @@ parsing::ParseStrategyResult IfExpressionNodeParseStrategy::parse(const tokenize
     static ExpressionParseStrategy expressionStrategy{};
     static statement::BlockStatementNodeParseStrategy blockStrategy{};
 
-    auto workbench = tokens.clone().next(); // current: 'if' | 'elif'
-
-    auto [condition, conditionItr] = expressionStrategy.parse(workbench);
-    workbench.move_at(conditionItr);
-
-    if (workbench.current()->get_type() != tokenize::TokenType::LBrace) {
-        throw std::runtime_error("Expected '{'");
-    }
-
-    auto [consequence, consequenceItr] = blockStrategy.parse(workbench);
-    workbench.move_at(consequenceItr);
-
-    // ealiy-return elif else case
-    if (!contains(workbench.current(), {tokenize::TokenType::Else, tokenize::TokenType::Elif})) {
-        return {std::make_shared<IfExpressionNode>(*tokens.current(), condition->as<Expression>(), consequence->as<Statement>(), nullptr),
-                tokens.begin() + workbench.current().distance()};
-    }
-
-    if (contains(workbench.current(), {tokenize::TokenType::Elif})) {
-        auto [alternative, alternativeItr] = parse(workbench);
-        workbench.move_at(alternativeItr);
-        return {std::make_shared<IfExpressionNode>(*tokens.current(), condition->as<Expression>(), consequence->as<Statement>(), alternative->as<Statement>()),
-                tokens.begin() + workbench.current().distance()};
-    }
-
-    if (contains(workbench.current(), {tokenize::TokenType::Else})) {
+    auto [node, itr] = stream::workbench(tokens, [this, &tokens](tokenize::TokenStream &workbench) {
+        // current: 'if' | 'elif'
         workbench.next();
-        auto [alternative, alternativeItr] = blockStrategy.parse(workbench);
-        workbench.move_at(alternativeItr);
-        return {std::make_shared<IfExpressionNode>(*tokens.current(), condition->as<Expression>(), consequence->as<Statement>(), alternative->as<Statement>()),
-                tokens.begin() + workbench.current().distance()};
-    }
 
-    return {std::make_shared<IfExpressionNode>(*tokens.current(), condition->as<Expression>(), consequence->as<Statement>(), nullptr),
-            tokens.begin() + workbench.current().distance()};
+        // current: condition
+        auto [condition, conditionItr] = expressionStrategy.parse(workbench);
+        workbench.move_at(conditionItr);
+
+        // current: consequence
+        auto [consequence, consequenceItr] = blockStrategy.parse(workbench);
+        workbench.move_at(consequenceItr);
+
+        // current: 'elif'
+        if (contains(workbench.current(), {tokenize::TokenType::Elif})) {
+            auto [alternative, alternativeItr] = parse(workbench);
+            workbench.move_at(alternativeItr);
+            return std::make_shared<IfExpressionNode>(*tokens.current(), condition->as<Expression>(), consequence->as<Statement>(),
+                                                      alternative->as<Statement>());
+        }
+
+        // current: 'else'
+        if (contains(workbench.current(), {tokenize::TokenType::Else})) {
+            workbench.next();
+            auto [alternative, alternativeItr] = blockStrategy.parse(workbench);
+            workbench.move_at(alternativeItr);
+            return std::make_shared<IfExpressionNode>(*tokens.current(), condition->as<Expression>(), consequence->as<Statement>(),
+                                                      alternative->as<Statement>());
+        }
+
+        return std::make_shared<IfExpressionNode>(*tokens.current(), condition->as<Expression>(), consequence->as<Statement>(), nullptr);
+    });
+    return {node, itr};
 }
 
 } // namespace nugdev::compiler::ast::expression

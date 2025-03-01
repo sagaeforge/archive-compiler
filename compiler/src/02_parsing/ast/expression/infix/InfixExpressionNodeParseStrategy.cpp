@@ -1,5 +1,6 @@
 #include "InfixExpressionNodeParseStrategy.h"
 
+#include "00_app/stream/StreamWorkbench.hpp"
 #include "02_parsing/ast/expression/ExpressionParseStrategy.h"
 #include "02_parsing/ast/expression/infix/InfixExpressionNode.h"
 
@@ -12,11 +13,16 @@ parsing::ParseStrategyResult InfixExpressionNodeParseStrategy::parse(const token
 parsing::ParseStrategyResult InfixExpressionNodeParseStrategy::parse(const tokenize::TokenStream &tokens, std::shared_ptr<Expression> left) {
     static ExpressionParseStrategy expressionStrategy{};
 
-    auto workbench = tokens.clone(); // current: '+' | '-' | '*' | '/' | '%' | '==' | '!=' | '<' | '>' | '<=' | '>=' | 'in'
-    auto [right, rightItr] = expressionStrategy.parse(workbench.next(), ExpressionParseStrategy::get_precedence(workbench.current()->get_type()));
-    workbench.move_at(rightItr);
+    auto [node, itr] = stream::workbench(tokens, [this, &tokens, left](tokenize::TokenStream &workbench) {
+        workbench.next();
 
-    return {create_node(*tokens.current(), left, right->as<Expression>()), tokens.begin() + workbench.current().distance()};
+        // current: '+' | '-' | '*' | '/' | '%' | '==' | '!=' | '<' | '>' | '<=' | '>=' | 'in'
+        auto [right, rightItr] = expressionStrategy.parse(workbench, ExpressionParseStrategy::get_precedence(workbench.current()->get_type()));
+        workbench.move_at(rightItr);
+        return create_node(*tokens.current(), left->as<Expression>(), right->as<Expression>(), tokens.current()->get_literal());
+    });
+
+    return {node, itr};
 }
 
 std::shared_ptr<ast::ASTNode> InfixExpressionNodeParseStrategy::create_node(const tokenize::Token &token, std::shared_ptr<Expression> left,

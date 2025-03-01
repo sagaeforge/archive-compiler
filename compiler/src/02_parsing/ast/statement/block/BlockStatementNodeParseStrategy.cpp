@@ -1,6 +1,6 @@
 #include "BlockStatementNodeParseStrategy.h"
 
-#include "01_tokenize/Token.h"
+#include "00_app/stream/StreamWorkbench.hpp"
 #include "02_parsing/ast/statement/StatementParseStrategy.h"
 #include "02_parsing/ast/statement/block/BlockStatementNode.h"
 
@@ -11,22 +11,25 @@ bool BlockStatementNodeParseStrategy::can_parse(const tokenize::TokenStream &tok
 parsing::ParseStrategyResult BlockStatementNodeParseStrategy::parse(const tokenize::TokenStream &tokens) {
     static StatementParseStrategy strategy{};
 
-    std::vector<std::shared_ptr<Statement>> statements;
+    auto [node, itr] = stream::workbench(tokens, [this](tokenize::TokenStream &workbench) {
+        std::vector<std::shared_ptr<Statement>> statements;
 
-    auto workbench = tokens.clone(); // current : '{'
-    do {
+        do {
+            workbench.next();
+            if (contains(workbench.current(), {tokenize::TokenType::RBrace})) {
+                break;
+            }
+
+            auto [statement, itr] = strategy.parse(workbench);
+            workbench.move_at(itr);
+            statements.push_back(statement->as<Statement>());
+        } while (workbench.current().valid() && !contains(workbench.current(), {tokenize::TokenType::RBrace}));
         workbench.next();
-        if (contains(workbench.current(), {tokenize::TokenType::RBrace})) {
-            break;
-        }
 
-        auto [statement, itr] = strategy.parse(workbench);
-        workbench.move_at(itr);
-        statements.push_back(statement->as<Statement>());
-    } while (workbench.current().valid() && !contains(workbench.current(), {tokenize::TokenType::RBrace}));
-    workbench.next();
+        return std::make_shared<BlockStatementNode>(statements);
+    });
 
-    return {std::make_shared<BlockStatementNode>(statements), tokens.begin() + workbench.current().distance()};
+    return {node, itr};
 }
 
 } // namespace nugdev::compiler::ast::statement
