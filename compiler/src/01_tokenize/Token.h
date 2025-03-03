@@ -78,7 +78,6 @@ enum class TokenType {
     For,
     Break,
     Continue,
-    Struct,
     When,
     Override,
 

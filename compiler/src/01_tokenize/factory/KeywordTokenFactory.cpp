@@ -16,7 +16,6 @@ KeywordTokenFactory::KeywordTokenFactory() {
     keywordMap.insert({icu::UnicodeString::fromUTF8("for"), TokenType::For});
     keywordMap.insert({icu::UnicodeString::fromUTF8("break"), TokenType::Break});
     keywordMap.insert({icu::UnicodeString::fromUTF8("continue"), TokenType::Continue});
-    keywordMap.insert({icu::UnicodeString::fromUTF8("struct"), TokenType::Struct});
     keywordMap.insert({icu::UnicodeString::fromUTF8("when"), TokenType::When});
     keywordMap.insert({icu::UnicodeString::fromUTF8("override"), TokenType::Override});
     keywordMap.insert({icu::UnicodeString::fromUTF8("in"), TokenType::In});
