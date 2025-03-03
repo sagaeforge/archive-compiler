@@ -1,15 +1,14 @@
 #pragma once
 
-#include <memory>
+#include <vector>
 
-#include "00_app/stream/Stream.hpp"
 #include "02_parsing/ast/AST.h"
 
 namespace nugdev::compiler::ast::module {
 
 class ProgramNode : public Module {
   public:
-    ProgramNode(stream::Stream<std::shared_ptr<Statement>> statements);
+    ProgramNode(std::vector<StatementPtr> statements);
 
   public:
     virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
@@ -17,10 +16,10 @@ class ProgramNode : public Module {
     virtual const tokenize::Token &get_token() const override;
 
   public:
-    stream::Stream<std::shared_ptr<Statement>> &get_statements() { return m_statements; }
+    std::vector<StatementPtr> &get_statements() { return m_statements; }
 
   private:
-    stream::Stream<std::shared_ptr<Statement>> m_statements;
+    std::vector<StatementPtr> m_statements;
 };
 
 } // namespace nugdev::compiler::ast::module

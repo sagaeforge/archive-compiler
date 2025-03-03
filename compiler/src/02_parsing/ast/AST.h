@@ -4,9 +4,10 @@
 #include "00_app/lib/PointerHelper.hpp"
 #include "01_tokenize/Token.h"
 
+#include <any>
 #include <memory>
-
 #include <unicode/unistr.h>
+#include <unordered_map>
 
 namespace nugdev::compiler {
 
@@ -19,17 +20,23 @@ class ASTNode : public lib::PointerHelper<ASTNode> {
     virtual ~ASTNode() = default;
 
   public:
-    virtual std::shared_ptr<ASTNode> accept(std::shared_ptr<ASTNodeVisitor> &visitor);
+    std::any accept(std::shared_ptr<ASTNodeVisitor> &visitor, const std::unordered_map<icu::UnicodeString, std::any> &context);
 
   public:
     virtual icu::UnicodeString to_str() const = 0;
     virtual json::JsonValue to_json(json::JsonAllocator &allocator) const = 0;
     virtual const tokenize::Token &get_token() const = 0;
 };
+using ASTNodePtr = std::shared_ptr<ASTNode>;
 
 class Expression : public ASTNode {};
+using ExpressionPtr = std::shared_ptr<Expression>;
+
 class Statement : public ASTNode {};
+using StatementPtr = std::shared_ptr<Statement>;
+
 class Module : public ASTNode {};
+using ModulePtr = std::shared_ptr<Module>;
 
 } // namespace ast
 

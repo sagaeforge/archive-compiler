@@ -1,94 +1,210 @@
 #pragma once
 
-namespace nugdev::compiler::generation {
+#include "Register.h"
 
-class Register;
+namespace nugdev::compiler::generation {
 
 class Opcode {};
 
 // Rx = Ry
-class Move : public Opcode {};
+class Move : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // Rx = null
-class LoadNull : public Opcode {};
+class LoadNull : public Opcode {
+
+  private:
+    RegisterTag rx;
+};
 
 // Rx = immediate integer
-class LoadInt : public Opcode {};
+class LoadInt : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterData value;
+};
 
 // Rx = immediate float
-class LoadFloat : public Opcode {};
+class LoadFloat : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterData value;
+};
 
 // Rx = Memory[Ry]
-class Load : public Opcode {};
+class Load : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // Memory[Rx] = Ry
-class Store : public Opcode {};
+class Store : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // Rx = alloc(Ry) - Ry는 크기
-class Allocate : public Opcode {};
+class Allocate : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // free(Rx)
-class Free : public Opcode {};
+class Free : public Opcode {
+
+  private:
+    RegisterTag rx;
+};
 
 // Rx = Rx + Ry
-class Add : public Opcode {};
+class Add : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // Rx = Rx - Ry
-class Sub : public Opcode {};
+class Sub : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // Rx = Rx * Ry
-class Mul : public Opcode {};
+class Mul : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // Rx = Rx / Ry
-class Div : public Opcode {};
+class Div : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // Rx = Rx % Ry
-class Mod : public Opcode {};
+class Mod : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // Rx = Rx & Ry
-class And : public Opcode {};
+class And : public Opcode {
 
-// Rx = Rx | Ry
-class Or : public Opcode {};
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // Rx = Rx ^ Ry
-class Xor : public Opcode {};
+class Xor : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // Rx = ~Rx
-class Not : public Opcode {};
+class Not : public Opcode {
+
+  private:
+    RegisterTag rx;
+};
 
 // Rx = Rx == Ry
-class Eq : public Opcode {};
+class Eq : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // Rx = Rx != Ry
-class Neq : public Opcode {};
+class Neq : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // Rx > Ry
-class Gt : public Opcode {};
+class Gt : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // Rx >= Ry
-class Gte : public Opcode {};
+class Gte : public Opcode {
+
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // Rx < Ry
-class Lt : public Opcode {};
+class Lte : public Opcode {
 
-// Rx <= Ry
-class Lte : public Opcode {};
+  private:
+    RegisterTag rx;
+    RegisterTag ry;
+};
 
 // pc = pc + Ry
-class Jump : public Opcode {};
+class Jump : public Opcode {
+
+  private:
+    RegisterTag ry;
+};
 
 // if Rx == 0: PC = address
-class Jumpz : public Opcode {};
+class Jumpz : public Opcode {
+
+  private:
+    RegisterTag rx;
+};
 
 // if Rx != 0: PC = address
-class Jumpnz : public Opcode {};
+class Jumpnz : public Opcode {
+
+  private:
+    RegisterTag rx;
+};
 
 // Call function at address
-class Call : public Opcode {};
+class Call : public Opcode {
+
+  private:
+    RegisterTag ry;
+};
 
 // Return from function
-class Return : public Opcode {};
+class Return : public Opcode {
+
+  private:
+    RegisterTag ry;
+};
 
 // Halt execution
 class Halt : public Opcode {};

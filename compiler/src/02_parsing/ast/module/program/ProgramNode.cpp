@@ -3,7 +3,7 @@
 
 namespace nugdev::compiler::ast::module {
 
-ProgramNode::ProgramNode(stream::Stream<std::shared_ptr<Statement>> statements) : m_statements(statements) {}
+ProgramNode::ProgramNode(std::vector<StatementPtr> statements) : m_statements(statements) {}
 
 json::JsonValue ProgramNode::to_json(json::JsonAllocator &allocator) const {
     json::JsonValue value(json::Type::kObjectType);
@@ -18,6 +18,7 @@ json::JsonValue ProgramNode::to_json(json::JsonAllocator &allocator) const {
 }
 
 icu::UnicodeString ProgramNode::to_str() const { return u"Program"; }
-const tokenize::Token &ProgramNode::get_token() const { return (*m_statements.current())->get_token(); }
+
+const tokenize::Token &ProgramNode::get_token() const { return m_statements.front()->get_token(); }
 
 } // namespace nugdev::compiler::ast::module

@@ -130,6 +130,10 @@ add_library(
     src/02_parsing/ast/expression/post/PostNode.cpp
     src/02_parsing/ast/expression/post/PostNodeParseStrategy.h
     src/02_parsing/ast/expression/post/PostNodeParseStrategy.cpp
+
+    src/04_generation/opcode/Opcode.h
+    src/04_generation/opcode/OpcodeGenerator.h
+    src/04_generation/opcode/Register.h
 )
 
 add_executable(
