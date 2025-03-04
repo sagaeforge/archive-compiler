@@ -140,8 +140,6 @@ std::string to_string(const nugdev::compiler::tokenize::TokenType &type) {
         return "Break";
     case nugdev::compiler::tokenize::TokenType::Continue:
         return "Continue";
-    case nugdev::compiler::tokenize::TokenType::Struct:
-        return "Struct";
     case nugdev::compiler::tokenize::TokenType::When:
         return "When";
     case nugdev::compiler::tokenize::TokenType::Override:

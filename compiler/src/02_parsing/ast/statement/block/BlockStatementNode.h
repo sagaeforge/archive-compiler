@@ -13,6 +13,9 @@ class BlockStatementNode : public Statement {
     virtual icu::UnicodeString to_str() const override;
     virtual const tokenize::Token &get_token() const override;
 
+  public:
+    const std::vector<std::shared_ptr<Statement>> &get_statements() const;
+
   private:
     std::vector<std::shared_ptr<Statement>> m_statements;
 };

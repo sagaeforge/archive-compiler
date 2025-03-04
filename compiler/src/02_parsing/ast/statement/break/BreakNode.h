@@ -19,6 +19,7 @@ class BreakNode : public Statement {
 
   public:
     self_t set_label(std::shared_ptr<Expression> label);
+    const std::shared_ptr<Expression> &get_label() const;
 
   private:
     tokenize::Token m_token;

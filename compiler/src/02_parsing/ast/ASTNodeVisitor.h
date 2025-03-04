@@ -10,8 +10,6 @@
 
 namespace nugdev::compiler::ast {
 
-class ASTNode;
-
 class ASTNodeVisitor : public lib::PointerHelper<ASTNodeVisitor> {
   public:
     using NodePredicate = std::function<bool(const ASTNodePtr &)>;
@@ -49,7 +47,7 @@ class ASTNodeVisitor : public lib::PointerHelper<ASTNodeVisitor> {
     virtual std::any visit_when_expression(const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) = 0;
 
   protected:
-    bool requires_context() const;
+    virtual bool requires_context() const = 0;
 
   protected:
     ASTNodeVisitor();

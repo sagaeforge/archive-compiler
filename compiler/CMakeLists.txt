@@ -134,6 +134,8 @@ add_library(
     src/04_generation/opcode/Opcode.h
     src/04_generation/opcode/OpcodeGenerator.h
     src/04_generation/opcode/Register.h
+    src/04_generation/opcode/OpcodeVisitor.h
+    src/04_generation/opcode/OpcodeVisitor.cpp
 )
 
 add_executable(

@@ -9,9 +9,7 @@
 #include <unicode/unistr.h>
 #include <unordered_map>
 
-namespace nugdev::compiler {
-
-namespace ast {
+namespace nugdev::compiler::ast {
 
 class ASTNodeVisitor;
 
@@ -20,7 +18,7 @@ class ASTNode : public lib::PointerHelper<ASTNode> {
     virtual ~ASTNode() = default;
 
   public:
-    std::any accept(std::shared_ptr<ASTNodeVisitor> &visitor, const std::unordered_map<icu::UnicodeString, std::any> &context);
+    std::any accept(const std::shared_ptr<ASTNodeVisitor> &visitor, const std::unordered_map<icu::UnicodeString, std::any> &context);
 
   public:
     virtual icu::UnicodeString to_str() const = 0;
@@ -38,6 +36,4 @@ using StatementPtr = std::shared_ptr<Statement>;
 class Module : public ASTNode {};
 using ModulePtr = std::shared_ptr<Module>;
 
-} // namespace ast
-
-} // namespace nugdev::compiler
+} // namespace nugdev::compiler::ast

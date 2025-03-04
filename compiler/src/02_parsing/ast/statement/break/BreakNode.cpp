@@ -16,6 +16,8 @@ icu::UnicodeString BreakNode::to_str() const { return u"Break"; }
 
 const tokenize::Token &BreakNode::get_token() const { return m_token; }
 
+const std::shared_ptr<Expression> &BreakNode::get_label() const { return m_label; }
+
 BreakNode::self_t BreakNode::set_label(std::shared_ptr<Expression> label) {
     m_label = label;
     return *this;

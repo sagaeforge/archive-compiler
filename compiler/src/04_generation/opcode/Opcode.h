@@ -6,6 +6,8 @@ namespace nugdev::compiler::generation {
 
 class Opcode {};
 
+namespace Code {
+
 // Rx = Ry
 class Move : public Opcode {
 
@@ -208,5 +210,6 @@ class Return : public Opcode {
 
 // Halt execution
 class Halt : public Opcode {};
+} // namespace Code
 
 } // namespace nugdev::compiler::generation

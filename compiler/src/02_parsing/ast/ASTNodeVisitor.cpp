@@ -135,6 +135,4 @@ std::any ASTNodeVisitor::visit(const ASTNodePtr &node, const std::unordered_map<
     throw std::runtime_error("No strategy found for node");
 }
 
-bool ASTNodeVisitor::requires_context() const { return false; }
-
 } // namespace nugdev::compiler::ast
