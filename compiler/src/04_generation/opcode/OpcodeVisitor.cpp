@@ -1,5 +1,7 @@
 #include "04_generation/opcode/OpcodeVisitor.h"
 #include "02_parsing/ast/AST.h"
+#include "02_parsing/ast/expression/boolean/BooleanLiteralNode.h"
+#include "02_parsing/ast/expression/string/StringLiteralNode.h"
 #include "02_parsing/ast/module/program/ProgramNode.h"
 #include "02_parsing/ast/statement/block/BlockStatementNode.h"
 #include "02_parsing/ast/statement/break/BreakNode.h"
@@ -33,50 +35,42 @@ std::any OpcodeVisitor::visit_program(const ast::ASTNodePtr &node, const std::un
     return opcodes;
 }
 
-std::any OpcodeVisitor::visit_block_statement(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) {
-    if (!node->is<ast::statement::BlockStatementNode>()) {
-        throw std::runtime_error("BlockStatementNode expected");
+std::any OpcodeVisitor::visit_string_literal_expression(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) {
+    if (!node->is<ast::expression::StringLiteralNode>()) {
+        throw std::runtime_error("StringLiteralExpressionNode expected");
     }
 
-    std::vector<Opcode> opcodes;
-    auto blockStatementNode = node->as<ast::statement::BlockStatementNode>();
-    for (const auto &statement : blockStatementNode->get_statements()) {
-        auto statementOpcodes = std::any_cast<std::vector<Opcode>>(statement->accept(self(), context));
-        opcodes.insert(opcodes.end(), statementOpcodes.begin(), statementOpcodes.end());
-    }
+    auto stringLiteralNode = node->as<ast::expression::StringLiteralNode>();
+    auto value = stringLiteralNode->get_value();
 
-    return opcodes;
+    auto literalTag = LiteralTag::create()->as<LiteralTag>();
+    auto resultTag = std::any_cast<std::shared_ptr<RegisterTag>>(context.at("resultTag"));
+    auto resourceTag = RegisterTag::create()->as<RegisterTag>();
+
+    return Codes{// 생성해야하는 코드
+                 {std::make_shared<Code::Load>(resultTag, resourceTag)},
+                 {},
+                 {resourceTag},
+                 {{resourceTag, literalTag}},
+                 {{literalTag, value}}};
 }
 
-// std::any OpcodeVisitor::visit_break_statement(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) {
-//     if (!node->is<ast::statement::BreakNode>()) {
-//         throw std::runtime_error("BreakNode expected");
-//     }
+std::any OpcodeVisitor::visit_boolean_literal_expression(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) {
+    if (!node->is<ast::expression::BooleanLiteralNode>()) {
+        throw std::runtime_error("BooleanLiteralExpressionNode expected");
+    }
 
-//     // for-list: std::map<std::string, std::pair<int, int>> # 레이블 이름과 for문 조건문 위치, for문 나가는 위치라고 하려고 했지만,
-//     // 그러기엔 너무 복잡하고 귀찮다.
+    auto booleanLiteralNode = node->as<ast::expression::BooleanLiteralNode>();
+    auto value = booleanLiteralNode->get_value();
 
-//     if (context.find("loop_outer_position") == context.end()) {
-//         throw std::runtime_error("Loop target not found");
-//     }
-//     auto loopOuterPosition = std::any_cast<std::deque<std::pair<icu::UnicodeString, std::pair<int, int>>>>(context.at("loop_outer_position"));
+    auto resultTag = std::any_cast<std::shared_ptr<RegisterTag>>(context.at("resultTag"));
 
-//     auto breakNode = node->as<ast::statement::BreakNode>();
-//     auto label = breakNode->get_label();
-
-//     for (const auto &[label, positions] : loopOuterPosition) {
-//         if (label == label) {
-//             auto [start, end] = positions;
-//             return {Code::Jump(end)};
-//         }
-//     }
-
-//     auto outer = loopOuterPosition.back();
-//     return {Code::Jump(outer.second.second)};
-// }
-
-std::any OpcodeVisitor::visit_continue_statement(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) {
-    return std::vector<Opcode>();
+    return Codes{// 생성해야하는 코드
+                 {std::make_shared<Code::LoadInt>(resultTag, value ? 1 : 0)},
+                 {},
+                 {},
+                 {},
+                 {}};
 }
 
 } // namespace nugdev::compiler::generation

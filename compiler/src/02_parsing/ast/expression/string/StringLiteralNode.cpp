@@ -19,4 +19,6 @@ json::JsonValue StringLiteralNode::to_json(json::JsonAllocator &allocator) const
 
 const tokenize::Token &StringLiteralNode::get_token() const { return m_token; }
 
+icu::UnicodeString StringLiteralNode::get_value() const { return m_value; }
+
 } // namespace nugdev::compiler::ast::expression

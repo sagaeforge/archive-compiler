@@ -4,10 +4,10 @@ namespace nugdev::compiler {
 
 Tag::Tag(const uuids::uuid &id) : m_id(id), m_hash(std::hash<uuids::uuid>{}(id)) {}
 
-Tag Tag::create() noexcept {
+std::shared_ptr<Tag> Tag::create() noexcept {
     static std::mt19937 engine(std::random_device{}());
     static uuids::uuid_random_generator generator(engine);
-    return Tag(generator());
+    return std::make_shared<Tag>(generator());
 }
 
 // 복사 생성자

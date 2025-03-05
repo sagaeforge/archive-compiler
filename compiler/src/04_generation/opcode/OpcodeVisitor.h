@@ -20,12 +20,12 @@ class OpcodeVisitor : public ast::ASTNodeVisitor {
     };
     struct StaticSection { // code section이랑 페어가 될듯.
         // 리소스 - 실제 값
-        std::unordered_map<LiteralTag, icu::UnicodeString> m_staticData;
+        std::unordered_map<std::shared_ptr<LiteralTag>, icu::UnicodeString> m_staticData;
     };
     // CodeSection 중 entry Section인지 모름.
     struct CodeSection {
         // 가상 레지스터 - 리소스 매핑
-        std::unordered_map<RegisterTag, LiteralTag> m_resourceTable;
+        std::unordered_map<std::shared_ptr<RegisterTag>, std::shared_ptr<LiteralTag>> m_resourceTable;
         // 실제 코드
         std::vector<std::shared_ptr<Opcode>> m_opcodes;
     };
@@ -47,13 +47,13 @@ class OpcodeVisitor : public ast::ASTNodeVisitor {
         // 실제 생성된 코드인데, 이 안에 Opcode는 가상 레지스터를 가지고 있음.
         std::vector<std::shared_ptr<Opcode>> m_createOpcodes;
         // 가상 레지스터들 중, 실제 위치가 지정되지 않은 정보를 가지고 있는 객체. (넣어줘야하는 가상 레지스터 태그, 이 주소가 무엇인지 알 수 있는 정보)
-        std::unordered_map<RegisterTag, std::shared_ptr<JumpTarget>> m_patchTable;
+        std::unordered_map<std::shared_ptr<RegisterTag>, std::shared_ptr<JumpTarget>> m_patchTable;
         // 실제 매핑해야하는 가상 레지스터 리스트
-        std::vector<RegisterTag> m_registerTags;
+        std::vector<std::shared_ptr<RegisterTag>> m_registerTags;
         // 리소스-가상 레지스터 매핑
-        std::unordered_map<RegisterTag, LiteralTag> m_resourceTable;
+        std::unordered_map<std::shared_ptr<RegisterTag>, std::shared_ptr<LiteralTag>> m_resourceTable;
         // 리소스-실제 값
-        std::unordered_map<LiteralTag, icu::UnicodeString> m_resourceValues;
+        std::unordered_map<std::shared_ptr<LiteralTag>, icu::UnicodeString> m_resourceValues;
     };
 
   public:

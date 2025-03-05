@@ -14,6 +14,9 @@ class BooleanLiteralNode : public Expression {
     virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
     virtual const tokenize::Token &get_token() const override;
 
+  public:
+    bool get_value() const;
+
   private:
     tokenize::Token m_token;
     bool m_value;
