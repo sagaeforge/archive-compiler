@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Register.h"
+#include "register/RegisterData.hpp"
+#include "register/RegisterTag.h"
 
 namespace nugdev::compiler::generation {
 

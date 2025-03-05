@@ -206,6 +206,7 @@ PUBLIC
     ICU::i18n
     ICU::data
     rapidjson
+    stduuid
 )
 
 target_link_libraries(

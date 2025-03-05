@@ -47,15 +47,4 @@ class RegisterData {
     std::array<std::uint8_t, REGISTER_SIZE> m_value;
 };
 
-class RegisterTag {};
-
-class Register {
-  public:
-    Register(RegisterTag tag, RegisterData data);
-
-  private:
-    RegisterTag m_index;
-    RegisterData m_data;
-};
-
 } // namespace nugdev::compiler::generation
