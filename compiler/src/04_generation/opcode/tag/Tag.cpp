@@ -1,23 +1,23 @@
-#include "RegisterTag.h"
+#include "Tag.h"
 
-namespace nugdev::compiler::generation {
+namespace nugdev::compiler {
 
-RegisterTag::RegisterTag(const uuids::uuid &id) : m_id(id), m_hash(std::hash<uuids::uuid>{}(id)) {}
+Tag::Tag(const uuids::uuid &id) : m_id(id), m_hash(std::hash<uuids::uuid>{}(id)) {}
 
-RegisterTag RegisterTag::create() noexcept {
+Tag Tag::create() noexcept {
     static std::mt19937 engine(std::random_device{}());
     static uuids::uuid_random_generator generator(engine);
-    return RegisterTag(generator());
+    return Tag(generator());
 }
 
 // 복사 생성자
-RegisterTag::RegisterTag(const RegisterTag &other) : m_id(other.m_id), m_hash(other.m_hash) {}
+Tag::Tag(const Tag &other) : m_id(other.m_id), m_hash(other.m_hash) {}
 
 // 이동 생성자
-RegisterTag::RegisterTag(RegisterTag &&other) noexcept : m_id(std::move(other.m_id)), m_hash(other.m_hash) {}
+Tag::Tag(Tag &&other) noexcept : m_id(std::move(other.m_id)), m_hash(other.m_hash) {}
 
 // 이동 할당 연산자
-RegisterTag &RegisterTag::operator=(RegisterTag &&other) noexcept {
+Tag &Tag::operator=(Tag &&other) noexcept {
     if (this != &other) {
         m_id = std::move(other.m_id);
         m_hash = other.m_hash;
@@ -26,7 +26,7 @@ RegisterTag &RegisterTag::operator=(RegisterTag &&other) noexcept {
 }
 
 // 복사 할당 연산자
-RegisterTag &RegisterTag::operator=(const RegisterTag &other) noexcept {
+Tag &Tag::operator=(const Tag &other) noexcept {
     if (this != &other) {
         m_id = other.m_id;
         m_hash = other.m_hash;
@@ -35,7 +35,7 @@ RegisterTag &RegisterTag::operator=(const RegisterTag &other) noexcept {
 }
 
 // 3방향 비교 연산자 (C++20)
-std::strong_ordering RegisterTag::operator<=>(const RegisterTag &other) const noexcept {
+std::strong_ordering Tag::operator<=>(const Tag &other) const noexcept {
     // 해시값 먼저 비교
     if (m_hash < other.m_hash)
         return std::strong_ordering::less;
@@ -57,6 +57,6 @@ std::strong_ordering RegisterTag::operator<=>(const RegisterTag &other) const no
     return std::strong_ordering::equal;
 }
 
-std::size_t RegisterTag::hash() const { return m_hash; }
+std::size_t Tag::hash() const { return m_hash; }
 
-} // namespace nugdev::compiler::generation
+} // namespace nugdev::compiler
