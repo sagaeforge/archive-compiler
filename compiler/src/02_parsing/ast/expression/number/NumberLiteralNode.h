@@ -13,6 +13,8 @@ class NumberLiteralNode : public Expression {
     virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
     virtual const tokenize::Token &get_token() const override;
 
+    icu::UnicodeString get_value() const;
+
   private:
     tokenize::Token m_token;
     icu::UnicodeString m_value;

@@ -13,6 +13,9 @@ class ExpressionStatementNode : public Statement {
     virtual icu::UnicodeString to_str() const override;
     virtual const tokenize::Token &get_token() const override;
 
+  public:
+    const std::shared_ptr<Expression> &get_expression() const;
+
   private:
     std::shared_ptr<Expression> m_expression;
 };

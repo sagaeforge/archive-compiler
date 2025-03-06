@@ -19,4 +19,6 @@ json::JsonValue NumberLiteralNode::to_json(json::JsonAllocator &allocator) const
 
 const tokenize::Token &NumberLiteralNode::get_token() const { return m_token; }
 
+icu::UnicodeString NumberLiteralNode::get_value() const { return m_value; }
+
 } // namespace nugdev::compiler::ast::expression

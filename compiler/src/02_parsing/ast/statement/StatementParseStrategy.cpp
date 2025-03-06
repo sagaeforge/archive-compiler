@@ -1,11 +1,11 @@
 #include "StatementParseStrategy.h"
 
-#include "02_parsing/ast/statement/break/BreakNodeParseStrategy.h"
-#include "02_parsing/ast/statement/continue/ContinueNodeParseStrategy.h"
+#include "02_parsing/ast/statement/break/BreakStatementNodeParseStrategy.h"
+#include "02_parsing/ast/statement/continue/ContinueStatementNodeParseStrategy.h"
 #include "02_parsing/ast/statement/expression/ExpressionStatementNodeParseStrategy.h"
-#include "02_parsing/ast/statement/for/ForNodeParseStrategy.h"
-#include "02_parsing/ast/statement/let/LetNodeParseStrategy.h"
-#include "02_parsing/ast/statement/return/ReturnNodeParseStrategy.h"
+#include "02_parsing/ast/statement/for/ForStatementNodeParseStrategy.h"
+#include "02_parsing/ast/statement/let/LetStatementNodeParseStrategy.h"
+#include "02_parsing/ast/statement/return/ReturnStatementNodeParseStrategy.h"
 
 namespace nugdev::compiler::ast::statement {
 
@@ -13,8 +13,9 @@ bool StatementParseStrategy::can_parse(const tokenize::TokenStream &tokens) { re
 
 parsing::ParseStrategyResult StatementParseStrategy::parse(const tokenize::TokenStream &tokens) {
     std::vector<std::shared_ptr<parsing::ParseStrategy>> strategies{
-        std::make_shared<BreakNodeParseStrategy>(), std::make_shared<ContinueNodeParseStrategy>(), std::make_shared<ReturnNodeParseStrategy>(),
-        std::make_shared<LetNodeParseStrategy>(),   std::make_shared<ForNodeParseStrategy>(),      std::make_shared<ExpressionStatementNodeParseStrategy>(),
+        std::make_shared<BreakStatementNodeParseStrategy>(),  std::make_shared<ContinueStatementNodeParseStrategy>(),
+        std::make_shared<ReturnStatementNodeParseStrategy>(), std::make_shared<LetStatementNodeParseStrategy>(),
+        std::make_shared<ForStatementNodeParseStrategy>(),    std::make_shared<ExpressionStatementNodeParseStrategy>(),
     };
 
     for (auto &strategy : strategies) {

@@ -11,6 +11,8 @@ add_library(
     src/00_app/lib/Singleton.h
     src/00_app/stream/Stream.hpp
     src/00_app/stream/Stream.cpp
+    src/00_app/tag/Tag.h
+    src/00_app/tag/Tag.cpp
     
     src/01_tokenize/Tokenizer.h
     src/01_tokenize/Tokenizer.cpp
@@ -45,22 +47,22 @@ add_library(
 
     src/02_parsing/ast/statement/StatementParseStrategy.h
     src/02_parsing/ast/statement/StatementParseStrategy.cpp
-    src/02_parsing/ast/statement/break/BreakNode.h
-    src/02_parsing/ast/statement/break/BreakNode.cpp
-    src/02_parsing/ast/statement/break/BreakNodeParseStrategy.h
-    src/02_parsing/ast/statement/break/BreakNodeParseStrategy.cpp
-    src/02_parsing/ast/statement/continue/ContinueNode.h
-    src/02_parsing/ast/statement/continue/ContinueNode.cpp
-    src/02_parsing/ast/statement/continue/ContinueNodeParseStrategy.h
-    src/02_parsing/ast/statement/continue/ContinueNodeParseStrategy.cpp
-    src/02_parsing/ast/statement/return/ReturnNode.h
-    src/02_parsing/ast/statement/return/ReturnNode.cpp
-    src/02_parsing/ast/statement/return/ReturnNodeParseStrategy.h
-    src/02_parsing/ast/statement/return/ReturnNodeParseStrategy.cpp
-    src/02_parsing/ast/statement/let/LetNode.h
-    src/02_parsing/ast/statement/let/LetNode.cpp
-    src/02_parsing/ast/statement/let/LetNodeParseStrategy.h
-    src/02_parsing/ast/statement/let/LetNodeParseStrategy.cpp
+    src/02_parsing/ast/statement/break/BreakStatementNode.h
+    src/02_parsing/ast/statement/break/BreakStatementNode.cpp
+    src/02_parsing/ast/statement/break/BreakStatementNodeParseStrategy.h
+    src/02_parsing/ast/statement/break/BreakStatementNodeParseStrategy.cpp
+    src/02_parsing/ast/statement/continue/ContinueStatementNode.h
+    src/02_parsing/ast/statement/continue/ContinueStatementNode.cpp
+    src/02_parsing/ast/statement/continue/ContinueStatementNodeParseStrategy.h
+    src/02_parsing/ast/statement/continue/ContinueStatementNodeParseStrategy.cpp
+    src/02_parsing/ast/statement/return/ReturnStatementNode.h
+    src/02_parsing/ast/statement/return/ReturnStatementNode.cpp
+    src/02_parsing/ast/statement/return/ReturnStatementNodeParseStrategy.h
+    src/02_parsing/ast/statement/return/ReturnStatementNodeParseStrategy.cpp
+    src/02_parsing/ast/statement/let/LetStatementNode.h
+    src/02_parsing/ast/statement/let/LetStatementNode.cpp
+    src/02_parsing/ast/statement/let/LetStatementNodeParseStrategy.h
+    src/02_parsing/ast/statement/let/LetStatementNodeParseStrategy.cpp
     src/02_parsing/ast/statement/expression/ExpressionStatementNode.h
     src/02_parsing/ast/statement/expression/ExpressionStatementNode.cpp
     src/02_parsing/ast/statement/expression/ExpressionStatementNodeParseStrategy.h
@@ -69,10 +71,10 @@ add_library(
     src/02_parsing/ast/statement/block/BlockStatementNode.cpp
     src/02_parsing/ast/statement/block/BlockStatementNodeParseStrategy.h
     src/02_parsing/ast/statement/block/BlockStatementNodeParseStrategy.cpp
-    src/02_parsing/ast/statement/for/ForNode.h
-    src/02_parsing/ast/statement/for/ForNode.cpp
-    src/02_parsing/ast/statement/for/ForNodeParseStrategy.h
-    src/02_parsing/ast/statement/for/ForNodeParseStrategy.cpp
+    src/02_parsing/ast/statement/for/ForStatementNode.h
+    src/02_parsing/ast/statement/for/ForStatementNode.cpp
+    src/02_parsing/ast/statement/for/ForStatementNodeParseStrategy.h
+    src/02_parsing/ast/statement/for/ForStatementNodeParseStrategy.cpp
 
     src/02_parsing/ast/expression/ExpressionParseStrategy.h
     src/02_parsing/ast/expression/ExpressionParseStrategy.cpp
@@ -102,10 +104,10 @@ add_library(
     src/02_parsing/ast/expression/call/CallExpressionNode.cpp
     src/02_parsing/ast/expression/call/CallExpressionNodeParseStrategy.h
     src/02_parsing/ast/expression/call/CallExpressionNodeParseStrategy.cpp
-    src/02_parsing/ast/expression/function/FunctionLiteralNode.h
-    src/02_parsing/ast/expression/function/FunctionLiteralNode.cpp
-    src/02_parsing/ast/expression/function/FunctionLiteralNodeParseStrategy.h
-    src/02_parsing/ast/expression/function/FunctionLiteralNodeParseStrategy.cpp
+    src/02_parsing/ast/expression/function/FunctionExpressionNode.h
+    src/02_parsing/ast/expression/function/FunctionExpressionNode.cpp
+    src/02_parsing/ast/expression/function/FunctionExpressionNodeParseStrategy.h
+    src/02_parsing/ast/expression/function/FunctionExpressionNodeParseStrategy.cpp
     src/02_parsing/ast/expression/if/IfExpressionNode.h
     src/02_parsing/ast/expression/if/IfExpressionNode.cpp
     src/02_parsing/ast/expression/if/IfExpressionNodeParseStrategy.h
@@ -122,20 +124,15 @@ add_library(
     src/02_parsing/ast/expression/prefix/PrefixExpressionNode.cpp
     src/02_parsing/ast/expression/prefix/PrefixExpressionNodeParseStrategy.h
     src/02_parsing/ast/expression/prefix/PrefixExpressionNodeParseStrategy.cpp
-    src/02_parsing/ast/expression/when/WhenNode.h
-    src/02_parsing/ast/expression/when/WhenNode.cpp
-    src/02_parsing/ast/expression/when/WhenNodeParseStrategy.h
-    src/02_parsing/ast/expression/when/WhenNodeParseStrategy.cpp
-    src/02_parsing/ast/expression/post/PostNode.h
-    src/02_parsing/ast/expression/post/PostNode.cpp
-    src/02_parsing/ast/expression/post/PostNodeParseStrategy.h
-    src/02_parsing/ast/expression/post/PostNodeParseStrategy.cpp
+    src/02_parsing/ast/expression/when/WhenExpressionNode.h
+    src/02_parsing/ast/expression/when/WhenExpressionNode.cpp
+    src/02_parsing/ast/expression/when/WhenExpressionNodeParseStrategy.h
+    src/02_parsing/ast/expression/when/WhenExpressionNodeParseStrategy.cpp
+    src/02_parsing/ast/expression/post/PostExpressionNode.h
+    src/02_parsing/ast/expression/post/PostExpressionNode.cpp
+    src/02_parsing/ast/expression/post/PostExpressionNodeParseStrategy.h
+    src/02_parsing/ast/expression/post/PostExpressionNodeParseStrategy.cpp
 
-    src/04_generation/opcode/Opcode.h
-    src/04_generation/opcode/OpcodeGenerator.h
-    src/04_generation/opcode/Register.h
-    src/04_generation/opcode/OpcodeVisitor.h
-    src/04_generation/opcode/OpcodeVisitor.cpp
 )
 
 add_executable(

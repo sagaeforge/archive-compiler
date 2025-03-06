@@ -14,6 +14,10 @@ class IfExpressionNode : public Expression {
     virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
     virtual const tokenize::Token &get_token() const override;
 
+    std::shared_ptr<Expression> get_condition() const;
+    std::shared_ptr<Statement> get_consequence() const;
+    std::shared_ptr<Statement> get_alternative() const;
+
   private:
     tokenize::Token m_token;
     std::shared_ptr<Expression> m_condition;

@@ -21,4 +21,6 @@ json::JsonValue IdentifierLiteralNode::to_json(json::JsonAllocator &allocator) c
 
 const tokenize::Token &IdentifierLiteralNode::get_token() const { return m_token; }
 
+icu::UnicodeString IdentifierLiteralNode::get_value() const { return m_value; }
+
 } // namespace nugdev::compiler::ast::expression

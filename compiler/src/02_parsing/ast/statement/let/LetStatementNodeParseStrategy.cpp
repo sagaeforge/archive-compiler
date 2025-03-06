@@ -1,0 +1,43 @@
+#include "LetStatementNodeParseStrategy.h"
+
+#include "00_app/stream/StreamWorkbench.hpp"
+#include "02_parsing/ast/expression/ExpressionParseStrategy.h"
+#include "02_parsing/ast/expression/identifier/IdentifierLiteralNodeParseStrategy.h"
+#include "02_parsing/ast/statement/let/LetStatementNode.h"
+
+namespace nugdev::compiler::ast::statement {
+
+bool LetStatementNodeParseStrategy::can_parse(const tokenize::TokenStream &tokens) { return contains(tokens.current(), {tokenize::TokenType::Let}); }
+
+parsing::ParseStrategyResult LetStatementNodeParseStrategy::parse(const tokenize::TokenStream &tokens) {
+    static expression::IdentifierLiteralNodeParseStrategy identifierStrategy{};
+    static expression::ExpressionParseStrategy expressionStrategy{};
+
+    auto [node, itr] = stream::workbench(tokens, [this, &tokens](tokenize::TokenStream &workbench) {
+        auto letToken = tokens.current();
+        workbench.next();
+
+        auto [name, identifierItr] = identifierStrategy.parse(workbench);
+        workbench.move_at(identifierItr);
+
+        auto letNode = std::make_shared<LetStatementNode>(letToken.value(), name->as<Expression>(), nullptr, nullptr);
+        if (contains(workbench.current(), {tokenize::TokenType::Colon})) {
+            workbench.next();
+            auto [type, expressionItr] = expressionStrategy.parse(workbench);
+            workbench.move_at(expressionItr);
+            letNode->set_type(type->as<Expression>());
+        }
+
+        if (contains(workbench.current(), {tokenize::TokenType::Assign})) {
+            workbench.next();
+            auto [value, expressionItr] = expressionStrategy.parse(workbench);
+            workbench.move_at(expressionItr);
+            letNode->set_value(value->as<Expression>());
+        }
+
+        return letNode;
+    });
+    return {node, itr};
+}
+
+} // namespace nugdev::compiler::ast::statement

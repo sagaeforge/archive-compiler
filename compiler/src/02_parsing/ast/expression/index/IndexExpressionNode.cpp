@@ -17,4 +17,8 @@ json::JsonValue IndexExpressionNode::to_json(json::JsonAllocator &allocator) con
 
 const tokenize::Token &IndexExpressionNode::get_token() const { return m_token; }
 
+std::shared_ptr<Expression> IndexExpressionNode::get_left() const { return m_left; }
+
+std::shared_ptr<Expression> IndexExpressionNode::get_index() const { return m_index; }
+
 } // namespace nugdev::compiler::ast::expression

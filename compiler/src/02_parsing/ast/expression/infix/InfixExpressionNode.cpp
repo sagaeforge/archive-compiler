@@ -23,4 +23,10 @@ json::JsonValue InfixExpressionNode::to_json(json::JsonAllocator &allocator) con
 
 const tokenize::Token &InfixExpressionNode::get_token() const { return m_token; }
 
+std::shared_ptr<Expression> InfixExpressionNode::get_left() const { return m_left; }
+
+icu::UnicodeString InfixExpressionNode::get_operator() const { return m_operator; }
+
+std::shared_ptr<Expression> InfixExpressionNode::get_right() const { return m_right; }
+
 } // namespace nugdev::compiler::ast::expression

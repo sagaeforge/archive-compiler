@@ -5,16 +5,16 @@
 #include "02_parsing/ast/expression/array/ArrayLiteralNodeParseStrategy.h"
 #include "02_parsing/ast/expression/boolean/BooleanLiteralNodeParseStrategy.h"
 #include "02_parsing/ast/expression/call/CallExpressionNodeParseStrategy.h"
-#include "02_parsing/ast/expression/function/FunctionLiteralNodeParseStrategy.h"
+#include "02_parsing/ast/expression/function/FunctionExpressionNodeParseStrategy.h"
 #include "02_parsing/ast/expression/identifier/IdentifierLiteralNodeParseStrategy.h"
 #include "02_parsing/ast/expression/if/IfExpressionNodeParseStrategy.h"
 #include "02_parsing/ast/expression/index/IndexExpressionNodeParseStrategy.h"
 #include "02_parsing/ast/expression/infix/InfixExpressionNodeParseStrategy.h"
 #include "02_parsing/ast/expression/number/NumberLiteralNodeParseStrategy.h"
-#include "02_parsing/ast/expression/post/PostNodeParseStrategy.h"
+#include "02_parsing/ast/expression/post/PostExpressionNodeParseStrategy.h"
 #include "02_parsing/ast/expression/prefix/PrefixExpressionNodeParseStrategy.h"
 #include "02_parsing/ast/expression/string/StringLiteralNodeParseStrategy.h"
-#include "02_parsing/ast/expression/when/WhenNodeParseStrategy.h"
+#include "02_parsing/ast/expression/when/WhenExpressionNodeParseStrategy.h"
 
 namespace nugdev::compiler::ast::expression {
 
@@ -30,9 +30,9 @@ ExpressionParseStrategy::ExpressionParseStrategy() {
         {tokenize::TokenType::False, std::make_shared<BooleanLiteralNodeParseStrategy>()},
         {tokenize::TokenType::LParen, std::make_shared<GroupExpressionParseStrategy>()},
         {tokenize::TokenType::If, std::make_shared<IfExpressionNodeParseStrategy>()},
-        {tokenize::TokenType::Function, std::make_shared<FunctionLiteralNodeParseStrategy>()},
+        {tokenize::TokenType::Function, std::make_shared<FunctionExpressionNodeParseStrategy>()},
         {tokenize::TokenType::LBracket, std::make_shared<ArrayLiteralNodeParseStrategy>()},
-        {tokenize::TokenType::When, std::make_shared<WhenNodeParseStrategy>()},
+        {tokenize::TokenType::When, std::make_shared<WhenExpressionNodeParseStrategy>()},
         {tokenize::TokenType::Inc, std::make_shared<PrefixExpressionNodeParseStrategy>()},
         {tokenize::TokenType::Dec, std::make_shared<PrefixExpressionNodeParseStrategy>()},
     };
@@ -50,8 +50,8 @@ ExpressionParseStrategy::ExpressionParseStrategy() {
         {tokenize::TokenType::LParen, std::make_shared<CallExpressionNodeParseStrategy>()},
         {tokenize::TokenType::LBracket, std::make_shared<IndexExpressionNodeParseStrategy>()},
 
-        {tokenize::TokenType::Inc, std::make_shared<PostNodeParseStrategy>()},
-        {tokenize::TokenType::Dec, std::make_shared<PostNodeParseStrategy>()},
+        {tokenize::TokenType::Inc, std::make_shared<PostExpressionNodeParseStrategy>()},
+        {tokenize::TokenType::Dec, std::make_shared<PostExpressionNodeParseStrategy>()},
     };
 }
 

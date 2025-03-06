@@ -20,4 +20,7 @@ json::JsonValue ArrayLiteralNode::to_json(json::JsonAllocator &allocator) const 
 }
 
 const tokenize::Token &ArrayLiteralNode::get_token() const { return m_token; }
+
+const std::vector<std::shared_ptr<Expression>> &ArrayLiteralNode::get_elements() const { return m_elements; }
+
 } // namespace nugdev::compiler::ast::expression

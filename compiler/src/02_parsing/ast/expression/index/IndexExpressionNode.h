@@ -13,6 +13,9 @@ class IndexExpressionNode : public Expression {
     virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
     virtual const tokenize::Token &get_token() const override;
 
+    std::shared_ptr<Expression> get_left() const;
+    std::shared_ptr<Expression> get_index() const;
+
   private:
     tokenize::Token m_token;
     std::shared_ptr<Expression> m_left;

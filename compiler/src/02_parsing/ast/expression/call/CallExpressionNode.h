@@ -13,6 +13,9 @@ class CallExpressionNode : public Expression {
     virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
     virtual const tokenize::Token &get_token() const override;
 
+    std::shared_ptr<Expression> get_callee() const;
+    const std::vector<std::shared_ptr<Expression>> &get_arguments() const;
+
   private:
     tokenize::Token m_token;
     std::shared_ptr<Expression> m_callee;

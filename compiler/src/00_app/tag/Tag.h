@@ -2,16 +2,17 @@
 
 #include "00_app/lib/PointerHelper.hpp"
 
+#include <memory>
 #include <stduuid/uuid.h>
 
 namespace nugdev::compiler {
 
 class Tag : public lib::PointerHelper<Tag> {
   private:
+    Tag();
     Tag(const uuids::uuid &id);
 
   public:
-    Tag() = delete; // 나중에 stl 사용하다가 문제 생기면, 그때 가서 고민.
     Tag(const Tag &);
     Tag(Tag &&) noexcept;
     Tag &operator=(Tag &&) noexcept;

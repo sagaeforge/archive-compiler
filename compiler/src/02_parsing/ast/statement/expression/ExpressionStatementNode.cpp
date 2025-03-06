@@ -15,4 +15,6 @@ icu::UnicodeString ExpressionStatementNode::to_str() const { return u"Expression
 
 const tokenize::Token &ExpressionStatementNode::get_token() const { return m_expression->get_token(); }
 
+const std::shared_ptr<Expression> &ExpressionStatementNode::get_expression() const { return m_expression; }
+
 } // namespace nugdev::compiler::ast::statement

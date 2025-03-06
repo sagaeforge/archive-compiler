@@ -13,6 +13,9 @@ class PrefixExpressionNode : public Expression {
     virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
     virtual const tokenize::Token &get_token() const override;
 
+    std::shared_ptr<Expression> get_right() const;
+    icu::UnicodeString get_operator() const;
+
   private:
     tokenize::Token m_token;
     icu::UnicodeString m_operator;

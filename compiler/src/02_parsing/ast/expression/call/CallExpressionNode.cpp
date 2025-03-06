@@ -22,4 +22,8 @@ json::JsonValue CallExpressionNode::to_json(json::JsonAllocator &allocator) cons
 
 const tokenize::Token &CallExpressionNode::get_token() const { return m_token; }
 
+std::shared_ptr<Expression> CallExpressionNode::get_callee() const { return m_callee; }
+
+const std::vector<std::shared_ptr<Expression>> &CallExpressionNode::get_arguments() const { return m_arguments; }
+
 } // namespace nugdev::compiler::ast::expression

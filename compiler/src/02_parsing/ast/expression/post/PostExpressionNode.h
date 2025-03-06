@@ -4,24 +4,22 @@
 
 namespace nugdev::compiler::ast::expression {
 
-class InfixExpressionNode : public Expression {
+class PostExpressionNode : public Expression {
   public:
-    InfixExpressionNode(const tokenize::Token &token, std::shared_ptr<Expression> left, const icu::UnicodeString &opCode, std::shared_ptr<Expression> right);
+    PostExpressionNode(const tokenize::Token &token, std::shared_ptr<Expression> left, const icu::UnicodeString &op);
 
   public:
     virtual icu::UnicodeString to_str() const override;
     virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
     virtual const tokenize::Token &get_token() const override;
 
-  public:
     std::shared_ptr<Expression> get_left() const;
     icu::UnicodeString get_operator() const;
-    std::shared_ptr<Expression> get_right() const;
 
   private:
     tokenize::Token m_token;
     std::shared_ptr<Expression> m_left;
-    icu::UnicodeString m_operator;
-    std::shared_ptr<Expression> m_right;
+    icu::UnicodeString m_op;
 };
+
 } // namespace nugdev::compiler::ast::expression
