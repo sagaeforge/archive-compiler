@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "00_app/lib/PointerHelper.hpp"
+#include "00_app/lib/UnicodeStringHash.h"
 #include "02_parsing/ast/AST.h"
 
 namespace nugdev::compiler::ast {
@@ -35,7 +36,7 @@ class ASTNodeVisitor : public lib::PointerHelper<ASTNodeVisitor> {
     virtual std::any visit_array_literal_expression(const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) = 0;
     virtual std::any visit_boolean_literal_expression(const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) = 0;
     virtual std::any visit_call_expression(const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) = 0;
-    virtual std::any visit_function_literal_expression(const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) = 0;
+    virtual std::any visit_function_expression(const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) = 0;
     virtual std::any visit_identifier_expression(const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) = 0;
     virtual std::any visit_if_expression(const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) = 0;
     virtual std::any visit_index_expression(const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) = 0;

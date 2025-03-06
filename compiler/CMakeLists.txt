@@ -37,6 +37,7 @@ add_library(
     src/02_parsing/ast/AST.cpp
     src/02_parsing/ast/ASTNodeAspect.h
     src/02_parsing/ast/ASTNodeVisitor.h
+    src/02_parsing/ast/ASTNodeVisitor.cpp
     src/02_parsing/ParseStrategy.h
     src/02_parsing/ParseStrategy.cpp
 
@@ -133,6 +134,8 @@ add_library(
     src/02_parsing/ast/expression/post/PostExpressionNodeParseStrategy.h
     src/02_parsing/ast/expression/post/PostExpressionNodeParseStrategy.cpp
 
+    src/04_generation/opcode/BytecodeGenerator.h
+    src/04_generation/opcode/BytecodeGenerator.cpp
 )
 
 add_executable(

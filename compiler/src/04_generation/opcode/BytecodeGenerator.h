@@ -106,7 +106,7 @@ class BytecodeGenerator : public ast::ASTNodeVisitor {
     virtual std::any visit_array_literal_expression(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) override;
     virtual std::any visit_boolean_literal_expression(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) override;
     virtual std::any visit_call_expression(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) override;
-    virtual std::any visit_function_literal_expression(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) override;
+    virtual std::any visit_function_expression(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) override;
     virtual std::any visit_identifier_expression(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) override;
     virtual std::any visit_if_expression(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) override;
     virtual std::any visit_index_expression(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) override;
@@ -150,6 +150,64 @@ class BytecodeGenerator : public ast::ASTNodeVisitor {
     // 레이블 관리 (점프 지점)
     std::unordered_map<std::string, int> m_labels;
     int m_nextLabelId;
+
+    // 루프 컨텍스트 관리를 위한 구조체
+    struct LoopContext {
+        std::string loopLabel;   // 루프 레이블 (없으면 빈 문자열)
+        std::string startLabel;  // 루프 시작 라벨
+        std::string condLabel;   // 조건 검사 라벨
+        std::string bodyLabel;   // 루프 본문 라벨
+        std::string postLabel;   // 증감식 라벨
+        std::string endLabel;    // 루프 끝 라벨
+        int loopStartInstrIndex; // 루프 시작 명령어 인덱스
+        int loopEndInstrIndex;   // 루프 끝 명령어 인덱스
+    };
+
+    // 현재 활성화된 루프 컨텍스트 스택
+    std::vector<LoopContext> m_loopContextStack;
+
+    // 루프 컨텍스트 관리 메서드
+    void pushLoopContext(const std::string &label);
+    void popLoopContext();
+    LoopContext *getCurrentLoopContext();
+    LoopContext *findLoopContextByLabel(const std::string &label);
+
+    // 함수 컨텍스트 관리를 위한 구조체
+    struct FunctionContext {
+        std::string functionName;                      // 함수 이름 (없으면 빈 문자열)
+        std::string startLabel;                        // 함수 시작 레이블
+        std::string endLabel;                          // 함수 끝 레이블
+        std::string returnLabel;                       // 반환 지점 레이블
+        int functionStartIndex;                        // 함수 시작 명령어 인덱스
+        int functionEndIndex;                          // 함수 끝 명령어 인덱스
+        int returnRegister;                            // 반환값을 저장할 레지스터
+        std::vector<int> localVars;                    // 지역 변수 레지스터 목록
+        std::unordered_map<std::string, int> paramMap; // 매개변수 이름과 레지스터 매핑
+    };
+
+    // 현재 활성화된 함수 컨텍스트 스택
+    std::vector<FunctionContext> m_functionContextStack;
+
+    // 함수 컨텍스트 관리 메서드
+    void pushFunctionContext(const std::string &name);
+    void popFunctionContext();
+    FunctionContext *getCurrentFunctionContext();
+    FunctionContext *findFunctionContextByName(const std::string &name);
+
+    // 점프 패치 관련 구조체와 데이터
+    struct JumpPatch {
+        int instructionIndex;    // 패치할 명령어 인덱스
+        int operandIndex;        // 패치할 operand 인덱스
+        std::string targetLabel; // 목적지 라벨
+    };
+
+    std::vector<JumpPatch> m_jumpPatches; // 패치해야 할 점프 명령어 목록
+
+    // 점프 패치 관리 메서드
+    void addJumpPatch(int instructionIndex, int operandIndex, const std::string &targetLabel);
+    void resolveJumpPatches();                                   // 모든 패치를 적용
+    void resolveJumpPatchesForSection(BytecodeSection &section); // 특정 섹션의 패치를 적용
+    void validateJumps();                                        // 점프 명령어 검증
 
     // 내부 유틸리티 함수
     std::string generateUniqueLabel();

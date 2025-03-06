@@ -3,24 +3,24 @@
 #include "02_parsing/ast/expression/array/ArrayLiteralNode.h"
 #include "02_parsing/ast/expression/boolean/BooleanLiteralNode.h"
 #include "02_parsing/ast/expression/call/CallExpressionNode.h"
-#include "02_parsing/ast/expression/function/FunctionLiteralNode.h"
+#include "02_parsing/ast/expression/function/FunctionExpressionNode.h"
 #include "02_parsing/ast/expression/identifier/IdentifierLiteralNode.h"
 #include "02_parsing/ast/expression/if/IfExpressionNode.h"
 #include "02_parsing/ast/expression/index/IndexExpressionNode.h"
 #include "02_parsing/ast/expression/infix/InfixExpressionNode.h"
 #include "02_parsing/ast/expression/number/NumberLiteralNode.h"
-#include "02_parsing/ast/expression/post/PostNode.h"
+#include "02_parsing/ast/expression/post/PostExpressionNode.h"
 #include "02_parsing/ast/expression/prefix/PrefixExpressionNode.h"
 #include "02_parsing/ast/expression/string/StringLiteralNode.h"
-#include "02_parsing/ast/expression/when/WhenNode.h"
+#include "02_parsing/ast/expression/when/WhenExpressionNode.h"
 #include "02_parsing/ast/module/program/ProgramNode.h"
 #include "02_parsing/ast/statement/block/BlockStatementNode.h"
-#include "02_parsing/ast/statement/break/BreakNode.h"
-#include "02_parsing/ast/statement/continue/ContinueNode.h"
+#include "02_parsing/ast/statement/break/BreakStatementNode.h"
+#include "02_parsing/ast/statement/continue/ContinueStatementNode.h"
 #include "02_parsing/ast/statement/expression/ExpressionStatementNode.h"
-#include "02_parsing/ast/statement/for/ForNode.h"
-#include "02_parsing/ast/statement/let/LetNode.h"
-#include "02_parsing/ast/statement/return/ReturnNode.h"
+#include "02_parsing/ast/statement/for/ForStatementNode.h"
+#include "02_parsing/ast/statement/let/LetStatementNode.h"
+#include "02_parsing/ast/statement/return/ReturnStatementNode.h"
 
 namespace nugdev::compiler::ast {
 
@@ -37,11 +37,11 @@ ASTNodeVisitor::ASTNodeVisitor() {
          [this](const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) -> std::any {
              return this->visit_block_statement(node, context);
          }},
-        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::statement::BreakNode>(); },
+        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::statement::BreakStatementNode>(); },
          [this](const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) -> std::any {
              return this->visit_break_statement(node, context);
          }},
-        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::statement::ContinueNode>(); },
+        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::statement::ContinueStatementNode>(); },
          [this](const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) -> std::any {
              return this->visit_continue_statement(node, context);
          }},
@@ -49,15 +49,15 @@ ASTNodeVisitor::ASTNodeVisitor() {
          [this](const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) -> std::any {
              return this->visit_expression_statement(node, context);
          }},
-        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::statement::ForNode>(); },
+        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::statement::ForStatementNode>(); },
          [this](const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) -> std::any {
              return this->visit_for_statement(node, context);
          }},
-        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::statement::LetNode>(); },
+        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::statement::LetStatementNode>(); },
          [this](const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) -> std::any {
              return this->visit_let_statement(node, context);
          }},
-        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::statement::ReturnNode>(); },
+        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::statement::ReturnStatementNode>(); },
          [this](const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) -> std::any {
              return this->visit_return_statement(node, context);
          }},
@@ -75,9 +75,9 @@ ASTNodeVisitor::ASTNodeVisitor() {
          [this](const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) -> std::any {
              return this->visit_call_expression(node, context);
          }},
-        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::expression::FunctionLiteralNode>(); },
+        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::expression::FunctionExpressionNode>(); },
          [this](const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) -> std::any {
-             return this->visit_function_literal_expression(node, context);
+             return this->visit_function_expression(node, context);
          }},
         {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::expression::IdentifierLiteralNode>(); },
          [this](const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) -> std::any {
@@ -99,7 +99,7 @@ ASTNodeVisitor::ASTNodeVisitor() {
          [this](const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) -> std::any {
              return this->visit_number_literal_expression(node, context);
          }},
-        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::expression::PostNode>(); },
+        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::expression::PostExpressionNode>(); },
          [this](const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) -> std::any {
              return this->visit_postfix_expression(node, context);
          }},
@@ -111,7 +111,7 @@ ASTNodeVisitor::ASTNodeVisitor() {
          [this](const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) -> std::any {
              return this->visit_string_literal_expression(node, context);
          }},
-        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::expression::WhenNode>(); },
+        {[this](const ASTNodePtr &node) -> bool { return node != nullptr && node->is<ast::expression::WhenExpressionNode>(); },
          [this](const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) -> std::any {
              return this->visit_when_expression(node, context);
          }},
@@ -122,7 +122,17 @@ ASTNodeVisitor::ASTNodeVisitor(const std::vector<std::tuple<NodePredicate, NodeV
 
 std::any ASTNodeVisitor::visit(const ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) {
     if (requires_context() && context.empty()) {
-        throw std::runtime_error("Context is required for this node");
+        // 컨텍스트가 필요하지만 비어있는 경우 기본 컨텍스트 생성
+        std::unordered_map<icu::UnicodeString, std::any> defaultContext;
+
+        for (const auto &strategy : m_strategies) {
+            if (std::get<0>(strategy)(node)) {
+                return std::get<1>(strategy)(node, defaultContext);
+            }
+        }
+
+        // 대응되는 케이스가 없으므로 오류 상황.
+        throw std::runtime_error("No strategy found for node");
     }
 
     for (const auto &strategy : m_strategies) {
