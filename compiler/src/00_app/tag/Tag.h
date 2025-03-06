@@ -6,7 +6,6 @@
 
 namespace nugdev::compiler {
 
-// 실제 레지스터를 가르킨다기보단, 가상 레지스터 역할이라고 보면 됨.
 class Tag : public lib::PointerHelper<Tag> {
   private:
     Tag(const uuids::uuid &id);
