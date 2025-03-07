@@ -1,4 +1,6 @@
+```cpp
 #include "BytecodeGenerator.h"
+
 #include "02_parsing/ast/AST.h"
 #include "02_parsing/ast/expression/array/ArrayLiteralNode.h"
 #include "02_parsing/ast/expression/boolean/BooleanLiteralNode.h"
@@ -20,136 +22,17 @@
 #include "02_parsing/ast/statement/for/ForStatementNode.h"
 #include "02_parsing/ast/statement/let/LetStatementNode.h"
 #include "02_parsing/ast/statement/return/ReturnStatementNode.h"
+
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <stdexcept>
 
 namespace nugdev::compiler::generation {
 
 // 헬퍼 함수 선언
 std::string opCodeToString(BytecodeOpCode opcode);
 std::string operandToString(const BytecodeOperand &operand);
-
-BytecodeGenerator::BytecodeGenerator() : m_currentSectionIndex(-1), m_nextRegister(0), m_nextLabelId(0) {
-    // 기본 섹션 생성 (전역 코드)
-    m_sections.emplace_back("global");
-    m_currentSectionIndex = 0;
-}
-
-BytecodeGenerator::~BytecodeGenerator() {
-    // 필요한 정리 작업 수행
-}
-
-std::any BytecodeGenerator::visit(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) {
-    // ASTNodeVisitor의 기본 방문 메서드 구현
-    return ast::ASTNodeVisitor::visit(node, context);
-}
-
-std::any BytecodeGenerator::visit_program(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) {
-    // 프로그램 노드 방문
-    // 각 자식 노드를 순회하며 바이트코드 생성
-
-    // 다운캐스팅을 통해 실제 Program 노드 접근
-    auto programNode = node->as<ast::module::ProgramNode>();
-    if (!programNode) {
-        // 잘못된 노드 타입
-        return {};
-    }
-
-    // 먼저 전역 섹션 설정
-    m_currentSectionIndex = 0;
-
-    // 레지스터 상태 초기화 (프로그램 시작 시 모든 레지스터 초기화)
-    resetRegisters();
-
-    // 프로그램의 모든 문장(statement)을 순회하며 방문
-    std::vector<ast::StatementPtr> &statements = programNode->get_statements();
-    for (const auto &stmt : statements) {
-        // 각 문장 방문 (바이트코드 생성)
-        std::any result = visit(stmt, context);
-
-        // 결과가 레지스터라면 해제 (최상위 문장의 결과는 유지할 필요 없음)
-        try {
-            int reg = std::any_cast<int>(result);
-            freeRegister(reg);
-        } catch (const std::bad_any_cast &) {
-            // 레지스터가 아닌 경우 무시
-        }
-    }
-
-    // 특별한 반환값은 없음 (프로그램 전체는 값을 반환하지 않음)
-    return {};
-}
-
-std::any BytecodeGenerator::visit_block_statement(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) {
-    // 블록 문장 노드 방문
-    // 블록 내의 각 문장을 순차적으로 방문하여 바이트코드 생성
-
-    // 다운캐스팅을 통해 실제 블록 문장 노드 접근
-    auto blockNode = node->as<ast::statement::BlockStatementNode>();
-    if (!blockNode) {
-        // 잘못된 노드 타입
-        return {};
-    }
-
-    // 블록 내의 모든 문장을 순회하며 방문
-    const std::vector<std::shared_ptr<ast::Statement>> &statements = blockNode->get_statements();
-
-    // 블록이 비어있는 경우 기본값 반환
-    if (statements.empty()) {
-        // 빈 블록은 undefined 반환
-        int resultReg = allocateRegister();
-        BytecodeInstruction nullInstr(BytecodeOpCode::LOAD_CONST);
-        nullInstr.registers.push_back(resultReg);
-        nullInstr.operands.push_back(std::string("undefined"));
-        addInstruction(nullInstr);
-        return resultReg;
-    }
-
-    // 마지막 문장의 결과 레지스터 (블록의 결과값으로 사용)
-    int lastResultReg = -1;
-
-    for (size_t i = 0; i < statements.size(); i++) {
-        // 이전 문장의 결과 레지스터가 있다면 해제 (마지막 문장 결과는 예외)
-        if (lastResultReg >= 0) {
-            freeRegister(lastResultReg);
-        }
-
-        // 현재 문장 방문 및 결과 저장
-        std::any result = visit(statements[i], context);
-
-        // 결과가 레지스터 번호라면 저장
-        if (!result.has_value()) {
-            lastResultReg = -1;
-        } else {
-            try {
-                lastResultReg = std::any_cast<int>(result);
-            } catch (const std::bad_any_cast &) {
-                lastResultReg = -1;
-            }
-        }
-
-        // 마지막 문장이 아니고 결과가 없는 경우, 기본값 생성 (선택적)
-        if (i < statements.size() - 1 && lastResultReg < 0) {
-            // 중간 문장 결과가 없는 경우는 무시
-            lastResultReg = -1;
-        }
-    }
-
-    // 블록의 결과는 마지막 문장의 결과
-    // 결과가 없는 경우 undefined 반환
-    if (lastResultReg < 0) {
-        lastResultReg = allocateRegister();
-        BytecodeInstruction undefinedInstr(BytecodeOpCode::LOAD_CONST);
-        undefinedInstr.registers.push_back(lastResultReg);
-        undefinedInstr.operands.push_back(std::string("undefined"));
-        addInstruction(undefinedInstr);
-    }
-
-    return lastResultReg;
-}
 
 std::any BytecodeGenerator::visit_break_statement(const ast::ASTNodePtr &node, const std::unordered_map<icu::UnicodeString, std::any> &context) {
     // break 문장 처리
@@ -1721,7 +1604,7 @@ void BytecodeGenerator::resetRegisters() {
 
 const std::vector<BytecodeSection> &BytecodeGenerator::getSections() const { return m_sections; }
 
-std::string BytecodeGenerator::dumpBytecode() const {
+std::string BytecodeGenerator::visit() const {
     std::stringstream ss;
 
     // 각 섹션 출력
@@ -1902,7 +1785,9 @@ void BytecodeGenerator::resolveJumpPatchesForSection(BytecodeSection &section) {
     // 안전한 기본 위치는 섹션의 마지막 명령어 (종료 지점)
     const int safeDefaultPosition = sectionSize - 1;
 
-    std::cerr << "Resolving patches for section '" << section.getName() << "' with " << m_jumpPatches.size() << " patches and " << m_labels.size() << " labels"
+    std::cerr << "Resolving patches for section '" << section.getName() << "' with " << m_jumpPatches.size() << " patches and " << m_labels.size()
+              << "
+        labels "
               << std::endl;
 
     // 먼저 모든 레이블의 임시값을 안전한 값으로 변경
@@ -2079,3 +1964,4 @@ std::string operandToString(const BytecodeOperand &operand) {
 }
 
 } // namespace nugdev::compiler::generation
+```

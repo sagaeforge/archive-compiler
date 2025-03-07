@@ -1,7 +1,7 @@
 #include "00_app/repl/repl.h"
 #include "01_tokenize/Tokenizer.h"
 #include "02_parsing/Parser.h"
-#include "04_generation/opcode/BytecodeGenerator.h"
+// #include "04_generation/opcode/BytecodeGenerator.h"
 #include <iostream>
 #include <string>
 #include <unicode/unistr.h>
@@ -32,15 +32,15 @@ void Repl::run() {
         auto ast = parser.parse(tokens);
 
         // 3. 바이트코드 생성
-        generation::BytecodeGenerator generator;
-        generator.generate(ast);
+        // generation::BytecodeGenerator generator;
+        // generator.generate(ast);
 
         // 4. 결과 출력
         std::cout << "=== AST ===" << std::endl;
         std::cout << parser.to_string(ast) << std::endl;
 
-        std::cout << "=== 바이트코드 ===" << std::endl;
-        std::cout << generator.dumpBytecode() << std::endl;
+        // std::cout << "=== 바이트코드 ===" << std::endl;
+        // std::cout << generator.dumpBytecode() << std::endl;
 
         std::cout << "입력 > ";
     }

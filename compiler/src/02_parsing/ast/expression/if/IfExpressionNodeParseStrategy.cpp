@@ -1,6 +1,7 @@
 #include "IfExpressionNodeParseStrategy.h"
 
 #include "00_app/stream/StreamWorkbench.hpp"
+#include "01_tokenize/Token.h"
 #include "02_parsing/ast/AST.h"
 #include "02_parsing/ast/expression/ExpressionParseStrategy.h"
 #include "02_parsing/ast/expression/if/IfExpressionNode.h"
@@ -18,29 +19,33 @@ parsing::ParseStrategyResult IfExpressionNodeParseStrategy::parse(const tokenize
         // current: 'if' | 'elif'
         workbench.next();
 
-        // current: condition
-        auto [condition, conditionItr] = expressionStrategy.parse(workbench);
-        workbench.move_at(conditionItr);
+        std::shared_ptr<Expression> condition;
+        if (workbench.current().valid() && !contains(workbench.current(), {tokenize::TokenType::LBrace})) {
+            // current: condition
+            auto [conditionNode, conditionItr] = expressionStrategy.parse(workbench);
+            workbench.move_at(conditionItr);
+            condition = conditionNode->as<Expression>();
+        }
 
         // current: consequence
         auto [consequence, consequenceItr] = blockStrategy.parse(workbench);
         workbench.move_at(consequenceItr);
 
         // current: 'elif'
-        if (contains(workbench.current(), {tokenize::TokenType::Elif})) {
+        if (workbench.current().valid() && contains(workbench.current(), {tokenize::TokenType::Elif})) {
             auto [alternative, alternativeItr] = parse(workbench);
             workbench.move_at(alternativeItr);
-            return std::make_shared<IfExpressionNode>(*tokens.current(), condition->as<Expression>(), consequence->as<Statement>(),
-                                                      alternative->as<Statement>());
+            return std::make_shared<IfExpressionNode>(*tokens.current(), condition != nullptr ? condition->as<Expression>() : nullptr,
+                                                      consequence->as<Statement>(), alternative->as<Statement>());
         }
 
         // current: 'else'
-        if (contains(workbench.current(), {tokenize::TokenType::Else})) {
+        if (workbench.current().valid() && contains(workbench.current(), {tokenize::TokenType::Else})) {
             workbench.next();
             auto [alternative, alternativeItr] = blockStrategy.parse(workbench);
             workbench.move_at(alternativeItr);
-            return std::make_shared<IfExpressionNode>(*tokens.current(), condition->as<Expression>(), consequence->as<Statement>(),
-                                                      alternative->as<Statement>());
+            return std::make_shared<IfExpressionNode>(*tokens.current(), condition != nullptr ? condition->as<Expression>() : nullptr,
+                                                      consequence->as<Statement>(), alternative->as<Statement>());
         }
 
         return std::make_shared<IfExpressionNode>(*tokens.current(), condition->as<Expression>(), consequence->as<Statement>(), nullptr);

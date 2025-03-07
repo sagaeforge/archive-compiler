@@ -6,6 +6,8 @@
 
 namespace nugdev::compiler::stream {
 
+template <typename T> class MutableStream;
+
 template <typename T = char16_t> class Stream {
   public:
     template <typename R> class const_iterator {
@@ -132,10 +134,37 @@ template <typename T = char16_t> class Stream {
         m_current--;
         return *this;
     }
+    MutableStream<elem_t> to_mutable() const { return MutableStream<elem_t>(m_elems); }
+    bool empty() const { return m_elems.empty(); }
 
-  private:
+  protected:
     std::vector<elem_t> m_elems;
     iterator_t m_current;
+};
+
+template <typename T> class MutableStream : public Stream<T> {
+  public:
+    using super = Stream<T>;
+    using super::Stream;
+
+  public: // stack처럼, current가 마지막 요소를 가르킴. 그래서 next 사용을 권장하지 않음.
+    super::iterator_t push(const T &elem) {
+        super::m_elems.push_back(elem);
+        super::move(1);
+        return super::m_current;
+    }
+    T pop() {
+        T elem = super::m_elems.back();
+        super::m_elems.pop_back();
+        super::move(-1);
+        return elem;
+    }
+
+  public: // set
+    super::self_t set(const super::iterator_t &it, const T &elem) {
+        super::m_elems[it.distance()] = elem;
+        return *this;
+    }
 };
 
 using StringStream = Stream<char16_t>;

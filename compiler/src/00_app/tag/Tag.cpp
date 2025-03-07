@@ -6,12 +6,6 @@ Tag::Tag() : m_id(), m_hash() {}
 
 Tag::Tag(const uuids::uuid &id) : m_id(id), m_hash(std::hash<uuids::uuid>{}(id)) {}
 
-std::shared_ptr<Tag> Tag::create() noexcept {
-    static std::mt19937 engine(std::random_device{}());
-    static uuids::uuid_random_generator generator(engine);
-    return std::shared_ptr<Tag>(new Tag(generator()));
-}
-
 // 복사 생성자
 Tag::Tag(const Tag &other) : m_id(other.m_id), m_hash(other.m_hash) {}
 

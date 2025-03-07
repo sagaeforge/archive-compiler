@@ -21,7 +21,13 @@ class Tag : public lib::PointerHelper<Tag> {
     std::strong_ordering operator<=>(const Tag &) const noexcept;
 
   public:
-    static std::shared_ptr<Tag> create() noexcept;
+    template <typename T>
+        requires std::is_base_of<Tag, T>::value
+    static T create() noexcept {
+        static std::mt19937 engine(std::random_device{}());
+        static uuids::uuid_random_generator generator(engine);
+        return T(generator());
+    }
 
   public:
     std::size_t hash() const;
