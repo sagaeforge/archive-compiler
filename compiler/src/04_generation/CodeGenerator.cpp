@@ -93,6 +93,9 @@ std::any CodeGenerator::visit_break_statement(const Super::NodePtr<ast::statemen
     }
 
     auto endLabel = targetLoopContext->find_label("endLabel");
+    if (!endLabel.has_value()) {
+        throw std::runtime_error("No end label found");
+    }
 
     auto instruction = Instruction {}
 }
