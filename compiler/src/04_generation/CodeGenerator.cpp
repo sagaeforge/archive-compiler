@@ -3,6 +3,7 @@
 #include "04_generation/register/Register.hpp"
 
 #include <any>
+#include <memory>
 #include <optional>
 #include <unicode/unistr.h>
 
@@ -12,92 +13,50 @@ CodeGenerator::CodeGenerator() : m_registers({}), m_sections({{u"global"}}) {}
 
 bool CodeGenerator::requires_context() const { return true; }
 
-std::any CodeGenerator::visit_program(const Super::NodePtr<ast::module::ProgramNode> &node, const Super::Context &context) {
-    std::vector<ast::StatementPtr> &statements = node->get_statements();
-    for (auto &statement : statements) {
-        auto result = statement->accept(self(), context);
-        try {
-            RegisterTag tag = std::any_cast<RegisterTag>(result);
-            free_register(tag);
-        } catch (const std::bad_any_cast &) {
+RegisterTag CodeGenerator::allocate_register() {
+    if (m_registers.empty()) {
+        static auto registerCnt = 0;
+        registerCnt++;
+        if (registerCnt > 30) {
+            // 30 개 이상인 경우, 로직이 잘못되었을 가능성이 매우 높음.
+            throw std::runtime_error("Too many registers");
         }
+        m_registers.push(RegisterTag::create<RegisterTag>());
     }
+    return m_registers.pop();
+};
 
-    return {};
+void CodeGenerator::free_register(const RegisterTag &tag) { m_registers.push(tag); }
+
+void CodeGenerator::push_instruction(const std::shared_ptr<Instruction> &instruction) {
+    auto currentSectionItr = m_sections.current();
+    auto currentSection = currentSectionItr.value();
+    currentSection.add_instruction(instruction);
+    m_sections.set(currentSectionItr, currentSection);
 }
 
-std::any CodeGenerator::visit_block_statement(const Super::NodePtr<ast::statement::BlockStatementNode> &node, const Super::Context &context) {
-    auto &statements = node->get_statements();
-    if (statements.empty()) {
-        auto result = allocate_register();
-        result.set_value(0);
-        auto instruction = Instruction{
-            InstructionCode::LOAD_CONST,
-            {result},
-        };
-        auto currentSection = *m_sections.current();
-        currentSection.add_instruction(instruction);
-        m_sections.set(m_sections.current(), currentSection);
-    }
-
-    auto lastResult = std::optional<UniversalRegister>();
-    for (auto &statement : statements) {
-        if (lastResult.has_value()) {
-            free_register(lastResult->get_tag());
-        }
-
-        auto result = statement->accept(self(), context);
-        if (!result.has_value()) {
-            lastResult = std::nullopt;
-        } else {
-            try {
-                lastResult = std::any_cast<UniversalRegister>(result);
-            } catch (const std::bad_any_cast &) {
-                lastResult = std::nullopt;
-            }
-        }
-    }
-
-    if (!lastResult.has_value()) {
-        lastResult = allocate_register();
-        lastResult->set_value(0);
-        auto instruction = Instruction{
-            InstructionCode::LOAD_CONST,
-            {lastResult->get_tag()},
-        };
-        auto currentSection = *m_sections.current();
-        currentSection.add_instruction(instruction);
-        m_sections.set(m_sections.current(), currentSection);
-    }
-
-    return lastResult;
+void CodeGenerator::allocate_data_section_field(const DataSectionField &field) {
+    auto currentSectionItr = m_sections.current();
+    auto currentSection = currentSectionItr.value();
+    currentSection.add_data_section_field(field);
+    m_sections.set(currentSectionItr, currentSection);
 }
 
-std::any CodeGenerator::visit_break_statement(const Super::NodePtr<ast::statement::BreakStatementNode> &node, const Super::Context &context) {
-    auto labelExpr = node->get_label();
-
-    icu::UnicodeString targetLoopLabel;
-    if (labelExpr) {
-        auto identifier = labelExpr->as<ast::expression::IdentifierLiteralNode>();
-        targetLoopLabel = identifier->get_value();
+std::any CodeGenerator::visit_array_literal_expression(const Super::NodePtr<ast::expression::ArrayLiteralNode> &node, const Super::Context &context) {
+    auto elems = node->get_elements();
+    if (elems.empty()) {
+        return {};
     }
 
-    std::optional<generation::Context> targetLoopContext;
-    if (targetLoopLabel.isEmpty()) {
-        if (m_loopContextStack.empty()) {
-            throw std::runtime_error("No loop context found");
-        }
-        targetLoopContext = m_loopContextStack.top();
-    } else {
-        targetLoopContext = m_loopContextStack.find_by_name(targetLoopLabel)->value();
+    DataSectionField dataSectionField{.m_tag = DataSectionField::DataScetionFieldTag::create<DataSectionField::DataScetionFieldTag>(),
+                                      .m_value =
+                                          std::make_shared<DataSectionField::DataSectionFieldValue>(DataSectionField::DataSectionFieldValue::Type::Array, {})};
+    for (auto &elem : elems) {
+        auto registerTag = std::any_cast<RegisterTag>(elem->accept(self(), context));
+        dataSectionField.m_value->m_array.push_back(
+            std::make_shared<DataSectionField::DataSectionFieldValue>(DataSectionField::DataSectionFieldValue::Type::Literal, registerTag.get_value()));
     }
-
-    auto endLabel = targetLoopContext->find_label("endLabel");
-    if (!endLabel.has_value()) {
-        throw std::runtime_error("No end label found");
-    }
-
-    auto instruction = Instruction {}
+    allocate_data_section_field(dataSectionField);
 }
 
 } // namespace nugdev::compiler::generation

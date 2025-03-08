@@ -1,62 +1,259 @@
 #pragma once
 
+#include "00_app/lib/PointerHelper.hpp"
+#include "00_app/tag/Tag.h"
 #include "04_generation/register/Register.hpp"
 
+#include <cstdint>
+#include <unicode/unistr.h>
+
 namespace nugdev::compiler::generation {
+/**
+ * @brief 데이터 섹션 필드
+ * @note 출력시: <tag> <type> <literal|array|string>
+ */
+struct DataSectionField {
+    struct DataSectionFieldValue : lib::PointerHelper<DataSectionFieldValue> {
+        virtual ~DataSectionFieldValue(){};
+        enum class Type {
+            Array,
+            Literal,
+            String,
+        };
+        Type m_type;
+        union {
+            // 64비트 미만의 리터럴 표현식
+            std::uint64_t m_literal;
+            // array 표현식
+            std::vector<std::shared_ptr<DataSectionFieldValue>> m_array;
+            // 문자열 표현식
+            icu::UnicodeString m_string;
+        };
+    };
+    struct DataScetionFieldTag : public Tag {};
 
-enum class InstructionCode {
-    // 데이터 로드/저장 명령어
-    LOAD,       // 메모리에서 레지스터로 값 로드
-    STORE,      // 레지스터 값을 메모리에 저장
-    LOAD_CONST, // 상수 값을 레지스터에 로드
-    MOV,        // 레지스터 간 값 이동
-
-    // 산술 연산 명령어
-    ADD, // 덧셈
-    SUB, // 뺄셈
-    MUL, // 곱셈
-    DIV, // 나눗셈
-    MOD, // 나머지
-    INC, // 증가
-    DEC, // 감소
-
-    // 비트 및 논리 연산
-    AND, // 비트 AND
-    OR,  // 비트 OR
-    XOR, // 비트 XOR
-    NOT, // 비트 NOT
-    SHL, // 왼쪽 시프트
-    SHR, // 오른쪽 시프트
-
-    // 비교 연산
-    CMP,  // 비교
-    TEST, // 비트 테스트
-
-    // 분기 명령어
-    JMP, // 무조건 점프
-    JE,  // 같으면 점프
-    JNE, // 같지 않으면 점프
-    JG,  // 크면 점프
-    JGE, // 크거나 같으면 점프
-    JL,  // 작으면 점프
-    JLE, // 작거나 같으면 점프
-
-    // 함수 호출 관련
-    CALL,     // 함수 호출 (레지스터에 반환 주소 저장)
-    RET,      // 함수에서 반환
-    SAVE_REG, // 레지스터 상태 저장
-    REST_REG, // 레지스터 상태 복원
-
-    // 시스템 콜 및 VM 제어
-    SYSCALL, // 시스템 콜 실행
-    INT,     // 인터럽트
-    HALT,    // VM 실행 중지
-    NOP      // 아무 작업 없음
+    DataScetionFieldTag m_tag;
+    std::shared_ptr<DataSectionFieldValue> m_value;
 };
 
-struct Instruction {
-    InstructionCode code;
-    std::vector<UniversalRegister> registers;
+/**
+ * @brief 메모리 표현식
+ */
+struct MemoryExpression : public lib::PointerHelper<MemoryExpression> {};
+/**
+ * @brief 데이터 섹션에 대한 표현식
+ * @note Memory[field_tag: DataScetionFieldTag]
+ */
+struct DataSectionMemoryExpression : public MemoryExpression {
+    DataSectionField::DataScetionFieldTag field_tag;
+};
+/**
+ * @brief 랜덤 액세스 메모리 표현식
+ * @note Memory[address: std::uint64_t]
+ */
+struct RandomAccessMemoryExpression : public MemoryExpression {
+    std::uint64_t address;
+};
+
+struct Instruction : public lib::PointerHelper<Instruction> {};
+
+/**
+ * @brief 레지스터 간 이동
+ * @param R(x): 목적지 레지스터
+ * @param R(y): 출발지 레지스터
+ * @note R(x) <- R(y)
+ */
+struct Move : public Instruction {
+    RegisterTag destination;
+    RegisterTag source;
+};
+
+/**
+ * @brief 데이터 섹션 로드
+ * @param R(x): 목적지 레지스터
+ * @param DataSectionMemoryExpression: 데이터 섹션 표현식
+ * @note R(x) <- DataSectionMemoryExpression
+ */
+struct Load : public Instruction {
+    RegisterTag destination;
+    DataSectionMemoryExpression dataSection;
+};
+
+/**
+ * @brief 더하기.
+ * @param R(x): 목적지 레지스터
+ * @param R(y): 출발지 레지스터
+ * @note R(x) <- R(x) + R(y)
+ */
+struct Add : public Instruction {
+    RegisterTag destination;
+    RegisterTag source;
+};
+
+/**
+ * @brief 빼기.
+ * @param R(x): 목적지 레지스터
+ * @param R(y): 출발지 레지스터
+ * @note R(x) <- R(x) - R(y)
+ */
+struct Sub : public Instruction {
+    RegisterTag destination;
+    RegisterTag source;
+};
+
+/**
+ * @brief 곱하기.
+ * @param R(x): 목적지 레지스터
+ * @param R(y): 출발지 레지스터
+ * @note R(x) <- R(x) * R(y)
+ */
+struct Mul : public Instruction {
+    RegisterTag destination;
+    RegisterTag source;
+};
+
+/**
+ * @brief 나누기.
+ * @param R(x): 목적지 레지스터
+ * @param R(y): 출발지 레지스터
+ * @note R(x) <- R(x) / R(y)
+ */
+struct Div : public Instruction {
+    RegisterTag destination;
+    RegisterTag source;
+};
+
+/**
+ * @brief 나머지.
+ * @param R(x): 목적지 레지스터
+ * @param R(y): 출발지 레지스터
+ * @note R(x) <- R(x) % R(y)
+ */
+struct Mod : public Instruction {
+    RegisterTag destination;
+    RegisterTag source;
+};
+
+/**
+ * @brief 증가.
+ * @param R(x): 목적지 레지스터
+ * @note R(x) <- R(x) + 1
+ */
+struct Inc : public Instruction {
+    RegisterTag destination;
+};
+
+/**
+ * @brief 감소.
+ * @param R(x): 목적지 레지스터
+ * @note R(x) <- R(x) - 1
+ */
+struct Dec : public Instruction {
+    RegisterTag destination;
+};
+
+/**
+ * @brief 비교.
+ * @param R(left): 왼쪽 레지스터
+ * @param R(right): 오른쪽 레지스터
+ * @return -> flag 레지스터
+ * @note R(left) - R(right)
+ */
+struct Cmp : public Instruction {
+    RegisterTag left;
+    RegisterTag right;
+};
+
+/**
+ * @brief 비트 비교
+ * @param R(left): 왼쪽 레지스터
+ * @param R(right): 오른쪽 레지스터
+ * @return -> flag 레지스터
+ * @note R(left) & R(right)
+ */
+struct Test : public Instruction {
+    RegisterTag left;
+    RegisterTag right;
+};
+
+/**
+ * @brief jump
+ * @param R(x): 목적지 레지스터
+ * @note PC <- R(x)
+ */
+struct Jump : public Instruction {
+    RegisterTag destination;
+};
+
+/**
+ * @brief 비교 결과가 같으면 jump
+ * @param R(x): 목적지 레지스터
+ * @note PC <- (if ZF=1) 이전 CMP 결과가 같으면 점프
+ */
+struct JumpEq : public Instruction {
+    RegisterTag destination;
+};
+
+/**
+ * @brief 비교 결과가 같지 않으면 jump
+ * @param R(x): 목적지 레지스터
+ * @note PC <- (if ZF=0) 이전 CMP 결과가 같지 않으면 점프
+ */
+struct JumpNe : public Instruction {
+    RegisterTag destination;
+};
+
+/**
+ * @brief 비교 결과가 작으면 jump
+ * @param R(x): 목적지 레지스터
+ * @note PC <- (if SF≠OF) 이전 CMP 결과 R(x) < R(y)이면 점프
+ */
+struct JumpLt : public Instruction {
+    RegisterTag destination;
+};
+
+/**
+ * @brief 비교 결과가 크면 jump
+ * @param R(x): 목적지 레지스터
+ * @note PC <- (if ZF=0 AND SF=OF) 이전 CMP 결과 R(x) > R(y)이면 점프
+ */
+struct JumpGt : public Instruction {
+    RegisterTag destination;
+};
+
+/**
+ * @brief 비교 결과가 작거나 같으면 jump
+ * @param R(x): 목적지 레지스터
+ * @note PC <- (if ZF=1 OR SF≠OF) 이전 CMP 결과 R(x) <= R(y)이면 점프
+ */
+struct JumpLe : public Instruction {
+    RegisterTag destination;
+};
+
+/**
+ * @brief 비교 결과가 크거나 같으면 jump
+ * @param R(x): 목적지 레지스터
+ * @note PC <- (if SF=OF) 이전 CMP 결과 R(x) >= R(y)이면 점프
+ */
+struct JumpGe : public Instruction {
+    RegisterTag destination;
+};
+
+/**
+ * @brief 함수 호출
+ * @param section_name: 함수 이름
+ * @note PC <- section_name
+ */
+struct Call : public Instruction {
+    icu::UnicodeString section_name;
+};
+
+/**
+ * @brief 함수 반환
+ * @note PC <- POP(); R(x) <- R(y) # 무조건 R(y)가 있음.
+ */
+struct Return : public Instruction {
+    RegisterTag destination;
 };
 
 } // namespace nugdev::compiler::generation

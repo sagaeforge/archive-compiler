@@ -1,12 +1,11 @@
 #pragma once
 
-#include "00_app/lib/UnicodeStringHash.h"
 #include "00_app/stream/Stream.hpp"
 #include "02_parsing/ast/ASTNodeVisitor.h"
 #include "04_generation/context/Context.h"
+#include "04_generation/instruction/Instruction.h"
 #include "04_generation/instruction/Section.h"
 #include "04_generation/register/Register.hpp"
-#include <deque>
 #include <unordered_map>
 
 namespace nugdev::compiler::generation {
@@ -20,6 +19,10 @@ class CodeGenerator : public ast::ASTNodeVisitor {
 
   private:
     virtual bool requires_context() const override;
+    RegisterTag allocate_register();
+    void free_register(const RegisterTag &tag);
+    void push_instruction(const std::shared_ptr<Instruction> &instruction);
+    void allocate_data_section_field(const DataSectionField &field);
 
   private:
     virtual std::any visit_program(const Super::NodePtr<ast::module::ProgramNode> &node, const Super::Context &context) override;
@@ -48,33 +51,9 @@ class CodeGenerator : public ast::ASTNodeVisitor {
     virtual std::any visit_string_literal_expression(const Super::NodePtr<ast::expression::StringLiteralNode> &node, const Super::Context &context) override;
     virtual std::any visit_when_expression(const Super::NodePtr<ast::expression::WhenExpressionNode> &node, const Super::Context &context) override;
 
-  private: // register
-    UniversalRegister allocate_register() {
-        if (!m_registers.empty()) {
-            return m_registers.pop();
-        }
-        return UniversalRegister(RegisterTag::create<RegisterTag>(), 0);
-    }
-    void free_register(const RegisterTag &tag);
-
-  private: // context
-    Context push_for_context(const icu::UnicodeString &label);
-    Context push_when_context(const icu::UnicodeString &label);
-    Context push_if_context(const icu::UnicodeString &label);
-    Context push_function_context(const icu::UnicodeString &label);
-
   private:
     stream::MutableStream<CodeSection> m_sections;
-
-    stream::MutableStream<UniversalRegister> m_registers;
-
-    std::unordered_map<icu::UnicodeString, RegisterTag> m_labels;
-    std::unordered_map<icu::UnicodeString, RegisterTag> m_variables;
-
-    ContextStack m_loopContextStack;
-    ContextStack m_functionContextStack;
-    ContextStack m_whenContextStack;
-    ContextStack m_ifContextStack;
+    stream::MutableStream<RegisterTag> m_registers;
 };
 
 } // namespace nugdev::compiler::generation
