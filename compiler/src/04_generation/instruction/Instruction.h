@@ -2,58 +2,41 @@
 
 #include "00_app/lib/PointerHelper.hpp"
 #include "00_app/tag/Tag.h"
-#include "04_generation/register/Register.hpp"
+#include "04_generation/memory/Memory.hpp"
+#include "04_generation/memory/Register.hpp"
 
 #include <cstdint>
+#include <unicode/umachine.h>
 #include <unicode/unistr.h>
 
 namespace nugdev::compiler::generation {
-/**
- * @brief 데이터 섹션 필드
- * @note 출력시: <tag> <type> <literal|array|string>
- */
-struct DataSectionField {
-    struct DataSectionFieldValue : lib::PointerHelper<DataSectionFieldValue> {
-        virtual ~DataSectionFieldValue(){};
-        enum class Type {
-            Array,
-            Literal,
-            String,
-        };
-        Type m_type;
-        union {
-            // 64비트 미만의 리터럴 표현식
-            std::uint64_t m_literal;
-            // array 표현식
-            std::vector<std::shared_ptr<DataSectionFieldValue>> m_array;
-            // 문자열 표현식
-            icu::UnicodeString m_string;
-        };
-    };
-    struct DataScetionFieldTag : public Tag {};
+// /**
+//  * @brief 데이터 섹션 필드
+//  * @note 출력시: <tag> <type> <literal|array|string>
+//  */
+// struct DataSectionField {
+//     struct DataSectionFieldValue : lib::PointerHelper<DataSectionFieldValue> {
+//         virtual ~DataSectionFieldValue(){};
+//         enum class Type {
+//             Array,
+//             Literal,
+//             String,
+//         };
+//         Type m_type;
+//         union {
+//             // 64비트 미만의 리터럴 표현식
+//             std::uint64_t m_literal;
+//             // array 표현식
+//             std::vector<std::shared_ptr<DataSectionFieldValue>> m_array;
+//             // 문자열 표현식
+//             icu::UnicodeString m_string;
+//         };
+//     };
+//     struct DataScetionFieldTag : public Tag {};
 
-    DataScetionFieldTag m_tag;
-    std::shared_ptr<DataSectionFieldValue> m_value;
-};
-
-/**
- * @brief 메모리 표현식
- */
-struct MemoryExpression : public lib::PointerHelper<MemoryExpression> {};
-/**
- * @brief 데이터 섹션에 대한 표현식
- * @note Memory[field_tag: DataScetionFieldTag]
- */
-struct DataSectionMemoryExpression : public MemoryExpression {
-    DataSectionField::DataScetionFieldTag field_tag;
-};
-/**
- * @brief 랜덤 액세스 메모리 표현식
- * @note Memory[address: std::uint64_t]
- */
-struct RandomAccessMemoryExpression : public MemoryExpression {
-    std::uint64_t address;
-};
+//     DataScetionFieldTag m_tag;
+//     std::shared_ptr<DataSectionFieldValue> m_value;
+// };
 
 struct Instruction : public lib::PointerHelper<Instruction> {};
 
@@ -71,12 +54,43 @@ struct Move : public Instruction {
 /**
  * @brief 데이터 섹션 로드
  * @param R(x): 목적지 레지스터
- * @param DataSectionMemoryExpression: 데이터 섹션 표현식
- * @note R(x) <- DataSectionMemoryExpression
+ * @param memoryTag: 메모리 태그
+ * @note R(x) <- memoryTag
  */
 struct Load : public Instruction {
     RegisterTag destination;
-    DataSectionMemoryExpression dataSection;
+    MemoryTag memoryTag;
+};
+
+/**
+ * @brief 레지스터에 값 로드
+ * @param R(x): 목적지 레지스터
+ * @param value: 값
+ * @note R(x) <- value
+ */
+struct LoadValue : public Instruction {
+    RegisterTag destination;
+    union {
+        std::uint64_t m_integer;
+        double m_float;
+        bool m_boolean;
+        UChar32 m_character;
+    };
+
+    LoadValue(const RegisterTag &destination, const std::uint64_t &value) : destination(destination), m_integer(value) {}
+    LoadValue(const RegisterTag &destination, const double &value) : destination(destination), m_float(value) {}
+    LoadValue(const RegisterTag &destination, const bool &value) : destination(destination), m_boolean(value) {}
+    LoadValue(const RegisterTag &destination, const UChar32 &value) : destination(destination), m_character(value) {}
+};
+
+/**
+ * @brief 데이터 섹션 저장
+ * @param R(x): 출발지 레지스터
+ * @param memoryTag: 메모리 태그
+ */
+struct Store : public Instruction {
+    RegisterTag source;
+    MemoryTag memoryTag;
 };
 
 /**

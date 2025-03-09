@@ -4,8 +4,6 @@
 
 namespace nugdev::compiler::ast {
 
-std::any ASTNode::accept(const std::shared_ptr<ASTNodeVisitor> &visitor, const std::unordered_map<icu::UnicodeString, std::any> &context) {
-    return visitor->visit(self(), context);
-}
+void ASTNode::accept(const std::shared_ptr<ASTNodeVisitor> &visitor) { visitor->visit(self()); }
 
 } // namespace nugdev::compiler::ast

@@ -4,10 +4,8 @@
 #include "00_app/lib/PointerHelper.hpp"
 #include "01_tokenize/Token.h"
 
-#include <any>
 #include <memory>
 #include <unicode/unistr.h>
-#include <unordered_map>
 
 namespace nugdev::compiler::ast {
 
@@ -18,7 +16,7 @@ class ASTNode : public lib::PointerHelper<ASTNode> {
     virtual ~ASTNode() = default;
 
   public:
-    std::any accept(const std::shared_ptr<ASTNodeVisitor> &visitor, const std::unordered_map<icu::UnicodeString, std::any> &context);
+    void accept(const std::shared_ptr<ASTNodeVisitor> &visitor);
 
   public:
     virtual icu::UnicodeString to_str() const = 0;

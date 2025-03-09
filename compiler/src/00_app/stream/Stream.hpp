@@ -1,5 +1,7 @@
 #pragma once
 
+#include <compare>
+#include <functional>
 #include <vector>
 
 #include <unicode/unistr.h>
@@ -136,6 +138,14 @@ template <typename T = char16_t> class Stream {
     }
     MutableStream<elem_t> to_mutable() const { return MutableStream<elem_t>(m_elems); }
     bool empty() const { return m_elems.empty(); }
+    template <typename Pred> iterator_t find(const Pred &predicate) const {
+        for (auto it = begin(); it != end(); ++it) {
+            if (static_cast<std::strong_ordering>(predicate(*it)) == std::strong_ordering::equal) {
+                return it;
+            }
+        }
+        return end();
+    }
 
   protected:
     std::vector<elem_t> m_elems;
@@ -163,6 +173,13 @@ template <typename T> class MutableStream : public Stream<T> {
   public: // set
     super::self_t set(const super::iterator_t &it, const T &elem) {
         super::m_elems[it.distance()] = elem;
+        return *this;
+    }
+
+  public: // remove
+    super::self_t remove(const super::iterator_t &it) {
+        super::m_elems.erase(super::m_elems.begin() + it.distance());
+        super::move(-1);
         return *this;
     }
 };
