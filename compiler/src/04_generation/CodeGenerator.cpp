@@ -333,6 +333,7 @@ void CodeGenerator::visit_index_expression(const Super::NodePtr<ast::expression:
             throw std::runtime_error("unsupported index expression");
         }
         auto variableLoadInstruction = variableInstruction->as<Load>();
+        auto variableMemory = section.get_memory(variableLoadInstruction->memoryTag);
 
         // index 표현식 처리.
         node->get_index()->accept(self());
@@ -344,22 +345,20 @@ void CodeGenerator::visit_index_expression(const Super::NodePtr<ast::expression:
             throw std::runtime_error("unsupported index expression");
         }
 
+        auto indexValue = 0;
         if (indexInstruction->is<LoadValue>()) {
             auto indexLoadValueInstruction = indexInstruction->as<LoadValue>(); // 0, 1 blur blur
-            auto indexValue = indexLoadValueInstruction->m_integer;
-
-            // 메모리 찾기
-            auto memoryTag = variableLoadInstruction->memoryTag;
-            auto memory = section.get_memory(memoryTag); // 0번째 element를 가르키고 있고.
-
-            // 메모리 태그에 대한 메모리 크기 확인.
+            indexValue = indexLoadValueInstruction->m_integer;
         } else {
             // register는 메모리를 가르키고 있는데, 그 값을 indexLoadInstruction에 넣어줘야함.
             auto indexLoadInstruction = indexInstruction->as<Load>();
             auto indexMemory = section.get_memory(indexLoadInstruction->memoryTag);
-
-            // Load일땐, 메모리에 접근 후, 값을 가져오는 데, Load로 해야겠네.
+            indexValue = indexMemory.get<std::uint64_t>();
         }
+
+        auto resultRegisterTag = allocate_register();
+        section.push_instruction(std::make_shared<Load>(resultRegisterTag, variableLoadInstruction->memoryTag, indexValue));
+        push_result_register_tag(resultRegisterTag);
     });
 }
 

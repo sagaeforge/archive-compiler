@@ -33,6 +33,7 @@ class Memory {
             m_memory.set(m_offset, value);
             return *this;
         }
+        template <typename T> operator T() const { return m_memory.get<T>(m_offset); }
 
       private:
         Memory &m_memory;
@@ -99,13 +100,20 @@ class Memory {
         std::memcpy(m_data.get() + m_size, &value, alignment);
         m_size += alignment;
     }
-    template <typename T> void set(const size_t &index, const T &value) {
+    template <typename T> void set(const size_t &offset, const T &value) {
         auto alignment = sizeof(T);
-        if (index + alignment > m_size) {
+        if (offset + alignment > m_size) {
             throw std::runtime_error("Memory allocation failed");
         }
         m_alignment = alignment;
-        std::memcpy(m_data.get() + index, &value, alignment);
+        std::memcpy(m_data.get() + offset, &value, alignment);
+    }
+    template <typename T> T get(const size_t &offset = 0) const {
+        auto alignment = sizeof(T);
+        if (offset + alignment > m_size) {
+            throw std::runtime_error("Memory allocation failed");
+        }
+        return *reinterpret_cast<T *>(m_data.get() + offset);
     }
 
   public:
