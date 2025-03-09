@@ -1,10 +1,11 @@
 #pragma once
 
+#include "00_app/lib/UnicodeString.hpp"
 #include "00_app/stream/Stream.hpp"
 #include "02_parsing/ast/ASTNodeVisitor.h"
+#include "04_generation/context/Context.h"
 #include "04_generation/instruction/Instruction.h"
 #include "04_generation/instruction/Section.h"
-#include "04_generation/memory/Memory.hpp"
 #include "04_generation/memory/Register.hpp"
 
 namespace nugdev::compiler::generation {
@@ -19,12 +20,17 @@ class CodeGenerator : public ast::ASTNodeVisitor {
   private:
     RegisterTag allocate_register();
     void free_register(const RegisterTag &tag);
-    void push_instruction(const std::shared_ptr<Instruction> &instruction);
-    std::shared_ptr<Instruction> pop_instruction();
     void push_result_register_tag(const RegisterTag &tag);
-    Memory allocate_memory(const size_t &size);
-    Memory get_memory(const MemoryTag &tag);
-    void free_memory(const MemoryTag &tag);
+    RegisterTag pop_result_register_tag();
+    void add_patch_table(const size_t &current_position, const PatchLabel targetTag);
+    template <typename Function> void transaction(Function &&func) {
+        // current section을 수정해줌.
+        auto currentSection = *m_sections.current();
+        func(currentSection);
+        m_sections.pop();
+        m_sections.push(currentSection);
+    }
+    MemoryTag find_variable(const lib::String &name);
 
   private:
     virtual void visit_program(const Super::NodePtr<ast::module::ProgramNode> &node) override;
@@ -56,7 +62,7 @@ class CodeGenerator : public ast::ASTNodeVisitor {
   private:
     stream::MutableStream<CodeSection> m_sections;
     stream::MutableStream<RegisterTag> m_registers;
-    stream::MutableStream<Memory> m_memoryMap;
+    stream::MutableStream<RegisterTag> m_resultRegisterTags;
 };
 
 } // namespace nugdev::compiler::generation

@@ -5,6 +5,7 @@
 #include "02_parsing/ast/expression/ExpressionParseStrategy.h"
 #include "02_parsing/ast/expression/identifier/IdentifierLiteralNodeParseStrategy.h"
 #include "02_parsing/ast/statement/block/BlockStatementNodeParseStrategy.h"
+#include "02_parsing/ast/statement/expression/ExpressionStatementNodeParseStrategy.h"
 #include "02_parsing/ast/statement/for/ForStatementNode.h"
 #include "02_parsing/ast/statement/let/LetStatementNodeParseStrategy.h"
 
@@ -34,6 +35,7 @@ parsing::ParseStrategyResult ForStatementNodeParseStrategy::parse(const tokenize
     static expression::ExpressionParseStrategy expressionStrategy{};
     static statement::BlockStatementNodeParseStrategy blockStatementStrategy{};
     static expression::IdentifierLiteralNodeParseStrategy identifierLiteralNodeParseStrategy{};
+    static statement::ExpressionStatementNodeParseStrategy expressionStatementStrategy{};
 
     auto [node, itr] = stream::workbench(tokens, [this, &tokens](tokenize::TokenStream &workbench) {
         std::shared_ptr<Expression> label = nullptr;
@@ -55,7 +57,7 @@ parsing::ParseStrategyResult ForStatementNodeParseStrategy::parse(const tokenize
 
         std::shared_ptr<Expression> init = nullptr;
         std::shared_ptr<Expression> condition = nullptr;
-        std::shared_ptr<Expression> post = nullptr;
+        std::shared_ptr<Statement> post = nullptr;
         if (workbench.current().valid() && contains(workbench.current(), {tokenize::TokenType::LParen})) {
             workbench.next();
 
@@ -79,9 +81,9 @@ parsing::ParseStrategyResult ForStatementNodeParseStrategy::parse(const tokenize
             if (contains(workbench.current(), {tokenize::TokenType::SemiColon})) {
                 workbench.next();
                 // current: post!
-                auto [postNode, postMoveItr] = expressionStrategy.parse(workbench);
+                auto [postNode, postMoveItr] = expressionStatementStrategy.parse(workbench);
                 workbench.move_at(postMoveItr);
-                post = postNode->as<Expression>();
+                post = postNode->as<Statement>();
             }
 
             if (!contains(workbench.current(), {tokenize::TokenType::RParen})) {

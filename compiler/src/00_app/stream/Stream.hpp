@@ -136,6 +136,8 @@ template <typename T = char16_t> class Stream {
         m_current--;
         return *this;
     }
+
+  public:
     MutableStream<elem_t> to_mutable() const { return MutableStream<elem_t>(m_elems); }
     bool empty() const { return m_elems.empty(); }
     template <typename Pred> iterator_t find(const Pred &predicate) const {
@@ -146,6 +148,23 @@ template <typename T = char16_t> class Stream {
         }
         return end();
     }
+    template <typename Pred> std::vector<iterator_t> find_all(const Pred &predicate) const {
+        std::vector<iterator_t> result;
+        for (auto it = begin(); it != end(); ++it) {
+            if (static_cast<std::strong_ordering>(predicate(*it)) == std::strong_ordering::equal) {
+                result.push_back(it);
+            }
+        }
+        return result;
+    }
+    template <typename Other> Stream<Other> map(const std::function<Other(const elem_t &)> &func) const {
+        std::vector<Other> result;
+        for (auto it = begin(); it != end(); ++it) {
+            result.push_back(func(*it));
+        }
+        return Stream<Other>(result);
+    }
+    std::uint32_t size() const { return m_elems.size(); }
 
   protected:
     std::vector<elem_t> m_elems;
@@ -179,9 +198,17 @@ template <typename T> class MutableStream : public Stream<T> {
   public: // remove
     super::self_t remove(const super::iterator_t &it) {
         super::m_elems.erase(super::m_elems.begin() + it.distance());
-        super::move(-1);
+
+        // current보다, it가 뒤에 있다면, 굳이 할 필요 없고, 앞에 있다면, 움직여야함.
+        if (super::m_current > it) {
+            super::move(-1);
+        }
+
         return *this;
     }
+
+  public: // to_immutable
+    super::self_t to_immutable() const { return super::self_t(super::m_elems); }
 };
 
 using StringStream = Stream<char16_t>;

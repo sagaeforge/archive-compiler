@@ -1,8 +1,19 @@
 #include "Tag.h"
+#include <uuid.h>
 
 namespace nugdev::compiler {
 
 Tag::Tag() : m_id(), m_hash() {}
+
+Tag::Tag(const lib::String &str) : m_id(), m_hash() {
+    auto uuid = uuids::uuid::from_string(str.to_string());
+    if (uuid.has_value()) {
+        m_id = uuid.value();
+        m_hash = std::hash<uuids::uuid>{}(m_id);
+    } else {
+        throw std::runtime_error("Invalid UUID string");
+    }
+}
 
 Tag::Tag(const uuids::uuid &id) : m_id(id), m_hash(std::hash<uuids::uuid>{}(id)) {}
 
@@ -30,6 +41,17 @@ Tag &Tag::operator=(const Tag &other) noexcept {
     return *this;
 }
 
+Tag &Tag::operator=(const lib::String &str) {
+    auto rhs = Tag(str);
+    if (this != &rhs) {
+        m_id = rhs.m_id;
+        m_hash = rhs.m_hash;
+    }
+    return *this;
+}
+
+bool Tag::operator==(const Tag &other) const noexcept { return m_id == other.m_id; }
+
 // 3방향 비교 연산자 (C++20)
 std::strong_ordering Tag::operator<=>(const Tag &other) const noexcept {
     // 해시값 먼저 비교
@@ -54,5 +76,7 @@ std::strong_ordering Tag::operator<=>(const Tag &other) const noexcept {
 }
 
 std::size_t Tag::hash() const { return m_hash; }
+
+lib::String Tag::to_str() const { return lib::String(uuids::to_string(m_id)); }
 
 } // namespace nugdev::compiler

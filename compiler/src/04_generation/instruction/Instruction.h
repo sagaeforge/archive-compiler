@@ -1,7 +1,6 @@
 #pragma once
 
 #include "00_app/lib/PointerHelper.hpp"
-#include "00_app/tag/Tag.h"
 #include "04_generation/memory/Memory.hpp"
 #include "04_generation/memory/Register.hpp"
 
@@ -10,33 +9,6 @@
 #include <unicode/unistr.h>
 
 namespace nugdev::compiler::generation {
-// /**
-//  * @brief 데이터 섹션 필드
-//  * @note 출력시: <tag> <type> <literal|array|string>
-//  */
-// struct DataSectionField {
-//     struct DataSectionFieldValue : lib::PointerHelper<DataSectionFieldValue> {
-//         virtual ~DataSectionFieldValue(){};
-//         enum class Type {
-//             Array,
-//             Literal,
-//             String,
-//         };
-//         Type m_type;
-//         union {
-//             // 64비트 미만의 리터럴 표현식
-//             std::uint64_t m_literal;
-//             // array 표현식
-//             std::vector<std::shared_ptr<DataSectionFieldValue>> m_array;
-//             // 문자열 표현식
-//             icu::UnicodeString m_string;
-//         };
-//     };
-//     struct DataScetionFieldTag : public Tag {};
-
-//     DataScetionFieldTag m_tag;
-//     std::shared_ptr<DataSectionFieldValue> m_value;
-// };
 
 struct Instruction : public lib::PointerHelper<Instruction> {};
 
@@ -60,6 +32,7 @@ struct Move : public Instruction {
 struct Load : public Instruction {
     RegisterTag destination;
     MemoryTag memoryTag;
+    std::uint32_t offset;
 };
 
 /**
@@ -71,13 +44,15 @@ struct Load : public Instruction {
 struct LoadValue : public Instruction {
     RegisterTag destination;
     union {
-        std::uint64_t m_integer;
+        std::int64_t m_integer;
+        std::uint64_t m_unsigned;
         double m_float;
         bool m_boolean;
         UChar32 m_character;
     };
 
-    LoadValue(const RegisterTag &destination, const std::uint64_t &value) : destination(destination), m_integer(value) {}
+    LoadValue(const RegisterTag &destination, const std::uint64_t &value) : destination(destination), m_unsigned(value) {}
+    LoadValue(const RegisterTag &destination, const std::int64_t &value) : destination(destination), m_integer(value) {}
     LoadValue(const RegisterTag &destination, const double &value) : destination(destination), m_float(value) {}
     LoadValue(const RegisterTag &destination, const bool &value) : destination(destination), m_boolean(value) {}
     LoadValue(const RegisterTag &destination, const UChar32 &value) : destination(destination), m_character(value) {}

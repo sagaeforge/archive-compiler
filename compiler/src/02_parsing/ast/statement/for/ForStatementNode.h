@@ -18,7 +18,7 @@ class ForStatementNode : public Statement {
     const std::shared_ptr<Expression> &get_label() const;
     const std::shared_ptr<Expression> &get_init() const;
     const std::shared_ptr<Expression> &get_condition() const;
-    const std::shared_ptr<Expression> &get_post() const;
+    const std::shared_ptr<Statement> &get_post() const;
     const std::shared_ptr<Statement> &get_consequence() const;
 
   private:
@@ -26,7 +26,7 @@ class ForStatementNode : public Statement {
     std::shared_ptr<Expression> m_label;
     std::shared_ptr<Expression> m_init;
     std::shared_ptr<Expression> m_condition;
-    std::shared_ptr<Expression> m_post;
+    std::shared_ptr<Statement> m_post;
     std::shared_ptr<Statement> m_consequence;
 };
 
