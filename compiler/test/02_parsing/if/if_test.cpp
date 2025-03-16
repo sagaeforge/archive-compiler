@@ -8,7 +8,7 @@ TEST_F(IfTestCase, if) {
     auto tokens = tokenizer.tokenize(u"if (a) { a }");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(IfTestCase, if_else) {
@@ -17,7 +17,7 @@ TEST_F(IfTestCase, if_else) {
     auto tokens = tokenizer.tokenize(u"if (a) { a } else { b }");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(IfTestCase, if_elif_else) {
@@ -26,7 +26,7 @@ TEST_F(IfTestCase, if_elif_else) {
     auto tokens = tokenizer.tokenize(u"if (a) { a } elif (b) { b } else { c }");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(IfTestCase, if_elif_elif) {
@@ -35,5 +35,5 @@ TEST_F(IfTestCase, if_elif_elif) {
     auto tokens = tokenizer.tokenize(u"if (a) { a } elif (b) { b } elif (c) { c }");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }

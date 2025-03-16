@@ -1,7 +1,8 @@
 #include "00_app/repl/repl.h"
 #include "01_tokenize/Tokenizer.h"
 #include "02_parsing/Parser.h"
-// #include "04_generation/opcode/BytecodeGenerator.h"
+#include "02_parsing/ast/visitor/ASTNodeJsonVisitor.h"
+
 #include <iostream>
 #include <string>
 #include <unicode/unistr.h>
@@ -9,6 +10,8 @@
 namespace nugdev::compiler::repl {
 
 void Repl::run() {
+    auto visitor = std::make_shared<ast::ASTNodeJsonVisitor>();
+
     std::string line;
     std::cout << "Nugdev Compiler REPL (exit으로 종료)" << std::endl;
     std::cout << "입력 > ";
@@ -37,7 +40,8 @@ void Repl::run() {
 
         // 4. 결과 출력
         std::cout << "=== AST ===" << std::endl;
-        std::cout << parser.to_string(ast) << std::endl;
+        auto ast_json = ast->accept<json::JsonValue>(visitor);
+        std::cout << visitor->to_str(ast_json).to_string() << std::endl;
 
         // std::cout << "=== 바이트코드 ===" << std::endl;
         // std::cout << generator.dumpBytecode() << std::endl;

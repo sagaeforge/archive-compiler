@@ -1,17 +1,18 @@
 #include "Token.h"
 
+#include "00_app/lib/UnicodeString.hpp"
+
 #include <sstream>
-#include <string>
 
 namespace nugdev::compiler::tokenize {
 
-Token::Token(TokenType type, icu::UnicodeString literal) : type(type), literal(literal) {}
+Token::Token(TokenType type, lib::String literal) : type(type), literal(literal) {}
 
-Token Token::empty() { return Token(TokenType::Illegal, icu::UnicodeString::fromUTF8("")); }
+Token Token::empty() { return Token(TokenType::Illegal, lib::String()); }
 
-Token Token::from(TokenType type, icu::UnicodeString literal) { return Token(type, literal); }
+Token Token::from(TokenType type, lib::String literal) { return Token(type, literal); }
 
-icu::UnicodeString Token::to_str() {
+lib::String Token::to_str() {
     std::string literal_str;
     literal.toUTF8String(literal_str);
 
@@ -24,7 +25,7 @@ icu::UnicodeString Token::to_str() {
 
 TokenType Token::get_type() const { return this->type; }
 
-icu::UnicodeString Token::get_literal() const { return this->literal; }
+lib::String Token::get_literal() const { return lib::String(this->literal); }
 
 } // namespace nugdev::compiler::tokenize
 

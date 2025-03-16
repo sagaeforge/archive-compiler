@@ -8,7 +8,7 @@ TEST_F(BreakTestCase, break) {
     auto tokens = tokenizer.tokenize(u"break");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(BreakTestCase, break_with_label) {
@@ -17,5 +17,5 @@ TEST_F(BreakTestCase, break_with_label) {
     auto tokens = tokenizer.tokenize(u"break@label");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }

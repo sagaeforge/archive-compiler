@@ -8,7 +8,7 @@ TEST_F(BooleanTestCase, true_literal) {
     auto tokens = tokenizer.tokenize(u"true");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(BooleanTestCase, false_literal) {
@@ -17,5 +17,5 @@ TEST_F(BooleanTestCase, false_literal) {
     auto tokens = tokenizer.tokenize(u"false");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }

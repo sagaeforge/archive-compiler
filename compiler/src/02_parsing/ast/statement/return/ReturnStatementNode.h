@@ -13,8 +13,6 @@ class ReturnStatementNode : public Statement {
     ReturnStatementNode(const tokenize::Token &token, std::shared_ptr<Expression> label, std::shared_ptr<Expression> value);
 
   public:
-    json::JsonValue to_json(json::JsonAllocator &allocator) const override;
-    icu::UnicodeString to_str() const override;
     const tokenize::Token &get_token() const override;
 
   public:

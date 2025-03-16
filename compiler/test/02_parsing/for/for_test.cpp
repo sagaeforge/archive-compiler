@@ -8,7 +8,7 @@ TEST_F(ForTestCase, for) {
     auto tokens = tokenizer.tokenize(u"for { statements }");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(ForTestCase, for_with_label) {
@@ -17,7 +17,7 @@ TEST_F(ForTestCase, for_with_label) {
     auto tokens = tokenizer.tokenize(u"label@for { statements }");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(ForTestCase, for_with_condition) {
@@ -26,7 +26,7 @@ TEST_F(ForTestCase, for_with_condition) {
     auto tokens = tokenizer.tokenize(u"for (i < 10) { statements }");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(ForTestCase, for_with_post) {
@@ -35,7 +35,7 @@ TEST_F(ForTestCase, for_with_post) {
     auto tokens = tokenizer.tokenize(u"for (i < 10; i++) { statements }");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(ForTestCase, for_with_init_and_condition) {
@@ -44,5 +44,5 @@ TEST_F(ForTestCase, for_with_init_and_condition) {
     auto tokens = tokenizer.tokenize(u"for (let i = 0; i < 10; i++) { statements }");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }

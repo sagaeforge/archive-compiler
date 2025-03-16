@@ -8,7 +8,7 @@ TEST_F(StringTestCase, string) {
     auto tokens = tokenizer.tokenize(u"\"hello\"");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(StringTestCase, string_with_escape_character) {
@@ -17,5 +17,5 @@ TEST_F(StringTestCase, string_with_escape_character) {
     auto tokens = tokenizer.tokenize(u"\"hello\\n\"");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }

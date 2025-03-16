@@ -8,7 +8,7 @@ TEST_F(ArrayTestCase, array) {
     auto tokens = tokenizer.tokenize(u"[1, 2, 3]");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(ArrayTestCase, array_with_empty_elements) {
@@ -17,5 +17,5 @@ TEST_F(ArrayTestCase, array_with_empty_elements) {
     auto tokens = tokenizer.tokenize(u"[]");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }

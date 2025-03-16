@@ -6,17 +6,6 @@ IfExpressionNode::IfExpressionNode(const tokenize::Token &token, std::shared_ptr
                                    std::shared_ptr<Statement> alternative)
     : m_token(token), m_condition(condition), m_consequence(consequence), m_alternative(alternative) {}
 
-icu::UnicodeString IfExpressionNode::to_str() const { return m_token.get_literal(); }
-
-json::JsonValue IfExpressionNode::to_json(json::JsonAllocator &allocator) const {
-    json::JsonValue value(json::Type::kObjectType);
-    value.AddMember("type", json::JsonValue("IfExpression"), allocator);
-    value.AddMember("condition", m_condition->to_json(allocator), allocator);
-    value.AddMember("consequence", m_consequence->to_json(allocator), allocator);
-    value.AddMember("alternative", m_alternative ? m_alternative->to_json(allocator) : json::JsonValue(json::Type::kNullType), allocator);
-    return value;
-}
-
 const tokenize::Token &IfExpressionNode::get_token() const { return m_token; }
 
 std::shared_ptr<Expression> IfExpressionNode::get_condition() const { return m_condition; }

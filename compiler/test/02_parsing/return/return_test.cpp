@@ -8,7 +8,7 @@ TEST_F(ReturnTestCase, return) {
     auto tokens = tokenizer.tokenize(u"return");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(ReturnTestCase, return_with_value) {
@@ -17,7 +17,7 @@ TEST_F(ReturnTestCase, return_with_value) {
     auto tokens = tokenizer.tokenize(u"return 1");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(ReturnTestCase, return_with_label) {
@@ -26,7 +26,7 @@ TEST_F(ReturnTestCase, return_with_label) {
     auto tokens = tokenizer.tokenize(u"return@label");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(ReturnTestCase, return_with_value_and_label) {
@@ -35,5 +35,5 @@ TEST_F(ReturnTestCase, return_with_value_and_label) {
     auto tokens = tokenizer.tokenize(u"return@label 1");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }

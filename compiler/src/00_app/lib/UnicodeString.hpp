@@ -5,19 +5,6 @@
 #include <string>
 #include <unicode/unistr.h>
 
-namespace std {
-// ICU UnicodeString에 대한 해시 함수 특수화
-template <> struct hash<icu::UnicodeString> {
-    size_t operator()(const icu::UnicodeString &str) const {
-        // UTF-8로 변환하여 std::string의 해시 함수를 재사용
-        std::string utf8;
-        str.toUTF8String(utf8);
-        return std::hash<std::string>{}(utf8);
-    }
-};
-
-} // namespace std
-
 namespace nugdev::compiler::lib {
 
 struct String : public icu::UnicodeString {
@@ -107,3 +94,26 @@ struct String : public icu::UnicodeString {
 };
 
 } // namespace nugdev::compiler::lib
+
+namespace std {
+// ICU UnicodeString에 대한 해시 함수 특수화
+template <> struct hash<icu::UnicodeString> {
+    size_t operator()(const icu::UnicodeString &str) const {
+        // UTF-8로 변환하여 std::string의 해시 함수를 재사용
+        std::string utf8;
+        str.toUTF8String(utf8);
+        return std::hash<std::string>{}(utf8);
+    }
+};
+
+// lib::String에 대한 해시 함수 특수화
+template <> struct hash<nugdev::compiler::lib::String> {
+    size_t operator()(const nugdev::compiler::lib::String &str) const {
+        // UTF-8로 변환하여 std::string의 해시 함수를 재사용
+        std::string utf8;
+        str.toUTF8String(utf8);
+        return std::hash<std::string>{}(utf8);
+    }
+};
+
+} // namespace std

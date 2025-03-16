@@ -4,17 +4,18 @@
 
 namespace nugdev::compiler::ast::expression {
 
-class NumberLiteralNode : public Expression {
+class TypeLiteralNode : public Expression {
+
   public:
-    NumberLiteralNode(const tokenize::Token &token, icu::UnicodeString value);
+    TypeLiteralNode(const tokenize::Token &token, const TypeMeta &meta);
 
   public:
     virtual const tokenize::Token &get_token() const override;
-
-    icu::UnicodeString get_value() const;
+    const TypeMeta &get_meta() const;
 
   private:
     tokenize::Token m_token;
-    icu::UnicodeString m_value;
+    TypeMeta m_meta;
 };
+
 } // namespace nugdev::compiler::ast::expression

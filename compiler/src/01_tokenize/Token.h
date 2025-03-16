@@ -1,7 +1,6 @@
 #pragma once
 
-#include <unicode/unistr.h>
-
+#include "00_app/lib/UnicodeString.hpp"
 #include "00_app/stream/Stream.hpp"
 
 namespace nugdev::compiler::tokenize {
@@ -86,22 +85,20 @@ enum class TokenType {
 
 class Token {
   public:
-    icu::UnicodeString to_str();
-
-  public:
     static Token empty();
-    static Token from(TokenType type, icu::UnicodeString literal);
+    static Token from(TokenType type, lib::String literal);
 
   private:
-    Token(TokenType type, icu::UnicodeString literal);
+    Token(TokenType type, lib::String literal);
 
   public:
     TokenType get_type() const;
-    icu::UnicodeString get_literal() const;
+    lib::String get_literal() const;
+    lib::String to_str();
 
   private:
     TokenType type;
-    icu::UnicodeString literal;
+    lib::String literal;
 };
 
 using TokenStream = stream::Stream<tokenize::Token>;

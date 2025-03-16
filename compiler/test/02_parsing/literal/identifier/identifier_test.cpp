@@ -8,7 +8,7 @@ TEST_F(IdentifierTestCase, identifier) {
     auto tokens = tokenizer.tokenize(u"a");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(IdentifierTestCase, identifier_with_underscore) {
@@ -16,4 +16,6 @@ TEST_F(IdentifierTestCase, identifier_with_underscore) {
 
     auto tokens = tokenizer.tokenize(u"_a");
     auto ast = parser.parse(tokens);
+
+    expect_ast(ast);
 }

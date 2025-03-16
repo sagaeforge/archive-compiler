@@ -9,8 +9,6 @@ class BlockStatementNode : public Statement {
     BlockStatementNode(std::vector<std::shared_ptr<Statement>> statements);
 
   public:
-    virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
-    virtual icu::UnicodeString to_str() const override;
     virtual const tokenize::Token &get_token() const override;
 
   public:

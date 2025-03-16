@@ -7,11 +7,9 @@ namespace nugdev::compiler::ast::statement {
 class ForStatementNode : public Statement {
   public:
     ForStatementNode(const tokenize::Token &token, std::shared_ptr<Expression> label, std::shared_ptr<Expression> init, std::shared_ptr<Expression> condition,
-                     std::shared_ptr<Expression> post, std::shared_ptr<Statement> consequence);
+                     std::shared_ptr<Statement> post, std::shared_ptr<Statement> consequence);
 
   public:
-    virtual icu::UnicodeString to_str() const override;
-    virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
     virtual const tokenize::Token &get_token() const override;
 
   public:

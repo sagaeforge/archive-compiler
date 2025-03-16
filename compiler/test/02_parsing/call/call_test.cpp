@@ -8,7 +8,7 @@ TEST_F(CallTestCase, call) {
     auto tokens = tokenizer.tokenize(u"add(1, 2)");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(CallTestCase, call_with_empty_arguments) {
@@ -17,5 +17,5 @@ TEST_F(CallTestCase, call_with_empty_arguments) {
     auto tokens = tokenizer.tokenize(u"add()");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }

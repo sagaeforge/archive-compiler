@@ -4,6 +4,8 @@
 #include <fstream>
 
 #include "00_app/json/Json.hpp"
+#include "02_parsing/ast/AST.h"
+#include "02_parsing/ast/visitor/ASTNodeJsonVisitor.h"
 #include <rapidjson/prettywriter.h>
 
 void ParserTestCase::SetUp() {
@@ -31,17 +33,15 @@ bool ParserTestCase::load_sample(const std::string_view &testCaseName, const std
     return true;
 }
 
-void ParserTestCase::expect_ast(const JsonDocument &ast) {
-    rapidjson::StringBuffer expected_buffer;
-    rapidjson::Writer<rapidjson::StringBuffer> expected_writer(expected_buffer);
-    ast.Accept(expected_writer);
+void ParserTestCase::expect_ast(const nugdev::compiler::ast::ASTNodePtr &ast) {
+    auto visitor = std::make_shared<nugdev::compiler::ast::ASTNodeJsonVisitor>();
+    auto expected = ast->accept<nugdev::compiler::json::JsonValue>(visitor);
+    auto expectedStr = visitor->to_str(expected).to_string();
 
-    rapidjson::StringBuffer actual_buffer;
-    rapidjson::Writer<rapidjson::StringBuffer> actual_writer(actual_buffer);
-    answer.Accept(actual_writer);
+    nugdev::compiler::json::JsonStringBuffer actualBuffer;
+    nugdev::compiler::json::JsonFormatter actualWriter(actualBuffer);
+    answer.Accept(actualWriter);
+    std::string actualStr(actualBuffer.GetString());
 
-    std::string expected_str(expected_buffer.GetString());
-    std::string actual_str(actual_buffer.GetString());
-
-    EXPECT_EQ(expected_str, actual_str);
+    EXPECT_EQ(expectedStr, actualStr);
 }

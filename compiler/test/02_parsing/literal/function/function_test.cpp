@@ -8,7 +8,7 @@ TEST_F(FunctionTestCase, function_empty_parameters) {
     auto tokens = tokenizer.tokenize(u"fn add() {}");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(FunctionTestCase, function_with_parameters) {
@@ -17,7 +17,7 @@ TEST_F(FunctionTestCase, function_with_parameters) {
     auto tokens = tokenizer.tokenize(u"fn add(a: Int, b: Int) { 123 }");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(FunctionTestCase, function_with_parameters_set_default_value) {
@@ -26,5 +26,5 @@ TEST_F(FunctionTestCase, function_with_parameters_set_default_value) {
     auto tokens = tokenizer.tokenize(u"fn add(a: Int, b: Int = 2) { 123 }");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }

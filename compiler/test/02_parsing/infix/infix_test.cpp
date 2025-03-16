@@ -8,5 +8,5 @@ TEST_F(InfixTestCase, infix_plus) {
     auto tokens = tokenizer.tokenize(u"1 + 2");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }

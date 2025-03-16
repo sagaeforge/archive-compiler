@@ -9,23 +9,62 @@
 
 namespace nugdev::compiler::ast {
 
-class ASTNodeVisitor;
+template <typename Return, typename... Args> class ASTNodeVisitor;
+
+struct TypeMeta {
+    enum class PrimitiveType {
+        // 부호 있는 정수형
+        int8,
+        int16,
+        int32,
+        int64,
+
+        // 부호 없는 정수형
+        uint8,
+        uint16,
+        uint32,
+        uint64,
+
+        // 부동소수점형
+        float_8,
+        float_16,
+        float_32,
+        float_64,
+
+        // 문자형
+        char_8,
+        char_16,
+        char_32,
+
+        // 논리형
+        boolean,
+    };
+    PrimitiveType m_type;
+    size_t m_size;
+};
 
 class ASTNode : public lib::PointerHelper<ASTNode> {
   public:
     virtual ~ASTNode() = default;
 
   public:
-    void accept(const std::shared_ptr<ASTNodeVisitor> &visitor);
+    template <typename Return> Return accept(const std::shared_ptr<ASTNodeVisitor<Return()>> &visitor) { return visitor->visit(self()); }
+    template <typename Return, typename... Args> Return accept(const std::shared_ptr<ASTNodeVisitor<Return(Args...)>> &visitor, Args &&...args) {
+        return visitor->visit(self(), std::forward<Args>(args)...);
+    }
+    template <typename... Args> void accept(const std::shared_ptr<ASTNodeVisitor<void(Args...)>> &visitor, Args &&...args) {
+        visitor->visit(self(), std::forward<Args>(args)...);
+    }
 
   public:
-    virtual icu::UnicodeString to_str() const = 0;
-    virtual json::JsonValue to_json(json::JsonAllocator &allocator) const = 0;
     virtual const tokenize::Token &get_token() const = 0;
 };
 using ASTNodePtr = std::shared_ptr<ASTNode>;
 
-class Expression : public ASTNode {};
+class Expression : public ASTNode {
+  public:
+    // virtual TypeMeta get_type() const = 0;
+};
 using ExpressionPtr = std::shared_ptr<Expression>;
 
 class Statement : public ASTNode {};

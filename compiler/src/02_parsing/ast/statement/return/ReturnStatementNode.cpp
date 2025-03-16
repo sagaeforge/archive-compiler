@@ -5,16 +5,6 @@ namespace nugdev::compiler::ast::statement {
 ReturnStatementNode::ReturnStatementNode(const tokenize::Token &token, std::shared_ptr<Expression> label, std::shared_ptr<Expression> value)
     : m_token(token), m_label(label), m_value(value) {}
 
-json::JsonValue ReturnStatementNode::to_json(json::JsonAllocator &allocator) const {
-    json::JsonValue value(json::Type::kObjectType);
-    value.AddMember("type", json::JsonValue("Return"), allocator);
-    value.AddMember("label", m_label != nullptr ? m_label->to_json(allocator) : json::JsonValue(json::Type::kNullType), allocator);
-    value.AddMember("value", m_value != nullptr ? m_value->to_json(allocator) : json::JsonValue(json::Type::kNullType), allocator);
-    return value;
-}
-
-icu::UnicodeString ReturnStatementNode::to_str() const { return u"Return"; }
-
 const tokenize::Token &ReturnStatementNode::get_token() const { return m_token; }
 
 ReturnStatementNode::self_t ReturnStatementNode::set_label(std::shared_ptr<Expression> label) {

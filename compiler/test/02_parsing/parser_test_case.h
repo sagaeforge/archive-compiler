@@ -19,7 +19,7 @@ class ParserTestCase : public ::testing::Test {
 
   protected:
     bool load_sample(const std::string_view &testCaseName, const std::string_view &testCasePath);
-    void expect_ast(const JsonDocument &ast);
+    void expect_ast(const nugdev::compiler::ast::ASTNodePtr &ast);
 
   protected:
     JsonDocument answer;

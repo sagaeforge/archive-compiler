@@ -9,8 +9,6 @@ class InfixExpressionNode : public Expression {
     InfixExpressionNode(const tokenize::Token &token, std::shared_ptr<Expression> left, const icu::UnicodeString &opCode, std::shared_ptr<Expression> right);
 
   public:
-    virtual icu::UnicodeString to_str() const override;
-    virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
     virtual const tokenize::Token &get_token() const override;
 
   public:

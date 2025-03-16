@@ -8,7 +8,7 @@ TEST_F(ContinueTestCase, continue) {
     auto tokens = tokenizer.tokenize(u"continue");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }
 
 TEST_F(ContinueTestCase, continue_with_label) {
@@ -17,5 +17,5 @@ TEST_F(ContinueTestCase, continue_with_label) {
     auto tokens = tokenizer.tokenize(u"continue@label");
     auto ast = parser.parse(tokens);
 
-    expect_ast(parser.to_json(ast));
+    expect_ast(ast);
 }

@@ -11,8 +11,6 @@ class ProgramNode : public Module {
     ProgramNode(std::vector<StatementPtr> statements);
 
   public:
-    virtual json::JsonValue to_json(json::JsonAllocator &allocator) const override;
-    virtual icu::UnicodeString to_str() const override;
     virtual const tokenize::Token &get_token() const override;
 
   public:
