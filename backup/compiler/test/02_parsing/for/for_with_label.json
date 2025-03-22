@@ -1,0 +1,27 @@
+{
+    "type": "Program",
+    "statements": [
+        {
+            "type": "For",
+            "label": {
+                "type": "IdentifierLiteral",
+                "value": "label"
+            },
+            "init": null,
+            "condition": null,
+            "post": null,
+            "consequence": {
+                "type": "BlockStatement",
+                "statements": [
+                    {
+                        "type": "ExpressionStatement",
+                        "expression": {
+                            "type": "IdentifierLiteral",
+                            "value": "statements"
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+}

@@ -1,0 +1,56 @@
+cmake_minimum_required(VERSION 3.25)
+project(nugdev-compiler-lib)
+
+add_library(
+    ${PROJECT_NAME}
+    
+    ${CMAKE_CURRENT_SOURCE_DIR}/module.cpp
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/lib/DontCopyable.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/lib/Exception.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/lib/Exception.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/lib/Json.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/lib/Json.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/lib/PointerHelper.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/lib/Strategy.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/lib/String.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/lib/String.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/lib/Tag.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/lib/Tag.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/lib/Transformer.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/iterator/Context.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/iterator/Iterator.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/iterator/Iteratable.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/iterator/Workbench.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/Token.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/Token.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/TokenType.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/Tokenizer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/Tokenizer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/TokenJsonConverter.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/TokenJsonConverter.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/TokenizeStrategy.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/IdentifierTokenizeStrategy.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/IdentifierTokenizeStrategy.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/StringTokenizeStrategy.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/StringTokenizeStrategy.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/NumberTokenizeStrategy.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/NumberTokenizeStrategy.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/OperatorTokenizeStrategy.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/OperatorTokenizeStrategy.cpp
+)
+target_include_directories(
+    ${PROJECT_NAME}
+PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_link_libraries(
+    ${PROJECT_NAME}
+PUBLIC
+    ICU::uc
+    ICU::i18n
+    ICU::data
+    rapidjson
+    stduuid
+    magic_enum::magic_enum
+)

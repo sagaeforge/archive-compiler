@@ -1,0 +1,28 @@
+{
+    "type": "Program",
+    "statements": [
+        {
+            "type": "ExpressionStatement",
+            "expression": {
+                "type": "IfExpression",
+                "condition": {
+                    "type": "IdentifierLiteral",
+                    "value": "a"
+                },
+                "consequence": {
+                    "type": "BlockStatement",
+                    "statements": [
+                        {
+                            "type": "ExpressionStatement",
+                            "expression": {
+                                "type": "IdentifierLiteral",
+                                "value": "a"
+                            }
+                        }
+                    ]
+                },
+                "alternative": null
+            }
+        }
+    ]
+}

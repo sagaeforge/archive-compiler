@@ -1,0 +1,12 @@
+{
+    "type": "Program",
+    "statements": [
+        {
+            "type": "ExpressionStatement",
+            "expression": {
+                "type": "StringLiteral",
+                "value": "hello"
+            }
+        }
+    ]
+}

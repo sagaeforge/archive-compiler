@@ -1,0 +1,16 @@
+{
+    "type": "Program",
+    "statements": [
+        {
+            "type": "ExpressionStatement",
+            "expression": {
+                "type": "FunctionLiteral",
+                "parameters": [],
+                "body": {
+                    "type": "BlockStatement",
+                    "statements": []
+                }
+            }
+        }
+    ]
+}

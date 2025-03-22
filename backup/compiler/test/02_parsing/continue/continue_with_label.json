@@ -1,0 +1,12 @@
+{
+    "type": "Program",
+    "statements": [
+        {
+            "type": "Continue",
+            "label": {
+                "type": "IdentifierLiteral",
+                "value": "label"
+            }
+        }
+    ]
+}

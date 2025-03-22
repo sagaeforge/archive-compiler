@@ -1,0 +1,25 @@
+{
+    "type": "Program",
+    "statements": [
+        {
+            "type": "ExpressionStatement",
+            "expression": {
+                "type": "ArrayLiteral",
+                "elements": [
+                    {
+                        "type": "NumberLiteral",
+                        "value": "1"
+                    },
+                    {
+                        "type": "NumberLiteral",
+                        "value": "2"
+                    },
+                    {
+                        "type": "NumberLiteral",
+                        "value": "3"
+                    }
+                ]
+            }
+        }
+    ]
+}

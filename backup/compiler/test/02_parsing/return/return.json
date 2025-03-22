@@ -1,0 +1,10 @@
+{
+    "type": "Program",
+    "statements": [
+        {
+            "type": "Return",
+            "label": null,
+            "value": null
+        }
+    ]
+}

@@ -10,6 +10,9 @@
       "cwd": "${workspaceFolder}",
       "terminal": "integrated",
       "console": "integratedTerminal",
+      "initCommands": [
+        "command script import ${workspaceFolder}/external/lldb/icu_unicode_string_formatter.py"
+      ]
     }
   ]
 }

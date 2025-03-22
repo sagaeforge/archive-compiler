@@ -1,0 +1,16 @@
+{
+    "type": "Program",
+    "statements": [
+        {
+            "type": "ExpressionStatement",
+            "expression": {
+                "type": "PrefixExpression",
+                "operator": "+",
+                "right": {
+                    "type": "NumberLiteral",
+                    "value": "1"
+                }
+            }
+        }
+    ]
+}

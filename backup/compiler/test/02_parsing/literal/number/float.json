@@ -1,0 +1,12 @@
+{
+    "type": "Program",
+    "statements": [
+        {
+            "type": "ExpressionStatement",
+            "expression": {
+                "type": "NumberLiteral",
+                "value": "10.5"
+            }
+        }
+    ]
+}
