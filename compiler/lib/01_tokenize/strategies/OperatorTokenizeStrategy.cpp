@@ -3,12 +3,12 @@
 namespace nugdev::compiler::tokenize {
 
 OperatorTokenizeStrategy::OperatorTokenizeStrategy()
-    : m_operatorMap{{L'!', TokenType::ExclamationMark}, {L'$', TokenType::Dollar},       {L'%', TokenType::Percent},   {L'&', TokenType::Ampersand},
-                    {L'(', TokenType::LeftParen},       {L')', TokenType::RightParen},   {L'*', TokenType::Asterisk},  {L'+', TokenType::Plus},
-                    {L',', TokenType::Comma},           {L'-', TokenType::Minus},        {L'.', TokenType::Period},    {L'/', TokenType::Slash},
-                    {L':', TokenType::Colon},           {L';', TokenType::SemiColon},    {L'<', TokenType::LeftAngle}, {L'=', TokenType::Assign},
-                    {L'>', TokenType::RightAngle},      {L'?', TokenType::QuestionMark}, {L'@', TokenType::At},        {L'[', TokenType::LeftBracket},
-                    {L']', TokenType::RightBracket},    {L'^', TokenType::Caret},        {L'{', TokenType::LeftBrace}, {L'}', TokenType::RightBrace}} {}
+    : m_operatorMap{{L'!', TokenType::ExclamationMark}, {L'$', TokenType::Dollar},     {L'%', TokenType::Percent},      {L'&', TokenType::Ampersand}, {L'(', TokenType::LeftParen},
+                    {L')', TokenType::RightParen},      {L'*', TokenType::Asterisk},   {L'+', TokenType::Plus},         {L',', TokenType::Comma},     {L'-', TokenType::Minus},
+                    {L'.', TokenType::Period},          {L'/', TokenType::Slash},      {L':', TokenType::Colon},        {L';', TokenType::SemiColon}, {L'<', TokenType::LeftAngle},
+                    {L'=', TokenType::Assign},          {L'>', TokenType::RightAngle}, {L'?', TokenType::QuestionMark}, {L'@', TokenType::At},        {L'[', TokenType::LeftBracket},
+                    {L']', TokenType::RightBracket},    {L'^', TokenType::Caret},      {L'{', TokenType::LeftBrace},    {L'}', TokenType::RightBrace}} {
+}
 
 bool OperatorTokenizeStrategy::can_handle(const lib::iterator::Workbench<lib::Char>::command_t &command) {
     if (command.valid()) {
@@ -71,4 +71,4 @@ std::optional<Token> OperatorTokenizeStrategy::handle(const lib::iterator::Workb
     return std::nullopt;
 }
 
-} // namespace nugdev::compiler::tokenize
+}  // namespace nugdev::compiler::tokenize

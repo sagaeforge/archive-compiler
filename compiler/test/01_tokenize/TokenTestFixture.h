@@ -6,4 +6,4 @@ namespace nugdev::compiler::test {
 
 class TokenTestFixture : public TestBase {};
 
-} // namespace nugdev::compiler::test
+}  // namespace nugdev::compiler::test

@@ -8,22 +8,24 @@
 namespace nugdev::compiler::lib {
 
 class Exception : public std::exception {
-  public:
+public:
     Exception(const std::source_location &location, const String &message);
     const char *what() const noexcept override;
 
-  private:
+private:
     String m_message;
     std::string m_message_str;
     std::source_location m_location;
 };
 
-#define DEFINE_DEFAULT_EXCEPTION_CONSTRUCTOR(CLASS)                                                                                                            \
-    CLASS(const String &message, const std::source_location &location) : Exception(location, message) {}
+#define DEFINE_DEFAULT_EXCEPTION_CONSTRUCTOR(CLASS)                                                                                                                                                    \
+    CLASS(const String &message, const std::source_location &location) : Exception(location, message) {                                                                                                \
+    }
 
-#define DEFINE_DEFAULT_EXCEPTION_CONSTRUCTOR_WITH_MESSAGE(CLASS, MESSAGE)                                                                                      \
-  public:                                                                                                                                                      \
-    CLASS(const std::source_location &location) : Exception(location, MESSAGE) {}                                                                              \
+#define DEFINE_DEFAULT_EXCEPTION_CONSTRUCTOR_WITH_MESSAGE(CLASS, MESSAGE)                                                                                                                              \
+public:                                                                                                                                                                                                \
+    CLASS(const std::source_location &location) : Exception(location, MESSAGE) {                                                                                                                       \
+    }                                                                                                                                                                                                  \
     DEFINE_DEFAULT_EXCEPTION_CONSTRUCTOR(CLASS)
 
 template <typename ExceptionType>
@@ -39,12 +41,12 @@ ExceptionType throw_exception(const String &message, const std::source_location 
 }
 
 class OutOfRangeException : public Exception {
-  public:
+public:
     DEFINE_DEFAULT_EXCEPTION_CONSTRUCTOR(OutOfRangeException)
 };
 
 class Nothing : public Exception {
-  public:
+public:
     DEFINE_DEFAULT_EXCEPTION_CONSTRUCTOR_WITH_MESSAGE(Nothing, "Nothing")
 };
 #define TODO() throw_exception<Nothing>(std::source_location::current())
@@ -54,7 +56,8 @@ struct require {
 
     bool m_condition;
 
-    template <typename ExceptionType, typename... Args> self_t throws(Args &&...args) {
+    template <typename ExceptionType, typename... Args>
+    self_t throws(Args &&...args) {
         if (m_condition == false) {
             throw_exception<ExceptionType>(std::forward<Args>(args)...);
         }
@@ -66,4 +69,4 @@ struct InfiniteLoopDetectedException : public Exception {
     DEFINE_DEFAULT_EXCEPTION_CONSTRUCTOR_WITH_MESSAGE(InfiniteLoopDetectedException, "Infinite loop detected")
 };
 
-} // namespace nugdev::compiler::lib
+}  // namespace nugdev::compiler::lib

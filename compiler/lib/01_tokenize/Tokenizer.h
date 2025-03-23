@@ -7,15 +7,15 @@ namespace nugdev::compiler::tokenize {
 
 class TokenizeStrategy;
 class Tokenizer {
-  public:
+public:
     Tokenizer();
     Tokenizer(const std::vector<std::shared_ptr<TokenizeStrategy>> &strategies);
 
-  public:
+public:
     std::vector<Token> tokenize(const lib::String &resource);
 
-  private:
+private:
     std::vector<std::shared_ptr<TokenizeStrategy>> m_strategies;
 };
 
-} // namespace nugdev::compiler::tokenize
+}  // namespace nugdev::compiler::tokenize

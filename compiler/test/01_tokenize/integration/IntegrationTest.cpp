@@ -24,4 +24,4 @@ TEST_F(TokenTestFixture, comment) {
 
     EXPECT_EQ(tokens.size(), 0);
 }
-} // namespace nugdev::compiler::test
+}  // namespace nugdev::compiler::test

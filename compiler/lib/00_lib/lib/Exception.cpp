@@ -6,6 +6,8 @@ Exception::Exception(const std::source_location &location, const String &message
     m_message_str = m_message.to_string();
 }
 
-const char *Exception::what() const noexcept { return m_message_str.c_str(); }
+const char *Exception::what() const noexcept {
+    return m_message_str.c_str();
+}
 
-} // namespace nugdev::compiler::lib
+}  // namespace nugdev::compiler::lib

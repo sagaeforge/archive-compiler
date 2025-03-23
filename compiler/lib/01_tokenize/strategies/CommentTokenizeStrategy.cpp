@@ -24,4 +24,4 @@ std::optional<Token> CommentTokenizeStrategy::handle(const lib::iterator::Workbe
     return Token(TokenType::Comment, literal);
 }
 
-} // namespace nugdev::compiler::tokenize
+}  // namespace nugdev::compiler::tokenize

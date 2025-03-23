@@ -1,8 +1,9 @@
 #include "TestBase.h"
 
+#include <gtest/gtest.h>
+
 #include <filesystem>
 #include <fstream>
-#include <gtest/gtest.h>
 #include <iostream>
 
 #include "00_lib/lib/Json.hpp"
@@ -10,9 +11,11 @@
 
 namespace nugdev::compiler::test {
 
-void TestBase::setup() {}
+void TestBase::setup() {
+}
 
-void TestBase::teardown() {}
+void TestBase::teardown() {
+}
 
 void TestBase::SetUp() {
     m_expacted_values = lib::String();
@@ -26,11 +29,17 @@ void TestBase::SetUp() {
     std::cout << "-------------------------------- nugdev compiler test --------------------------------" << std::endl;
 }
 
-void TestBase::TearDown() { teardown(); }
+void TestBase::TearDown() {
+    teardown();
+}
 
-const testing::TestInfo *TestBase::get_test_info() { return ::testing::UnitTest::GetInstance()->current_test_info(); }
+const testing::TestInfo *TestBase::get_test_info() {
+    return ::testing::UnitTest::GetInstance()->current_test_info();
+}
 
-void TestBase::set_expacted_file_extension(const lib::String &extension) { m_expacted_file_extension = extension; }
+void TestBase::set_expacted_file_extension(const lib::String &extension) {
+    m_expacted_file_extension = extension;
+}
 
 bool TestBase::load_expacted_file() {
     auto test_info = get_test_info();
@@ -105,4 +114,4 @@ void TestBase::expected_result(const lib::JsonValue &value) {
     ASSERT_EQ(actualStr, expectedStr);
 }
 
-} // namespace nugdev::compiler::test
+}  // namespace nugdev::compiler::test

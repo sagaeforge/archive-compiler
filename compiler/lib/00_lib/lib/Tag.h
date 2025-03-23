@@ -1,30 +1,30 @@
 #pragma once
 
-#include "00_lib/lib/String.h"
-
 #include <stduuid/uuid.h>
+
+#include "00_lib/lib/String.h"
 
 namespace nugdev::compiler::lib {
 
 class Tag {
-  public:
+public:
     Tag();
     Tag(const lib::String &str);
     Tag(const Tag &);
     Tag(Tag &&) noexcept;
 
-  public:
+public:
     Tag &operator=(Tag &&) noexcept;
     Tag &operator=(const Tag &) noexcept;
     Tag &operator=(const lib::String &str);
     bool operator==(const Tag &) const noexcept;
     std::strong_ordering operator<=>(const Tag &) const noexcept;
 
-  public:
+public:
     std::size_t hash() const;
     lib::String to_str() const;
 
-  private:
+private:
     uuids::uuid m_id;
     std::size_t m_hash;
 };
@@ -35,11 +35,14 @@ Tag make_tag(Args &&...args) {
     return Tag(std::forward<Args>(args)...);
 }
 
-} // namespace nugdev::compiler::lib
+}  // namespace nugdev::compiler::lib
 
 namespace std {
-template <> struct hash<nugdev::compiler::lib::Tag> {
-    std::size_t operator()(const nugdev::compiler::lib::Tag &tag) const noexcept { return tag.hash(); }
+template <>
+struct hash<nugdev::compiler::lib::Tag> {
+    std::size_t operator()(const nugdev::compiler::lib::Tag &tag) const noexcept {
+        return tag.hash();
+    }
 };
 
-} // namespace std
+}  // namespace std

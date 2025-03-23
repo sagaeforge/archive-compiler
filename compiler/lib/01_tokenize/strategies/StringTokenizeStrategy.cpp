@@ -30,4 +30,4 @@ std::optional<Token> StringTokenizeStrategy::handle(const lib::iterator::Workben
     return std::nullopt;
 }
 
-} // namespace nugdev::compiler::tokenize
+}  // namespace nugdev::compiler::tokenize

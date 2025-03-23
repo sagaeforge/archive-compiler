@@ -8,4 +8,4 @@ JsonValue create_json_value(const String &str, JsonAllocator &allocator) {
     return value;
 }
 
-} // namespace nugdev::compiler::lib
+}  // namespace nugdev::compiler::lib

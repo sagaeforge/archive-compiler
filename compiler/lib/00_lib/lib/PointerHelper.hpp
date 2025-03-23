@@ -5,8 +5,9 @@
 
 namespace nugdev::compiler::lib {
 
-template <typename T> class PointerHelper : public std::enable_shared_from_this<T> {
-  public:
+template <typename T>
+class PointerHelper : public std::enable_shared_from_this<T> {
+public:
     using self_t = T;
     virtual ~PointerHelper() = default;
 
@@ -27,13 +28,18 @@ template <typename T> class PointerHelper : public std::enable_shared_from_this<
         }
     }
 
-    std::shared_ptr<T> self() { return this->shared_from_this(); }
+    std::shared_ptr<T> self() {
+        return this->shared_from_this();
+    }
 
     bool is_valid() const {
         return this->is_valid([](auto ptr) { return ptr != nullptr; });
     }
 
-    template <typename Func> bool is_valid(Func condition) const { return condition(this->shared_from_this()); }
+    template <typename Func>
+    bool is_valid(Func condition) const {
+        return condition(this->shared_from_this());
+    }
 };
 
-} // namespace nugdev::compiler::lib
+}  // namespace nugdev::compiler::lib

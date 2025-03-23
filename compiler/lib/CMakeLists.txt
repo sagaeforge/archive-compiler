@@ -42,7 +42,7 @@ add_library(
     ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/CommentTokenizeStrategy.cpp
 
     ${CMAKE_CURRENT_SOURCE_DIR}/02_parsing/ast/ASTNode.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/02_parsing/ast/ASTNodeJsonConvertor.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/02_parsing/ast/ASTNodeCreateStrategy.h
 )
 target_include_directories(
     ${PROJECT_NAME}

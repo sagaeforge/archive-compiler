@@ -3,20 +3,22 @@
 namespace nugdev::compiler::tokenize {
 
 IdentifierTokenizeStrategy::IdentifierTokenizeStrategy()
-    : m_keywordMap{{u"in", TokenType::In},
-                   {u"and", TokenType::And},
-                   {u"or", TokenType::Or},
-                   {u"let", TokenType::Let},
-                   {u"if", TokenType::If},
-                   {u"elif", TokenType::Elif},
-                   {u"else", TokenType::Else},
-                   {u"when", TokenType::When},
-                   {u"for", TokenType::For},
-                   {u"break", TokenType::Break},
-                   {u"continue", TokenType::Continue},
-                   {u"function", TokenType::Function},
-                   {u"return", TokenType::Return},
-                   {u"struct", TokenType::Struct}} {}
+    : m_keywordMap{
+              {u"in", TokenType::In},
+              {u"and", TokenType::And},
+              {u"or", TokenType::Or},
+              {u"let", TokenType::Let},
+              {u"if", TokenType::If},
+              {u"elif", TokenType::Elif},
+              {u"else", TokenType::Else},
+              {u"when", TokenType::When},
+              {u"for", TokenType::For},
+              {u"break", TokenType::Break},
+              {u"continue", TokenType::Continue},
+              {u"function", TokenType::Function},
+              {u"return", TokenType::Return},
+              {u"struct", TokenType::Struct}} {
+}
 
 bool IdentifierTokenizeStrategy::can_handle(const lib::iterator::Workbench<lib::Char>::command_t &command) {
     if (command.valid()) {
@@ -44,4 +46,4 @@ std::optional<Token> IdentifierTokenizeStrategy::handle(const lib::iterator::Wor
     return Token(TokenType::Identifier, literal);
 }
 
-} // namespace nugdev::compiler::tokenize
+}  // namespace nugdev::compiler::tokenize

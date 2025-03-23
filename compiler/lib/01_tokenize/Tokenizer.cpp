@@ -12,11 +12,16 @@ namespace nugdev::compiler::tokenize {
 
 Tokenizer::Tokenizer()
     : m_strategies{
-          std::make_shared<IdentifierTokenizeStrategy>(), std::make_shared<StringTokenizeStrategy>(),  std::make_shared<NumberTokenizeStrategy>(),
-          std::make_shared<OperatorTokenizeStrategy>(),   std::make_shared<CommentTokenizeStrategy>(),
-      } {}
+              std::make_shared<IdentifierTokenizeStrategy>(),
+              std::make_shared<StringTokenizeStrategy>(),
+              std::make_shared<NumberTokenizeStrategy>(),
+              std::make_shared<OperatorTokenizeStrategy>(),
+              std::make_shared<CommentTokenizeStrategy>(),
+      } {
+}
 
-Tokenizer::Tokenizer(const std::vector<std::shared_ptr<TokenizeStrategy>> &strategies) : m_strategies(strategies) {}
+Tokenizer::Tokenizer(const std::vector<std::shared_ptr<TokenizeStrategy>> &strategies) : m_strategies(strategies) {
+}
 
 std::vector<Token> Tokenizer::tokenize(const lib::String &resource) {
     auto tokens = lib::iterator::Workbench<lib::Char>::from(resource.to_vector()).stream([this](const lib::iterator::Workbench<lib::Char>::command_t &command) {
@@ -41,4 +46,4 @@ std::vector<Token> Tokenizer::tokenize(const lib::String &resource) {
     return filtered_tokens;
 }
 
-} // namespace nugdev::compiler::tokenize
+}  // namespace nugdev::compiler::tokenize

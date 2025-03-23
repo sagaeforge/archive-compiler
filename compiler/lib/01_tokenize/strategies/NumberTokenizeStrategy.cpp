@@ -74,4 +74,4 @@ std::optional<Token> NumberTokenizeStrategy::handle(const lib::iterator::Workben
     return Token(TokenType::Number, literal);
 }
 
-} // namespace nugdev::compiler::tokenize
+}  // namespace nugdev::compiler::tokenize

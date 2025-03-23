@@ -6,16 +6,16 @@
 namespace nugdev::compiler::tokenize {
 
 class Token {
-  public:
+public:
     Token(const TokenType type, const lib::String &literal);
 
-  public:
+public:
     TokenType get_type() const;
     const lib::String &get_literal() const;
 
-  private:
+private:
     TokenType m_type;
     lib::String m_literal;
 };
 
-} // namespace nugdev::compiler::tokenize
+}  // namespace nugdev::compiler::tokenize

@@ -4,12 +4,13 @@
 
 namespace nugdev::compiler::lib {
 
-template <typename Element, template <typename...> class Container = std::vector> class IFunctional {
-  public:
+template <typename Element, template <typename...> class Container = std::vector>
+class IFunctional {
+public:
     using size_t = std::uint32_t;
     using index_t = std::uint32_t;
 
-  public:
+public:
     template <typename Mapper, typename Return = typename std::invoke_result<Mapper, const Element &>::type>
         requires std::is_invocable_v<Mapper, const Element &>
     Container<Return> map(Mapper mapper) {
@@ -75,15 +76,15 @@ template <typename Element, template <typename...> class Container = std::vector
         }
     }
 
-  protected:
-    IFunctional(std::function<std::uint32_t()> sizer, std::function<Element(const std::uint32_t &)> getter) : m_sizer(sizer), m_getter(getter) {}
+protected:
+    IFunctional(std::function<std::uint32_t()> sizer, std::function<Element(const std::uint32_t &)> getter) : m_sizer(sizer), m_getter(getter) {
+    }
 
-  private:
+private:
     std::function<std::uint32_t()> m_sizer;
     std::function<Element(const std::uint32_t &)> m_getter;
 };
 
-#define IMPLEMENT_FUNCTIONAL(TYPE, CONTAINER, FIELD)                                                                                                           \
-    IFunctional<TYPE, CONTAINER>([this]() { return FIELD.size(); }, [this](const std::uint32_t &index) { return FIELD[index]; })
+#define IMPLEMENT_FUNCTIONAL(TYPE, CONTAINER, FIELD) IFunctional<TYPE, CONTAINER>([this]() { return FIELD.size(); }, [this](const std::uint32_t &index) { return FIELD[index]; })
 
-} // namespace nugdev::compiler::lib
+}  // namespace nugdev::compiler::lib
