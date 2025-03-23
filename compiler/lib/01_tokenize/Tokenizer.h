@@ -1,7 +1,7 @@
 #pragma once
 
 #include "00_lib/lib/String.h"
-#include "01_tokenize/Token.h"
+#include "01_tokenize/token/Token.h"
 
 namespace nugdev::compiler::tokenize {
 

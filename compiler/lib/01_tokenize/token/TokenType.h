@@ -7,6 +7,7 @@ namespace nugdev::compiler::tokenize {
  */
 enum class TokenType {
     Illegal = 1,
+    Comment,
 
     // 특수 문자.
     ExclamationMark = '!', // !

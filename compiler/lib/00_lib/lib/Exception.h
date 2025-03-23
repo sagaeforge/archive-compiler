@@ -1,7 +1,6 @@
 #pragma once
 
 #include <source_location>
-#include <stdexcept>
 #include <type_traits>
 
 #include "00_lib/lib/String.h"

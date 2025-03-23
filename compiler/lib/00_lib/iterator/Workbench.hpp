@@ -27,13 +27,10 @@ template <typename T> class Workbench {
 
   public:
     // 함수 객체 자체의 반환 타입을 추론
-    template <typename Func> auto stream(const Func &converter) {
+    template <typename Func, typename Result = std::invoke_result_t<Func, command_t>> auto stream(const Func &converter) {
         require{m_context.valid()}.throws<ContextInvalidException>();
 
-        // 함수 객체의 반환 타입을 추론하기 위한 타입 특성
-        using result_type = std::invoke_result_t<Func, command_t>;
-
-        std::vector<result_type> values;
+        std::vector<Result> values;
         while (m_context.valid()) {
             auto prev = m_context.current();
 

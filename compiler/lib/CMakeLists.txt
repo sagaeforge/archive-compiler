@@ -22,13 +22,13 @@ add_library(
     ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/iterator/Iterator.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/iterator/Iteratable.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/00_lib/iterator/Workbench.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/Token.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/Token.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/TokenType.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/token/Token.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/token/Token.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/token/TokenType.h
     ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/Tokenizer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/Tokenizer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/TokenJsonConverter.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/TokenJsonConverter.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/token/TokenJsonConverter.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/token/TokenJsonConverter.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/TokenizeStrategy.h
     ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/IdentifierTokenizeStrategy.h
     ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/IdentifierTokenizeStrategy.cpp
@@ -38,6 +38,11 @@ add_library(
     ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/NumberTokenizeStrategy.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/OperatorTokenizeStrategy.h
     ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/OperatorTokenizeStrategy.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/CommentTokenizeStrategy.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_tokenize/strategies/CommentTokenizeStrategy.cpp
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/02_parsing/ast/ASTNode.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/02_parsing/ast/ASTNodeJsonConvertor.h
 )
 target_include_directories(
     ${PROJECT_NAME}
@@ -52,5 +57,5 @@ PUBLIC
     ICU::data
     rapidjson
     stduuid
-    magic_enum::magic_enum
+    magic_enum::magic_enum 
 )
