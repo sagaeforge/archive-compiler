@@ -14,14 +14,14 @@ namespace nugdev::compiler::lib::iterator {
  * @note 절대로 멀티쓰레드에서 사용하지 마세요. 크리티컬 섹션이 너무 많아서 동작이 이상할 거임.
  * @tparam T
  */
-template <typename T>
+template <typename T, typename Context = context_t<T>, typename Command = command_t<T>>
 class Workbench {
 public:
     using self_t = Workbench<T>;
     using elem_t = T;
     using iterator_t = iterator_t<T>;
-    using context_t = context_t<T>;
-    using command_t = command_t<T>;
+    using context_t = Context;
+    using command_t = Command;
 
 public:
     static self_t from(const std::vector<T> &vec) {
@@ -32,7 +32,7 @@ public:
     // 함수 객체 자체의 반환 타입을 추론
     template <typename Func, typename Result = std::invoke_result_t<Func, command_t>>
     auto stream(const Func &converter) {
-        require{m_context.valid()}.throws<ContextInvalidException>();
+        Requires{m_context.valid()}.throws<ContextInvalidException>();
 
         std::vector<Result> values;
         while (m_context.valid()) {

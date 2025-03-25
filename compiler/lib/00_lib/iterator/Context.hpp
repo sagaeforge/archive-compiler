@@ -6,7 +6,7 @@
 namespace nugdev::compiler::lib::iterator {
 
 struct ContextInvalidException : public Exception {
-    DEFINE_DEFAULT_EXCEPTION_CONSTRUCTOR_WITH_MESSAGE(ContextInvalidException, "Context is invalid")
+    DEFINE_DEFAULT_EXCEPTION_CONSTRUCTOR_WITH_MESSAGE(ContextInvalidException, Exception, "Context is invalid")
 };
 
 template <typename T>
@@ -48,6 +48,7 @@ private:
 };
 template <typename T>
 using context_t = Context<T>;
+
 template <typename T>
 class ContextCommand {
 public:

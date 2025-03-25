@@ -7,6 +7,8 @@
 
 namespace nugdev::compiler::ast {
 
+class ParseCommand {};
+
 class ASTNodeCreateStrategy : public lib::Strategy<ASTNodePtr(const lib::iterator::Workbench<tokenize::Token>::command_t &)> {};
 
 }  // namespace nugdev::compiler::ast

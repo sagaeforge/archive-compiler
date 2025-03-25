@@ -11,7 +11,6 @@ enum class TokenType {
 
     // 특수 문자.
     ExclamationMark = '!',  // !
-    Hash = '#',             // #
     Dollar = '$',           // $
     Percent = '%',          // %
     Ampersand = '&',        // &

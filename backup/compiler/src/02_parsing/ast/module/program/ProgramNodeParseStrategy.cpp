@@ -5,7 +5,9 @@
 
 namespace nugdev::compiler::ast::module {
 
-bool ProgramNodeParseStrategy::can_parse(const parsing::Parser &parser, const tokenize::TokenStream &tokens) { return true; }
+bool ProgramNodeParseStrategy::can_parse(const parsing::Parser &parser, const tokenize::TokenStream &tokens) {
+    return true;
+}
 
 parsing::ParseStrategyResult ProgramNodeParseStrategy::parse(parsing::Parser &parser, const tokenize::TokenStream &tokens) {
     static statement::StatementParseStrategy strategy{};
@@ -22,4 +24,4 @@ parsing::ParseStrategyResult ProgramNodeParseStrategy::parse(parsing::Parser &pa
     return {std::make_shared<ProgramNode>(statements), tokens.begin() + workbench.current().distance()};
 }
 
-} // namespace nugdev::compiler::ast::module
+}  // namespace nugdev::compiler::ast::module
