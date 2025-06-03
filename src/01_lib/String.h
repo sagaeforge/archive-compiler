@@ -1,5 +1,8 @@
 #pragma once
 
+#define MAGIC_ENUM_RANGE_MIN 0
+#define MAGIC_ENUM_RANGE_MAX 1024
+
 #include <magic_enum/magic_enum.hpp>
 #include <optional>
 #include <string>
@@ -7,9 +10,10 @@
 #include <unicode/unistr.h>
 #include <vector>
 
+#include "Char.h"
+
 namespace nugdev::lib {
 
-using Char = UChar;
 class String : public icu::UnicodeString {
 public:
   using icu::UnicodeString::UnicodeString;

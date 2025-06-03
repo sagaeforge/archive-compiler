@@ -1,7 +1,8 @@
 add_executable(compiler_test
-    test_main.cpp
-    
     ${CMAKE_CURRENT_SOURCE_DIR}/01_lib/StringTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/01_lib/CharTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/02_scanning/ScannerTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/03_tokenize/TokenConverterTest.cpp
 )
 
 target_link_libraries(compiler_test
@@ -16,4 +17,4 @@ target_include_directories(compiler_test
 )
 
 include(GoogleTest)
-gtest_discover_tests(compiler_test) 
+gtest_discover_tests(compiler_test)
