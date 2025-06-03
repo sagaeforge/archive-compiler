@@ -62,6 +62,11 @@ private:
 
   // 유틸리티
   TokenType lookup_keyword(const std::string &text) const;
+
+  // Static lookup tables for operators
+  static const std::unordered_map<std::string, TokenType> &
+  get_two_char_operators();
+  static const std::unordered_map<char, TokenType> &get_single_char_tokens();
 };
 
 } // namespace nugdev::compiler::tokenize

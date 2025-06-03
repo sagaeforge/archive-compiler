@@ -2,6 +2,7 @@
 #include "TokenCategories.h"
 #include <cctype>
 #include <sstream>
+#include <unordered_map>
 
 namespace nugdev::compiler::tokenize {
 
@@ -143,7 +144,6 @@ Token Tokenizer::make_error_token(const lib::String &message) {
 }
 
 Token Tokenizer::parse_number() {
-  size_t start = m_current_pos;
   std::string number_str;
 
   // .123 형태 처리 (앞에 0 추가)
@@ -232,174 +232,28 @@ Token Tokenizer::parse_identifier_or_keyword() {
 Token Tokenizer::parse_operator_or_punctuation(char first_char) {
   advance(); // 첫 번째 문자 소비
 
-  switch (first_char) {
-  // 단순 연산자들
-  case '+':
-    if (!is_at_end()) {
-      if (current_char() == '+') {
-        advance();
-        return make_token(TokenType::Increment, lib::String("++"));
-      }
-      if (current_char() == '=') {
-        advance();
-        return make_token(TokenType::PlusAssign, lib::String("+="));
-      }
+  // 두 문자 연산자 확인
+  if (!is_at_end()) {
+    std::string two_char = std::string(1, first_char) + current_char();
+    const auto &two_char_ops = get_two_char_operators();
+    auto it = two_char_ops.find(two_char);
+    if (it != two_char_ops.end()) {
+      advance(); // 두 번째 문자 소비
+      return make_token(it->second, lib::String(two_char));
     }
-    return make_token(TokenType::Plus, lib::String("+"));
-
-  case '-':
-    if (!is_at_end()) {
-      if (current_char() == '-') {
-        advance();
-        return make_token(TokenType::Decrement, lib::String("--"));
-      }
-      if (current_char() == '=') {
-        advance();
-        return make_token(TokenType::MinusAssign, lib::String("-="));
-      }
-    }
-    return make_token(TokenType::Minus, lib::String("-"));
-
-  case '*':
-    if (!is_at_end() && current_char() == '=') {
-      advance();
-      return make_token(TokenType::AsteriskAssign, lib::String("*="));
-    }
-    return make_token(TokenType::Asterisk, lib::String("*"));
-
-  case '/':
-    if (!is_at_end() && current_char() == '=') {
-      advance();
-      return make_token(TokenType::SlashAssign, lib::String("/="));
-    }
-    return make_token(TokenType::Slash, lib::String("/"));
-
-  case '%':
-    if (!is_at_end() && current_char() == '=') {
-      advance();
-      return make_token(TokenType::PercentAssign, lib::String("%="));
-    }
-    return make_token(TokenType::Percent, lib::String("%"));
-
-  case '=':
-    if (!is_at_end() && current_char() == '=') {
-      advance();
-      return make_token(TokenType::Equal, lib::String("=="));
-    }
-    return make_token(TokenType::Assign, lib::String("="));
-
-  case '!':
-    if (!is_at_end()) {
-      if (current_char() == '=') {
-        advance();
-        return make_token(TokenType::NotEqual, lib::String("!="));
-      }
-      if (current_char() == '!') {
-        advance();
-        return make_token(TokenType::NullAssertion, lib::String("!!"));
-      }
-    }
-    return make_token(TokenType::Exclamation, lib::String("!"));
-
-  case '<':
-    if (!is_at_end()) {
-      if (current_char() == '=') {
-        advance();
-        return make_token(TokenType::LessThanEqual, lib::String("<="));
-      }
-      if (current_char() == '<') {
-        advance();
-        return make_token(TokenType::BitwiseShiftLeft, lib::String("<<"));
-      }
-    }
-    return make_token(TokenType::LessThan, lib::String("<"));
-
-  case '>':
-    if (!is_at_end()) {
-      if (current_char() == '=') {
-        advance();
-        return make_token(TokenType::GreaterThanEqual, lib::String(">="));
-      }
-      if (current_char() == '>') {
-        advance();
-        return make_token(TokenType::BitwiseShiftRight, lib::String(">>"));
-      }
-    }
-    return make_token(TokenType::GreaterThan, lib::String(">"));
-
-  case '&':
-    if (!is_at_end() && current_char() == '=') {
-      advance();
-      return make_token(TokenType::AmpersandAssign, lib::String("&="));
-    }
-    return make_token(TokenType::Ampersand, lib::String("&"));
-
-  case '|':
-    if (!is_at_end() && current_char() == '=') {
-      advance();
-      return make_token(TokenType::PipeAssign, lib::String("|="));
-    }
-    return make_token(TokenType::Pipe, lib::String("|"));
-
-  case '^':
-    if (!is_at_end() && current_char() == '=') {
-      advance();
-      return make_token(TokenType::CaretAssign, lib::String("^="));
-    }
-    return make_token(TokenType::Caret, lib::String("^"));
-
-  case '~':
-    if (!is_at_end() && current_char() == '=') {
-      advance();
-      return make_token(TokenType::TildeAssign, lib::String("~="));
-    }
-    return make_token(TokenType::Tilde, lib::String("~"));
-
-  case '?':
-    if (!is_at_end()) {
-      if (current_char() == ':') {
-        advance();
-        return make_token(TokenType::NullElvis, lib::String("?:"));
-      }
-      if (current_char() == '.') {
-        advance();
-        return make_token(TokenType::NullSafeAccess, lib::String("?."));
-      }
-    }
-    return make_token(TokenType::Question, lib::String("?"));
-
-  // 구분자들
-  case '(':
-    return make_token(TokenType::LeftParen, lib::String("("));
-  case ')':
-    return make_token(TokenType::RightParen, lib::String(")"));
-  case '{':
-    return make_token(TokenType::LeftBrace, lib::String("{"));
-  case '}':
-    return make_token(TokenType::RightBrace, lib::String("}"));
-  case '[':
-    return make_token(TokenType::LeftBracket, lib::String("["));
-  case ']':
-    return make_token(TokenType::RightBracket, lib::String("]"));
-  case ',':
-    return make_token(TokenType::Comma, lib::String(","));
-  case ';':
-    return make_token(TokenType::Semicolon, lib::String(";"));
-  case ':':
-    return make_token(TokenType::Colon, lib::String(":"));
-  case '.':
-    return make_token(TokenType::Dot, lib::String("."));
-  case '\\':
-    return make_token(TokenType::Backslash, lib::String("\\"));
-  case '@':
-    return make_token(TokenType::At, lib::String("@"));
-  case '$':
-    return make_token(TokenType::Dollar, lib::String("$"));
-
-  default:
-    return make_error_token(lib::String("Unexpected character: ") +
-                            lib::String(std::string(1, first_char)));
   }
+
+  // 단일 문자 토큰 확인
+  const auto &single_char_ops = get_single_char_tokens();
+  auto single_it = single_char_ops.find(first_char);
+  if (single_it != single_char_ops.end()) {
+    return make_token(single_it->second,
+                      lib::String(std::string(1, first_char)));
+  }
+
+  // 알 수 없는 문자
+  return make_error_token(lib::String("Unexpected character: ") +
+                          lib::String(std::string(1, first_char)));
 }
 
 TokenType Tokenizer::lookup_keyword(const std::string &text) const {
@@ -408,6 +262,42 @@ TokenType Tokenizer::lookup_keyword(const std::string &text) const {
     return it->second;
   }
   return TokenType::Illegal;
+}
+
+// Static lookup table getters for better memory management
+const std::unordered_map<std::string, TokenType> &
+Tokenizer::get_two_char_operators() {
+  static const std::unordered_map<std::string, TokenType> two_char_operators = {
+      {"++", TokenType::Increment},         {"--", TokenType::Decrement},
+      {"+=", TokenType::PlusAssign},        {"-=", TokenType::MinusAssign},
+      {"*=", TokenType::AsteriskAssign},    {"/=", TokenType::SlashAssign},
+      {"%=", TokenType::PercentAssign},     {"==", TokenType::Equal},
+      {"!=", TokenType::NotEqual},          {"<=", TokenType::LessThanEqual},
+      {">=", TokenType::GreaterThanEqual},  {"<<", TokenType::BitwiseShiftLeft},
+      {">>", TokenType::BitwiseShiftRight}, {"&=", TokenType::AmpersandAssign},
+      {"|=", TokenType::PipeAssign},        {"^=", TokenType::CaretAssign},
+      {"~=", TokenType::TildeAssign},       {"?:", TokenType::NullElvis},
+      {"?.", TokenType::NullSafeAccess},    {"!!", TokenType::NullAssertion}};
+  return two_char_operators;
+}
+
+const std::unordered_map<char, TokenType> &Tokenizer::get_single_char_tokens() {
+  static const std::unordered_map<char, TokenType> single_char_tokens = {
+      {'+', TokenType::Plus},        {'-', TokenType::Minus},
+      {'*', TokenType::Asterisk},    {'/', TokenType::Slash},
+      {'%', TokenType::Percent},     {'=', TokenType::Assign},
+      {'!', TokenType::Exclamation}, {'<', TokenType::LessThan},
+      {'>', TokenType::GreaterThan}, {'&', TokenType::Ampersand},
+      {'|', TokenType::Pipe},        {'^', TokenType::Caret},
+      {'~', TokenType::Tilde},       {'?', TokenType::Question},
+      {'(', TokenType::LeftParen},   {')', TokenType::RightParen},
+      {'{', TokenType::LeftBrace},   {'}', TokenType::RightBrace},
+      {'[', TokenType::LeftBracket}, {']', TokenType::RightBracket},
+      {',', TokenType::Comma},       {';', TokenType::Semicolon},
+      {':', TokenType::Colon},       {'.', TokenType::Dot},
+      {'\\', TokenType::Backslash},  {'@', TokenType::At},
+      {'$', TokenType::Dollar}};
+  return single_char_tokens;
 }
 
 } // namespace nugdev::compiler::tokenize
