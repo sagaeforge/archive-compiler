@@ -34,9 +34,12 @@ TokenConverter::JsonConverter::serialize(const Token &source) const {
 
   lib::JsonValue json(rapidjson::kObjectType);
 
-  // Add type field
-  int typeValue = static_cast<int>(source.get_type());
-  json.AddMember("type", lib::JsonValue(typeValue), allocator);
+  // Add type field using magic_enum string conversion
+  lib::String typeStr = lib::to_string(source.get_type());
+  auto typeStdStr = typeStr.to_string();
+  json.AddMember(
+      "type", lib::JsonValue(typeStdStr.c_str(), typeStdStr.size(), allocator),
+      allocator);
 
   // Add literal field
   auto literal = source.get_literal().to_string();
@@ -57,13 +60,19 @@ TokenConverter::JsonConverter::deserialize(const lib::JsonValue &target) const {
     return std::nullopt;
   }
 
-  if (!target["type"].IsInt() || !target["literal"].IsString()) {
+  if (!target["type"].IsString() || !target["literal"].IsString()) {
     return std::nullopt;
   }
 
-  int typeValue = target["type"].GetInt();
-  TokenType type = static_cast<TokenType>(typeValue);
+  // Convert string type back to enum using magic_enum
+  std::string typeStr = target["type"].GetString();
+  lib::String libTypeStr(typeStr);
+  auto typeOpt = lib::to_enum<TokenType>(libTypeStr);
+  if (!typeOpt.has_value()) {
+    return std::nullopt;
+  }
 
+  TokenType type = typeOpt.value();
   std::string literal = target["literal"].GetString();
 
   return Token(type, lib::String(literal));
