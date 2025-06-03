@@ -3,6 +3,7 @@ add_executable(compiler_test
     ${CMAKE_CURRENT_SOURCE_DIR}/01_lib/CharTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/02_scanning/ScannerTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/03_tokenize/TokenConverterTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/03_tokenize/TokenTest.cpp
 )
 
 target_link_libraries(compiler_test

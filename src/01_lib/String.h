@@ -35,6 +35,10 @@ public: // 문자열 변환
 public: // 기타 함수
   String slice(const iterator_t &start, const iterator_t &end) const;
   std::vector<String> split(const String &delimiter) const;
+
+public: // operator
+  auto operator<=>(const String &other) const;
+  bool operator==(const String &other) const;
 };
 
 template <typename Type>

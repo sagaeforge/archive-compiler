@@ -58,4 +58,12 @@ std::vector<String> String::split(const String &delimiter) const {
   return result;
 }
 
+auto String::operator<=>(const String &other) const {
+  return static_cast<const icu::UnicodeString &>(*this).compare(other);
+}
+
+bool String::operator==(const String &other) const {
+  return static_cast<const icu::UnicodeString &>(*this).compare(other) == 0;
+}
+
 } // namespace nugdev::lib
