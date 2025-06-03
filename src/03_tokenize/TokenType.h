@@ -79,21 +79,22 @@ enum class TokenType {
   BitwiseShiftRight = 153, //'>>'
 
   // null 연산자
-  NullElvis = 154,     //'?:'
-  NullAssertion = 155, //'!!'
+  NullElvis = 154,      //'?:'
+  NullAssertion = 155,  //'!!'
+  NullSafeAccess = 156, //'?.'
 
   // 키워드
-  Let = 157,      //'let'
-  Mut = 158,      //'mut'
-  If = 159,       //'if'
-  Elif = 160,     //'elif'
-  Else = 161,     //'else'
-  For = 162,      //'for'
-  Break = 163,    //'break'
-  Continue = 164, //'continue'
-  Function = 165, //'function'
-  Return = 166,   //'return'
-  When = 167,     //'when'
+  Let = 158,      //'let'
+  Mut = 159,      //'mut'
+  If = 160,       //'if'
+  Elif = 161,     //'elif'
+  Else = 162,     //'else'
+  For = 163,      //'for'
+  Break = 164,    //'break'
+  Continue = 165, //'continue'
+  Function = 166, //'function'
+  Return = 167,   //'return'
+  When = 168,     //'when'
 };
 
 }

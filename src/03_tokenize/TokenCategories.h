@@ -15,10 +15,12 @@ inline const std::unordered_set<TokenType> LITERALS = {
 
 // 키워드 타입들
 inline const std::unordered_set<TokenType> KEYWORDS = {
-    TokenType::Let,    TokenType::Mut,      TokenType::If,
-    TokenType::Elif,   TokenType::Else,     TokenType::For,
-    TokenType::Break,  TokenType::Continue, TokenType::Function,
-    TokenType::Return, TokenType::When};
+    TokenType::Let,       TokenType::Mut,       TokenType::If,
+    TokenType::Elif,      TokenType::Else,      TokenType::For,
+    TokenType::Break,     TokenType::Continue,  TokenType::Function,
+    TokenType::Return,    TokenType::When,      TokenType::True,
+    TokenType::False,     TokenType::Null,      TokenType::LogicalAnd,
+    TokenType::LogicalOr, TokenType::LogicalNot};
 
 // 산술 연산자들
 inline const std::unordered_set<TokenType> ARITHMETIC_OPERATORS = {
@@ -83,6 +85,7 @@ inline const std::unordered_set<TokenType> &get_all_operators() {
     result.insert(TokenType::Question);
     result.insert(TokenType::NullElvis);
     result.insert(TokenType::NullAssertion);
+    result.insert(TokenType::NullSafeAccess);
 
     return result;
   }();

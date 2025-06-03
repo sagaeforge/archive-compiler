@@ -12,6 +12,9 @@ add_library(compiler_lib SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/03_tokenize/TokenType.h
     ${CMAKE_CURRENT_SOURCE_DIR}/03_tokenize/TokenConverter.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/03_tokenize/TokenConverter.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/03_tokenize/Tokenizer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/03_tokenize/Tokenizer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/03_tokenize/TokenCategories.h
 )
 
 target_include_directories(compiler_lib
