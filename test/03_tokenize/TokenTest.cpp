@@ -220,9 +220,9 @@ TEST_F(TokenTest, DebuggingMethods) {
   lib::String debugStr = token.to_debug_string();
   std::string debugStdStr = debugStr.to_string();
 
-  EXPECT_TRUE(debugStdStr.find("Token{") != std::string::npos);
-  EXPECT_TRUE(debugStdStr.find("type=") != std::string::npos);
-  EXPECT_TRUE(debugStdStr.find("literal=") != std::string::npos);
+  EXPECT_TRUE(debugStdStr.find("{") != std::string::npos);
+  EXPECT_TRUE(debugStdStr.find("type") != std::string::npos);
+  EXPECT_TRUE(debugStdStr.find("literal") != std::string::npos);
   EXPECT_TRUE(debugStdStr.find("myVar") != std::string::npos);
 
   // 스트림 출력 연산자 테스트

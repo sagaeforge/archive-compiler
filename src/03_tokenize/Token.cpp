@@ -1,6 +1,10 @@
 #include "Token.h"
+
 #include <compare>
 #include <sstream>
+
+#include "01_lib/Json.hpp"
+#include "TokenConverter.h"
 
 namespace nugdev::compiler::tokenize {
 
@@ -27,10 +31,23 @@ bool Token::operator==(const Token &other) const {
 
 // 디버깅 메서드들 (개발 과정에서 필수)
 lib::String Token::to_debug_string() const {
-  std::ostringstream oss;
-  oss << "Token{type=" << static_cast<int>(m_type) << ", literal=\""
-      << m_literal.to_string() << "\"}";
-  return lib::String(oss.str());
+  TokenConverter converter;
+
+  lib::JsonDocument doc;
+  auto &allocator = doc.GetAllocator();
+
+  // TokenConverter를 사용해서 JSON 값 생성
+  lib::JsonValue jsonValue = converter.to_json(*this);
+
+  // document에 값 설정
+  doc.CopyFrom(jsonValue, allocator);
+
+  // JSON을 문자열로 변환
+  lib::JsonStringBuffer buffer;
+  lib::JsonWriter writer(buffer);
+  doc.Accept(writer);
+
+  return lib::String(buffer.GetString());
 }
 
 std::ostream &operator<<(std::ostream &os, const Token &token) {
