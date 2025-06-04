@@ -11,6 +11,9 @@ enum class TokenType {
   Null = 6,
   True = 7,
   False = 8,
+  None = 9,       // Added: None literal
+  Character = 10, // Added: Character literal
+  Range = 11,     // Added: Range literal (..)
 
   // Special characters
   Plus = '+',
@@ -71,17 +74,14 @@ enum class TokenType {
   LogicalNot = 147, //'not'
 
   // 비트 연산자
-  // BitwiseAnd = 148,        //'&'
-  // BitwiseOr = 149,         //'|'
-  // BitwiseXor = 150,        //'^'
-  // BitwiseNot = 151,        //'~'
   BitwiseShiftLeft = 152,  //'<<'
   BitwiseShiftRight = 153, //'>>'
 
   // null 연산자
-  NullElvis = 154,      //'?:'
-  NullAssertion = 155,  //'!!'
-  NullSafeAccess = 156, //'?.'
+  NullCoalescing = 154, //'??'
+  NullElvis = 155,      //'?:'
+  NullAssertion = 156,  //'!!'
+  NullSafeAccess = 157, //'?.'
 
   // 키워드
   Let = 158,      //'let'
@@ -92,9 +92,39 @@ enum class TokenType {
   For = 163,      //'for'
   Break = 164,    //'break'
   Continue = 165, //'continue'
-  Function = 166, //'function'
+  Function = 166, //'function' -> 'fun'
   Return = 167,   //'return'
   When = 168,     //'when'
+
+  // Added: New keywords from EBNF
+  In = 169,        //'in'
+  Import = 170,    //'import'
+  Export = 171,    //'export'
+  As = 172,        //'as'
+  Is = 173,        //'is'
+  Struct = 174,    //'struct'
+  Interface = 175, //'interface'
+
+  // Added: Special operators
+  Arrow = 176,    //'->'
+  FatArrow = 177, //'=>'
+  Spread = 178,   //'...'
+
+  // Added: Template string support
+  TemplateStringStart = 179, //'`'
+  TemplateStringEnd = 180,   //'`'
+  TemplateExprStart = 181,   //'${'
+  TemplateExprEnd = 182,     //'}'
+
+  // Added: Raw string support
+  RawStringStart = 183, //'r"'
+  RawStringEnd = 184,   //'"'
+
+  // Special tokens
+  EOF_TOKEN = 255,
+  NEWLINE = 254,
+  WHITESPACE = 253,
+  COMMENT = 252,
 };
 
 }

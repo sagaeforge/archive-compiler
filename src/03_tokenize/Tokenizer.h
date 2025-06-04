@@ -1,6 +1,5 @@
 #pragma once
 
-#include "01_lib/Char.h"
 #include "01_lib/String.h"
 #include "Token.h"
 #include "TokenType.h"
