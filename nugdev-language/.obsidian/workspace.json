@@ -1,0 +1,199 @@
+{
+  "main": {
+    "id": "451d05b2fe8cfa06",
+    "type": "split",
+    "children": [
+      {
+        "id": "b1c6856d25a43e51",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "c1e0f616a17f4690",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "nugdev.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "nugdev"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "88736aff853e7ee4",
+    "type": "split",
+    "children": [
+      {
+        "id": "5a9cb51f1c6909f6",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "bd2b7c4a8e564161",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "057ae3a21311816b",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "cf99f65915c802d8",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "35d81ef44a67cee9",
+    "type": "split",
+    "children": [
+      {
+        "id": "1edbf2161b1c06ef",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "d0836f88a3e3c34e",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "nugdev.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for nugdev"
+            }
+          },
+          {
+            "id": "a18d92e0f675fd53",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "nugdev.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from nugdev"
+            }
+          },
+          {
+            "id": "4849a63031e0ae9b",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "c95be06e459e5462",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "nugdev.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of nugdev"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false
+    }
+  },
+  "active": "c1e0f616a17f4690",
+  "lastOpenFiles": [
+    "ebnf_viewer/build/freetype.dll",
+    "ebnf_viewer/build/oggd.lib",
+    "ebnf_viewer/build/ogg.lib",
+    "ebnf_viewer/build/freetyped.lib",
+    "ebnf_viewer/build/freetype.lib",
+    "ebnf_viewer/build/FLACd.lib",
+    "ebnf_viewer/build/FLAC.lib",
+    "ebnf_viewer/build/Debug/vorbisfiled.pdb",
+    "ebnf_viewer/build/Debug/vorbisencd.pdb",
+    "ebnf_viewer/build/Debug/sfml-window.pdb",
+    "ebnf_viewer/build/Debug/vorbisd.pdb",
+    "ebnf_viewer/SFML-3.0.0/doc/html/search/mag_seld.svg",
+    "ebnf_viewer/SFML-3.0.0/doc/html/search/mag_sel.svg",
+    "ebnf_viewer/SFML-3.0.0/doc/html/search/mag_d.svg",
+    "ebnf_viewer/SFML-3.0.0/doc/html/search/mag.svg",
+    "ebnf_viewer/SFML-3.0.0/doc/html/search/close.svg",
+    "ebnf_viewer/SFML-3.0.0/examples/win32/resources/image2.jpg",
+    "ebnf_viewer/SFML-3.0.0/examples/win32/resources/image1.jpg",
+    "ebnf_viewer/SFML-3.0.0/examples/vulkan/resources/logo.png",
+    "ebnf_viewer/SFML-3.0.0/examples/tennis/resources/sfml_logo.png",
+    "ebnf_viewer/SFML-3.0.0/examples/sound_effects/resources/text-background.png",
+    "ebnf_viewer/SFML-3.0.0/examples/asset_licenses.md",
+    "ebnf_viewer/SFML-3.0.0-windows-vc17-64-bit/SFML-3.0.0/examples/asset_licenses.md",
+    "ebnf_viewer/README.md",
+    "nugdev.md"
+  ]
+}

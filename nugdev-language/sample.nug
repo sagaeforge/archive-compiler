@@ -1,0 +1,1084 @@
+// =============================================
+// Sample Code for nugdev Language
+// =============================================
+
+// Module imports
+import "std/io" as io;
+import "std/math" as math;
+import "physics.nug" as Physics;
+
+// Namespace for mathematical operations
+namespace Math {
+    // Static constants
+    private static let PI: number = 3.14159265359;
+    private static let E: number = 2.71828182846;
+    
+    // Static functions
+    public static fn square(x: number): number => x * x;
+    
+    public static fn cube(x: number): number => x * x * x;
+    
+    public static fn factorial(n: number): number {
+        if n <= 1 {
+            return 1;
+        }
+        return n * factorial(n - 1);
+    }
+    
+    // Nested namespace
+    namespace Geometry {
+        public static fn circleArea(radius: number): number {
+            return Math.PI * Math.square(radius);
+        }
+        
+        public static fn circlePerimeter(radius: number): number {
+            return 2 * Math.PI * radius;
+        }
+    }
+
+    // Vector struct with generic type constraint
+    struct Vector<T: number> {
+        private let _x: T;
+        private let _y: T;
+        private let _z: T;
+
+        // Static member
+        private static let _zero: Vector<T> = Vector<T>(0, 0, 0);
+        
+        // Constructor
+        public constructor(x: T, y: T, z: T) {
+            this._x = x;
+            this._y = y;
+            this._z = z;
+        }
+
+        // Static property
+        public static property zero: Vector<T> {
+            get(): Vector<T> => this._zero;
+        }
+
+        // Instance properties
+        public property x: T {
+            get(): T => this._x;
+            set(value: T): void => this._x = value;
+        }
+
+        public property y: T {
+            get(): T => this._y;
+            set(value: T): void => this._y = value;
+        }
+
+        public property z: T {
+            get(): T => this._z;
+            set(value: T): void => this._z = value;
+        }
+
+        // Operator overloading
+        public operator + (other: Vector<T>): Vector<T> {
+            return Vector<T>(
+                this._x + other._x,
+                this._y + other._y,
+                this._z + other._z
+            );
+        }
+
+        public operator - (other: Vector<T>): Vector<T> {
+            return Vector<T>(
+                this._x - other._x,
+                this._y - other._y,
+                this._z - other._z
+            );
+        }
+
+        public operator * (scalar: T): Vector<T> {
+            return Vector<T>(
+                this._x * scalar,
+                this._y * scalar,
+                this._z * scalar
+            );
+        }
+
+        public operator / (scalar: T): Vector<T> {
+            return Vector<T>(
+                this._x / scalar,
+                this._y / scalar,
+                this._z / scalar
+            );
+        }
+
+        // Compound assignment operators
+        public operator += (other: Vector<T>): Vector<T> {
+            this._x += other._x;
+            this._y += other._y;
+            this._z += other._z;
+            return this;
+        }
+
+        public operator -= (other: Vector<T>): Vector<T> {
+            this._x -= other._x;
+            this._y -= other._y;
+            this._z -= other._z;
+            return this;
+        }
+
+        public operator *= (scalar: T): Vector<T> {
+            this._x *= scalar;
+            this._y *= scalar;
+            this._z *= scalar;
+            return this;
+        }
+
+        // Comparison operators
+        public operator == (other: Vector<T>): boolean {
+            return this._x == other._x && this._y == other._y && this._z == other._z;
+        }
+
+        public operator != (other: Vector<T>): boolean {
+            return !(this == other);
+        }
+
+        // Unary operators
+        public operator - (): Vector<T> {
+            return Vector<T>(-this._x, -this._y, -this._z);
+        }
+
+        public operator ++ (): Vector<T> {
+            this._x++;
+            this._y++;
+            this._z++;
+            return this;
+        }
+
+        public operator -- (): Vector<T> {
+            this._x--;
+            this._y--;
+            this._z--;
+            return this;
+        }
+
+        // Array subscript operator
+        public operator [] (index: number): T {
+            when(index) {
+                0 -> return this._x;
+                1 -> return this._y;
+                2 -> return this._z;
+                else -> throw "Index out of bounds";
+            }
+        }
+    }
+
+    // Specialization for number
+    struct Vector<number> {
+        private let _x: number;
+        private let _y: number;
+        private let _z: number;
+
+        // Specialized methods
+        public fn dot(other: Vector<number>): number {
+            return this._x * other._x + this._y * other._y + this._z * other._z;
+        }
+
+        public fn cross(other: Vector<number>): Vector<number> {
+            return Vector<number>(
+                this._y * other._z - this._z * other._y,
+                this._z * other._x - this._x * other._z,
+                this._x * other._y - this._y * other._x
+            );
+        }
+    }
+
+    // Interface template
+    interface Container<T> {
+        fn add(item: T): void;
+        fn remove(item: T): void;
+        fn contains(item: T): boolean;
+    }
+
+    // Interface specialization
+    interface Container<number> {
+        fn sum(): number;
+        fn average(): number;
+    }
+
+    // Function template
+    fn max<T: number>(a: T, b: T): T {
+        return a > b ? a : b;
+    }
+
+    // Function specialization
+    fn max(a: number, b: number): number {
+        return math.max(a, b);
+    }
+}
+
+// Constants
+private let MAX_RETRIES: number = 3;
+private let DEFAULT_TIMEOUT: number = 5000;
+
+// Basic type definitions
+struct Point {
+    private let _x: number,
+    private let _y: number,
+    
+    // Static field
+    private static let _count: number = 0;
+    
+    // Static property
+    public static count: number {
+        get() => Point._count
+    },
+    
+    public x: number {
+        get() => this._x,
+        set(value) => this._x = value
+    },
+    
+    public y: number {
+        get() => this._y,
+        set(value) => this._y = value
+    },
+    
+    // Static factory method
+    public static fn create(x: number, y: number): Point {
+        Point._count += 1;
+        return Point { _x: x, _y: y };
+    },
+    
+    // Instance method
+    public fn distance(other: Point): number {
+        let dx = this._x - other._x;
+        let dy = this._y - other._y;
+        return Math.square(dx) + Math.square(dy);
+    }
+}
+
+// Enum definition
+enum Color {
+    Red = "#FF0000",
+    Green = "#00FF00",
+    Blue = "#0000FF",
+    
+    // Static method
+    public static fn fromHex(hex: string): Color {
+        when(hex) {
+            "#FF0000" -> return Color.Red;
+            "#00FF00" -> return Color.Green;
+            "#0000FF" -> return Color.Blue;
+            else -> throw "Invalid hex color";
+        }
+    },
+    
+    fn isWarm(): boolean {
+        when(this) {
+            Red -> return true;
+            Green -> return false;
+            Blue -> return false;
+        }
+    }
+}
+
+// Union type
+union Result {
+    Success: number,
+    Error: string,
+    
+    fn getValue(): number {
+        when(this) {
+            Success -> return this.Success;
+            Error -> return 0;
+        }
+    }
+}
+
+// Shape interface for polymorphism without inheritance
+interface Shape {
+    fn area(): number;
+    fn perimeter(): number;
+}
+
+// Circle implementation using composition
+struct Circle {
+    private let _radius: number;
+    private let _color: Color;
+    
+    public radius: number {
+        get(): number => this._radius;
+        set(value: number): void {
+            if value < 0 {
+                throw "Radius cannot be negative";
+            }
+            this._radius = value;
+        }
+    }
+    
+    public fn area(): number => Math.PI * this._radius * this._radius;
+    public fn perimeter(): number => 2 * Math.PI * this._radius;
+}
+
+// Rectangle implementation using composition
+struct Rectangle {
+    private let _width: number;
+    private let _height: number;
+    private let _color: Color;
+    
+    public width: number {
+        get(): number => this._width;
+        set(value: number): void {
+            if value < 0 {
+                throw "Width cannot be negative";
+            }
+            this._width = value;
+        }
+    }
+    
+    public height: number {
+        get(): number => this._height;
+        set(value: number): void {
+            if value < 0 {
+                throw "Height cannot be negative";
+            }
+            this._height = value;
+        }
+    }
+    
+    public fn area(): number => this._width * this._height;
+    public fn perimeter(): number => 2 * (this._width + this._height);
+}
+
+// ShapeCollection using composition and generics
+struct ShapeCollection<T: Shape> {
+    private let _shapes: T[];
+    
+    public constructor() {
+        this._shapes = [];
+    }
+    
+    public fn add(shape: T): void {
+        this._shapes.push(shape);
+    }
+    
+    public fn totalArea(): number {
+        return this._shapes.reduce((sum, shape) => sum + shape.area(), 0);
+    }
+    
+    public fn totalPerimeter(): number {
+        return this._shapes.reduce((sum, shape) => sum + shape.perimeter(), 0);
+    }
+}
+
+// Function with error handling
+public fn divide(a: number, b: number): Result {
+    if b == 0 {
+        return Result.Error("Division by zero");
+    }
+    return Result.Success(a / b);
+}
+
+// RAII and operator overloading example
+struct Resource {
+    private let _handle: number,
+    private let _name: string,
+    
+    // Static field for resource tracking
+    private static let _activeResources: number = 0;
+    
+    // Primary constructor
+    public constructor(name: string) {
+        this._name = name;
+        this._handle = Math.random() * 1000;  // Simulate resource acquisition
+        Resource._activeResources += 1;
+        io.println(`Resource ${this._name} acquired`);
+    }
+    
+    // Secondary constructor (copy constructor)
+    public constructor(other: Resource): this(other._name + "_copy") {
+        this._handle = Math.random() * 1000;
+        Resource._activeResources += 1;
+        io.println(`Resource ${this._name} copied`);
+    }
+    
+    // Destructor
+    public destructor() {
+        Resource._activeResources -= 1;
+        io.println(`Resource ${this._name} released`);
+    }
+    
+    // Operator overloading
+    public operator == (other: Resource): boolean {
+        return this._handle == other._handle;
+    }
+    
+    public operator != (other: Resource): boolean {
+        return this._handle != other._handle;
+    }
+    
+    // Array subscript operator
+    public operator [] (index: number): string {
+        if index == 0 {
+            return this._name;
+        } else if index == 1 {
+            return this._handle.toString();
+        }
+        throw "Invalid index";
+    }
+    
+    // Function call operator
+    public operator () (): string {
+        return `Resource(${this._name}, ${this._handle})`;
+    }
+}
+
+// Smart pointer implementation
+struct SmartPtr<T> {
+    private let _ptr: T,
+    private let _refCount: number,
+    
+    // Primary constructor
+    public constructor(value: T) {
+        this._ptr = value;
+        this._refCount = 1;
+    }
+    
+    // Secondary constructor (copy constructor)
+    public constructor(other: SmartPtr<T>): this(other._ptr) {
+        this._refCount = other._refCount + 1;
+    }
+    
+    public destructor() {
+        this._refCount -= 1;
+        if this._refCount == 0 {
+            // T's destructor will be called automatically
+            io.println("SmartPtr: Resource released");
+        }
+    }
+    
+    // Dereference operator
+    public operator * (): T {
+        return this._ptr;
+    }
+    
+    // Arrow operator
+    public operator -> (): T {
+        return this._ptr;
+    }
+}
+
+// Vector implementation with extended operator overloading
+struct Vector<T: number> {
+    private let _x: T;
+    private let _y: T;
+    private let _z: T;
+
+    public constructor(x: T, y: T, z: T) {
+        this._x = x;
+        this._y = y;
+        this._z = z;
+    }
+
+    // Basic arithmetic operators
+    public operator + (other: Vector<T>): Vector<T> {
+        return Vector<T>(this._x + other._x, this._y + other._y, this._z + other._z);
+    }
+
+    public operator - (other: Vector<T>): Vector<T> {
+        return Vector<T>(this._x - other._x, this._y - other._y, this._z - other._z);
+    }
+
+    public operator * (scalar: T): Vector<T> {
+        return Vector<T>(this._x * scalar, this._y * scalar, this._z * scalar);
+    }
+
+    public operator / (scalar: T): Vector<T> {
+        return Vector<T>(this._x / scalar, this._y / scalar, this._z / scalar);
+    }
+
+    // Compound assignment operators
+    public operator += (other: Vector<T>): Vector<T> {
+        this._x += other._x;
+        this._y += other._y;
+        this._z += other._z;
+        return this;
+    }
+
+    public operator -= (other: Vector<T>): Vector<T> {
+        this._x -= other._x;
+        this._y -= other._y;
+        this._z -= other._z;
+        return this;
+    }
+
+    public operator *= (scalar: T): Vector<T> {
+        this._x *= scalar;
+        this._y *= scalar;
+        this._z *= scalar;
+        return this;
+    }
+
+    // Comparison operators
+    public operator == (other: Vector<T>): boolean {
+        return this._x == other._x && this._y == other._y && this._z == other._z;
+    }
+
+    public operator != (other: Vector<T>): boolean {
+        return !(this == other);
+    }
+
+    // Unary operators
+    public operator - (): Vector<T> {
+        return Vector<T>(-this._x, -this._y, -this._z);
+    }
+
+    public operator ++ (): Vector<T> {
+        this._x++;
+        this._y++;
+        this._z++;
+        return this;
+    }
+
+    public operator -- (): Vector<T> {
+        this._x--;
+        this._y--;
+        this._z--;
+        return this;
+    }
+
+    // Array subscript operator
+    public operator [] (index: number): T {
+        when(index) {
+            0 -> return this._x;
+            1 -> return this._y;
+            2 -> return this._z;
+            else -> throw "Index out of bounds";
+        }
+    }
+}
+
+// Specialization for integer vectors with delegation
+struct Vector<integer> by Vector<number> {
+    // Additional integer-specific operations
+    public fn bitwiseAnd(other: Vector<integer>): Vector<integer> {
+        return Vector<integer>(
+            this._x & other._x,
+            this._y & other._y,
+            this._z & other._z
+        );
+    }
+
+    public fn bitwiseOr(other: Vector<integer>): Vector<integer> {
+        return Vector<integer>(
+            this._x | other._x,
+            this._y | other._y,
+            this._z | other._z
+        );
+    }
+
+    // Integer-specific operators
+    public operator & (other: Vector<integer>): Vector<integer> {
+        return this.bitwiseAnd(other);
+    }
+
+    public operator | (other: Vector<integer>): Vector<integer> {
+        return this.bitwiseOr(other);
+    }
+}
+
+// Property delegation example
+struct Observable<T> {
+    private let _value: T;
+    private let _listeners: ((T) => void)[];
+
+    public constructor(initialValue: T) {
+        this._value = initialValue;
+        this._listeners = [];
+    }
+
+    public property value: T {
+        get(): T => this._value;
+        set(newValue: T): void {
+            this._value = newValue;
+            for (let listener in this._listeners) {
+                listener(newValue);
+            }
+        }
+    }
+
+    public fn addListener(listener: (T) => void): void {
+        this._listeners.push(listener);
+    }
+}
+
+// Lazy property delegation
+struct Lazy<T> {
+    private let _initializer: () => T;
+    private let _value: T?;
+    private let _initialized: boolean = false;
+
+    public constructor(initializer: () => T) {
+        this._initializer = initializer;
+    }
+
+    public property value: T {
+        get(): T {
+            if (!this._initialized) {
+                this._value = this._initializer();
+                this._initialized = true;
+            }
+            return this._value!;
+        }
+    }
+}
+
+// Usage example
+struct User {
+    private let _name: string;
+    private let _observableAge: Observable<number>;
+    private let _lazyFullName: Lazy<string>;
+
+    public constructor(name: string, age: number) {
+        this._name = name;
+        this._observableAge = Observable<number>(age);
+        this._lazyFullName = Lazy<string>(() => `${this._name} (${this._observableAge.value})`);
+    }
+
+    // Property delegation using 'by'
+    public property age: number by this._observableAge.value;
+    public property fullName: string by this._lazyFullName.value;
+
+    public fn addAgeChangeListener(listener: (number) => void): void {
+        this._observableAge.addListener(listener);
+    }
+}
+
+// Main function
+public fn main(): void {
+    // Using static functions from namespace
+    let squared = Math.square(5);  // 25
+    let cubed = Math.cube(3);      // 27
+    let fact = Math.factorial(5);  // 120
+    
+    // Using nested namespace
+    let area = Math.Geometry.circleArea(5);
+    let perimeter = Math.Geometry.circlePerimeter(5);
+    
+    // Using static factory method
+    let p1 = Point.create(0, 0);
+    let p2 = Point.create(3, 4);
+    
+    // Accessing static property
+    io.println(`Total points created: ${Point.count}`);
+    
+    // Using static enum method
+    let color = Color.fromHex("#FF0000");
+    
+    // Function calls
+    let distance = p1.distance(p2);
+    io.println(`Distance: ${distance}`);
+    
+    // Control flow
+    if distance > 5 {
+        io.println("Points are far apart");
+    } elif distance > 0 {
+        io.println("Points are close");
+    } else {
+        io.println("Points are at the same location");
+    }
+    
+    // Loop example
+    let sum = 0;
+    for (let i = 0; i < 10; i++) {
+        sum += i;
+    }
+    
+    // When expression
+    let isWarm = color.isWarm();
+    
+    // Error handling
+    let result = divide(10, 2);
+    when(result) {
+        Success -> io.println(`Result: ${result.Success}`);
+        Error -> io.println(`Error: ${result.Error}`);
+    }
+    
+    // Object creation and method calls
+    let circle = Circle {
+        _radius: 5,
+        _color: Color.Blue
+    };
+    
+    io.println(`Circle area: ${circle.area()}`);
+    io.println(`Circle perimeter: ${circle.perimeter()}`);
+    
+    // Array operations
+    let numbers = [1, 2, 3, 4, 5];
+    let doubled = numbers.map(fn (x: number): number => x * 2);
+    
+    // Object spread
+    let config = {
+        timeout: 1000,
+        retries: 3,
+        ...{ debug: true }
+    };
+    
+    // Optional chaining
+    let user = {
+        name: "John",
+        address: {
+            city: "Boston"
+        }
+    };
+    
+    let city = user?.address?.city;
+    let zip = user?.address?.zip ?? "unknown";
+    
+    // Template literals
+    let message = `Hello, ${user.name}! You live in ${city}.`;
+    io.println(message);
+    
+    // Resource RAII example
+    {
+        let resource = Resource("file1");
+        io.println(resource[0]);  // Access name
+        io.println(resource());   // Call operator
+        
+        let resource2 = Resource(resource);  // Copy constructor
+        io.println(resource == resource2);   // Operator ==
+    }  // Resources automatically released here
+    
+    // Smart pointer example
+    {
+        let ptr = SmartPtr(Resource("file2"));
+        let ptr2 = SmartPtr(ptr);  // Reference counting
+    }  // Resources automatically released when ref count reaches 0
+    
+    // Vector example
+    {
+        let vec = Vector<number>();
+        vec << 1 << 2 << 3;  // Push back operator
+        
+        for (let i = 0; i < 3; i++) {
+            io.println(vec[i]);  // Subscript operator
+        }
+    }  // Vector automatically cleaned up
+
+    // 일반 템플릿 사용
+    let vec1 = Math.Vector<number>(1, 2, 3);
+    let vec2 = Math.Vector<number>(4, 5, 6);
+    
+    // 연산자 사용
+    let sumVec = vec1 + vec2;
+    let scaledVec = vec1 * 2;
+    
+    // 프로퍼티 사용
+    let length = sumVec.length;
+    let normalizedVec = sumVec.normalized;
+    
+    // 특수화된 메서드 사용
+    let dotProduct = vec1.dot(vec2);
+    let squaredLength = vec1.squaredLength;
+    
+    // 함수 템플릿 사용
+    let maxValue = Math.max(5, 10);
+    
+    print(`Sum: ${sumVec.x}, ${sumVec.y}, ${sumVec.z}`);
+    print(`Length: ${length}`);
+    print(`Dot Product: ${dotProduct}`);
+    print(`Max Value: ${maxValue}`);
+
+    // Create shapes
+    let rectangle = Rectangle { _width: 4, _height: 6, _color: Color.Red };
+    
+    // Create collection
+    let shapes = ShapeCollection<Shape>();
+    shapes.add(circle);
+    shapes.add(rectangle);
+    
+    // Calculate totals
+    let totalArea = shapes.totalArea();
+    let totalPerimeter = shapes.totalPerimeter();
+    
+    print(`Total Area: ${totalArea}`);
+    print(`Total Perimeter: ${totalPerimeter}`);
+
+    // Create user with delegated properties
+    let user = User("John", 25);
+    
+    // Add listener for age changes
+    user.addAgeChangeListener((newAge) => {
+        print(`Age changed to: ${newAge}`);
+    });
+    
+    // Access delegated properties
+    print(`Initial age: ${user.age}`);
+    print(`Initial full name: ${user.fullName}`);
+    
+    // Modify age (triggers listener)
+    user.age = 26;
+    
+    // Access lazy property (initialized on first access)
+    print(`Updated full name: ${user.fullName}`);
+
+    // Using number vector
+    let vec1 = Vector<number>(1.5, 2.5, 3.5);
+    let vec2 = Vector<number>(2.0, 3.0, 4.0);
+    
+    // Basic operations
+    let sum = vec1 + vec2;
+    let diff = vec1 - vec2;
+    let scaled = vec1 * 2.0;
+    
+    // Compound assignments
+    vec1 += vec2;
+    vec1 *= 2.0;
+    
+    // Unary operations
+    let neg = -vec1;
+    vec1++;
+    
+    // Using integer vector specialization
+    let ivec1 = Vector<integer>(1, 2, 3);
+    let ivec2 = Vector<integer>(4, 5, 6);
+    
+    // Bitwise operations (only available for integer vectors)
+    let bitwiseAnd = ivec1 & ivec2;
+    let bitwiseOr = ivec1 | ivec2;
+    
+    print(`Sum: ${sum[0]}, ${sum[1]}, ${sum[2]}`);
+    print(`Bitwise AND: ${bitwiseAnd[0]}, ${bitwiseAnd[1]}, ${bitwiseAnd[2]}`);
+}
+
+// Export statements
+export main;
+export Point;
+export Circle;
+export Color;
+export Result;
+export Math;
+
+// 물리 시스템 구현
+namespace Physics {
+    // 기본 단위 타입 정의
+    enum Unit {
+        METER,
+        KILOGRAM,
+        SECOND,
+        NEWTON
+    }
+
+    // 단위 변환을 위한 인터페이스
+    interface Convertible<T> {
+        fn convert(to: Unit): T;
+    }
+
+    // 기본 벡터 템플릿
+    struct Vector<T: Convertible<T>> {
+        private let _x: T;
+        private let _y: T;
+        private let _z: T;
+
+        // 프로퍼티를 사용한 getter/setter
+        public x: T {
+            get() => this._x;
+            set(value) => this._x = value;
+        }
+
+        public y: T {
+            get() => this._y;
+            set(value) => this._y = value;
+        }
+
+        public z: T {
+            get() => this._z;
+            set(value) => this._z = value;
+        }
+
+        // 생성자
+        public constructor(x: T, y: T, z: T) {
+            this._x = x;
+            this._y = y;
+            this._z = z;
+        }
+
+        // 연산자 오버로딩
+        public operator + (other: Vector<T>): Vector<T> {
+            return Vector<T>(
+                this._x + other._x,
+                this._y + other._y,
+                this._z + other._z
+            );
+        }
+
+        public operator * (scalar: number): Vector<T> {
+            return Vector<T>(
+                this._x * scalar,
+                this._y * scalar,
+                this._z * scalar
+            );
+        }
+    }
+
+    // 힘을 나타내는 구조체
+    struct Force {
+        private let _magnitude: number;
+        private let _direction: Vector<number>;
+        private let _unit: Unit;
+
+        public magnitude: number {
+            get() => this._magnitude;
+            set(value) => this._magnitude = value;
+        }
+
+        public direction: Vector<number> {
+            get() => this._direction;
+            set(value) => this._direction = value;
+        }
+
+        public constructor(magnitude: number, direction: Vector<number>, unit: Unit = Unit.NEWTON) {
+            this._magnitude = magnitude;
+            this._direction = direction;
+            this._unit = unit;
+        }
+
+        // 힘의 합성
+        public fn add(other: Force): Force {
+            return Force(
+                this._magnitude + other._magnitude,
+                this._direction + other._direction,
+                this._unit
+            );
+        }
+    }
+
+    // 위치를 나타내는 구조체
+    struct Position {
+        private let _vector: Vector<number>;
+        private let _unit: Unit;
+
+        public vector: Vector<number> {
+            get() => this._vector;
+            set(value) => this._vector = value;
+        }
+
+        public constructor(x: number, y: number, z: number, unit: Unit = Unit.METER) {
+            this._vector = Vector<number>(x, y, z);
+            this._unit = unit;
+        }
+
+        // 위치 이동
+        public fn move(displacement: Vector<number>): Position {
+            return Position(
+                this._vector.x + displacement.x,
+                this._vector.y + displacement.y,
+                this._vector.z + displacement.z,
+                this._unit
+            );
+        }
+    }
+
+    // 물체를 나타내는 구조체
+    struct Object {
+        private let _mass: number;
+        private let _position: Position;
+        private let _forces: Force[];
+
+        public mass: number {
+            get() => this._mass;
+            set(value) => this._mass = value;
+        }
+
+        public position: Position {
+            get() => this._position;
+            set(value) => this._position = value;
+        }
+
+        public constructor(mass: number, position: Position) {
+            this._mass = mass;
+            this._position = position;
+            this._forces = [];
+        }
+
+        // 힘 추가
+        public fn addForce(force: Force): void {
+            this._forces.push(force);
+        }
+
+        // 합력 계산
+        public fn calculateNetForce(): Force {
+            let netForce = Force(0, Vector<number>(0, 0, 0));
+            for (let force in this._forces) {
+                netForce = netForce.add(force);
+            }
+            return netForce;
+        }
+
+        // 가속도 계산 (F = ma)
+        public fn calculateAcceleration(): Vector<number> {
+            let netForce = this.calculateNetForce();
+            return netForce.direction * (netForce.magnitude / this._mass);
+        }
+    }
+
+    // 물리 시뮬레이션 시스템
+    struct PhysicsSystem {
+        private let _objects: Object[];
+        private let _gravity: Force;
+
+        public constructor(gravity: Force = Force(9.81, Vector<number>(0, -1, 0))) {
+            this._objects = [];
+            this._gravity = gravity;
+        }
+
+        // 물체 추가
+        public fn addObject(obj: Object): void {
+            this._objects.push(obj);
+            obj.addForce(this._gravity);
+        }
+
+        // 시뮬레이션 스텝
+        public fn simulate(deltaTime: number): void {
+            for (let obj in this._objects) {
+                let acceleration = obj.calculateAcceleration();
+                let displacement = acceleration * (deltaTime * deltaTime / 2);
+                obj.position = obj.position.move(displacement);
+            }
+        }
+    }
+}
+
+// 모듈 내부에서만 사용 가능한 유틸리티 함수
+static fn calculateDistance(v1: Vector<number>, v2: Vector<number>): number {
+    let dx = v2.x - v1.x;
+    let dy = v2.y - v1.y;
+    let dz = v2.z - v1.z;
+    return math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+// 다른 모듈에서 사용 가능한 함수
+export fn createVector(x: number, y: number, z: number): Vector<number> {
+    return Vector<number>(x, y, z);
+}
+
+// 모듈 내부에서만 사용 가능한 상수
+static let PI = 3.14159265359;
+
+// 다른 모듈에서 사용 가능한 상수
+export let GRAVITY = 9.81;
+
+// 사용 예시
+fn main() {
+    // 일반 템플릿 사용
+    let vec1 = Vector<number>(1, 2, 3);
+    let vec2 = Vector<number>(4, 5, 6);
+    
+    // 연산자 사용
+    let sum = vec1 + vec2;
+    let diff = vec1 - vec2;
+    let scaled = vec1 * 2.0;
+    
+    // 특수화된 메서드 사용
+    let dotProduct = vec1.dot(vec2);
+    let crossProduct = vec1.cross(vec2);
+    
+    print(`Sum: ${sum.x}, ${sum.y}, ${sum.z}`);
+    print(`Dot Product: ${dotProduct}`);
+    print(`Cross Product: ${crossProduct.x}, ${crossProduct.y}, ${crossProduct.z}`);
+} 

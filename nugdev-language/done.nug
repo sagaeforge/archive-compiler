@@ -1,0 +1,520 @@
+// =============================================
+// Comprehensive Sample Code for nugdev Language
+// =============================================
+
+// Module imports
+import "std/io" as io;
+import "std/math" as math;
+
+// Namespace declaration
+export namespace Math {
+    // 1.1 네임스페이스 내부의 using
+    using Vector = std::collections::Vector;
+    using namespace std::math;
+
+    // 1.2 타입 별칭
+    using Point = Vector<f32>;
+    using Matrix = Vector<Vector<f32>>;
+
+    // 1.3 네임스페이스 별칭
+    using Vec = std::collections::Vector;
+    using Num = std::numeric;
+
+    // 1.4 정적 멤버
+    public static const PI: f32 = 3.14159;
+    public static const E: f32 = 2.71828;
+    
+    // Static functions
+    public static fn square(x: number): number => x * x;
+    
+    // Nested namespace
+    namespace Geometry {
+        public static fn circleArea(radius: number): number {
+            return Math.PI * Math.square(radius);
+        }
+    }
+}
+
+// Enum definition
+enum Color {
+    Red = "#FF0000",
+    Green = "#00FF00",
+    Blue = "#0000FF",
+    
+    // Static method
+    public static fn fromHex(hex: string): Color {
+        when(hex) {
+            "#FF0000" -> return Color.Red;
+            "#00FF00" -> return Color.Green;
+            "#0000FF" -> return Color.Blue;
+            else -> throw "Invalid hex color";
+        }
+    }
+}
+
+// Union type
+union Result<T> {
+    Success: T,
+    Error: string,
+    
+    fn getValue(): T? {
+        when(this) {
+            Success -> return this.Success;
+            Error -> return null;
+        }
+    }
+}
+
+// Interface with generic type
+interface Container<T> {
+    fn add(item: T): void;
+    fn remove(item: T): void;
+    fn contains(item: T): boolean;
+}
+
+// Generic struct with type constraints
+struct Vector<T: number> {
+    private let _x: T;
+    private let _y: T;
+    private let _z: T;
+
+    // Static field
+    private static let _zero: Vector<T> = Vector<T>(0, 0, 0);
+    
+    // Constructor
+    public constructor(x: T, y: T, z: T) {
+        this._x = x;
+        this._y = y;
+        this._z = z;
+    }
+
+    // Static property
+    public static property zero: Vector<T> {
+        get(): Vector<T> => this._zero;
+    }
+
+    // Instance properties with delegation
+    public property x: T {
+        get(): T => this._x;
+        set(value: T): void => this._x = value;
+    }
+
+    // Operator overloading
+    public operator + (other: Vector<T>): Vector<T> {
+        return Vector<T>(
+            this._x + other._x,
+            this._y + other._y,
+            this._z + other._z
+        );
+    }
+
+    public operator * (scalar: T): Vector<T> {
+        return Vector<T>(
+            this._x * scalar,
+            this._y * scalar,
+            this._z * scalar
+        );
+    }
+
+    // Compound assignment operators
+    public operator += (other: Vector<T>): Vector<T> {
+        this._x += other._x;
+        this._y += other._y;
+        this._z += other._z;
+        return this;
+    }
+
+    // Comparison operators
+    public operator == (other: Vector<T>): boolean {
+        return this._x == other._x && this._y == other._y && this._z == other._z;
+    }
+
+    // Unary operators
+    public operator - (): Vector<T> {
+        return Vector<T>(-this._x, -this._y, -this._z);
+    }
+
+    // Array subscript operator
+    public operator [] (index: number): T {
+        when(index) {
+            0 -> return this._x;
+            1 -> return this._y;
+            2 -> return this._z;
+            else -> throw "Index out of bounds";
+        }
+    }
+}
+
+// Template specialization with delegation
+struct Vector<number> by Vector<T> {
+    // Specialized methods
+    public fn dot(other: Vector<number>): number {
+        return this._x * other._x + this._y * other._y + this._z * other._z;
+    }
+
+    // Additional specialized methods
+    public fn cross(other: Vector<number>): Vector<number> {
+        return Vector<number>(
+            this._y * other._z - this._z * other._y,
+            this._z * other._x - this._x * other._z,
+            this._x * other._y - this._y * other._x
+        );
+    }
+
+    // Specialized operators
+    public operator / (scalar: number): Vector<number> {
+        if scalar == 0 {
+            throw "Division by zero";
+        }
+        return Vector<number>(
+            this._x / scalar,
+            this._y / scalar,
+            this._z / scalar
+        );
+    }
+}
+
+// Property delegation example
+struct Observable<T> {
+    private let _value: T;
+    private let _listeners: ((T) => void)[];
+
+    public constructor(initialValue: T) {
+        this._value = initialValue;
+        this._listeners = [];
+    }
+
+    public property value: T {
+        get(): T => this._value;
+        set(newValue: T): void {
+            this._value = newValue;
+            for (let listener in this._listeners) {
+                listener(newValue);
+            }
+        }
+    }
+}
+
+// Lazy property delegation
+struct Lazy<T> {
+    private let _initializer: () => T;
+    private let _value: T?;
+    private let _initialized: boolean = false;
+
+    public constructor(initializer: () => T) {
+        this._initializer = initializer;
+    }
+
+    public property value: T {
+        get(): T {
+            if (!this._initialized) {
+                this._value = this._initializer();
+                this._initialized = true;
+            }
+            return this._value!;
+        }
+    }
+}
+
+// Main function demonstrating all features
+public fn main(): void {
+    // Basic expressions
+    let x: number = 42;
+    let y: number = 10;
+    let z: number = x + y * 2;
+    
+    // Control flow
+    if x > y {
+        io.println("x is greater than y");
+        if x > 100 {
+            io.println("x is very large");
+        } elif x > 50 {
+            io.println("x is moderately large");
+        } else {
+            io.println("x is not so large");
+        }
+    } elif x == y {
+        io.println("x equals y");
+    } else {
+        io.println("x is less than y");
+    }
+    
+    // Using labels for loop control
+    outer@ for (let i = 0; i < 5; i++) {
+        inner@ for (let j = 0; j < 5; j++) {
+            if i == 2 && j == 2 {
+                outer@ return 42;  // 레이블이 있는 return
+            }
+            if j == 3 {
+                continue inner;  // 내부 루프의 다음 반복으로
+            }
+            io.println(`i: ${i}, j: ${j}`);
+        }
+    }
+    
+    // When expression
+    let color = Color.fromHex("#FF0000");
+    when(color) {
+        Color.Red -> io.println("It's red!");
+        Color.Green -> io.println("It's green!");
+        Color.Blue -> io.println("It's blue!");
+    }
+    
+    // Generic type usage
+    let vec1 = Vector<number>(1, 2, 3);
+    let vec2 = Vector<number>(4, 5, 6);
+    let sum = vec1 + vec2;
+    
+    // Operator overloading
+    let scaled = vec1 * 2;
+    vec1 += vec2;
+    
+    // Property access
+    io.println(`Vector x: ${vec1.x}`);
+    
+    // Array subscript
+    io.println(`First component: ${vec1[0]}`);
+    
+    // Type checking
+    if vec1 is Vector<number> {
+        io.println("vec1 is a Vector<number>");
+    }
+    
+    // Null coalescing
+    let result = Result<number>.Success(42);
+    let value = result.getValue() ?? 0;
+    
+    // Property delegation
+    let observable = Observable<number>(10);
+    observable.value = 20;  // Triggers listeners
+    
+    // Lazy initialization
+    let lazy = Lazy<string>(() => "Computed value");
+    io.println(lazy.value);  // Computed on first access
+    
+    // Error handling
+    try {
+        let division = divide(10, 0);
+    } catch (error) {
+        io.println(`Error: ${error}`);
+    }
+
+    // Function with labeled return
+    fn processData(data: number[]): number {
+        process@ for (let item in data) {
+            if item < 0 {
+                process@ return 0;  // 음수 발견시 0 반환
+            }
+            if item > 100 {
+                process@ return 100;  // 100 초과시 100 반환
+            }
+        }
+        return data.reduce((sum, x) => sum + x, 0);
+    }
+}
+
+// Error handling function
+fn divide(a: number, b: number): number {
+    if b == 0 {
+        throw "Division by zero";
+    }
+    return a / b;
+}
+
+// Export statements
+export main;
+export Vector;
+export Color;
+export Result;
+export Math;
+
+// Module system example
+namespace Physics {
+    using Vector = std::collections::Vector;
+    using namespace std::math;
+
+    // 타입 별칭
+    using Force = Vector<f32>;
+    using Position = Vector<f32>;
+    using Velocity = Vector<f32>;
+
+    // 네임스페이스 별칭
+    using Vec = std::collections::Vector;
+    using Math = std::math;
+
+    // 정적 멤버 접근
+    let gravity = Physics::Constants::GRAVITY;
+    let maxSpeed = Physics::Constants::MAX_SPEED;
+
+    // 인스턴스 멤버 접근
+    let force = Force::new();
+    force.magnitude = 9.8;
+    force.direction = Vector::new(0.0, -1.0, 0.0);
+
+    // 옵셔널 체이닝
+    let optionalForce = some(force);
+    let magnitude = optionalForce?.magnitude;
+
+    // 제네릭 타입 제약이 있는 함수
+    fn calculateForce<T: PhysicsObject>(object: T) -> Force {
+        return object.mass * Physics::Constants::GRAVITY;
+    }
+
+    // 화살표 함수
+    fn getGravity() -> f32 => Physics::Constants::GRAVITY;
+
+    // 블록 함수
+    fn applyForce(force: Force, object: PhysicsObject) {
+        object.velocity += force / object.mass;
+        object.position += object.velocity * Physics::Constants::DELTA_TIME;
+    }
+}
+
+// 중첩된 네임스페이스
+namespace Physics::Simulation {
+    using namespace Physics;  // 부모 네임스페이스 사용
+
+    fn simulate(objects: Vector<PhysicsObject>) {
+        for object in objects {
+            let force = Physics::calculateForce(object);
+            Physics::applyForce(force, object);
+        }
+    }
+}
+
+// using 지시문의 스코프
+{
+    using namespace Physics::Simulation;
+    let objects = Vector::new();
+    simulate(objects);  // Physics::Simulation::simulate를 직접 사용
+}
+
+// 타입 별칭과 제네릭
+using PhysicsObject = struct {
+    mass: f32,
+    position: Physics::Position,
+    velocity: Physics::Velocity
+};
+
+// 네임스페이스 별칭 사용
+using Sim = Physics::Simulation;
+let result = Sim::simulate(objects);
+
+// 정적 멤버와 인스턴스 멤버 접근
+let constants = Physics::Constants;  // 정적 멤버
+let object = PhysicsObject::new();   // 정적 메서드
+object.position = Vector::new(0.0, 0.0, 0.0);  // 인스턴스 멤버
+
+// 옵셔널 체이닝과 안전한 접근
+let optionalObject = some(object);
+let position = optionalObject?.position;
+let velocity = optionalObject?.velocity ?? Vector::new(0.0, 0.0, 0.0);
+
+// Run the async main function
+main().catch(error => console.error(error));
+
+// 3. 제네릭과 고차 제네릭
+// 3.1 기본 제네릭 선언
+public struct Container<T> {
+    private _items: Vector<T>;
+
+    public fn add(item: T): void {
+        this._items.push(item);
+    }
+
+    public fn get(index: i32): T {
+        return this._items[index];
+    }
+}
+
+// 3.2 고차 타입 파라미터
+public struct Functor<F<_>> {
+    public fn map<A, B>(fa: F<A>, f: fn(A) -> B): F<B>;
+}
+
+public struct Bifunctor<F<_, _>> {
+    public fn bimap<A, B, C, D>(fab: F<A, B>, f: fn(A) -> C, g: fn(B) -> D): F<C, D>;
+}
+
+// 3.3 타입 제약과 기본 타입
+public struct Sorter<T: Comparable> {
+    public fn sort(items: Vector<T>): Vector<T>;
+}
+
+public struct Optional<T = any> {
+    private _value: T | null;
+}
+
+// 3.4 특수화
+public struct Container<number> {
+    private _items: Vector<number>;
+
+    public fn sum(): number {
+        return this._items.reduce((a, b) => a + b, 0);
+    }
+
+    public fn average(): number {
+        return this.sum() / this._items.length;
+    }
+}
+
+// 3.5 특수화 위임
+public struct Container<string> by Container<number> {
+    public fn join(separator: string): string {
+        return this._items.join(separator);
+    }
+}
+
+// 3.6 고차 타입 특수화
+public struct Either<L, R> by Bifunctor<Either> {
+    private _value: L | R;
+    private _isLeft: bool;
+
+    public fn bimap<A, B, C, D>(fab: Either<A, B>, f: fn(A) -> C, g: fn(B) -> D): Either<C, D> {
+        return fab._isLeft ? 
+            Either.left(f(fab._value as A)) : 
+            Either.right(g(fab._value as B));
+    }
+}
+
+// 3.7 와일드카드 타입
+public struct Transformer<F<?>, G<?>> {
+    public fn transform<A>(fa: F<A>): G<A>;
+}
+
+// 3.8 타입 별칭
+using Maybe<T> = Option<T>;
+using Result<T> = Either<string, T>;
+using Future<T> = Promise<T>;
+
+// 3.9 제네릭 함수
+public fn sequence<F<_>, A>(fas: Vector<F<A>>): F<Vector<A>> 
+    where F: Applicative<F> {
+    return fas.reduce(
+        (acc, fa) => acc.bind(as => fa.map(a => as.concat([a]))),
+        F.pure([])
+    );
+}
+
+// 3.10 제네릭 컴포지션
+public struct Compose<F<_>, G<_>> {
+    public type T<A> = F<G<A>>;
+}
+
+public struct Product<F<_>, G<_>> {
+    public type T<A> = [F<A>, G<A>];
+}
+
+// 3.11 제네릭 사용 예제
+let maybeList: Maybe<List<number>> = Maybe.some(List.from([1, 2, 3]));
+let transformed = maybeList.map(list => list.map(x => x * 2));
+
+// 3.12 제네릭 트랜스포머
+public struct ReaderT<F<_>, R, A> by Functor<F> {
+    private _run: fn(R) -> F<A>;
+
+    public fn map<B>(f: fn(A) -> B): ReaderT<F, R, B> 
+        where F: Functor<F> {
+        return ReaderT.new(r => this._run(r).map(f));
+    }
+} 

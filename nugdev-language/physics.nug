@@ -1,0 +1,241 @@
+// 물리 시스템 구현
+namespace Physics {
+    // 기본 단위 타입 정의
+    enum Unit {
+        METER,
+        KILOGRAM,
+        SECOND,
+        NEWTON
+    }
+
+    // 단위 변환을 위한 인터페이스
+    interface Convertible<T> {
+        fn convert(to: Unit): T;
+    }
+
+    // 기본 벡터 템플릿
+    struct Vector<T: Convertible<T>> {
+        private let _x: T;
+        private let _y: T;
+        private let _z: T;
+
+        // 기본 접근자
+        public fn getX(): T => this._x;
+        public fn getY(): T => this._y;
+        public fn getZ(): T => this._z;
+        public fn setX(value: T): void => this._x = value;
+        public fn setY(value: T): void => this._y = value;
+        public fn setZ(value: T): void => this._z = value;
+
+        // 계산된 프로퍼티
+        public magnitude: number {
+            get() => math.sqrt(this._x * this._x + this._y * this._y + this._z * this._z);
+        }
+
+        public normalized: Vector<T> {
+            get() {
+                let mag = this.magnitude;
+                return Vector<T>(
+                    this._x / mag,
+                    this._y / mag,
+                    this._z / mag
+                );
+            }
+        }
+
+        // 생성자
+        public constructor(x: T, y: T, z: T) {
+            this._x = x;
+            this._y = y;
+            this._z = z;
+        }
+
+        // 연산자 오버로딩
+        public operator + (other: Vector<T>): Vector<T> {
+            return Vector<T>(
+                this._x + other._x,
+                this._y + other._y,
+                this._z + other._z
+            );
+        }
+
+        public operator * (scalar: number): Vector<T> {
+            return Vector<T>(
+                this._x * scalar,
+                this._y * scalar,
+                this._z * scalar
+            );
+        }
+    }
+
+    // 힘을 나타내는 구조체
+    struct Force {
+        private let _magnitude: number;
+        private let _direction: Vector<number>;
+        private let _unit: Unit;
+
+        // 기본 접근자
+        public fn getMagnitude(): number => this._magnitude;
+        public fn getDirection(): Vector<number> => this._direction;
+        public fn setMagnitude(value: number): void => this._magnitude = value;
+        public fn setDirection(value: Vector<number>): void => this._direction = value;
+
+        // 계산된 프로퍼티
+        public vector: Vector<number> {
+            get() => this._direction * this._magnitude;
+        }
+
+        public components: { x: number, y: number, z: number } {
+            get() => {
+                let vec = this.vector;
+                return {
+                    x: vec.getX(),
+                    y: vec.getY(),
+                    z: vec.getZ()
+                };
+            }
+        }
+
+        public constructor(magnitude: number, direction: Vector<number>, unit: Unit = Unit.NEWTON) {
+            this._magnitude = magnitude;
+            this._direction = direction;
+            this._unit = unit;
+        }
+
+        // 힘의 합성
+        public fn add(other: Force): Force {
+            return Force(
+                this._magnitude + other._magnitude,
+                this._direction + other._direction,
+                this._unit
+            );
+        }
+    }
+
+    // 위치를 나타내는 구조체
+    struct Position {
+        private let _vector: Vector<number>;
+        private let _unit: Unit;
+
+        // 기본 접근자
+        public fn getVector(): Vector<number> => this._vector;
+        public fn setVector(value: Vector<number>): void => this._vector = value;
+
+        // 계산된 프로퍼티
+        public distance: number {
+            get() => this._vector.magnitude;
+        }
+
+        public coordinates: { x: number, y: number, z: number } {
+            get() => {
+                return {
+                    x: this._vector.getX(),
+                    y: this._vector.getY(),
+                    z: this._vector.getZ()
+                };
+            }
+        }
+
+        public constructor(x: number, y: number, z: number, unit: Unit = Unit.METER) {
+            this._vector = Vector<number>(x, y, z);
+            this._unit = unit;
+        }
+
+        // 위치 이동
+        public fn move(displacement: Vector<number>): Position {
+            return Position(
+                this._vector.x + displacement.x,
+                this._vector.y + displacement.y,
+                this._vector.z + displacement.z,
+                this._unit
+            );
+        }
+    }
+
+    // 물체를 나타내는 구조체
+    struct Object {
+        private let _mass: number;
+        private let _position: Position;
+        private let _forces: Force[];
+
+        // 기본 접근자
+        public fn getMass(): number => this._mass;
+        public fn getPosition(): Position => this._position;
+        public fn setMass(value: number): void => this._mass = value;
+        public fn setPosition(value: Position): void => this._position = value;
+
+        // 계산된 프로퍼티
+        public kineticEnergy: number {
+            get() {
+                let velocity = this.calculateAcceleration();
+                return 0.5 * this._mass * velocity.magnitude * velocity.magnitude;
+            }
+        }
+
+        public potentialEnergy: number {
+            get() {
+                let height = this._position.getVector().getY();
+                return this._mass * 9.81 * height;  // mgh
+            }
+        }
+
+        public totalEnergy: number {
+            get() => this.kineticEnergy + this.potentialEnergy;
+        }
+
+        public constructor(mass: number, position: Position) {
+            this._mass = mass;
+            this._position = position;
+            this._forces = [];
+        }
+
+        // 힘 추가
+        public fn addForce(force: Force): void {
+            this._forces.push(force);
+        }
+
+        // 합력 계산
+        public fn calculateNetForce(): Force {
+            let netForce = Force(0, Vector<number>(0, 0, 0));
+            for (let force in this._forces) {
+                netForce = netForce.add(force);
+            }
+            return netForce;
+        }
+
+        // 가속도 계산 (F = ma)
+        public fn calculateAcceleration(): Vector<number> {
+            let netForce = this.calculateNetForce();
+            return netForce.direction * (netForce.magnitude / this._mass);
+        }
+    }
+
+    // 물리 시뮬레이션 시스템
+    struct PhysicsSystem {
+        private let _objects: Object[];
+        private let _gravity: Force;
+
+        public constructor(gravity: Force = Force(9.81, Vector<number>(0, -1, 0))) {
+            this._objects = [];
+            this._gravity = gravity;
+        }
+
+        // 물체 추가
+        public fn addObject(obj: Object): void {
+            this._objects.push(obj);
+            obj.addForce(this._gravity);
+        }
+
+        // 시뮬레이션 스텝
+        public fn simulate(deltaTime: number): void {
+            for (let obj in this._objects) {
+                let acceleration = obj.calculateAcceleration();
+                let displacement = acceleration * (deltaTime * deltaTime / 2);
+                obj.position = obj.position.move(displacement);
+            }
+        }
+    }
+}
+
+// 모듈 내보내기
+export Physics; 
