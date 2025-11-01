@@ -1,0 +1,268 @@
+[
+  {
+    "type": "Function",
+    "literal": "fn",
+    "file-name": "fibonacci.txt",
+    "file-line": 0,
+    "file-column": 0
+  },
+  {
+    "type": "Identifier",
+    "literal": "fibonacci",
+    "file-name": "fibonacci.txt",
+    "file-line": 0,
+    "file-column": 3
+  },
+  {
+    "type": "LeftParenthesis",
+    "literal": "(",
+    "file-name": "fibonacci.txt",
+    "file-line": 0,
+    "file-column": 12
+  },
+  {
+    "type": "Variable",
+    "literal": "var",
+    "file-name": "fibonacci.txt",
+    "file-line": 0,
+    "file-column": 13
+  },
+  {
+    "type": "Identifier",
+    "literal": "n",
+    "file-name": "fibonacci.txt",
+    "file-line": 0,
+    "file-column": 17
+  },
+  {
+    "type": "Colon",
+    "literal": ":",
+    "file-name": "fibonacci.txt",
+    "file-line": 0,
+    "file-column": 18
+  },
+  {
+    "type": "Identifier",
+    "literal": "i32",
+    "file-name": "fibonacci.txt",
+    "file-line": 0,
+    "file-column": 20
+  },
+  {
+    "type": "RightParenthesis",
+    "literal": ")",
+    "file-name": "fibonacci.txt",
+    "file-line": 0,
+    "file-column": 23
+  },
+  {
+    "type": "Colon",
+    "literal": ":",
+    "file-name": "fibonacci.txt",
+    "file-line": 0,
+    "file-column": 24
+  },
+  {
+    "type": "Identifier",
+    "literal": "i32",
+    "file-name": "fibonacci.txt",
+    "file-line": 0,
+    "file-column": 26
+  },
+  {
+    "type": "LeftBrace",
+    "literal": "{",
+    "file-name": "fibonacci.txt",
+    "file-line": 0,
+    "file-column": 30
+  },
+  {
+    "type": "If",
+    "literal": "if",
+    "file-name": "fibonacci.txt",
+    "file-line": 1,
+    "file-column": 4
+  },
+  {
+    "type": "Identifier",
+    "literal": "n",
+    "file-name": "fibonacci.txt",
+    "file-line": 1,
+    "file-column": 7
+  },
+  {
+    "type": "LessEqual",
+    "literal": "<=",
+    "file-name": "fibonacci.txt",
+    "file-line": 1,
+    "file-column": 9
+  },
+  {
+    "type": "Number",
+    "literal": "2",
+    "file-name": "fibonacci.txt",
+    "file-line": 1,
+    "file-column": 12
+  },
+  {
+    "type": "LeftBrace",
+    "literal": "{",
+    "file-name": "fibonacci.txt",
+    "file-line": 1,
+    "file-column": 14
+  },
+  {
+    "type": "Return",
+    "literal": "return",
+    "file-name": "fibonacci.txt",
+    "file-line": 2,
+    "file-column": 8
+  },
+  {
+    "type": "Identifier",
+    "literal": "n",
+    "file-name": "fibonacci.txt",
+    "file-line": 2,
+    "file-column": 15
+  },
+  {
+    "type": "RightBrace",
+    "literal": "}",
+    "file-name": "fibonacci.txt",
+    "file-line": 3,
+    "file-column": 4
+  },
+  {
+    "type": "Return",
+    "literal": "return",
+    "file-name": "fibonacci.txt",
+    "file-line": 4,
+    "file-column": 4
+  },
+  {
+    "type": "Identifier",
+    "literal": "fibonacci",
+    "file-name": "fibonacci.txt",
+    "file-line": 4,
+    "file-column": 11
+  },
+  {
+    "type": "LeftParenthesis",
+    "literal": "(",
+    "file-name": "fibonacci.txt",
+    "file-line": 4,
+    "file-column": 20
+  },
+  {
+    "type": "Identifier",
+    "literal": "n",
+    "file-name": "fibonacci.txt",
+    "file-line": 4,
+    "file-column": 21
+  },
+  {
+    "type": "Minus",
+    "literal": "-",
+    "file-name": "fibonacci.txt",
+    "file-line": 4,
+    "file-column": 23
+  },
+  {
+    "type": "Number",
+    "literal": "1",
+    "file-name": "fibonacci.txt",
+    "file-line": 4,
+    "file-column": 25
+  },
+  {
+    "type": "RightParenthesis",
+    "literal": ")",
+    "file-name": "fibonacci.txt",
+    "file-line": 4,
+    "file-column": 26
+  },
+  {
+    "type": "Plus",
+    "literal": "+",
+    "file-name": "fibonacci.txt",
+    "file-line": 4,
+    "file-column": 28
+  },
+  {
+    "type": "Identifier",
+    "literal": "fibonacci",
+    "file-name": "fibonacci.txt",
+    "file-line": 4,
+    "file-column": 30
+  },
+  {
+    "type": "LeftParenthesis",
+    "literal": "(",
+    "file-name": "fibonacci.txt",
+    "file-line": 4,
+    "file-column": 39
+  },
+  {
+    "type": "Identifier",
+    "literal": "n",
+    "file-name": "fibonacci.txt",
+    "file-line": 4,
+    "file-column": 40
+  },
+  {
+    "type": "Minus",
+    "literal": "-",
+    "file-name": "fibonacci.txt",
+    "file-line": 4,
+    "file-column": 42
+  },
+  {
+    "type": "Number",
+    "literal": "2",
+    "file-name": "fibonacci.txt",
+    "file-line": 4,
+    "file-column": 44
+  },
+  {
+    "type": "RightParenthesis",
+    "literal": ")",
+    "file-name": "fibonacci.txt",
+    "file-line": 4,
+    "file-column": 45
+  },
+  {
+    "type": "RightBrace",
+    "literal": "}",
+    "file-name": "fibonacci.txt",
+    "file-line": 5,
+    "file-column": 0
+  },
+  {
+    "type": "Identifier",
+    "literal": "fibonacci",
+    "file-name": "fibonacci.txt",
+    "file-line": 7,
+    "file-column": 0
+  },
+  {
+    "type": "LeftParenthesis",
+    "literal": "(",
+    "file-name": "fibonacci.txt",
+    "file-line": 7,
+    "file-column": 9
+  },
+  {
+    "type": "Number",
+    "literal": "5",
+    "file-name": "fibonacci.txt",
+    "file-line": 7,
+    "file-column": 10
+  },
+  {
+    "type": "RightParenthesis",
+    "literal": ")",
+    "file-name": "fibonacci.txt",
+    "file-line": 7,
+    "file-column": 11
+  }
+]
