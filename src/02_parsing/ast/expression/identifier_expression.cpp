@@ -4,6 +4,8 @@
 
 #include "identifier_expression.h"
 
+#include "02_parsing/ast/util/visitor.h"
+
 IdentifierExpression::IdentifierExpression(Token token) : m_token(std::move(token)) {
 }
 
@@ -17,6 +19,7 @@ std::partial_ordering IdentifierExpression::compare(const std::shared_ptr<ASTNod
 }
 
 void IdentifierExpression::accept(ASTVisitor &visitor) const {
+    visitor.visit(std::static_pointer_cast<const IdentifierExpression>(self()));
 }
 
 Token IdentifierExpression::token() const {

@@ -8,7 +8,7 @@
 
 #include "01_tokenize/token_converter.h"
 
-TEST(milestone_01_fibonacci, shows) {
+TEST(milestone_01_fibonacci, shows_token) {
     auto file = std::ifstream("../test/milestone/1/fibonacci.txt");
     auto tokenizer = Tokenizer("fibonacci.txt", file);
     auto tokens = tokenizer.tokenize();

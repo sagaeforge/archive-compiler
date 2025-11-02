@@ -7,6 +7,7 @@
 #include "identifier_expression.h"
 #include "type_expression.h"
 #include "02_parsing/ast/statement/block_statement.h"
+#include "02_parsing/ast/util/visitor.h"
 
 FunctionExpression::FunctionExpression(const Token &token, const Node<IdentifierExpression> &name,
                                        const std::vector<Node<Statement> > &parameters,
@@ -50,12 +51,7 @@ std::partial_ordering FunctionExpression::compare(const std::shared_ptr<ASTNode>
 }
 
 void FunctionExpression::accept(ASTVisitor &visitor) const {
-    m_name->accept(visitor);
-    for (const auto &m_parameter: m_parameters) {
-        m_parameter->accept(visitor);
-    }
-    m_body->accept(visitor);
-    m_returnType->accept(visitor);
+    visitor.visit(std::static_pointer_cast<const FunctionExpression>(self()));
 }
 
 Token FunctionExpression::token() const {

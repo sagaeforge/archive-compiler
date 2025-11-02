@@ -4,8 +4,11 @@
 
 #include "call_expression.h"
 
-CallExpression::CallExpression(const Node<Expression> &callee,
-                               const std::vector<Node<Expression> > &args) : m_callee(callee),
+#include "02_parsing/ast/util/visitor.h"
+
+CallExpression::CallExpression(const Token &token, const Node<Expression> &callee,
+                               const std::vector<Node<Expression> > &args) : m_token(token),
+                                                                             m_callee(callee),
                                                                              m_args(args) {
 }
 
@@ -35,10 +38,7 @@ std::partial_ordering CallExpression::compare(const std::shared_ptr<ASTNode> &ot
 }
 
 void CallExpression::accept(ASTVisitor &visitor) const {
-    m_callee->accept(visitor);
-    for (const auto &arg: m_args) {
-        arg->accept(visitor);
-    }
+    visitor.visit(std::static_pointer_cast<const CallExpression>(self()));
 }
 
 Token CallExpression::token() const {

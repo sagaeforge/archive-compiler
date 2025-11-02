@@ -20,7 +20,7 @@ public:
     [[nodiscard]] Token token() const override;
 
 public:
-    Node<Expression> expression();
+    Node<Expression> expression() const;
 
 private:
     Node<Expression> m_expression;

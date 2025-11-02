@@ -4,6 +4,8 @@
 
 #include "infix_expression.h"
 
+#include "02_parsing/ast/util/visitor.h"
+
 InfixExpression::InfixExpression(const Token &token, const Node<Expression> &left,
                                  const Node<Expression> &right) : m_token(token),
                                                                   m_left(left),
@@ -28,8 +30,7 @@ std::partial_ordering InfixExpression::compare(const std::shared_ptr<ASTNode> &o
 }
 
 void InfixExpression::accept(ASTVisitor &visitor) const {
-    m_left->accept(visitor);
-    m_right->accept(visitor);
+    visitor.visit(std::static_pointer_cast<const InfixExpression>(self()));
 }
 
 Token InfixExpression::token() const {

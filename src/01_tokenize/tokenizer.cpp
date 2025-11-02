@@ -163,7 +163,10 @@ std::unordered_map<string_t, TokenType> Tokenizer::m_keywords = {
     {"var", TokenType::Variable},
     {"if", TokenType::If},
     {"fn", TokenType::Function},
-    {"return", TokenType::Return}
+    {"return", TokenType::Return},
+    {"elif", TokenType::Elif},
+    {"else", TokenType::Else},
+    {"null", TokenType::Null}
 };
 
 std::unordered_map<string_t, TokenType> Tokenizer::m_operators = {
@@ -182,4 +185,5 @@ std::unordered_map<string_t, TokenType> Tokenizer::m_operators = {
     {"<=", TokenType::GreaterEqual},
     {"==", TokenType::Equal},
     {"=", TokenType::Assign},
+    {",", TokenType::Comma},
 };

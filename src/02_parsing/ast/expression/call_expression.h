@@ -8,7 +8,8 @@
 
 class CallExpression final : public Expression {
 public:
-    explicit CallExpression(const Node<Expression> &callee, const std::vector<Node<Expression> > &args);
+    explicit CallExpression(const Token &token, const Node<Expression> &callee,
+                            const std::vector<Node<Expression> > &args);
 
     ~CallExpression() override = default;
 
@@ -25,6 +26,7 @@ public:
     std::vector<Node<Expression> > args() const;
 
 private:
+    Token m_token;
     Node<Expression> m_callee;
     std::vector<Node<Expression> > m_args;
 };

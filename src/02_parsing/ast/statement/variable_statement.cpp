@@ -6,6 +6,7 @@
 
 #include "02_parsing/ast/expression/identifier_expression.h"
 #include "02_parsing/ast/expression/type_expression.h"
+#include "02_parsing/ast/util/visitor.h"
 
 VariableStatement::VariableStatement(const Token &token, const Node<IdentifierExpression> &name,
                                      const Node<TypeExpression> &type,
@@ -48,15 +49,7 @@ std::partial_ordering VariableStatement::compare(const std::shared_ptr<ASTNode> 
 }
 
 void VariableStatement::accept(ASTVisitor &visitor) const {
-    m_name->accept(visitor);
-
-    if (m_type != nullptr) {
-        m_type->accept(visitor);
-    }
-
-    if (m_value != nullptr) {
-        m_value->accept(visitor);
-    }
+    return visitor.visit(std::static_pointer_cast<const VariableStatement>(self()));
 }
 
 Token VariableStatement::token() const {

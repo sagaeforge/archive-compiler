@@ -4,7 +4,7 @@
 
 #include "token.h"
 
-#include "00_core/magic_enum/magic_enum.hpp"
+#include "01_tokenize/token_converter.h"
 
 Token::Token(string_t literal,
              const TokenType type,
@@ -18,12 +18,8 @@ Token::Token(string_t literal,
 }
 
 void Token::print(std::ostream &os) const {
-    const auto typeStr = magic_enum::enum_name(m_type);
-    os << R"({"literal":")" << m_literal <<
-            R"(", "type":")" << string_t(typeStr.begin(), typeStr.end()) <<
-            R"(","name":)" << m_fileName <<
-            R"(", "line":")" << m_line <<
-            R"(", "column": ")" << m_column << "\"}";
+    const auto json = TokenConverter::exportJson(*this);
+    os << json;
 }
 
 std::partial_ordering Token::compare(const Token &other) const {

@@ -47,8 +47,8 @@ add_library(${PROJECT_NAME}_lib
         src/02_parsing/precedence.h
         src/02_parsing/precedence.cpp
         src/02_parsing/ast/node.h
-        src/02_parsing/ast/program/Program.cpp
-        src/02_parsing/ast/program/Program.h
+        src/02_parsing/ast/module/Program.cpp
+        src/02_parsing/ast/module/Program.h
         src/02_parsing/ast/statement/block_statement.cpp
         src/02_parsing/ast/statement/block_statement.h
         src/02_parsing/ast/statement/variable_statement.cpp
@@ -76,6 +76,8 @@ add_library(${PROJECT_NAME}_lib
         src/02_parsing/ast/util/visitor.h
         src/02_parsing/ast/expression/call_expression.cpp
         src/02_parsing/ast/expression/call_expression.h
+        src/02_parsing/ast/util/ast_json_exporter.cpp
+        src/02_parsing/ast/util/ast_json_exporter.h
 )
 target_include_directories(${PROJECT_NAME}_lib
         PUBLIC
@@ -89,6 +91,7 @@ add_executable(${PROJECT_NAME}_test
         "test/milestone/1/01. tokenize/tokenizer_test.cpp"
         test/01_tokenize/number_tokenize.cpp
         test/01_tokenize/string_tokenize.cpp
+        "test/milestone/1/02. parsing/parser_test.cpp"
 )
 
 target_link_libraries(

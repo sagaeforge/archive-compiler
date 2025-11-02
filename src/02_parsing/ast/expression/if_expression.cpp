@@ -5,6 +5,7 @@
 #include "if_expression.h"
 
 #include "02_parsing/ast/statement/block_statement.h"
+#include "02_parsing/ast/util/visitor.h"
 
 IfExpression::IfExpression(const Token &token, const Node<Expression> &condition,
                            const Node<BlockStatement> &consequence, const Node<IfExpression> &then,
@@ -21,8 +22,15 @@ std::partial_ordering IfExpression::compare(const std::shared_ptr<ASTNode> &othe
         return std::partial_ordering::unordered;
     }
 
-    if (m_condition->compare(otherNode->m_condition) != std::partial_ordering::equivalent) {
+    bool isConditionNotNull = otherNode->m_condition != nullptr;
+    bool isConditionOtherNotNull = otherNode->m_condition == nullptr;
+    if (isConditionNotNull != isConditionOtherNotNull) {
         return std::partial_ordering::unordered;
+    }
+    if (isConditionNotNull && isConditionOtherNotNull) {
+        if (m_condition->compare(otherNode->m_condition) != std::partial_ordering::equivalent) {
+            return std::partial_ordering::unordered;
+        }
     }
 
     if (m_consequence->compare(otherNode->m_consequence) != std::partial_ordering::equivalent) {
@@ -57,15 +65,7 @@ std::partial_ordering IfExpression::compare(const std::shared_ptr<ASTNode> &othe
 }
 
 void IfExpression::accept(ASTVisitor &visitor) const {
-    m_condition->accept(visitor);
-    m_consequence->accept(visitor);
-    if (m_then != nullptr) {
-        m_then->accept(visitor);
-    }
-
-    if (m_alternative != nullptr) {
-        m_alternative->accept(visitor);
-    }
+    visitor.visit(std::static_pointer_cast<const IfExpression>(self()));
 }
 
 Token IfExpression::token() const {

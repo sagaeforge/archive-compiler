@@ -4,6 +4,8 @@
 
 #include "prefix_expression.h"
 
+#include "02_parsing/ast/util/visitor.h"
+
 PrefixExpression::PrefixExpression(const Token &m_token, const Node<Expression> &m_right) : m_token(m_token),
     m_right(m_right) {
 }
@@ -22,7 +24,7 @@ std::partial_ordering PrefixExpression::compare(const std::shared_ptr<ASTNode> &
 }
 
 void PrefixExpression::accept(ASTVisitor &visitor) const {
-    m_right->accept(visitor);
+    visitor.visit(std::static_pointer_cast<const PrefixExpression>(self()));
 }
 
 Token PrefixExpression::token() const {

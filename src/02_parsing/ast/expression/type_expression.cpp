@@ -4,6 +4,8 @@
 
 #include "type_expression.h"
 
+#include "02_parsing/ast/util/visitor.h"
+
 TypeExpression::TypeExpression(const Token &m_token) : m_token(m_token) {
 }
 
@@ -17,6 +19,7 @@ std::partial_ordering TypeExpression::compare(const std::shared_ptr<ASTNode> &ot
 }
 
 void TypeExpression::accept(ASTVisitor &visitor) const {
+    visitor.visit(std::static_pointer_cast<const TypeExpression>(self()));
 }
 
 Token TypeExpression::token() const {

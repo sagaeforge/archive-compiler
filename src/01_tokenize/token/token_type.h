@@ -133,4 +133,24 @@ enum class TokenType : uint8_t {
      * @version 0.0.1a, Milestone 1
      */
     Assign,
+    /**
+     * @brief else-if
+     * @version 0.0.1a, Milestone 1
+     */
+    Elif,
+    /**
+     * @brief else
+     * @version 0.0.1a, Milestone 1
+     */
+    Else,
+    /**
+     * @brief Comma
+     * @version 0.0.1a, Milestone 1
+     */
+    Comma,
+    /**
+     * @brief Null
+     * @version 0.0.1a, Milestone 1
+     */
+    Null,
 };

@@ -4,6 +4,8 @@
 
 #include "string_expression.h"
 
+#include "02_parsing/ast/util/visitor.h"
+
 StringExpression::StringExpression(const Token &m_token) : m_token(m_token) {
 }
 
@@ -17,6 +19,7 @@ std::partial_ordering StringExpression::compare(const std::shared_ptr<ASTNode> &
 }
 
 void StringExpression::accept(ASTVisitor &visitor) const {
+    visitor.visit(std::static_pointer_cast<const StringExpression>(self()));
 }
 
 Token StringExpression::token() const {

@@ -1,0 +1,354 @@
+{
+  "statements": [
+    {
+      "expression": {
+        "body": {
+          "statements": [
+            {
+              "expression": {
+                "alternative": "null",
+                "condition": {
+                  "left": {
+                    "token": {
+                      "file-column": 7,
+                      "file-line": 1,
+                      "file-name": "fibonacci.txt",
+                      "literal": "n",
+                      "type": "Identifier"
+                    },
+                    "type": "identifierExpression",
+                    "value": "n"
+                  },
+                  "operator": "<=",
+                  "right": {
+                    "token": {
+                      "file-column": 12,
+                      "file-line": 1,
+                      "file-name": "fibonacci.txt",
+                      "literal": "2",
+                      "type": "Number"
+                    },
+                    "type": "numberExpression",
+                    "value": "2"
+                  },
+                  "token": {
+                    "file-column": 9,
+                    "file-line": 1,
+                    "file-name": "fibonacci.txt",
+                    "literal": "<=",
+                    "type": "LessEqual"
+                  },
+                  "type": "infixExpression"
+                },
+                "consequence": {
+                  "statements": [
+                    {
+                      "token": {
+                        "file-column": 8,
+                        "file-line": 2,
+                        "file-name": "fibonacci.txt",
+                        "literal": "return",
+                        "type": "Return"
+                      },
+                      "type": "returnStatement",
+                      "value": {
+                        "token": {
+                          "file-column": 15,
+                          "file-line": 2,
+                          "file-name": "fibonacci.txt",
+                          "literal": "n",
+                          "type": "Identifier"
+                        },
+                        "type": "identifierExpression",
+                        "value": "n"
+                      }
+                    }
+                  ],
+                  "token": {
+                    "file-column": 8,
+                    "file-line": 2,
+                    "file-name": "fibonacci.txt",
+                    "literal": "return",
+                    "type": "Return"
+                  },
+                  "type": "blockStatement"
+                },
+                "then": "null",
+                "token": {
+                  "file-column": 4,
+                  "file-line": 1,
+                  "file-name": "fibonacci.txt",
+                  "literal": "if",
+                  "type": "If"
+                },
+                "type": "ifExpression"
+              },
+              "token": {
+                "file-column": 4,
+                "file-line": 1,
+                "file-name": "fibonacci.txt",
+                "literal": "if",
+                "type": "If"
+              },
+              "type": "expressionStatement"
+            },
+            {
+              "token": {
+                "file-column": 4,
+                "file-line": 4,
+                "file-name": "fibonacci.txt",
+                "literal": "return",
+                "type": "Return"
+              },
+              "type": "returnStatement",
+              "value": {
+                "left": {
+                  "arguments": [
+                    {
+                      "left": {
+                        "token": {
+                          "file-column": 21,
+                          "file-line": 4,
+                          "file-name": "fibonacci.txt",
+                          "literal": "n",
+                          "type": "Identifier"
+                        },
+                        "type": "identifierExpression",
+                        "value": "n"
+                      },
+                      "operator": "-",
+                      "right": {
+                        "token": {
+                          "file-column": 25,
+                          "file-line": 4,
+                          "file-name": "fibonacci.txt",
+                          "literal": "1",
+                          "type": "Number"
+                        },
+                        "type": "numberExpression",
+                        "value": "1"
+                      },
+                      "token": {
+                        "file-column": 23,
+                        "file-line": 4,
+                        "file-name": "fibonacci.txt",
+                        "literal": "-",
+                        "type": "Minus"
+                      },
+                      "type": "infixExpression"
+                    }
+                  ],
+                  "callee": {
+                    "token": {
+                      "file-column": 11,
+                      "file-line": 4,
+                      "file-name": "fibonacci.txt",
+                      "literal": "fibonacci",
+                      "type": "Identifier"
+                    },
+                    "type": "identifierExpression",
+                    "value": "fibonacci"
+                  },
+                  "token": {
+                    "file-column": 11,
+                    "file-line": 4,
+                    "file-name": "fibonacci.txt",
+                    "literal": "fibonacci",
+                    "type": "Identifier"
+                  },
+                  "type": "callExpression"
+                },
+                "operator": "+",
+                "right": {
+                  "arguments": [
+                    {
+                      "left": {
+                        "token": {
+                          "file-column": 40,
+                          "file-line": 4,
+                          "file-name": "fibonacci.txt",
+                          "literal": "n",
+                          "type": "Identifier"
+                        },
+                        "type": "identifierExpression",
+                        "value": "n"
+                      },
+                      "operator": "-",
+                      "right": {
+                        "token": {
+                          "file-column": 44,
+                          "file-line": 4,
+                          "file-name": "fibonacci.txt",
+                          "literal": "2",
+                          "type": "Number"
+                        },
+                        "type": "numberExpression",
+                        "value": "2"
+                      },
+                      "token": {
+                        "file-column": 42,
+                        "file-line": 4,
+                        "file-name": "fibonacci.txt",
+                        "literal": "-",
+                        "type": "Minus"
+                      },
+                      "type": "infixExpression"
+                    }
+                  ],
+                  "callee": {
+                    "token": {
+                      "file-column": 30,
+                      "file-line": 4,
+                      "file-name": "fibonacci.txt",
+                      "literal": "fibonacci",
+                      "type": "Identifier"
+                    },
+                    "type": "identifierExpression",
+                    "value": "fibonacci"
+                  },
+                  "token": {
+                    "file-column": 30,
+                    "file-line": 4,
+                    "file-name": "fibonacci.txt",
+                    "literal": "fibonacci",
+                    "type": "Identifier"
+                  },
+                  "type": "callExpression"
+                },
+                "token": {
+                  "file-column": 28,
+                  "file-line": 4,
+                  "file-name": "fibonacci.txt",
+                  "literal": "+",
+                  "type": "Plus"
+                },
+                "type": "infixExpression"
+              }
+            }
+          ],
+          "token": {
+            "file-column": 4,
+            "file-line": 1,
+            "file-name": "fibonacci.txt",
+            "literal": "if",
+            "type": "If"
+          },
+          "type": "blockStatement"
+        },
+        "name": {
+          "token": {
+            "file-column": 3,
+            "file-line": 0,
+            "file-name": "fibonacci.txt",
+            "literal": "fibonacci",
+            "type": "Identifier"
+          },
+          "type": "identifierExpression",
+          "value": "fibonacci"
+        },
+        "parameters": [
+          {
+            "name": {
+              "token": {
+                "file-column": 17,
+                "file-line": 0,
+                "file-name": "fibonacci.txt",
+                "literal": "n",
+                "type": "Identifier"
+              },
+              "type": "identifierExpression",
+              "value": "n"
+            },
+            "token": {
+              "file-column": 13,
+              "file-line": 0,
+              "file-name": "fibonacci.txt",
+              "literal": "var",
+              "type": "Variable"
+            },
+            "type": {
+              "token": {
+                "file-column": 20,
+                "file-line": 0,
+                "file-name": "fibonacci.txt",
+                "literal": "i32",
+                "type": "Identifier"
+              },
+              "type": "typeExpression",
+              "value": "i32"
+            },
+            "value": "null"
+          }
+        ],
+        "token": {
+          "file-column": 0,
+          "file-line": 0,
+          "file-name": "fibonacci.txt",
+          "literal": "fn",
+          "type": "Function"
+        },
+        "type": "functionExpression"
+      },
+      "token": {
+        "file-column": 0,
+        "file-line": 0,
+        "file-name": "fibonacci.txt",
+        "literal": "fn",
+        "type": "Function"
+      },
+      "type": "expressionStatement"
+    },
+    {
+      "expression": {
+        "arguments": [
+          {
+            "token": {
+              "file-column": 10,
+              "file-line": 7,
+              "file-name": "fibonacci.txt",
+              "literal": "5",
+              "type": "Number"
+            },
+            "type": "numberExpression",
+            "value": "5"
+          }
+        ],
+        "callee": {
+          "token": {
+            "file-column": 0,
+            "file-line": 7,
+            "file-name": "fibonacci.txt",
+            "literal": "fibonacci",
+            "type": "Identifier"
+          },
+          "type": "identifierExpression",
+          "value": "fibonacci"
+        },
+        "token": {
+          "file-column": 0,
+          "file-line": 7,
+          "file-name": "fibonacci.txt",
+          "literal": "fibonacci",
+          "type": "Identifier"
+        },
+        "type": "callExpression"
+      },
+      "token": {
+        "file-column": 0,
+        "file-line": 7,
+        "file-name": "fibonacci.txt",
+        "literal": "fibonacci",
+        "type": "Identifier"
+      },
+      "type": "expressionStatement"
+    }
+  ],
+  "token": {
+    "file-column": 0,
+    "file-line": 0,
+    "file-name": "fibonacci.txt",
+    "literal": "fn",
+    "type": "Function"
+  },
+  "type": "program"
+}

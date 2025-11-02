@@ -4,6 +4,8 @@
 
 #include "block_statement.h"
 
+#include "02_parsing/ast/util/visitor.h"
+
 BlockStatement::BlockStatement(std::vector<Node<Statement> > statements) : m_statements(std::move(statements)) {
 }
 
@@ -27,9 +29,7 @@ std::partial_ordering BlockStatement::compare(const std::shared_ptr<ASTNode> &ot
 }
 
 void BlockStatement::accept(ASTVisitor &visitor) const {
-    for (const auto &stmt: m_statements) {
-        stmt->accept(visitor);
-    }
+    visitor.visit(std::static_pointer_cast<const BlockStatement>(self()));
 }
 
 Token BlockStatement::token() const {
@@ -39,6 +39,6 @@ Token BlockStatement::token() const {
     return m_statements.front()->token();
 }
 
-std::vector<Node<Statement> > BlockStatement::statements() {
+std::vector<Node<Statement> > BlockStatement::statements() const {
     return m_statements;
 }

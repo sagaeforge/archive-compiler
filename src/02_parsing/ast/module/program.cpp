@@ -6,6 +6,8 @@
 
 #include <utility>
 
+#include "02_parsing/ast/util/visitor.h"
+
 Program::Program(std::vector<Node<Statement> > statements) : m_statements(std::move(statements)) {
 }
 
@@ -29,9 +31,7 @@ std::partial_ordering Program::compare(const Node<ASTNode> &other) const {
 }
 
 void Program::accept(ASTVisitor &visitor) const {
-    for (const auto &stmt: m_statements) {
-        stmt->accept(visitor);
-    }
+    visitor.visit(std::static_pointer_cast<const Program>(self()));
 }
 
 Token Program::token() const {
@@ -41,6 +41,6 @@ Token Program::token() const {
     return m_statements.front()->token();
 }
 
-std::vector<Node<Statement> > Program::statements() {
+std::vector<Node<Statement> > Program::statements() const {
     return m_statements;
 }

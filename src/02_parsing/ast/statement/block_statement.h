@@ -20,7 +20,7 @@ public:
     [[nodiscard]] Token token() const override;
 
 public:
-    std::vector<Node<Statement> > statements();
+    std::vector<Node<Statement> > statements() const;
 
 private:
     std::vector<Node<Statement> > m_statements;

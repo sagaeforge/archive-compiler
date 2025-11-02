@@ -4,6 +4,8 @@
 
 #include "return_statement.h"
 
+#include "02_parsing/ast/util/visitor.h"
+
 ReturnStatement::ReturnStatement(const Token &token, const Node<Expression> &value) : m_token(token), m_value(value) {
 }
 
@@ -29,9 +31,7 @@ std::partial_ordering ReturnStatement::compare(const std::shared_ptr<ASTNode> &o
 }
 
 void ReturnStatement::accept(ASTVisitor &visitor) const {
-    if (m_value != nullptr) {
-        m_value->accept(visitor);
-    }
+    visitor.visit(std::static_pointer_cast<const ReturnStatement>(self()));
 }
 
 Token ReturnStatement::token() const {

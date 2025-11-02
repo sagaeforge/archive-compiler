@@ -4,6 +4,8 @@
 
 #include "number_expression.h"
 
+#include "02_parsing/ast/util/visitor.h"
+
 NumberExpression::NumberExpression(const Token &m_token) : m_token(m_token) {
 }
 
@@ -17,6 +19,7 @@ std::partial_ordering NumberExpression::compare(const std::shared_ptr<ASTNode> &
 }
 
 void NumberExpression::accept(ASTVisitor &visitor) const {
+    visitor.visit(std::static_pointer_cast<const NumberExpression>(self()));
 }
 
 Token NumberExpression::token() const {
