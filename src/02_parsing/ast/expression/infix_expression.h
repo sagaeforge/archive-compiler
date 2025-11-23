@@ -20,6 +20,8 @@ public:
     [[nodiscard]] Token token() const override;
 
 public:
+    string_t opcode() const;
+
     Node<Expression> left() const;
 
     Node<Expression> right() const;

@@ -19,10 +19,10 @@
                     "type": "identifierExpression",
                     "value": "n"
                   },
-                  "operator": "<=",
+                  "operator": "<",
                   "right": {
                     "token": {
-                      "file-column": 12,
+                      "file-column": 11,
                       "file-line": 1,
                       "file-name": "fibonacci.txt",
                       "literal": "2",
@@ -35,8 +35,8 @@
                     "file-column": 9,
                     "file-line": 1,
                     "file-name": "fibonacci.txt",
-                    "literal": "<=",
-                    "type": "LessEqual"
+                    "literal": "<",
+                    "type": "Less"
                   },
                   "type": "infixExpression"
                 },

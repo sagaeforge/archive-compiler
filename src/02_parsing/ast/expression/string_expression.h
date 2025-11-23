@@ -19,6 +19,9 @@ public:
 
     [[nodiscard]] Token token() const override;
 
+public:
+    string_t value() const;
+
 private:
     Token m_token;
 };

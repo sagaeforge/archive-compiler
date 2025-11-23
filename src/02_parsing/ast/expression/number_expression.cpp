@@ -34,3 +34,11 @@ bool NumberExpression::isFloating() const {
     }
     return false;
 }
+
+std::int64_t NumberExpression::asInt() const {
+    return std::stoll(m_token.literal());
+}
+
+std::uint64_t NumberExpression::asUInt() const {
+    return std::stoull(m_token.literal());
+}

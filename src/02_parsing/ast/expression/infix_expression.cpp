@@ -37,6 +37,10 @@ Token InfixExpression::token() const {
     return m_token;
 }
 
+string_t InfixExpression::opcode() const {
+    return m_token.literal();
+}
+
 Node<Expression> InfixExpression::left() const {
     return m_left;
 }

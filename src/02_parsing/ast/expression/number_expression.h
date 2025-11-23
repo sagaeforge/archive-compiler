@@ -21,6 +21,8 @@ public:
 
 public:
     bool isFloating() const;
+    std::int64_t asInt() const;
+    std::uint64_t asUInt() const;
 
 private:
     Token m_token;

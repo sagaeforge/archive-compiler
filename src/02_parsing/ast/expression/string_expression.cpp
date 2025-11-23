@@ -25,3 +25,7 @@ void StringExpression::accept(ASTVisitor &visitor) const {
 Token StringExpression::token() const {
     return m_token;
 }
+
+string_t StringExpression::value() const {
+    return m_token.literal();
+}

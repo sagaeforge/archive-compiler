@@ -78,6 +78,14 @@ add_library(${PROJECT_NAME}_lib
         src/02_parsing/ast/expression/call_expression.h
         src/02_parsing/ast/util/ast_json_exporter.cpp
         src/02_parsing/ast/util/ast_json_exporter.h
+        src/04_generate/Operand.h
+        src/04_generate/Instruction.h
+        src/04_generate/Compiler.cpp
+        src/04_generate/Compiler.h
+        src/04_generate/register_allocator.cpp
+        src/04_generate/register_allocator.h
+        src/04_generate/operand.cpp
+        src/04_generate/instruction.cpp
 )
 target_include_directories(${PROJECT_NAME}_lib
         PUBLIC
@@ -92,6 +100,7 @@ add_executable(${PROJECT_NAME}_test
         test/01_tokenize/number_tokenize.cpp
         test/01_tokenize/string_tokenize.cpp
         "test/milestone/1/02. parsing/parser_test.cpp"
+        "test/milestone/1/04. generate/generate_test.cpp"
 )
 
 target_link_libraries(

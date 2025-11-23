@@ -25,3 +25,7 @@ void IdentifierExpression::accept(ASTVisitor &visitor) const {
 Token IdentifierExpression::token() const {
     return m_token;
 }
+
+string_t IdentifierExpression::value() const {
+    return m_token.literal();
+}

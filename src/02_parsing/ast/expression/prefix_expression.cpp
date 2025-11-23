@@ -31,6 +31,10 @@ Token PrefixExpression::token() const {
     return m_token;
 }
 
+string_t PrefixExpression::value() const {
+    return m_token.literal();
+}
+
 Node<Expression> PrefixExpression::right() const {
     return m_right;
 }

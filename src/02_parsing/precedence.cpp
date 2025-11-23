@@ -16,8 +16,10 @@ precedence getPrecedence(const TokenType type) {
             return precedence::Equality;
 
         // Comparison (<, >, <=, >=)
-        case TokenType::LessEqual:
+        case TokenType::Greater:
         case TokenType::GreaterEqual:
+        case TokenType::Less:
+        case TokenType::LessEqual:
             return precedence::Comparison;
 
         // // Elvis (?:)
