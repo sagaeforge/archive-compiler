@@ -1,0 +1,13 @@
+fn gcd(a: i64, b: i64) -> i64 {
+    loop(x = a, y = b) {
+        if y == 0 {
+            break x
+        }
+        val r: i64 = x - (x / y) * y
+        continue(y, r)
+    }
+}
+
+fn main() -> i64 {
+    gcd(84, 42)
+}

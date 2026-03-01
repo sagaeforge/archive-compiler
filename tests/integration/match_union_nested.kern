@@ -1,0 +1,21 @@
+union Maybe { Some(i64), None }
+
+fn find_first(start: i64, target: i64) -> Maybe {
+    loop(i = start) {
+        if i > 100 {
+            break Maybe::None
+        }
+        if i == target {
+            break Maybe::Some(i)
+        }
+        continue(i + 1)
+    }
+}
+
+fn main() -> i64 {
+    val r: Maybe = find_first(0, 42)
+    match r {
+        Some(v) => v
+        None => 0
+    }
+}
