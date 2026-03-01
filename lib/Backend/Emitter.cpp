@@ -439,6 +439,11 @@ void NASMEmitter::emitEpilogue(const MachFunction& fn) {
 void NASMEmitter::emitFunction(const MachFunction& fn) {
     if (fn.is_intrinsic) return;
 
+    // Emit custom section directive if specified
+    if (!fn.section_name.empty()) {
+        out_ << "section " << fn.section_name << "\n";
+    }
+
     out_ << "_" << fn.name << ":\n";
 
     if (!fn.is_naked) {

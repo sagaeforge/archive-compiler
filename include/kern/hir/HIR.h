@@ -357,6 +357,7 @@ struct HIRFnDecl {
     bool is_intrinsic;
     bool is_naked;           // @naked — skip prologue/epilogue
     bool is_interrupt;       // @interrupt — iretq return, save all regs
+    std::string_view section_name;  // @section("name"), empty = default
 
     SourceLocation loc;
 };

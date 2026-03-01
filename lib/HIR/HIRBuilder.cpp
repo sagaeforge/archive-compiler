@@ -668,6 +668,7 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
     hfn->is_intrinsic = fn->is_intrinsic;
     hfn->is_naked = fn->is_naked;
     hfn->is_interrupt = fn->is_interrupt;
+    hfn->section_name = fn->section_name;
     hfn->loc = fn->loc;
 
     // Register parameters

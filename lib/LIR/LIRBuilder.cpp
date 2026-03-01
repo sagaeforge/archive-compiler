@@ -197,6 +197,7 @@ LIRFunction LIRBuilder::buildFunction(const HIRFnDecl* fn) {
     lir_fn.is_intrinsic = fn->is_intrinsic;
     lir_fn.is_naked = fn->is_naked;
     lir_fn.is_interrupt = fn->is_interrupt;
+    lir_fn.section_name = fn->section_name;
 
     if (fn->param_count > 0) {
         lir_fn.param_types = ctx_.arena.makeArray<TypeId>(fn->param_count);
@@ -693,6 +694,37 @@ VReg LIRBuilder::lowerCall(const HIRCallExpr* expr) {
         i.op = LIROp::CompilerFence;
         i.result = INVALID_VREG;
         i.type = TypeTable::Unit;
+        i.loc = expr->loc;
+        emit(i);
+        return INVALID_VREG;
+    }
+
+    // volatile_read(ptr) -> value
+    if (callee == "volatile_read" && expr->arg_count == 1) {
+        VReg ptr = lowerExpr(expr->args[0]);
+        VReg r = freshVReg();
+        LIRInstr i{};
+        i.op = LIROp::Load;
+        i.result = r;
+        i.type = expr->type;
+        i.load.ptr = ptr;
+        i.load.is_volatile = true;
+        i.loc = expr->loc;
+        emit(i);
+        return r;
+    }
+
+    // volatile_write(ptr, value)
+    if (callee == "volatile_write" && expr->arg_count == 2) {
+        VReg ptr = lowerExpr(expr->args[0]);
+        VReg val = lowerExpr(expr->args[1]);
+        LIRInstr i{};
+        i.op = LIROp::Store;
+        i.result = INVALID_VREG;
+        i.type = expr->type;
+        i.store.ptr = ptr;
+        i.store.value = val;
+        i.store.is_volatile = true;
         i.loc = expr->loc;
         emit(i);
         return INVALID_VREG;

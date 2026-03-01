@@ -104,8 +104,8 @@ struct LIRBranchPayload    { uint32_t target; VReg* args; uint32_t arg_count; };
 struct LIRCondBrPayload    { VReg cond; uint32_t true_target; uint32_t false_target; };
 struct LIRRetPayload       { VReg value; };
 struct LIRAddrOfPayload    { VReg source; };
-struct LIRLoadPayload      { VReg ptr; };
-struct LIRStorePayload     { VReg ptr; VReg value; };
+struct LIRLoadPayload      { VReg ptr; bool is_volatile = false; };
+struct LIRStorePayload     { VReg ptr; VReg value; bool is_volatile = false; };
 struct LIRFieldPtrPayload  { VReg base; uint32_t offset; };
 struct LIRStructAllocPayload { uint32_t size; uint32_t align; };
 struct LIRBlockArgPayload  { uint32_t index; };
@@ -211,6 +211,7 @@ struct LIRFunction {
     bool is_intrinsic;
     bool is_naked;
     bool is_interrupt;
+    std::string_view section_name;  // @section("name"), empty = default
 };
 
 // ============================================================================

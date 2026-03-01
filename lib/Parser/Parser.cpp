@@ -452,7 +452,11 @@ Module* Parser::parseModule() {
             } else if (anno.text == "section") {
                 expect(TokenKind::LParen, "expected '(' after @section");
                 Token val = expect(TokenKind::StringLit, "expected string in @section(\"name\")");
+                // Strip surrounding quotes from StringLit token text
                 section_name = val.text;
+                if (section_name.size() >= 2 && section_name.front() == '"' && section_name.back() == '"') {
+                    section_name = section_name.substr(1, section_name.size() - 2);
+                }
                 expect(TokenKind::RParen, "expected ')' after @section(\"name\")");
             } else {
                 diag_.error(anno.loc, std::string("unknown annotation '@") +
@@ -486,6 +490,7 @@ Module* Parser::parseModule() {
             if (fn) {
                 fn->is_naked = is_naked;
                 fn->is_interrupt = is_interrupt;
+                fn->section_name = section_name;
                 fns.push_back(fn);
             }
         } else if (check(TokenKind::KwType)) {

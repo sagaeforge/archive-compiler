@@ -299,6 +299,7 @@ struct MachFunction {
     bool is_intrinsic = false;
     bool is_naked = false;
     bool is_interrupt = false;
+    std::string_view section_name;  // @section("name"), empty = default
 };
 
 // ============================================================================

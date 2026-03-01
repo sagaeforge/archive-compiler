@@ -115,6 +115,7 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     mf->is_intrinsic = fn.is_intrinsic;
     mf->is_naked = fn.is_naked;
     mf->is_interrupt = fn.is_interrupt;
+    mf->section_name = fn.section_name;
     mf->next_vreg = fn.next_vreg;
     next_vreg_ = fn.next_vreg;
     struct_alloc_bytes_ = 0;

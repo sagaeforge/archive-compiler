@@ -432,6 +432,7 @@ struct FnDecl {
     Pattern* pattern_param = nullptr; // pattern for first param (when has_pattern_params)
     TypeParam* type_params = nullptr; // generic type parameters (<T, U>)
     uint32_t type_param_count = 0;
+    std::string_view section_name;    // @section("name"), empty = default
 };
 
 // --- Module ---
