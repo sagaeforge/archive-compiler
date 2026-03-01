@@ -45,6 +45,8 @@ private:
     Expr* parseStructLit(std::string_view name, SourceLocation loc);
     Expr* parseMatchExpr();
     Expr* parseLoopExpr();
+    Expr* parseLambdaExpr(SourceLocation loc);
+    bool isLambdaStart();
     Pattern* parsePattern();
 
     // Statements

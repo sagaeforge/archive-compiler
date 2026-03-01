@@ -175,6 +175,122 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
         named_types_[interned] = tid;
         return tid;
     }
+    // Generic type instantiation: Name<T1, T2, ...>
+    if (ref.type_arg_count > 0) {
+        // Resolve all type arguments first
+        std::vector<TypeId> type_args;
+        for (uint32_t i = 0; i < ref.type_arg_count; ++i) {
+            type_args.push_back(resolveType(ref.type_args[i]));
+        }
+
+        // Build mangled name: Name_T1_T2
+        std::string mangled = std::string(ref.name);
+        for (auto ta : type_args) {
+            mangled += "_";
+            mangled += ctx_.types.name(ta);
+        }
+        auto interned_mangled = ctx_.strings.intern(mangled);
+
+        // Check if already instantiated
+        auto it = named_types_.find(interned_mangled);
+        if (it != named_types_.end()) return it->second;
+
+        // Look up generic struct template
+        auto gs = generic_structs_.find(ref.name);
+        if (gs != generic_structs_.end()) {
+            auto* sd = gs->second;
+            if (ref.type_arg_count != sd->type_param_count) {
+                ctx_.diag.error(ref.loc, std::string("generic struct '") +
+                    std::string(ref.name) + "' expects " +
+                    std::to_string(sd->type_param_count) + " type arguments, got " +
+                    std::to_string(ref.type_arg_count));
+                return TypeTable::Error;
+            }
+
+            // Temporarily register type param substitutions
+            std::vector<std::pair<std::string_view, TypeId>> saved;
+            for (uint32_t i = 0; i < sd->type_param_count; ++i) {
+                auto param_name = sd->type_params[i].name;
+                if (named_types_.count(param_name)) {
+                    saved.push_back({param_name, named_types_[param_name]});
+                }
+                named_types_[param_name] = type_args[i];
+            }
+
+            // Build concrete struct fields
+            std::vector<FieldInfo> fields;
+            for (uint32_t j = 0; j < sd->field_count; ++j) {
+                auto& f = sd->fields[j];
+                TypeId ft = resolveType(f.type);
+                fields.push_back({ctx_.strings.intern(f.name), ft, f.is_mutable, -1});
+            }
+
+            TypeId tid = ctx_.types.makeStruct(interned_mangled, fields,
+                                                sd->is_packed, sd->explicit_align);
+            named_types_[interned_mangled] = tid;
+
+            // Restore type param names
+            for (uint32_t i = 0; i < sd->type_param_count; ++i) {
+                named_types_.erase(sd->type_params[i].name);
+            }
+            for (auto& [name, old_tid] : saved) {
+                named_types_[name] = old_tid;
+            }
+
+            return tid;
+        }
+
+        // Look up generic union template
+        auto gu = generic_unions_.find(ref.name);
+        if (gu != generic_unions_.end()) {
+            auto* ud = gu->second;
+            if (ref.type_arg_count != ud->type_param_count) {
+                ctx_.diag.error(ref.loc, std::string("generic union '") +
+                    std::string(ref.name) + "' expects " +
+                    std::to_string(ud->type_param_count) + " type arguments, got " +
+                    std::to_string(ref.type_arg_count));
+                return TypeTable::Error;
+            }
+
+            // Temporarily register type param substitutions
+            std::vector<std::pair<std::string_view, TypeId>> saved;
+            for (uint32_t i = 0; i < ud->type_param_count; ++i) {
+                auto param_name = ud->type_params[i].name;
+                if (named_types_.count(param_name)) {
+                    saved.push_back({param_name, named_types_[param_name]});
+                }
+                named_types_[param_name] = type_args[i];
+            }
+
+            // Build concrete union variants
+            std::vector<VariantInfo> variants;
+            for (uint32_t j = 0; j < ud->variant_count; ++j) {
+                TypeId payload = INVALID_TYPE;
+                if (ud->variants[j].payload_type) {
+                    payload = resolveType(*ud->variants[j].payload_type);
+                }
+                variants.push_back({ctx_.strings.intern(ud->variants[j].name), payload});
+            }
+
+            TypeId tid = ctx_.types.makeUnion(interned_mangled, variants);
+            named_types_[interned_mangled] = tid;
+
+            // Restore type param names
+            for (uint32_t i = 0; i < ud->type_param_count; ++i) {
+                named_types_.erase(ud->type_params[i].name);
+            }
+            for (auto& [name, old_tid] : saved) {
+                named_types_[name] = old_tid;
+            }
+
+            return tid;
+        }
+
+        ctx_.diag.error(ref.loc, std::string("unknown generic type '") +
+            std::string(ref.name) + "'");
+        return TypeTable::Error;
+    }
+
     auto it = named_types_.find(ref.name);
     if (it != named_types_.end()) return it->second;
     ctx_.diag.error(ref.loc, std::string("unknown type '") + std::string(ref.name) + "'");
@@ -196,6 +312,11 @@ void HIRBuilder::registerStructDecls(const Module* ast) {
     // First pass: register names so nested references resolve
     for (uint32_t i = 0; i < ast->struct_count; ++i) {
         auto* sd = ast->structs[i];
+        if (sd->type_param_count > 0) {
+            // Generic struct — store as template, don't register as concrete type
+            generic_structs_[sd->name] = sd;
+            continue;
+        }
         // Placeholder — will be replaced with computed layout
         named_types_[sd->name] = INVALID_TYPE;
     }
@@ -203,6 +324,7 @@ void HIRBuilder::registerStructDecls(const Module* ast) {
     // Second pass: compute layouts and register proper TypeIds
     for (uint32_t i = 0; i < ast->struct_count; ++i) {
         auto* sd = ast->structs[i];
+        if (sd->type_param_count > 0) continue; // skip generic structs
         std::vector<FieldInfo> fields;
 
         for (uint32_t j = 0; j < sd->field_count; ++j) {
@@ -234,6 +356,11 @@ void HIRBuilder::registerEnumDecls(const Module* ast) {
 void HIRBuilder::registerUnionDecls(const Module* ast) {
     for (uint32_t i = 0; i < ast->union_count; ++i) {
         auto* ud = ast->unions[i];
+        if (ud->type_param_count > 0) {
+            // Generic union — store as template
+            generic_unions_[ud->name] = ud;
+            continue;
+        }
         std::vector<VariantInfo> variants;
         for (uint32_t j = 0; j < ud->variant_count; ++j) {
             TypeId payload = INVALID_TYPE;
@@ -371,10 +498,24 @@ HIRModule* HIRBuilder::build(const Module* ast) {
     }
 
     // Functions
-    mod->fn_count = ast->fn_count;
-    mod->functions = ctx_.arena.makeArray<HIRFnDecl*>(ast->fn_count);
+    lifted_lambdas_.clear();
+    lambda_counter_ = 0;
+
+    // First pass: build all declared functions (may produce lifted lambdas)
+    auto* ast_fns = ctx_.arena.makeArray<HIRFnDecl*>(ast->fn_count);
     for (uint32_t i = 0; i < ast->fn_count; ++i) {
-        mod->functions[i] = buildFn(ast->functions[i]);
+        ast_fns[i] = buildFn(ast->functions[i]);
+    }
+
+    // Merge original functions + lifted lambdas
+    uint32_t total_fns = ast->fn_count + static_cast<uint32_t>(lifted_lambdas_.size());
+    mod->fn_count = total_fns;
+    mod->functions = ctx_.arena.makeArray<HIRFnDecl*>(total_fns);
+    for (uint32_t i = 0; i < ast->fn_count; ++i) {
+        mod->functions[i] = ast_fns[i];
+    }
+    for (uint32_t i = 0; i < lifted_lambdas_.size(); ++i) {
+        mod->functions[ast->fn_count + i] = lifted_lambdas_[i];
     }
 
     return mod;
@@ -520,6 +661,8 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
             e->type = TypeTable::U64;
             return e;
         }
+        case Expr::Kind::Lambda:
+            return buildLambda(expr, ctx_type);
     }
     return errorExpr(expr->loc);
 }
@@ -2022,6 +2165,135 @@ HIRStmt* HIRBuilder::buildStmt(const Stmt* stmt) {
     s->loc = stmt->loc;
     s->expr = errorExpr(stmt->loc);
     return s;
+}
+
+// ============================================================================
+// Lambda building (closure conversion — lift to top-level function)
+// ============================================================================
+
+HIRExpr* HIRBuilder::buildLambda(const Expr* expr, std::optional<TypeId> ctx_type) {
+    auto* lam = static_cast<const LambdaExpr*>(expr);
+
+    // Determine param types from context type (Fn type) or explicit annotations
+    std::vector<TypeId> param_types;
+    TypeId return_type = INVALID_TYPE;
+
+    // If context type is an Fn type, use it to infer param/return types
+    const TypeInfo* ctx_fn_info = nullptr;
+    if (ctx_type && *ctx_type < ctx_.types.size() &&
+        ctx_.types.get(*ctx_type).kind == TypeKind::Fn) {
+        ctx_fn_info = &ctx_.types.get(*ctx_type);
+        if (ctx_fn_info->fn.param_count != lam->param_count) {
+            ctx_.diag.error(expr->loc,
+                std::string("lambda has ") + std::to_string(lam->param_count) +
+                " parameters, but context expects " +
+                std::to_string(ctx_fn_info->fn.param_count));
+            return errorExpr(expr->loc);
+        }
+    }
+
+    for (uint32_t i = 0; i < lam->param_count; ++i) {
+        if (!lam->params[i].type.name.empty()) {
+            // Explicit type annotation
+            param_types.push_back(resolveType(lam->params[i].type));
+        } else if (ctx_fn_info && i < ctx_fn_info->fn.param_count) {
+            // Infer from context
+            param_types.push_back(ctx_fn_info->fn.params[i]);
+        } else {
+            ctx_.diag.error(lam->params[i].loc,
+                std::string("cannot infer type for lambda parameter '") +
+                std::string(lam->params[i].name) + "'");
+            param_types.push_back(TypeTable::Error);
+        }
+    }
+
+    if (ctx_fn_info) {
+        return_type = ctx_fn_info->fn.return_type;
+    }
+
+    // Generate a unique name for the lifted function
+    std::string fn_name = "__lambda_" + std::to_string(lambda_counter_++);
+    auto interned_name = ctx_.strings.intern(fn_name);
+
+    // Build the lifted HIRFnDecl
+    auto* hfn = ctx_.arena.make<HIRFnDecl>();
+    hfn->name = interned_name;
+    hfn->param_count = lam->param_count;
+    hfn->params = ctx_.arena.makeArray<HIRParam>(lam->param_count);
+    hfn->is_intrinsic = false;
+    hfn->is_naked = false;
+    hfn->is_interrupt = false;
+    hfn->is_recursive = false;
+    hfn->is_tail_recursive = false;
+    hfn->purity = 0; // will be set by purity pass
+    hfn->loc = expr->loc;
+    hfn->type_param_count = 0;
+    hfn->type_params = nullptr;
+
+    // Save outer scope and set up lambda scope
+    auto saved_locals = local_vars_;
+    auto saved_mutables = mutable_vars_;
+    auto saved_return = current_return_type_;
+    local_vars_.clear();
+    mutable_vars_.clear();
+
+    for (uint32_t i = 0; i < lam->param_count; ++i) {
+        auto param_name = ctx_.strings.intern(lam->params[i].name);
+        hfn->params[i].name = param_name;
+        hfn->params[i].type = param_types[i];
+        hfn->params[i].loc = lam->params[i].loc;
+        local_vars_[param_name] = param_types[i];
+    }
+
+    // Set return type for type checking inside the body
+    current_return_type_ = return_type;
+
+    // Build body
+    hfn->body = buildExpr(lam->body, return_type != INVALID_TYPE ? std::optional<TypeId>(return_type) : std::nullopt);
+
+    // Infer return type from body if not provided
+    if (return_type == INVALID_TYPE && hfn->body) {
+        return_type = hfn->body->type;
+    }
+    hfn->return_type = return_type;
+
+    // Check body type matches return type
+    if (hfn->body && hfn->body->type != TypeTable::Error &&
+        return_type != INVALID_TYPE && return_type != TypeTable::Error &&
+        !typesMatch(hfn->body->type, return_type)) {
+        ctx_.diag.error(expr->loc,
+            std::string("lambda body type ") + ctx_.types.name(hfn->body->type) +
+            " does not match expected return type " + ctx_.types.name(return_type));
+    }
+
+    // Restore outer scope
+    local_vars_ = saved_locals;
+    mutable_vars_ = saved_mutables;
+    current_return_type_ = saved_return;
+
+    // Register the lifted function in fn_table_ so it can be found
+    FnSig sig;
+    sig.name = interned_name;
+    sig.param_types = param_types;
+    sig.return_type = return_type;
+    fn_table_[interned_name] = sig;
+
+    // Add to lifted lambdas list
+    lifted_lambdas_.push_back(hfn);
+
+    // Build the Fn type
+    auto* tid_params = ctx_.arena.makeArray<TypeId>(param_types.size());
+    for (size_t i = 0; i < param_types.size(); ++i) tid_params[i] = param_types[i];
+    TypeId fn_type = ctx_.types.makeFn(
+        std::span<const TypeId>(tid_params, param_types.size()), return_type);
+
+    // Return an FnRef pointing to the lifted function
+    auto* ref = ctx_.arena.make<HIRFnRefExpr>();
+    ref->kind = HIRExpr::Kind::FnRef;
+    ref->loc = expr->loc;
+    ref->fn_name = interned_name;
+    ref->type = fn_type;
+    return ref;
 }
 
 } // namespace kern

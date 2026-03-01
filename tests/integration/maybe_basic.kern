@@ -1,0 +1,13 @@
+union Maybe<T> { Some(T), None }
+
+fn unwrap_or(m: Maybe<i64>, default: i64) -> i64 {
+    match m {
+        Some(v) => v
+        None => default
+    }
+}
+
+fn main() -> i64 {
+    val x: Maybe<i64> = Maybe<i64>::Some(42)
+    unwrap_or(x, 0)
+}

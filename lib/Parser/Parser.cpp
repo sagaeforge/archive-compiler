@@ -1,4 +1,5 @@
 #include "kern/parser/Parser.h"
+#include <cstring>
 #include <sstream>
 #include <iostream>
 
@@ -290,6 +291,19 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
         case Expr::Kind::Alignof: {
             auto* al = static_cast<const AlignofExpr*>(expr);
             out << "Alignof(" << al->target.name << ")\n";
+            break;
+        }
+        case Expr::Kind::Lambda: {
+            auto* lam = static_cast<const LambdaExpr*>(expr);
+            out << "Lambda(";
+            for (uint32_t i = 0; i < lam->param_count; ++i) {
+                if (i > 0) out << ", ";
+                out << lam->params[i].name;
+                if (!lam->params[i].type.name.empty())
+                    out << ": " << lam->params[i].type.name;
+            }
+            out << ")\n";
+            dumpExpr(lam->body, out, ind + 1);
             break;
         }
     }
@@ -759,6 +773,22 @@ UnionDecl* Parser::parseUnionDecl() {
     SourceLocation loc = peek().loc;
     expect(TokenKind::KwUnion, "expected 'union'");
     Token nameTok = expect(TokenKind::Ident, "expected union name");
+
+    // Parse optional type parameters: <T, U, ...>
+    std::vector<TypeParam> type_params;
+    if (check(TokenKind::Lt)) {
+        advance(); // consume '<'
+        while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
+            Token tp = expect(TokenKind::Ident, "expected type parameter name");
+            TypeParam p; p.name = tp.text; p.loc = tp.loc;
+            type_params.push_back(p);
+            if (!check(TokenKind::Gt)) {
+                expect(TokenKind::Comma, "expected ',' or '>' in type parameter list");
+            }
+        }
+        expect(TokenKind::Gt, "expected '>' after type parameters");
+    }
+
     skipNewlines();
     expect(TokenKind::LBrace, "expected '{' after union name");
     skipNewlines();
@@ -788,6 +818,12 @@ UnionDecl* Parser::parseUnionDecl() {
     ud->variants = arena_.makeArray<UnionVariantDecl>(variants.size());
     for (size_t i = 0; i < variants.size(); ++i) {
         ud->variants[i] = variants[i];
+    }
+    ud->type_param_count = static_cast<uint32_t>(type_params.size());
+    if (!type_params.empty()) {
+        ud->type_params = arena_.makeArray<TypeParam>(type_params.size());
+        for (size_t i = 0; i < type_params.size(); ++i)
+            ud->type_params[i] = type_params[i];
     }
     return ud;
 }
@@ -992,6 +1028,29 @@ TypeRef Parser::parseType() {
         ref.name = "Slice";
         ref.loc = tok.loc;
         ref.pointee = elem;  // reuse pointee field for element type
+        return ref;
+    }
+    // Generic type: Name<T1, T2, ...>
+    if (check(TokenKind::Lt)) {
+        advance(); // consume '<'
+        std::vector<TypeRef> args;
+        while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
+            args.push_back(parseType());
+            if (!check(TokenKind::Gt)) {
+                expect(TokenKind::Comma, "expected ',' or '>' in type argument list");
+            }
+        }
+        expect(TokenKind::Gt, "expected '>' after type arguments");
+        TypeRef ref;
+        ref.kind = TypeRef::Kind::Named;
+        ref.name = tok.text;
+        ref.loc = tok.loc;
+        ref.type_arg_count = static_cast<uint32_t>(args.size());
+        if (!args.empty()) {
+            ref.type_args = arena_.makeArray<TypeRef>(args.size());
+            for (size_t i = 0; i < args.size(); ++i)
+                ref.type_args[i] = args[i];
+        }
         return ref;
     }
     return {TypeRef::Kind::Named, tok.text, tok.loc};
@@ -1305,6 +1364,74 @@ Expr* Parser::parsePrimary() {
         if (check(TokenKind::LBrace) && struct_names_.count(tok.text)) {
             return parseStructLit(tok.text, tok.loc);
         }
+        // Generic struct literal or union variant: Name<T1, T2> { ... } or Name<T>::Variant(...)
+        if (check(TokenKind::Lt) && (struct_names_.count(tok.text) || union_names_.count(tok.text))) {
+            // Save state in case this is a comparison, not generic args
+            auto lexer_snap = lexer_.save();
+            Token saved_current = current_;
+            Token saved_previous = previous_;
+            bool saved_has = has_current_;
+
+            // Try to parse type args
+            advance(); // consume '<'
+            std::vector<TypeRef> type_args;
+            bool valid = true;
+            while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
+                // If we see something that can't be a type, bail out
+                if (!check(TokenKind::Ident) && !check(TokenKind::LBracket) &&
+                    !check(TokenKind::KwFn) && !check(TokenKind::Exclaim)) {
+                    valid = false;
+                    break;
+                }
+                type_args.push_back(parseType());
+                if (!check(TokenKind::Gt)) {
+                    if (!match(TokenKind::Comma)) { valid = false; break; }
+                }
+            }
+            if (valid && check(TokenKind::Gt)) {
+                advance(); // consume '>'
+                skipNewlines();
+
+                // Build mangled name helper
+                std::string mangled = std::string(tok.text);
+                for (auto& ta : type_args) {
+                    mangled += "_";
+                    mangled += ta.name;
+                }
+                char* buf = arena_.makeArray<char>(mangled.size());
+                std::memcpy(buf, mangled.data(), mangled.size());
+                std::string_view mangled_sv(buf, mangled.size());
+
+                if (check(TokenKind::LBrace)) {
+                    // Generic struct literal: Name<T> { ... }
+                    return parseStructLit(mangled_sv, tok.loc);
+                }
+                if (check(TokenKind::ColonColon)) {
+                    // Generic union variant: Name<T>::Variant(...)
+                    advance(); // consume ::
+                    Token variant_tok = expect(TokenKind::Ident, "expected variant name after '::'");
+                    auto* uv = arena_.make<UnionVariantExpr>();
+                    uv->kind = Expr::Kind::UnionVariant;
+                    uv->loc = tok.loc;
+                    uv->union_name = mangled_sv;
+                    uv->variant_name = variant_tok.text;
+                    uv->payload = nullptr;
+                    if (match(TokenKind::LParen)) {
+                        if (!check(TokenKind::RParen)) {
+                            uv->payload = parseExpr();
+                        }
+                        expect(TokenKind::RParen, "expected ')' after variant payload");
+                    }
+                    return uv;
+                }
+            }
+
+            // Not a generic construct — restore and fall through
+            lexer_.restore(lexer_snap);
+            current_ = saved_current;
+            previous_ = saved_previous;
+            has_current_ = saved_has;
+        }
         // Union variant: Name::Variant or Name::Variant(payload)
         if (check(TokenKind::ColonColon) && union_names_.count(tok.text)) {
             advance(); // consume ::
@@ -1441,8 +1568,14 @@ Expr* Parser::parsePrimary() {
         return parseLoopExpr();
     }
 
-    // Block expression
+    // Lambda or Block expression
     if (tok.kind == TokenKind::LBrace) {
+        if (isLambdaStart()) {
+            SourceLocation loc = peek().loc;
+            advance(); // consume '{'
+            skipNewlines();
+            return parseLambdaExpr(loc);
+        }
         return parseBlockExpr();
     }
 
@@ -1588,6 +1721,68 @@ Expr* Parser::parseBlockExpr() {
                 lhs = parseCallExpr(identTok.text, identTok.loc);
             } else if (check(TokenKind::LBrace) && struct_names_.count(identTok.text)) {
                 lhs = parseStructLit(identTok.text, identTok.loc);
+            } else if (check(TokenKind::Lt) && (struct_names_.count(identTok.text) || union_names_.count(identTok.text))) {
+                // Generic struct literal or union variant in block context
+                auto lexer_snap = lexer_.save();
+                Token saved_current2 = current_;
+                Token saved_previous2 = previous_;
+                bool saved_has2 = has_current_;
+
+                advance(); // consume '<'
+                std::vector<TypeRef> ta;
+                bool va = true;
+                while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
+                    if (!check(TokenKind::Ident) && !check(TokenKind::LBracket) &&
+                        !check(TokenKind::KwFn) && !check(TokenKind::Exclaim)) {
+                        va = false; break;
+                    }
+                    ta.push_back(parseType());
+                    if (!check(TokenKind::Gt)) {
+                        if (!match(TokenKind::Comma)) { va = false; break; }
+                    }
+                }
+                if (va && check(TokenKind::Gt)) {
+                    advance(); // consume '>'
+                    skipNewlines();
+
+                    std::string mangled = std::string(identTok.text);
+                    for (auto& t : ta) { mangled += "_"; mangled += t.name; }
+                    char* buf = arena_.makeArray<char>(mangled.size());
+                    std::memcpy(buf, mangled.data(), mangled.size());
+                    std::string_view mangled_sv(buf, mangled.size());
+
+                    if (check(TokenKind::LBrace)) {
+                        lhs = parseStructLit(mangled_sv, identTok.loc);
+                        goto block_ident_done;
+                    }
+                    if (check(TokenKind::ColonColon)) {
+                        advance();
+                        Token variant_tok = expect(TokenKind::Ident, "expected variant name after '::'");
+                        auto* uv = arena_.make<UnionVariantExpr>();
+                        uv->kind = Expr::Kind::UnionVariant;
+                        uv->loc = identTok.loc;
+                        uv->union_name = mangled_sv;
+                        uv->variant_name = variant_tok.text;
+                        uv->payload = nullptr;
+                        if (match(TokenKind::LParen)) {
+                            if (!check(TokenKind::RParen)) uv->payload = parseExpr();
+                            expect(TokenKind::RParen, "expected ')' after variant payload");
+                        }
+                        lhs = uv;
+                        goto block_ident_done;
+                    }
+                }
+                // Restore — not a generic construct
+                lexer_.restore(lexer_snap);
+                current_ = saved_current2;
+                previous_ = saved_previous2;
+                has_current_ = saved_has2;
+
+                auto* ident = arena_.make<IdentExpr>();
+                ident->kind = Expr::Kind::Ident;
+                ident->loc = identTok.loc;
+                ident->name = identTok.text;
+                lhs = ident;
             } else if (check(TokenKind::ColonColon) && union_names_.count(identTok.text)) {
                 advance(); // consume ::
                 Token variant_tok = expect(TokenKind::Ident, "expected variant name after '::'");
@@ -1623,6 +1818,7 @@ Expr* Parser::parseBlockExpr() {
                 lhs = ident;
             }
 
+            block_ident_done:
             // Parse dot chains and index access (highest precedence postfix)
             while (check(TokenKind::Dot) || check(TokenKind::LBracket)) {
                 if (check(TokenKind::Dot)) {
@@ -2160,6 +2356,147 @@ Stmt* Parser::parseValDecl() {
         decl->init = init;
         return decl;
     }
+}
+
+// --- Lambda ---
+
+bool Parser::isLambdaStart() {
+    // We are looking at '{'. Detect lambda patterns:
+    //   { => body }              — zero-param lambda
+    //   { x => body }            — untyped single param
+    //   { x: T => body }         — typed single param
+    //   { x: T, y: U => body }   — multiple typed params
+    // Save full parser + lexer state, scan ahead, then restore.
+
+    auto lexer_snap = lexer_.save();
+    Token saved_current = current_;
+    Token saved_previous = previous_;
+    bool saved_has = has_current_;
+
+    // Consume '{'
+    advance();
+    while (check(TokenKind::Newline)) advance();
+
+    bool is_lambda = false;
+
+    if (check(TokenKind::FatArrow)) {
+        is_lambda = true;
+    } else if (check(TokenKind::Ident)) {
+        advance();
+        while (check(TokenKind::Newline)) advance();
+        if (check(TokenKind::FatArrow)) {
+            is_lambda = true;
+        } else if (check(TokenKind::Colon)) {
+            // { x: T ... => } pattern — scan forward for '=>' before '}'
+            int depth = 0;
+            while (!check(TokenKind::Eof)) {
+                if (check(TokenKind::FatArrow) && depth == 0) {
+                    is_lambda = true;
+                    break;
+                }
+                if (check(TokenKind::RBrace)) break;
+                if (check(TokenKind::LBrace)) break; // nested block, not lambda
+                if (check(TokenKind::LParen)) depth++;
+                if (check(TokenKind::RParen)) depth--;
+                advance();
+            }
+        }
+    }
+
+    // Restore state
+    lexer_.restore(lexer_snap);
+    current_ = saved_current;
+    previous_ = saved_previous;
+    has_current_ = saved_has;
+
+    return is_lambda;
+}
+
+Expr* Parser::parseLambdaExpr(SourceLocation loc) {
+    // Already consumed '{' and skipped newlines. Parse: params => body }
+
+    std::vector<Param> params;
+
+    // Zero-param lambda: { => body }
+    if (!check(TokenKind::FatArrow)) {
+        // Parse params: x: T, y: U, ... =>
+        do {
+            Param p;
+            Token name = expect(TokenKind::Ident, "expected parameter name in lambda");
+            p.name = name.text;
+            p.loc = name.loc;
+
+            if (match(TokenKind::Colon)) {
+                p.type = parseType();
+            } else {
+                // Untyped param — type will be inferred from context
+                p.type = {};
+                p.type.kind = TypeRef::Kind::Named;
+                p.type.name = "";
+                p.type.loc = name.loc;
+            }
+            params.push_back(p);
+            skipNewlines();
+        } while (match(TokenKind::Comma));
+        skipNewlines();
+    }
+
+    expect(TokenKind::FatArrow, "expected '=>' in lambda expression");
+    skipNewlines();
+
+    // Parse body — can be a single expression or multiple stmts + result
+    // For simplicity: parse as a sequence of stmts ending with an expression
+    std::vector<Stmt*> stmts;
+    Expr* result = nullptr;
+
+    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        if (check(TokenKind::KwVal) || check(TokenKind::KwVar)) {
+            stmts.push_back(parseValDecl());
+        } else {
+            Expr* expr = parseExpr();
+            // Check if this is followed by newline/semicolon/rbrace
+            skipNewlines();
+            if (check(TokenKind::RBrace) || check(TokenKind::Eof)) {
+                result = expr;
+                break;
+            }
+            // Treat as statement
+            auto* es = arena_.make<ExprStmt>();
+            es->kind = Stmt::Kind::ExprStmt;
+            es->loc = expr->loc;
+            es->expr = expr;
+            stmts.push_back(es);
+        }
+        // Skip semicolons/newlines between statements
+        while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+    }
+
+    expect(TokenKind::RBrace, "expected '}' at end of lambda");
+
+    // Build lambda body as a block
+    auto* body = arena_.make<BlockExpr>();
+    body->kind = Expr::Kind::Block;
+    body->loc = loc;
+    body->stmt_count = static_cast<uint32_t>(stmts.size());
+    body->stmts = arena_.makeArray<Stmt*>(stmts.size());
+    for (size_t i = 0; i < stmts.size(); ++i) body->stmts[i] = stmts[i];
+    body->result = result;
+
+    auto* lambda = arena_.make<LambdaExpr>();
+    lambda->kind = Expr::Kind::Lambda;
+    lambda->loc = loc;
+    lambda->param_count = static_cast<uint32_t>(params.size());
+    lambda->params = arena_.makeArray<Param>(params.size());
+    for (size_t i = 0; i < params.size(); ++i) lambda->params[i] = params[i];
+    lambda->body = body;
+
+    // Return type is inferred (empty)
+    lambda->return_type = {};
+    lambda->return_type.kind = TypeRef::Kind::Named;
+    lambda->return_type.name = "";
+    lambda->return_type.loc = loc;
+
+    return lambda;
 }
 
 } // namespace kern

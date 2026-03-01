@@ -415,6 +415,9 @@ void Formatter::formatExpr(const Expr* expr) {
             out_ << ")";
             break;
         }
+
+        case Expr::Kind::Lambda:
+            break;  // v2 only — not formatted in v1 pipeline
     }
 }
 

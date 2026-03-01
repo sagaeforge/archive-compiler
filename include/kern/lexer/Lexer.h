@@ -12,6 +12,25 @@ public:
     Token nextToken();
     const std::string_view& source() const { return source_; }
 
+    // Save/restore for parser lookahead
+    struct Snapshot {
+        const char* start;
+        const char* current;
+        uint32_t line;
+        uint32_t col;
+        uint32_t token_start_col;
+    };
+    Snapshot save() const {
+        return {start_, current_, line_, col_, token_start_col_};
+    }
+    void restore(const Snapshot& s) {
+        start_ = s.start;
+        current_ = s.current;
+        line_ = s.line;
+        col_ = s.col;
+        token_start_col_ = s.token_start_col;
+    }
+
 private:
     char peek() const;
     char peekNext() const;

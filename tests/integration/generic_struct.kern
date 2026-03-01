@@ -1,0 +1,10 @@
+struct Pair<T> { first: T, second: T }
+
+fn sum_pair(p: Pair<i64>) -> i64 {
+    p.first + p.second
+}
+
+fn main() -> i64 {
+    val p: Pair<i64> = Pair<i64> { first: 20, second: 22 }
+    sum_pair(p)
+}

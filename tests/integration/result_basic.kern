@@ -1,0 +1,17 @@
+union Result<T, E> { Ok(T), Err(E) }
+
+fn safe_div(a: i64, b: i64) -> Result<i64, i64> {
+    if b == 0 {
+        Result<i64, i64>::Err(0)
+    } else {
+        Result<i64, i64>::Ok(a / b)
+    }
+}
+
+fn main() -> i64 {
+    val r: Result<i64, i64> = safe_div(84, 2)
+    match r {
+        Ok(v) => v
+        Err(e) => e
+    }
+}

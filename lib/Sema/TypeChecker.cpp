@@ -1261,6 +1261,10 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
             diag_.error(expr->loc, "alignof not yet implemented");
             result = Type::Error;
             break;
+        case Expr::Kind::Lambda:
+            diag_.error(expr->loc, "lambda not yet implemented in v1 pipeline");
+            result = Type::Error;
+            break;
     }
 
     expr_types_[expr] = result;

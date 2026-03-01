@@ -24,6 +24,9 @@ struct TypeRef {
     TypeRef* fn_params = nullptr;      // arena array of param types
     uint32_t fn_param_count = 0;
     TypeRef* fn_return = nullptr;      // return type
+    // Generic type arguments: Pair<i64>, Result<T, E>
+    TypeRef* type_args = nullptr;
+    uint32_t type_arg_count = 0;
 };
 
 // --- Parameter ---
@@ -122,6 +125,8 @@ struct UnionDecl {
     UnionVariantDecl* variants;
     uint32_t variant_count;
     SourceLocation loc;
+    TypeParam* type_params = nullptr;
+    uint32_t type_param_count = 0;
 };
 
 // --- Type alias ---
@@ -155,7 +160,8 @@ struct Expr {
         EnumAccess, UnionVariant,
         Loop, InlineAsm,
         ArrayLit, IndexAccess,
-        Sizeof, Alignof
+        Sizeof, Alignof,
+        Lambda
     };
     Kind kind;
     SourceLocation loc;
@@ -292,6 +298,13 @@ struct SizeofExpr : Expr {
 
 struct AlignofExpr : Expr {
     TypeRef target;
+};
+
+struct LambdaExpr : Expr {
+    Param* params;
+    uint32_t param_count;
+    TypeRef return_type;          // optional, can be Named with empty name if inferred
+    Expr* body;
 };
 
 struct LoopBinding {

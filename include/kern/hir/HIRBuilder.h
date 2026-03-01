@@ -54,6 +54,7 @@ private:
     HIRExpr* buildArrayLit(const Expr* expr);
     HIRExpr* buildIndexAccess(const Expr* expr);
     HIRExpr* buildInlineAsm(const Expr* expr);
+    HIRExpr* buildLambda(const Expr* expr, std::optional<TypeId> ctx_type);
 
     // Statement building
     HIRStmt* buildStmt(const Stmt* stmt);
@@ -87,6 +88,14 @@ private:
 
     // Type name → TypeId for struct/enum/union
     std::unordered_map<std::string_view, TypeId> named_types_;
+
+    // Generic struct/union templates (for on-demand monomorphization)
+    std::unordered_map<std::string_view, const StructDecl*> generic_structs_;
+    std::unordered_map<std::string_view, const UnionDecl*> generic_unions_;
+
+    // Lambda lifting: accumulated lifted functions to add to module
+    std::vector<HIRFnDecl*> lifted_lambdas_;
+    uint32_t lambda_counter_ = 0;
 };
 
 } // namespace kern
