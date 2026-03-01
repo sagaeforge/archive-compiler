@@ -417,6 +417,13 @@ std::unordered_map<std::string_view, PurityResult> PurityChecker::analyze(Module
         PurityResult pr;
         FnDecl* fn = fn_map_[fn_name];
 
+        // Intrinsic functions are classified as ImpureIo
+        if (fn->is_intrinsic) {
+            pr.purity = Purity::ImpureIo;
+            results[fn_name] = pr;
+            continue;
+        }
+
         // Check for var usage
         if (bodyUsesVar(fn)) {
             pr.uses_var = true;

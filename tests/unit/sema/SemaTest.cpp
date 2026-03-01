@@ -672,3 +672,49 @@ TEST(SemaTest, ReturnLiteralCoerce) {
         "fn f() -> i32 { return 42 }"
     ));
 }
+
+// ===== M4a: Pipe type check =====
+
+TEST(SemaTest, PipeTypeCheck) {
+    EXPECT_TRUE(checkSource(
+        "fn double(x: i64) -> i64 { x * 2 }\n"
+        "fn main() -> i64 { 21 |> double }"
+    ));
+}
+
+TEST(SemaTest, PipeTypeError) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn f(x: bool) -> bool { x }\n"
+        "fn main() -> bool { 42 |> f }",
+        &errors
+    ));
+    EXPECT_NE(errors.find("mismatch"), std::string::npos);
+}
+
+// ===== M4a: Intrinsic type check =====
+
+TEST(SemaTest, IntrinsicTypeCheck) {
+    EXPECT_TRUE(checkSource(
+        "fn halt() -> Unit = intrinsic\n"
+        "fn main() -> i64 { 42 }"
+    ));
+}
+
+TEST(SemaTest, IntrinsicReturnType) {
+    // Calling an intrinsic should use its declared return type
+    EXPECT_TRUE(checkSource(
+        "fn read_port(port: u16) -> u8 = intrinsic\n"
+        "fn main() -> u8 { read_port(0) }"
+    ));
+}
+
+TEST(SemaTest, IntrinsicWrongArgs) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn halt() -> Unit = intrinsic\n"
+        "fn main() -> Unit { halt(42) }",
+        &errors
+    ));
+    EXPECT_NE(errors.find("expects"), std::string::npos);
+}

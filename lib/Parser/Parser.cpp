@@ -118,8 +118,12 @@ void dumpAST(const Module* mod, std::ostream& out, int /*ind*/) {
             if (j > 0) out << ", ";
             out << fn->params[j].name << ": " << fn->params[j].type.name;
         }
-        out << ") -> " << fn->return_type.name << ")\n";
-        dumpExpr(fn->body, out, 1);
+        out << ") -> " << fn->return_type.name;
+        if (fn->is_intrinsic) out << " [intrinsic]";
+        out << ")\n";
+        if (fn->body) {
+            dumpExpr(fn->body, out, 1);
+        }
     }
 }
 
@@ -219,7 +223,22 @@ FnDecl* Parser::parseFnDecl() {
     TypeRef ret = parseType();
 
     skipNewlines();
-    Expr* body = parseBlockExpr();
+
+    // Check for `= intrinsic`
+    bool is_intrinsic = false;
+    Expr* body = nullptr;
+    if (check(TokenKind::Eq)) {
+        advance();
+        Token kw = expect(TokenKind::Ident, "expected 'intrinsic' after '='");
+        if (kw.text == "intrinsic") {
+            is_intrinsic = true;
+        } else {
+            diag_.error(kw.loc, std::string("expected 'intrinsic', got '") +
+                        std::string(kw.text) + "'");
+        }
+    } else {
+        body = parseBlockExpr();
+    }
 
     auto* fn = arena_.make<FnDecl>();
     fn->name = nameTok.text;
@@ -231,6 +250,7 @@ FnDecl* Parser::parseFnDecl() {
     fn->return_type = ret;
     fn->body = body;
     fn->loc = loc;
+    fn->is_intrinsic = is_intrinsic;
     return fn;
 }
 
@@ -250,16 +270,17 @@ TypeRef Parser::parseType() {
 
 Parser::InfixBP Parser::infixBP(TokenKind kind) {
     switch (kind) {
-        case TokenKind::KwOr:    return {2, 3};
-        case TokenKind::KwAnd:   return {4, 5};
+        case TokenKind::Pipe:    return {1, 2};
+        case TokenKind::KwOr:    return {3, 4};
+        case TokenKind::KwAnd:   return {5, 6};
         case TokenKind::EqEq:
-        case TokenKind::NotEq:   return {6, 7};
+        case TokenKind::NotEq:   return {7, 8};
         case TokenKind::Lt:
         case TokenKind::LtEq:
         case TokenKind::Gt:
-        case TokenKind::GtEq:    return {8, 9};
+        case TokenKind::GtEq:    return {9, 10};
         case TokenKind::Plus:
-        case TokenKind::Minus:   return {10, 11};
+        case TokenKind::Minus:   return {11, 12};
         case TokenKind::Star:
         case TokenKind::Slash:   return {20, 21};
         default:                 return {0, 0};
@@ -303,6 +324,42 @@ Expr* Parser::parseExprInfix(Expr* lhs, uint8_t minBP) {
 
         Token opTok = advance();
         skipNewlines();
+
+        // Pipe operator: desugar to CallExpr
+        if (op == TokenKind::Pipe) {
+            Expr* rhs = parsePrimary();
+            if (rhs->kind == Expr::Kind::Ident) {
+                // a |> f → CallExpr(f, [a])
+                auto* ident = static_cast<IdentExpr*>(rhs);
+                // Check if followed by '(' — it was parsed as ident, but user wrote f(b,c)
+                // parsePrimary already consumed ident and would have parsed call if '(' followed
+                auto* call = arena_.make<CallExpr>();
+                call->kind = Expr::Kind::Call;
+                call->loc = ident->loc;
+                call->callee = ident->name;
+                call->arg_count = 1;
+                call->args = arena_.makeArray<Expr*>(1);
+                call->args[0] = lhs;
+                lhs = call;
+            } else if (rhs->kind == Expr::Kind::Call) {
+                // a |> f(b, c) → CallExpr(f, [a, b, c])
+                auto* orig_call = static_cast<CallExpr*>(rhs);
+                uint32_t new_count = orig_call->arg_count + 1;
+                auto** new_args = arena_.makeArray<Expr*>(new_count);
+                new_args[0] = lhs;
+                for (uint32_t i = 0; i < orig_call->arg_count; ++i) {
+                    new_args[i + 1] = orig_call->args[i];
+                }
+                orig_call->args = new_args;
+                orig_call->arg_count = new_count;
+                lhs = orig_call;
+            } else {
+                diag_.error(opTok.loc, "expected function name or call after '|>'");
+                lhs = rhs;
+            }
+            continue;
+        }
+
         Expr* rhs = parseExpr(rBP);
 
         auto* bin = arena_.make<BinOpExpr>();

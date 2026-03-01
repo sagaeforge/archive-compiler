@@ -277,3 +277,24 @@ TEST(PurityTest, ResultCountMatchesFnCount) {
     );
     EXPECT_EQ(r.results.size(), 3u);
 }
+
+// ===== M4a: Intrinsic purity =====
+
+TEST(PurityTest, IntrinsicPurity) {
+    auto r = analyzePurity(
+        "fn halt() -> Unit = intrinsic"
+    );
+    auto it = r.results.find("halt");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_EQ(it->second.purity, Purity::ImpureIo);
+}
+
+TEST(PurityTest, IntrinsicPropagation) {
+    auto r = analyzePurity(
+        "fn write(port: u16, value: u8) -> Unit = intrinsic\n"
+        "fn do_write() -> Unit { write(0, 0) }"
+    );
+    auto it = r.results.find("do_write");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_EQ(it->second.purity, Purity::ImpureIo);
+}

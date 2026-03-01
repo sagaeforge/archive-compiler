@@ -615,3 +615,156 @@ TEST(ParserTest, ASTDumpAssign) {
     dumpAST(r.mod, out);
     EXPECT_NE(out.str().find("Assign(x)"), std::string::npos);
 }
+
+// ===== M4a: Pipe operator tests =====
+
+TEST(ParserTest, PipeSimple) {
+    auto r = parse(
+        "fn double(x: i64) -> i64 { x * 2 }\n"
+        "fn main() -> i64 { 21 |> double }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[1]->body);
+    ASSERT_EQ(body->result->kind, Expr::Kind::Call);
+    auto* call = static_cast<CallExpr*>(body->result);
+    EXPECT_EQ(call->callee, "double");
+    EXPECT_EQ(call->arg_count, 1u);
+    EXPECT_EQ(call->args[0]->kind, Expr::Kind::IntLit);
+    EXPECT_EQ(static_cast<IntLitExpr*>(call->args[0])->value, 21);
+}
+
+TEST(ParserTest, PipeWithArgs) {
+    auto r = parse(
+        "fn add(a: i64, b: i64) -> i64 { a + b }\n"
+        "fn main() -> i64 { 10 |> add(32) }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[1]->body);
+    ASSERT_EQ(body->result->kind, Expr::Kind::Call);
+    auto* call = static_cast<CallExpr*>(body->result);
+    EXPECT_EQ(call->callee, "add");
+    EXPECT_EQ(call->arg_count, 2u);
+    EXPECT_EQ(static_cast<IntLitExpr*>(call->args[0])->value, 10);
+    EXPECT_EQ(static_cast<IntLitExpr*>(call->args[1])->value, 32);
+}
+
+TEST(ParserTest, PipeChain) {
+    auto r = parse(
+        "fn f(x: i64) -> i64 { x }\n"
+        "fn g(x: i64) -> i64 { x }\n"
+        "fn main() -> i64 { 1 |> f |> g }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[2]->body);
+    ASSERT_EQ(body->result->kind, Expr::Kind::Call);
+    auto* outer = static_cast<CallExpr*>(body->result);
+    EXPECT_EQ(outer->callee, "g");
+    EXPECT_EQ(outer->arg_count, 1u);
+    ASSERT_EQ(outer->args[0]->kind, Expr::Kind::Call);
+    auto* inner = static_cast<CallExpr*>(outer->args[0]);
+    EXPECT_EQ(inner->callee, "f");
+}
+
+TEST(ParserTest, PipeChainWithArgs) {
+    auto r = parse(
+        "fn add(a: i64, b: i64) -> i64 { a + b }\n"
+        "fn mul(a: i64, b: i64) -> i64 { a * b }\n"
+        "fn main() -> i64 { 10 |> add(11) |> mul(2) }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[2]->body);
+    auto* outer = static_cast<CallExpr*>(body->result);
+    EXPECT_EQ(outer->callee, "mul");
+    EXPECT_EQ(outer->arg_count, 2u);
+    auto* inner = static_cast<CallExpr*>(outer->args[0]);
+    EXPECT_EQ(inner->callee, "add");
+    EXPECT_EQ(inner->arg_count, 2u);
+}
+
+TEST(ParserTest, PipePrecedence) {
+    // Pipe has lower precedence than arithmetic
+    auto r = parse(
+        "fn f(x: i64) -> i64 { x }\n"
+        "fn main() -> i64 { 1 + 2 |> f }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[1]->body);
+    // (1 + 2) |> f → f(1 + 2)
+    ASSERT_EQ(body->result->kind, Expr::Kind::Call);
+    auto* call = static_cast<CallExpr*>(body->result);
+    EXPECT_EQ(call->callee, "f");
+    EXPECT_EQ(call->args[0]->kind, Expr::Kind::BinOp);
+}
+
+TEST(ParserTest, PipeMultipleArgs) {
+    auto r = parse(
+        "fn add3(a: i64, b: i64, c: i64) -> i64 { a + b + c }\n"
+        "fn main() -> i64 { 10 |> add3(20, 30) }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[1]->body);
+    auto* call = static_cast<CallExpr*>(body->result);
+    EXPECT_EQ(call->callee, "add3");
+    EXPECT_EQ(call->arg_count, 3u);
+}
+
+TEST(ParserTest, PipeInBlock) {
+    auto r = parse(
+        "fn f(x: i64) -> i64 { x }\n"
+        "fn main() -> i64 {\n"
+        "    val x: i64 = 21 |> f\n"
+        "    x\n"
+        "}");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[1]->body);
+    EXPECT_EQ(body->stmt_count, 1u);
+    auto* decl = static_cast<ValDeclStmt*>(body->stmts[0]);
+    EXPECT_EQ(decl->init->kind, Expr::Kind::Call);
+}
+
+TEST(ParserTest, PipeError) {
+    auto r = parse("fn main() -> i64 { 42 |> 99 }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected function name or call after '|>'"), std::string::npos);
+}
+
+// ===== M4a: Intrinsic function tests =====
+
+TEST(ParserTest, IntrinsicDecl) {
+    auto r = parse("fn halt() -> Unit = intrinsic");
+    ASSERT_FALSE(r.diag.hasErrors());
+    ASSERT_EQ(r.mod->fn_count, 1u);
+    EXPECT_TRUE(r.mod->functions[0]->is_intrinsic);
+    EXPECT_EQ(r.mod->functions[0]->body, nullptr);
+    EXPECT_EQ(r.mod->functions[0]->name, "halt");
+}
+
+TEST(ParserTest, IntrinsicWithParams) {
+    auto r = parse("fn write(port: u16, value: u8) -> Unit = intrinsic");
+    ASSERT_FALSE(r.diag.hasErrors());
+    ASSERT_EQ(r.mod->fn_count, 1u);
+    EXPECT_TRUE(r.mod->functions[0]->is_intrinsic);
+    EXPECT_EQ(r.mod->functions[0]->param_count, 2u);
+}
+
+TEST(ParserTest, IntrinsicAST) {
+    auto r = parse("fn halt() -> Unit = intrinsic");
+    ASSERT_FALSE(r.diag.hasErrors());
+    std::ostringstream out;
+    dumpAST(r.mod, out);
+    EXPECT_NE(out.str().find("[intrinsic]"), std::string::npos);
+}
+
+TEST(ParserTest, IntrinsicAndNormalFn) {
+    auto r = parse(
+        "fn halt() -> Unit = intrinsic\n"
+        "fn main() -> i64 { 42 }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    ASSERT_EQ(r.mod->fn_count, 2u);
+    EXPECT_TRUE(r.mod->functions[0]->is_intrinsic);
+    EXPECT_FALSE(r.mod->functions[1]->is_intrinsic);
+}
+
+TEST(ParserTest, IntrinsicError) {
+    auto r = parse("fn halt() -> Unit = foobar");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected 'intrinsic'"), std::string::npos);
+}

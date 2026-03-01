@@ -140,6 +140,11 @@ Type TypeChecker::checkFn(FnDecl* fn) {
     mutable_vars_.clear();
     current_return_type_ = resolveType(fn->return_type);
 
+    // Intrinsic functions: signature only, no body to check
+    if (fn->is_intrinsic) {
+        return current_return_type_;
+    }
+
     // Register parameters
     for (uint32_t i = 0; i < fn->param_count; ++i) {
         Type pt = resolveType(fn->params[i].type);

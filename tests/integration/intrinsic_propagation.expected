@@ -1,0 +1,2 @@
+stdout:do_write: impure(io)
+args:--dump-purity

@@ -754,3 +754,54 @@ TEST(IRTest, DumpIRShowsTail) {
     std::string dump = out.str();
     EXPECT_NE(dump.find("tail call"), std::string::npos);
 }
+
+// ===== M4a: Pipe IR =====
+
+TEST(IRTest, PipeIR) {
+    // Pipe desugars to call — IR should be identical to direct call
+    auto r1 = buildIR(
+        "fn double(x: i64) -> i64 { x * 2 }\n"
+        "fn main() -> i64 { 21 |> double }");
+    auto r2 = buildIR(
+        "fn double(x: i64) -> i64 { x * 2 }\n"
+        "fn main() -> i64 { double(21) }");
+    // Both should have a call to "double" in main
+    bool r1_has_call = false, r2_has_call = false;
+    for (auto& fn : r1.ir.functions) {
+        if (fn.name == "main") r1_has_call = hasOpcode(fn, IROpcode::Call);
+    }
+    for (auto& fn : r2.ir.functions) {
+        if (fn.name == "main") r2_has_call = hasOpcode(fn, IROpcode::Call);
+    }
+    EXPECT_TRUE(r1_has_call);
+    EXPECT_TRUE(r2_has_call);
+}
+
+// ===== M4a: Intrinsic IR =====
+
+TEST(IRTest, IntrinsicSkipped) {
+    auto r = buildIR(
+        "fn halt() -> Unit = intrinsic\n"
+        "fn main() -> i64 { 42 }");
+    // Should only have main, not halt
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_EQ(r.ir.functions[0].name, "main");
+}
+
+TEST(IRTest, IntrinsicCallIR) {
+    auto r = buildIR(
+        "fn read_port(port: i64) -> i64 = intrinsic\n"
+        "fn main() -> i64 { read_port(42) }");
+    // Main should have a Call instruction to read_port
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::Call));
+    bool found = false;
+    for (auto& block : r.ir.functions[0].blocks) {
+        for (auto& instr : block.instrs) {
+            if (instr.op == IROpcode::Call && instr.callee_name == "read_port") {
+                found = true;
+            }
+        }
+    }
+    EXPECT_TRUE(found);
+}

@@ -149,6 +149,7 @@ IRModule IRBuilder::build(Module* mod, const TypeChecker& tc) {
     tc_ = &tc;
     module_.functions.clear();
     for (uint32_t i = 0; i < mod->fn_count; ++i) {
+        if (mod->functions[i]->is_intrinsic) continue;
         buildFunction(mod->functions[i]);
     }
     return std::move(module_);

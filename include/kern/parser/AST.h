@@ -131,8 +131,9 @@ struct FnDecl {
     Param* params;
     uint32_t param_count;
     TypeRef return_type;
-    Expr* body; // BlockExpr
+    Expr* body; // BlockExpr (nullptr for intrinsics)
     SourceLocation loc;
+    bool is_intrinsic = false;
 };
 
 // --- Module ---
