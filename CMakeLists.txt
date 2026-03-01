@@ -33,6 +33,8 @@ add_subdirectory(tools/kernc)
 add_subdirectory(tools/kern-fmt)
 add_subdirectory(tools/kern-lsp)
 add_subdirectory(tools/kern-pkg)
+add_subdirectory(tools/kern-dbg)
+add_subdirectory(tools/kern-repl)
 
 # Testing
 option(KERN_BUILD_TESTS "Build tests" ON)
