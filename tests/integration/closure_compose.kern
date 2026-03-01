@@ -1,0 +1,11 @@
+fn add5(x: i64) -> i64 { x + 5 }
+fn mul2(x: i64) -> i64 { x * 2 }
+
+fn compose_add5_mul2() -> fn(i64) -> i64 {
+    { x: i64 => add5(mul2(x)) }
+}
+
+fn main() -> i64 {
+    val f: fn(i64) -> i64 = compose_add5_mul2()
+    f(10)
+}

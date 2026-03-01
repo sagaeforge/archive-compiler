@@ -1539,6 +1539,48 @@ HIRExpr* HIRBuilder::buildCall(const Expr* expr) {
         }
     }
 
+    // Inside a lambda: if the callee is a captured Fn-typed variable, register
+    // the capture and treat it as an indirect call (function pointer variable).
+    if (in_lambda_) {
+        auto outer_it = outer_locals_.find(call->callee);
+        if (outer_it != outer_locals_.end()) {
+            TypeId outer_type = outer_it->second;
+            if (outer_type < ctx_.types.size() && ctx_.types.get(outer_type).kind == TypeKind::Fn) {
+                auto interned = ctx_.strings.intern(call->callee);
+                // Record capture
+                bool already = false;
+                for (auto& cap : current_captures_) {
+                    if (cap.name == interned) { already = true; break; }
+                }
+                if (!already) {
+                    current_captures_.push_back({interned, outer_type,
+                        outer_mutables_.count(call->callee) > 0});
+                }
+                local_vars_[interned] = outer_type;
+                // Rebuild as indirect call via the captured variable
+                auto& ti = ctx_.types.get(outer_type);
+                auto* e = ctx_.arena.make<HIRCallIndirectExpr>();
+                e->kind = HIRExpr::Kind::CallIndirect;
+                e->loc = expr->loc;
+                e->is_tail_call = false;
+                auto* callee_expr = ctx_.arena.make<HIRIdentExpr>();
+                callee_expr->kind = HIRExpr::Kind::Ident;
+                callee_expr->loc = expr->loc;
+                callee_expr->name = interned;
+                callee_expr->type = outer_type;
+                e->callee = callee_expr;
+                e->arg_count = call->arg_count;
+                e->args = ctx_.arena.makeArray<HIRExpr*>(call->arg_count);
+                for (uint32_t i = 0; i < call->arg_count; ++i) {
+                    TypeId expected = (i < ti.fn.param_count) ? ti.fn.params[i] : INVALID_TYPE;
+                    e->args[i] = buildExpr(call->args[i], expected);
+                }
+                e->type = ti.fn.return_type;
+                return e;
+            }
+        }
+    }
+
     // Direct call
     auto* e = ctx_.arena.make<HIRCallExpr>();
     e->kind = HIRExpr::Kind::Call;
