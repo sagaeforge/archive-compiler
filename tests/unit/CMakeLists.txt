@@ -18,8 +18,10 @@ add_executable(kern_tests
     backend/EmitterTest.cpp
     debug/DebugInfoTest.cpp
     ide/IDETest.cpp
+    fmt/FormatterTest.cpp
 )
 target_link_libraries(kern_tests
+    kern_fmt
     kern_ide
     kern_debug
     kern_backend
