@@ -107,4 +107,85 @@ BuildPlan BuildPlan::create(const Manifest& manifest) {
     return plan;
 }
 
+// ============================================================================
+// Dependency Resolution (topological sort with cycle detection)
+// ============================================================================
+
+static std::string joinPath(const std::string& base, const std::string& rel) {
+    if (rel.empty()) return base;
+    if (!rel.empty() && rel[0] == '/') return rel;  // absolute
+    if (base.empty()) return rel;
+    if (base.back() == '/') return base + rel;
+    return base + "/" + rel;
+}
+
+bool DependencyResolver::visit(
+    const std::string& name, const std::string& dep_path,
+    const std::string& base_dir,
+    std::unordered_map<std::string, ResolvedDep>& resolved,
+    std::unordered_set<std::string>& visiting,
+    std::unordered_set<std::string>& visited,
+    std::vector<ResolvedDep>& order,
+    std::string& error)
+{
+    if (visited.count(name)) return true;   // already resolved
+    if (visiting.count(name)) {
+        error = "circular dependency detected: " + name;
+        return false;
+    }
+    visiting.insert(name);
+
+    // Resolve the dep's manifest path
+    std::string full_path = joinPath(base_dir, dep_path);
+    std::string manifest_path = full_path + "/kern.toml";
+
+    Manifest dep_manifest;
+    try {
+        dep_manifest = Manifest::fromFile(manifest_path);
+    } catch (const std::exception& e) {
+        error = "failed to load dependency '" + name + "': " + e.what();
+        return false;
+    }
+
+    // Recursively resolve this dep's dependencies
+    for (const auto& sub_dep : dep_manifest.dependencies) {
+        if (!visit(sub_dep.name, sub_dep.path, full_path,
+                   resolved, visiting, visited, order, error)) {
+            return false;
+        }
+    }
+
+    visiting.erase(name);
+    visited.insert(name);
+
+    ResolvedDep rd;
+    rd.name = name;
+    rd.path = full_path;
+    rd.manifest = dep_manifest;
+    order.push_back(rd);
+    resolved[name] = rd;
+    return true;
+}
+
+DependencyResolver::Result DependencyResolver::resolve(
+    const Manifest& root, const std::string& base_dir)
+{
+    Result result;
+    result.success = true;
+
+    std::unordered_map<std::string, ResolvedDep> resolved;
+    std::unordered_set<std::string> visiting;
+    std::unordered_set<std::string> visited;
+
+    for (const auto& dep : root.dependencies) {
+        if (!visit(dep.name, dep.path, base_dir,
+                   resolved, visiting, visited, result.resolved, result.error)) {
+            result.success = false;
+            return result;
+        }
+    }
+
+    return result;
+}
+
 } // namespace kern
