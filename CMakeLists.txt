@@ -23,6 +23,7 @@ add_subdirectory(lib/HIR)
 add_subdirectory(lib/LIR)
 add_subdirectory(lib/Backend)
 add_subdirectory(lib/Debug)
+add_subdirectory(lib/IDE)
 
 # Compiler driver
 add_subdirectory(tools/kernc)

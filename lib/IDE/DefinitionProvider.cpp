@@ -1,0 +1,94 @@
+#include "kern/ide/DefinitionProvider.h"
+#include "kern/ide/IDEContext.h"
+#include "kern/hir/HIR.h"
+
+namespace kern {
+
+// Reuse the same identifier extraction logic.
+static std::string_view findIdentAt(std::string_view content,
+                                     uint32_t line, uint32_t column) {
+    uint32_t cur_line = 1;
+    size_t pos = 0;
+
+    while (cur_line < line && pos < content.size()) {
+        if (content[pos] == '\n') cur_line++;
+        pos++;
+    }
+
+    size_t line_start = pos;
+    size_t cursor = line_start + (column > 0 ? column - 1 : 0);
+    if (cursor >= content.size()) return {};
+
+    size_t start = cursor;
+    while (start > line_start) {
+        char c = content[start - 1];
+        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') {
+            start--;
+        } else {
+            break;
+        }
+    }
+
+    size_t end = cursor;
+    while (end < content.size()) {
+        char c = content[end];
+        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') {
+            end++;
+        } else {
+            break;
+        }
+    }
+
+    if (start == end) return {};
+    return content.substr(start, end - start);
+}
+
+std::optional<DefinitionResult> DefinitionProvider::findDefinition(
+    IDEContext& ctx, std::string_view path,
+    uint32_t line, uint32_t column) {
+
+    auto content = ctx.getContent(path);
+    if (content.empty()) return std::nullopt;
+
+    auto ident = findIdentAt(content, line, column);
+    if (ident.empty()) return std::nullopt;
+
+    const HIRModule* hir = ctx.getHIR(path);
+    if (!hir) return std::nullopt;
+
+    // Functions
+    for (uint32_t i = 0; i < hir->fn_count; ++i) {
+        auto* fn = hir->functions[i];
+        if (fn->name == ident) {
+            return DefinitionResult{fn->loc, fn->name};
+        }
+    }
+
+    // Structs
+    for (uint32_t i = 0; i < hir->struct_count; ++i) {
+        auto* s = hir->structs[i];
+        if (s->name == ident) {
+            return DefinitionResult{s->loc, s->name};
+        }
+    }
+
+    // Enums
+    for (uint32_t i = 0; i < hir->enum_count; ++i) {
+        auto* e = hir->enums[i];
+        if (e->name == ident) {
+            return DefinitionResult{e->loc, e->name};
+        }
+    }
+
+    // Unions
+    for (uint32_t i = 0; i < hir->union_count; ++i) {
+        auto* u = hir->unions[i];
+        if (u->name == ident) {
+            return DefinitionResult{u->loc, u->name};
+        }
+    }
+
+    return std::nullopt;
+}
+
+} // namespace kern
