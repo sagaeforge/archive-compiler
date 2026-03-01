@@ -5,6 +5,7 @@
 #include "kern/ide/DefinitionProvider.h"
 #include "kern/ide/ReferencesProvider.h"
 #include "kern/ide/SemanticTokens.h"
+#include "kern/ide/DiagnosticProvider.h"
 #include "kern/support/CompilationContext.h"
 
 using namespace kern;
@@ -484,4 +485,49 @@ TEST(SemanticTokensTest, TypeNameMapping) {
     EXPECT_STREQ(semanticTokenTypeName(SemanticTokenType::Parameter), "parameter");
     EXPECT_STREQ(semanticTokenTypeName(SemanticTokenType::Comment), "comment");
     EXPECT_STREQ(semanticTokenTypeName(SemanticTokenType::EnumMember), "enumMember");
+}
+
+// ============================================================================
+// DiagnosticProvider Tests
+// ============================================================================
+
+TEST(DiagnosticProviderTest, NoDiagnosticsForValidCode) {
+    CompilationContext ctx;
+    IDEContext ide(ctx);
+    ide.openFile("valid.kern", SIMPLE_SOURCE);
+
+    DiagnosticProvider provider;
+    auto diags = provider.diagnose(ide, "valid.kern");
+    EXPECT_TRUE(diags.empty());
+}
+
+TEST(DiagnosticProviderTest, ReportsTypeError) {
+    CompilationContext ctx;
+    IDEContext ide(ctx);
+    ide.openFile("err.kern", "fn main() -> i64 { true + 1 }");
+
+    DiagnosticProvider provider;
+    auto diags = provider.diagnose(ide, "err.kern");
+    EXPECT_FALSE(diags.empty());
+    EXPECT_EQ(diags[0].severity, DiagLevel::Error);
+}
+
+TEST(DiagnosticProviderTest, EmptyForUnknownFile) {
+    CompilationContext ctx;
+    IDEContext ide(ctx);
+
+    DiagnosticProvider provider;
+    auto diags = provider.diagnose(ide, "unknown.kern");
+    EXPECT_TRUE(diags.empty());
+}
+
+TEST(DiagnosticProviderTest, DiagnosticHasLocation) {
+    CompilationContext ctx;
+    IDEContext ide(ctx);
+    ide.openFile("loc.kern", "fn main() -> i64 { undefined_fn() }");
+
+    DiagnosticProvider provider;
+    auto diags = provider.diagnose(ide, "loc.kern");
+    EXPECT_FALSE(diags.empty());
+    EXPECT_GT(diags[0].loc.line, 0u);
 }
