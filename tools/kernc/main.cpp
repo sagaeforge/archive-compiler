@@ -2,6 +2,9 @@
 #include "kern/parser/Parser.h"
 #include "kern/sema/TypeChecker.h"
 #include "kern/sema/PurityChecker.h"
+#include "kern/hir/HIRBuilder.h"
+#include "kern/hir/HIRDump.h"
+#include "kern/hir/HIRPasses.h"
 #include "kern/ir/IRBuilder.h"
 #include "kern/ir/KernIR.h"
 #include "kern/codegen/CodeGen.h"
@@ -22,6 +25,7 @@ static void printUsage(const char* prog) {
               << "  -S              Output assembly only (.asm)\n"
               << "  --dump-tokens   Dump token stream\n"
               << "  --dump-ast      Dump AST\n"
+              << "  --dump-hir      Dump HIR (typed, desugared)\n"
               << "  --dump-ir       Dump IR\n"
               << "  --dump-purity   Dump purity analysis\n"
               << "  --help          Show this help\n";
@@ -38,6 +42,7 @@ int main(int argc, char** argv) {
     bool asm_only = false;
     bool dump_tokens = false;
     bool dump_ast = false;
+    bool dump_hir = false;
     bool dump_ir = false;
     bool dump_purity = false;
 
@@ -54,6 +59,8 @@ int main(int argc, char** argv) {
             dump_tokens = true;
         } else if (arg == "--dump-ast") {
             dump_ast = true;
+        } else if (arg == "--dump-hir") {
+            dump_hir = true;
         } else if (arg == "--dump-ir") {
             dump_ir = true;
         } else if (arg == "--dump-purity") {
@@ -110,6 +117,25 @@ int main(int argc, char** argv) {
 
     if (dump_ast) {
         kern::dumpAST(mod, std::cout);
+        if (!dump_hir && !dump_ir && !asm_only) return 0;
+    }
+
+    // --- HIR Pipeline (parallel to v1 sema for now) ---
+    if (dump_hir) {
+        kern::CompilationContext hir_ctx;
+        hir_ctx.diag.setSource(source);
+        kern::HIRBuilder hir_builder(hir_ctx);
+        kern::HIRModule* hir_mod = hir_builder.build(mod);
+
+        if (!hir_ctx.diag.hasErrors()) {
+            kern::HIRPassManager pm;
+            pm.add<kern::PurityAnalysisPass>();
+            pm.add<kern::TailCallAnalysisPass>();
+            pm.run(*hir_mod, hir_ctx);
+            kern::dumpHIR(hir_mod, hir_ctx.types, std::cout);
+        } else {
+            hir_ctx.diag.printAll(std::cerr);
+        }
         if (!dump_ir && !asm_only) return 0;
     }
 

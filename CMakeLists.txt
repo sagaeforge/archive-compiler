@@ -19,6 +19,7 @@ add_subdirectory(lib/Parser)
 add_subdirectory(lib/Sema)
 add_subdirectory(lib/IR)
 add_subdirectory(lib/CodeGen)
+add_subdirectory(lib/HIR)
 
 # Compiler driver
 add_subdirectory(tools/kernc)

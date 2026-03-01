@@ -7,8 +7,12 @@ add_executable(kern_tests
     sema/PurityTest.cpp
     ir/IRTest.cpp
     codegen/CodeGenTest.cpp
+    hir/HIRTest.cpp
+    hir/HIRBuilderTest.cpp
+    hir/HIRPassesTest.cpp
 )
 target_link_libraries(kern_tests
+    kern_hir
     kern_codegen
     kern_ir
     kern_sema
