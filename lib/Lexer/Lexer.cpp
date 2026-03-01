@@ -67,6 +67,7 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::Pipe:       return "|>";
         case TokenKind::Ampersand:  return "&";
         case TokenKind::At:         return "@";
+        case TokenKind::Question:   return "?";
         case TokenKind::Comma:      return ",";
         case TokenKind::Semicolon:  return ";";
         case TokenKind::LParen:     return "(";
@@ -343,6 +344,7 @@ Token Lexer::nextToken() {
         case '^': return makeToken(TokenKind::BitXor);
         case '~': return makeToken(TokenKind::Tilde);
         case '@': return makeToken(TokenKind::At);
+        case '?': return makeToken(TokenKind::Question);
 
         case '!':
             if (match('=')) return makeToken(TokenKind::NotEq);

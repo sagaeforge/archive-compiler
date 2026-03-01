@@ -315,6 +315,12 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             }
             break;
         }
+        case Expr::Kind::Try: {
+            auto* te = static_cast<const TryExpr*>(expr);
+            out << "Try(?)\n";
+            dumpExpr(te->operand, out, ind + 1);
+            break;
+        }
     }
 }
 
@@ -1401,6 +1407,17 @@ Expr* Parser::parseExprInfix(Expr* lhs, uint8_t minBP) {
         if (on_new_line && (op == TokenKind::Star || op == TokenKind::Ampersand ||
                              op == TokenKind::Tilde)) {
             break;
+        }
+        // Try operator: expr? — postfix, same precedence as '.'
+        if (op == TokenKind::Question && !on_new_line) {
+            if (200 < minBP) break;
+            advance(); // consume '?'
+            auto* te = arena_.make<TryExpr>();
+            te->kind = Expr::Kind::Try;
+            te->loc = lhs->loc;
+            te->operand = lhs;
+            lhs = te;
+            continue;
         }
         // Index access: arr[idx] — postfix, same precedence as '.'
         if (op == TokenKind::LBracket && !on_new_line) {

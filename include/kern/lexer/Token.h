@@ -72,6 +72,7 @@ enum class TokenKind : uint8_t {
     Pipe,        // |>
     Ampersand,   // &
     At,          // @
+    Question,    // ?
     Comma,       // ,
     Semicolon,   // ;
 

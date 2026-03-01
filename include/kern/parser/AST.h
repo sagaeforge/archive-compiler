@@ -192,7 +192,8 @@ struct Expr {
         Loop, InlineAsm,
         ArrayLit, IndexAccess,
         Sizeof, Alignof,
-        Lambda, MethodCall
+        Lambda, MethodCall,
+        Try
     };
     Kind kind;
     SourceLocation loc;
@@ -343,6 +344,10 @@ struct MethodCallExpr : Expr {
     std::string_view method_name;
     Expr** args;
     uint32_t arg_count;
+};
+
+struct TryExpr : Expr {
+    Expr* operand;
 };
 
 struct LoopBinding {

@@ -56,6 +56,7 @@ private:
     HIRExpr* buildInlineAsm(const Expr* expr);
     HIRExpr* buildLambda(const Expr* expr, std::optional<TypeId> ctx_type);
     HIRExpr* buildMethodCall(const Expr* expr);
+    HIRExpr* buildTry(const Expr* expr);
 
     // Statement building
     HIRStmt* buildStmt(const Stmt* stmt);

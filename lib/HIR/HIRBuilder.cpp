@@ -979,6 +979,8 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
             return buildLambda(expr, ctx_type);
         case Expr::Kind::MethodCall:
             return buildMethodCall(expr);
+        case Expr::Kind::Try:
+            return buildTry(expr);
     }
     return errorExpr(expr->loc);
 }
@@ -3021,6 +3023,154 @@ HIRExpr* HIRBuilder::buildMethodCall(const Expr* expr) {
 
     call->type = sig.return_type;
     return call;
+}
+
+HIRExpr* HIRBuilder::buildTry(const Expr* expr) {
+    auto* te = static_cast<const TryExpr*>(expr);
+    HIRExpr* operand = buildExpr(te->operand);
+    if (operand->type == TypeTable::Error) return errorExpr(expr->loc);
+
+    TypeId op_type = operand->type;
+    if (op_type >= ctx_.types.size()) {
+        ctx_.diag.error(expr->loc, "'?' operand has invalid type");
+        return errorExpr(expr->loc);
+    }
+
+    const auto& info = ctx_.types.get(op_type);
+    if (info.kind != TypeKind::Union) {
+        ctx_.diag.error(expr->loc, "'?' operator requires a union type (e.g. Result<T, E>)");
+        return errorExpr(expr->loc);
+    }
+
+    // Find Ok and Err variants
+    int ok_idx = -1, err_idx = -1;
+    for (uint32_t i = 0; i < info.union_.variant_count; ++i) {
+        if (info.union_.variants[i].name == "Ok") ok_idx = static_cast<int>(i);
+        if (info.union_.variants[i].name == "Err") err_idx = static_cast<int>(i);
+    }
+
+    if (ok_idx < 0 || err_idx < 0) {
+        ctx_.diag.error(expr->loc, "'?' operator requires a union with Ok and Err variants");
+        return errorExpr(expr->loc);
+    }
+
+    TypeId ok_payload = info.union_.variants[ok_idx].payload_type;
+    TypeId err_payload = info.union_.variants[err_idx].payload_type;
+
+    // Check that the current function returns a compatible Result type
+    if (current_return_type_ == INVALID_TYPE) {
+        ctx_.diag.error(expr->loc, "'?' operator used outside a function");
+        return errorExpr(expr->loc);
+    }
+
+    TypeId ret_type = current_return_type_;
+    if (ret_type < ctx_.types.size()) {
+        const auto& ret_info = ctx_.types.get(ret_type);
+        if (ret_info.kind != TypeKind::Union) {
+            ctx_.diag.error(expr->loc,
+                "function must return a Result/union type to use '?'");
+            return errorExpr(expr->loc);
+        }
+
+        // Find Err variant in return type to check compatibility
+        bool found_err = false;
+        for (uint32_t i = 0; i < ret_info.union_.variant_count; ++i) {
+            if (ret_info.union_.variants[i].name == "Err" &&
+                ret_info.union_.variants[i].payload_type == err_payload) {
+                found_err = true;
+                break;
+            }
+        }
+        if (!found_err) {
+            ctx_.diag.error(expr->loc,
+                "error type of '?' does not match function return type's Err variant");
+            return errorExpr(expr->loc);
+        }
+    }
+
+    // Synthesize: match operand { Ok(v) => v, Err(e) => return RetType::Err(e) }
+    auto* match = ctx_.arena.make<HIRMatchExpr>();
+    match->kind = HIRExpr::Kind::Match;
+    match->loc = expr->loc;
+    match->scrutinee = operand;
+    match->arm_count = 2;
+    match->arms = ctx_.arena.makeArray<HIRMatchArm>(2);
+    match->type = ok_payload;
+
+    // Arm 0: Ok(v) => v
+    {
+        auto ok_name = ctx_.strings.intern("__try_ok");
+        auto* pat = ctx_.arena.make<HIRUnionPattern>();
+        pat->kind = HIRPattern::Kind::Union;
+        pat->variant_name = ctx_.strings.intern("Ok");
+        pat->field_bindings = nullptr;
+        pat->field_binding_count = 0;
+        if (ok_payload != INVALID_TYPE) {
+            auto* inner = ctx_.arena.make<HIRVariablePattern>();
+            inner->kind = HIRPattern::Kind::Variable;
+            inner->name = ok_name;
+            pat->inner = inner;
+        } else {
+            pat->inner = nullptr;
+        }
+
+        auto* body = ctx_.arena.make<HIRIdentExpr>();
+        body->kind = HIRExpr::Kind::Ident;
+        body->loc = expr->loc;
+        body->name = ok_name;
+        body->type = ok_payload;
+
+        match->arms[0].pattern = pat;
+        match->arms[0].guard = nullptr;
+        match->arms[0].body = body;
+        match->arms[0].loc = expr->loc;
+    }
+
+    // Arm 1: Err(e) => return RetType::Err(e)
+    {
+        auto err_name = ctx_.strings.intern("__try_err");
+        auto* pat = ctx_.arena.make<HIRUnionPattern>();
+        pat->kind = HIRPattern::Kind::Union;
+        pat->variant_name = ctx_.strings.intern("Err");
+        pat->field_bindings = nullptr;
+        pat->field_binding_count = 0;
+        if (err_payload != INVALID_TYPE) {
+            auto* inner = ctx_.arena.make<HIRVariablePattern>();
+            inner->kind = HIRPattern::Kind::Variable;
+            inner->name = err_name;
+            pat->inner = inner;
+        } else {
+            pat->inner = nullptr;
+        }
+
+        // Build: return RetType::Err(e)
+        auto* err_val = ctx_.arena.make<HIRIdentExpr>();
+        err_val->kind = HIRExpr::Kind::Ident;
+        err_val->loc = expr->loc;
+        err_val->name = err_name;
+        err_val->type = err_payload;
+
+        auto* err_wrap = ctx_.arena.make<HIRUnionVariantExpr>();
+        err_wrap->kind = HIRExpr::Kind::UnionVariant;
+        err_wrap->loc = expr->loc;
+        err_wrap->union_name = ctx_.types.get(ret_type).union_.name;
+        err_wrap->variant_name = ctx_.strings.intern("Err");
+        err_wrap->payload = err_val;
+        err_wrap->type = ret_type;
+
+        auto* ret = ctx_.arena.make<HIRReturnExpr>();
+        ret->kind = HIRExpr::Kind::Return;
+        ret->loc = expr->loc;
+        ret->value = err_wrap;
+        ret->type = ret_type;
+
+        match->arms[1].pattern = pat;
+        match->arms[1].guard = nullptr;
+        match->arms[1].body = ret;
+        match->arms[1].loc = expr->loc;
+    }
+
+    return match;
 }
 
 } // namespace kern
