@@ -21,6 +21,7 @@ add_subdirectory(lib/IR)
 add_subdirectory(lib/CodeGen)
 add_subdirectory(lib/HIR)
 add_subdirectory(lib/LIR)
+add_subdirectory(lib/Backend)
 
 # Compiler driver
 add_subdirectory(tools/kernc)

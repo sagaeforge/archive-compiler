@@ -1,0 +1,6 @@
+args:--dump-machir
+stdout:fn @add
+stdout:fn @main
+stdout:mov
+stdout:add
+stdout:ret

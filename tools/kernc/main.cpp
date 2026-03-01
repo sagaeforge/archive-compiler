@@ -7,6 +7,8 @@
 #include "kern/hir/HIRPasses.h"
 #include "kern/lir/LIRBuilder.h"
 #include "kern/lir/LIRDump.h"
+#include "kern/backend/X86Backend.h"
+#include "kern/backend/MachIRDump.h"
 #include "kern/ir/IRBuilder.h"
 #include "kern/ir/KernIR.h"
 #include "kern/codegen/CodeGen.h"
@@ -29,6 +31,7 @@ static void printUsage(const char* prog) {
               << "  --dump-ast      Dump AST\n"
               << "  --dump-hir      Dump HIR (typed, desugared)\n"
               << "  --dump-lir      Dump LIR (lowered SSA)\n"
+              << "  --dump-machir   Dump MachIR (x86-64 instructions)\n"
               << "  --dump-ir       Dump IR\n"
               << "  --dump-purity   Dump purity analysis\n"
               << "  --help          Show this help\n";
@@ -47,6 +50,7 @@ int main(int argc, char** argv) {
     bool dump_ast = false;
     bool dump_hir = false;
     bool dump_lir = false;
+    bool dump_machir = false;
     bool dump_ir = false;
     bool dump_purity = false;
 
@@ -67,6 +71,8 @@ int main(int argc, char** argv) {
             dump_hir = true;
         } else if (arg == "--dump-lir") {
             dump_lir = true;
+        } else if (arg == "--dump-machir") {
+            dump_machir = true;
         } else if (arg == "--dump-ir") {
             dump_ir = true;
         } else if (arg == "--dump-purity") {
@@ -163,6 +169,32 @@ int main(int argc, char** argv) {
             kern::dumpLIR(lir_mod, lir_ctx.types, std::cout);
         } else {
             lir_ctx.diag.printAll(std::cerr);
+        }
+        if (!dump_machir && !dump_ir && !asm_only) return 0;
+    }
+
+    // --- MachIR Pipeline (LIR → x86-64 MachIR) ---
+    if (dump_machir) {
+        kern::CompilationContext machir_ctx;
+        machir_ctx.diag.setSource(source);
+        kern::HIRBuilder hir_builder3(machir_ctx);
+        kern::HIRModule* hir_mod3 = hir_builder3.build(mod);
+
+        if (!machir_ctx.diag.hasErrors()) {
+            kern::HIRPassManager pm3;
+            pm3.add<kern::PurityAnalysisPass>();
+            pm3.add<kern::TailCallAnalysisPass>();
+            pm3.run(*hir_mod3, machir_ctx);
+
+            kern::LIRBuilder lir_builder3(machir_ctx);
+            kern::LIRModule* lir_mod3 = lir_builder3.build(hir_mod3);
+
+            kern::X86Backend backend(machir_ctx);
+            kern::MachModule* mach_mod = backend.lower(*lir_mod3);
+            backend.allocateRegisters(*mach_mod);
+            kern::dumpMachIR(mach_mod, lir_mod3, machir_ctx.types, std::cout);
+        } else {
+            machir_ctx.diag.printAll(std::cerr);
         }
         if (!dump_ir && !asm_only) return 0;
     }

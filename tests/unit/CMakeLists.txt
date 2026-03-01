@@ -12,8 +12,13 @@ add_executable(kern_tests
     hir/HIRPassesTest.cpp
     lir/LIRTest.cpp
     lir/LIRBuilderTest.cpp
+    backend/MachIRTest.cpp
+    backend/InstructionSelectorTest.cpp
+    backend/RegisterAllocatorTest.cpp
+    backend/EmitterTest.cpp
 )
 target_link_libraries(kern_tests
+    kern_backend
     kern_lir
     kern_hir
     kern_codegen
