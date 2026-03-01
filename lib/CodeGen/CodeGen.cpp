@@ -83,13 +83,13 @@ std::string CodeGen::allocXmmReg(ValueId v) {
     if (!free_xmm_regs_.empty()) {
         std::string reg = free_xmm_regs_.back();
         free_xmm_regs_.pop_back();
-        value_locs_[v] = {Location::XmmReg, reg, 0, getValueType(v)};
+        value_locs_[v] = {Location::XmmReg, reg, 0, getValueType(v), {}};
         return reg;
     }
     // Spill to stack (store from xmm to memory)
     stack_offset_ -= 8;
     if (-stack_offset_ > max_stack_) max_stack_ = -stack_offset_;
-    value_locs_[v] = {Location::Stack, "", stack_offset_, getValueType(v)};
+    value_locs_[v] = {Location::Stack, "", stack_offset_, getValueType(v), {}};
     return "qword [rbp" + std::to_string(stack_offset_) + "]";
 }
 
@@ -119,7 +119,7 @@ std::string CodeGen::allocReg(ValueId v) {
     if (!free_regs_.empty()) {
         std::string reg = free_regs_.back();
         free_regs_.pop_back();
-        value_locs_[v] = {Location::Reg, reg, 0, getValueType(v)};
+        value_locs_[v] = {Location::Reg, reg, 0, getValueType(v), {}};
         return reg;
     }
     static const char* callee_saved[] = {"rbx", "r12", "r13", "r14", "r15"};
@@ -136,7 +136,7 @@ std::string CodeGen::allocReg(ValueId v) {
                 == used_callee_saved_.end()) {
                 used_callee_saved_.push_back(cs);
             }
-            value_locs_[v] = {Location::Reg, cs, 0, getValueType(v)};
+            value_locs_[v] = {Location::Reg, cs, 0, getValueType(v), {}};
             return cs;
         }
     }
@@ -146,7 +146,7 @@ std::string CodeGen::allocReg(ValueId v) {
 std::string CodeGen::spillToStack(ValueId v, IRType type) {
     stack_offset_ -= 8; // always 8-byte aligned slots
     if (-stack_offset_ > max_stack_) max_stack_ = -stack_offset_;
-    value_locs_[v] = {Location::Stack, "", stack_offset_, type};
+    value_locs_[v] = {Location::Stack, "", stack_offset_, type, {}};
     return "qword [rbp" + std::to_string(stack_offset_) + "]";
 }
 
@@ -264,6 +264,26 @@ void CodeGen::emitFunction(const IRFunction& fn) {
                 }
                 xmm_idx++;
             }
+        } else if (pt == IRType::Struct) {
+            // Struct param: unpack from GPR(s) to stack
+            // For M5a simplification: all structs ≤16B use 1-2 GPRs
+            // We allocate stack space and store GPR contents there
+            int32_t struct_size = 16; // conservative default
+            stack_offset_ -= struct_size;
+            if (-stack_offset_ > max_stack_) max_stack_ = -stack_offset_;
+            int32_t base = stack_offset_;
+
+            if (gpr_idx < MAX_ARG_REGS) {
+                out() << "    mov  qword [rbp" << base << "], " << ARG_REGS[gpr_idx] << "\n";
+                gpr_idx++;
+            }
+            if (gpr_idx < MAX_ARG_REGS && struct_size > 8) {
+                out() << "    mov  qword [rbp" << (base + 8) << "], " << ARG_REGS[gpr_idx] << "\n";
+                gpr_idx++;
+            }
+            value_locs_[fn.param_values[i]] = {
+                Location::StructBase, "", base, IRType::Struct, {}, struct_size
+            };
         } else {
             if (gpr_idx < MAX_ARG_REGS) {
                 std::string reg = allocReg(fn.param_values[i]);
@@ -352,9 +372,9 @@ void CodeGen::emitBlock(const IRFunction& fn, uint32_t block_idx) {
         const auto& mi = merge_it->second;
         IRType merge_type = getValueType(mi.then_val);
         if (irTypeIsFloat(merge_type)) {
-            value_locs_[mi.result_val] = {Location::XmmReg, "xmm0", 0, merge_type};
+            value_locs_[mi.result_val] = {Location::XmmReg, "xmm0", 0, merge_type, {}};
         } else {
-            value_locs_[mi.result_val] = {Location::Reg, "rax", 0, IRType::Unknown};
+            value_locs_[mi.result_val] = {Location::Reg, "rax", 0, IRType::Unknown, {}};
         }
     }
 
@@ -599,7 +619,20 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
         case IROpcode::Ret: {
             if (!instr.operands.empty()) {
                 IRType ret_type = getValueType(instr.operands[0]);
-                if (irTypeIsFloat(ret_type)) {
+                if (ret_type == IRType::Struct) {
+                    // Pack struct from StructBase into rax + rdx
+                    auto base_it = value_locs_.find(instr.operands[0]);
+                    if (base_it != value_locs_.end() && base_it->second.kind == Location::StructBase) {
+                        int32_t base = base_it->second.stack_offset;
+                        out() << "    mov  rax, qword [rbp" << std::showpos << base << std::noshowpos << "]\n";
+                        out() << "    mov  rdx, qword [rbp" << std::showpos << (base + 8) << std::noshowpos << "]\n";
+                    } else {
+                        std::string val = valReg(instr.operands[0]);
+                        if (val != "rax") {
+                            out() << "    mov  rax, " << val << "\n";
+                        }
+                    }
+                } else if (irTypeIsFloat(ret_type)) {
                     std::string val = valXmmReg(instr.operands[0]);
                     std::string suffix = (ret_type == IRType::F32) ? "ss" : "sd";
                     if (val != "xmm0") {
@@ -924,9 +957,22 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
                 out() << "    add  rsp, 8\n";
             }
 
-            // Result: float return → xmm0, integer return → rax
+            // Result: float return → xmm0, struct → unpack rax/rdx to stack, integer → rax
             IRType result_type = getValueType(instr.result);
-            if (irTypeIsFloat(result_type)) {
+            if (result_type == IRType::Struct) {
+                // Unpack struct return from rax (+ rdx for >8B) to stack
+                int32_t struct_size = 16; // conservative default for M5a
+                stack_offset_ -= struct_size;
+                if (-stack_offset_ > max_stack_) max_stack_ = -stack_offset_;
+                int32_t base = stack_offset_;
+                out() << "    mov  qword [rbp" << std::showpos << base << std::noshowpos << "], rax\n";
+                if (struct_size > 8) {
+                    out() << "    mov  qword [rbp" << std::showpos << (base + 8) << std::noshowpos << "], rdx\n";
+                }
+                value_locs_[instr.result] = {
+                    Location::StructBase, "", base, IRType::Struct, {}, struct_size
+                };
+            } else if (irTypeIsFloat(result_type)) {
                 std::string dst = allocXmmReg(instr.result);
                 if (dst != "xmm0") {
                     std::string suffix = (result_type == IRType::F32) ? "ss" : "sd";
@@ -936,6 +982,146 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
                 std::string dst = allocReg(instr.result);
                 if (dst != "rax") {
                     out() << "    mov  " << dst << ", rax\n";
+                }
+            }
+            break;
+        }
+
+        case IROpcode::StructAlloc: {
+            // Allocate stack space for struct
+            int32_t size = static_cast<int32_t>(instr.imm_value);
+            // Align to 8 bytes
+            int32_t aligned_size = (size + 7) & ~7;
+            stack_offset_ -= aligned_size;
+            if (-stack_offset_ > max_stack_) max_stack_ = -stack_offset_;
+            // Record as StructBase location
+            value_locs_[instr.result] = {
+                Location::StructBase, "", stack_offset_, IRType::Struct,
+                instr.callee_name, size
+            };
+            break;
+        }
+
+        case IROpcode::FieldStore: {
+            ValueId base_id = instr.operands[0];
+            ValueId val_id = instr.operands[1];
+            int32_t field_offset = static_cast<int32_t>(instr.imm_value);
+
+            auto base_it = value_locs_.find(base_id);
+            assert(base_it != value_locs_.end());
+            int32_t base_off = base_it->second.stack_offset;
+            int32_t total_off = base_off + field_offset;
+
+            IRType ftype = instr.type;
+            int bits = irTypeBitWidth(ftype);
+            std::string size_word;
+            switch (bits) {
+                case 8:  size_word = "byte"; break;
+                case 16: size_word = "word"; break;
+                case 32: size_word = "dword"; break;
+                default: size_word = "qword"; break;
+            }
+            std::string mem = size_word + " [rbp" + std::to_string(total_off) + "]";
+
+            if (irTypeIsFloat(ftype)) {
+                std::string src = valXmmReg(val_id);
+                const char* sfx = (ftype == IRType::F32) ? "ss" : "sd";
+                if (isMemOperand(src)) {
+                    // xmm spilled to stack → load to xmm0 first
+                    out() << "    movs" << sfx << " xmm0, " << src << "\n";
+                    out() << "    movs" << sfx << " " << mem << ", xmm0\n";
+                } else {
+                    out() << "    movs" << sfx << " " << mem << ", " << src << "\n";
+                }
+            } else if (ftype == IRType::Struct) {
+                // Nested struct: copy all bytes from source StructBase to dest
+                auto val_it = value_locs_.find(val_id);
+                if (val_it != value_locs_.end() && val_it->second.kind == Location::StructBase) {
+                    int32_t src_base = val_it->second.stack_offset;
+                    int32_t copy_size = val_it->second.struct_size;
+                    if (copy_size <= 0) copy_size = 8; // fallback
+                    // Copy 8 bytes at a time
+                    for (int32_t off = 0; off < copy_size; off += 8) {
+                        out() << "    mov  rax, qword [rbp" << (src_base + off) << "]\n";
+                        out() << "    mov  qword [rbp" << (total_off + off) << "], rax\n";
+                    }
+                } else {
+                    // Value in register (e.g., from call return) — just store
+                    std::string src = valReg(val_id);
+                    if (isMemOperand(src)) {
+                        out() << "    mov  rax, " << src << "\n";
+                        out() << "    mov  qword [rbp" << total_off << "], rax\n";
+                    } else {
+                        out() << "    mov  qword [rbp" << total_off << "], " << src << "\n";
+                    }
+                }
+            } else {
+                std::string src = valReg(val_id);
+                std::string src_sized = src;
+                if (!isMemOperand(src)) {
+                    src_sized = regForWidth(src, bits);
+                }
+
+                if (isMemOperand(src)) {
+                    out() << "    mov  rax, " << src << "\n";
+                    out() << "    mov  " << mem << ", " << regForWidth("rax", bits) << "\n";
+                } else {
+                    out() << "    mov  " << mem << ", " << src_sized << "\n";
+                }
+            }
+            break;
+        }
+
+        case IROpcode::FieldLoad: {
+            ValueId base_id = instr.operands[0];
+            int32_t field_offset = static_cast<int32_t>(instr.imm_value);
+
+            auto base_it = value_locs_.find(base_id);
+            assert(base_it != value_locs_.end());
+            int32_t base_off = base_it->second.stack_offset;
+            int32_t total_off = base_off + field_offset;
+
+            IRType ftype = instr.type;
+
+            if (ftype == IRType::Struct) {
+                // Nested struct: return a "pointer" (StructBase) to the sub-struct
+                int32_t nested_size = static_cast<int32_t>(instr.target_block);
+                if (nested_size <= 0) nested_size = 8; // fallback
+                value_locs_[instr.result] = {
+                    Location::StructBase, "", total_off, IRType::Struct,
+                    instr.callee_name, nested_size
+                };
+            } else if (irTypeIsFloat(ftype)) {
+                std::string dst = allocXmmReg(instr.result);
+                int bits = irTypeBitWidth(ftype);
+                std::string size_word = (bits == 32) ? "dword" : "qword";
+                const char* sfx = (ftype == IRType::F32) ? "ss" : "sd";
+                out() << "    movs" << sfx << " " << dst << ", " << size_word
+                      << " [rbp" << total_off << "]\n";
+            } else {
+                std::string dst = allocReg(instr.result);
+                int bits = irTypeBitWidth(ftype);
+                std::string size_word;
+                switch (bits) {
+                    case 8:  size_word = "byte"; break;
+                    case 16: size_word = "word"; break;
+                    case 32: size_word = "dword"; break;
+                    default: size_word = "qword"; break;
+                }
+
+                if (isMemOperand(dst)) {
+                    out() << "    mov  rax, " << size_word << " [rbp" << total_off << "]\n";
+                    out() << "    mov  " << dst << ", rax\n";
+                } else {
+                    std::string dst_sized = regForWidth(dst, bits);
+                    if (bits < 64) {
+                        // Zero-extend small loads
+                        out() << "    movzx " << dst << ", " << size_word
+                              << " [rbp" << total_off << "]\n";
+                    } else {
+                        out() << "    mov  " << dst_sized << ", " << size_word
+                              << " [rbp" << total_off << "]\n";
+                    }
                 }
             }
             break;

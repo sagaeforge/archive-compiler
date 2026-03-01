@@ -24,6 +24,7 @@ enum class TokenKind : uint8_t {
     KwNot,
     KwTrue,
     KwFalse,
+    KwStruct,
 
     // Operators
     Plus,        // +

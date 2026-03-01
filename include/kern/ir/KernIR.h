@@ -27,6 +27,9 @@ enum class IROpcode : uint8_t {
     CondBranch,
     Ret,
     Call,
+    StructAlloc,
+    FieldStore,
+    FieldLoad,
 };
 
 const char* irOpcodeName(IROpcode op);

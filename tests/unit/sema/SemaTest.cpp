@@ -815,3 +815,135 @@ TEST(SemaTest, MatchVariableScopedToArm) {
         "fn main() -> i64 { match 1 { x => x, _ => 0 } }"
     ));
 }
+
+// ===== M5a: struct type checking =====
+
+TEST(SemaTest, StructBasicValid) {
+    EXPECT_TRUE(checkSource(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = Point { x: 1, y: 2 }\n"
+        "    p.x\n"
+        "}"
+    ));
+}
+
+TEST(SemaTest, StructFieldTypeMismatch) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = Point { x: true, y: 2 }\n"
+        "    p.x\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("field 'x' expects i64"), std::string::npos);
+}
+
+TEST(SemaTest, StructMissingField) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = Point { x: 1 }\n"
+        "    p.x\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("expects 2 fields, got 1"), std::string::npos);
+}
+
+TEST(SemaTest, StructExtraField) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = Point { x: 1, y: 2, z: 3 }\n"
+        "    p.x\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("expects 2 fields, got 3"), std::string::npos);
+}
+
+TEST(SemaTest, StructNonexistentField) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = Point { x: 1, z: 2 }\n"
+        "    p.x\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("no field named 'z'"), std::string::npos);
+}
+
+TEST(SemaTest, StructFieldAccessNonexistent) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = Point { x: 1, y: 2 }\n"
+        "    p.z\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("no field named 'z'"), std::string::npos);
+}
+
+TEST(SemaTest, StructValBindingMutation) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "struct Point { var x: i64, var y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = Point { x: 1, y: 2 }\n"
+        "    p.x = 42\n"
+        "    p.x\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("immutable binding"), std::string::npos);
+}
+
+TEST(SemaTest, StructValFieldMutation) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    var p: Point = Point { x: 1, y: 2 }\n"
+        "    p.x = 42\n"
+        "    p.x\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("immutable field"), std::string::npos);
+}
+
+TEST(SemaTest, StructVarBindingVarField) {
+    EXPECT_TRUE(checkSource(
+        "struct Point { var x: i64, var y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    var p: Point = Point { x: 1, y: 2 }\n"
+        "    p.x = 42\n"
+        "    p.x\n"
+        "}"
+    ));
+}
+
+TEST(SemaTest, StructNested) {
+    EXPECT_TRUE(checkSource(
+        "struct Inner { v: i64 }\n"
+        "struct Outer { inner: Inner }\n"
+        "fn main() -> i64 {\n"
+        "    val o: Outer = Outer { inner: Inner { v: 42 } }\n"
+        "    o.inner.v\n"
+        "}"
+    ));
+}
+
+TEST(SemaTest, StructParam) {
+    EXPECT_TRUE(checkSource(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn sum(p: Point) -> i64 { p.x + p.y }\n"
+        "fn main() -> i64 { sum(Point { x: 10, y: 20 }) }"
+    ));
+}
+
+TEST(SemaTest, StructReturn) {
+    EXPECT_TRUE(checkSource(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn make() -> Point { Point { x: 1, y: 2 } }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = make()\n"
+        "    p.x + p.y\n"
+        "}"
+    ));
+}

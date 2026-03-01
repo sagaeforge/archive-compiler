@@ -1,0 +1,7 @@
+struct Point { var x: i64, var y: i64 }
+
+fn main() -> i64 {
+    val p: Point = Point { x: 1, y: 2 }
+    p.x = 42
+    p.x
+}

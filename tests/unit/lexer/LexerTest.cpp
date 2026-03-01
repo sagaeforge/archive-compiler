@@ -337,7 +337,7 @@ TEST(LexerTest, TokenKindNameCoverage) {
         TokenKind::KwMatch, TokenKind::KwReturn,
         TokenKind::KwIf, TokenKind::KwElse,
         TokenKind::KwAnd, TokenKind::KwOr, TokenKind::KwNot,
-        TokenKind::KwTrue, TokenKind::KwFalse,
+        TokenKind::KwTrue, TokenKind::KwFalse, TokenKind::KwStruct,
         TokenKind::Plus, TokenKind::Minus, TokenKind::Star, TokenKind::Slash,
         TokenKind::Eq, TokenKind::EqEq, TokenKind::NotEq,
         TokenKind::Lt, TokenKind::Gt, TokenKind::LtEq, TokenKind::GtEq,
@@ -451,4 +451,20 @@ TEST(LexerTest, LongIdentifier) {
     auto r = lex(long_id);
     EXPECT_EQ(r[0].kind, TokenKind::Ident);
     EXPECT_EQ(r[0].text, long_id);
+}
+
+// ===== M5a: struct keyword =====
+
+TEST(LexerTest, StructKeyword) {
+    auto r = lex("struct Point { x: i64, y: i64 }");
+    EXPECT_EQ(r[0].kind, TokenKind::KwStruct);
+    EXPECT_EQ(r[0].text, "struct");
+    EXPECT_EQ(r[1].kind, TokenKind::Ident);
+    EXPECT_EQ(r[1].text, "Point");
+}
+
+TEST(LexerTest, StructIdentifierPrefix) {
+    auto r = lex("structure");
+    EXPECT_EQ(r[0].kind, TokenKind::Ident);
+    EXPECT_EQ(r[0].text, "structure");
 }

@@ -21,6 +21,7 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::KwNot:      return "not";
         case TokenKind::KwTrue:     return "true";
         case TokenKind::KwFalse:    return "false";
+        case TokenKind::KwStruct:   return "struct";
         case TokenKind::Plus:       return "+";
         case TokenKind::Minus:      return "-";
         case TokenKind::Star:       return "*";
@@ -192,6 +193,7 @@ TokenKind Lexer::identifierKind(std::string_view text) {
     if (text == "not")    return TokenKind::KwNot;
     if (text == "true")   return TokenKind::KwTrue;
     if (text == "false")  return TokenKind::KwFalse;
+    if (text == "struct") return TokenKind::KwStruct;
     return TokenKind::Ident;
 }
 

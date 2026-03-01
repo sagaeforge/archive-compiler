@@ -304,7 +304,7 @@ TEST(ParserTest, ErrorUnexpectedTopLevel) {
     EXPECT_TRUE(r.diag.hasErrors());
     std::ostringstream out;
     r.diag.printAll(out);
-    EXPECT_NE(out.str().find("expected function declaration"), std::string::npos);
+    EXPECT_NE(out.str().find("expected function or struct declaration"), std::string::npos);
 }
 
 // --- Error: missing function name ---
@@ -866,4 +866,101 @@ TEST(ParserTest, FnLevelPatternThreeOverloads) {
     ASSERT_EQ(block->result->kind, Expr::Kind::Match);
     auto* match_expr = static_cast<MatchExpr*>(block->result);
     EXPECT_EQ(match_expr->arm_count, 4u);
+}
+
+// ===== M5a: struct parsing tests =====
+
+TEST(ParserTest, StructDecl) {
+    auto r = parse(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 { 0 }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    ASSERT_EQ(r.mod->struct_count, 1u);
+    auto* sd = r.mod->structs[0];
+    EXPECT_EQ(sd->name, "Point");
+    ASSERT_EQ(sd->field_count, 2u);
+    EXPECT_EQ(sd->fields[0].name, "x");
+    EXPECT_EQ(sd->fields[0].type.name, "i64");
+    EXPECT_FALSE(sd->fields[0].is_mutable);
+    EXPECT_EQ(sd->fields[1].name, "y");
+}
+
+TEST(ParserTest, StructDeclVarFields) {
+    auto r = parse(
+        "struct Mutable { val a: i64, var b: i64 }\n"
+        "fn main() -> i64 { 0 }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    ASSERT_EQ(r.mod->struct_count, 1u);
+    EXPECT_FALSE(r.mod->structs[0]->fields[0].is_mutable);
+    EXPECT_TRUE(r.mod->structs[0]->fields[1].is_mutable);
+}
+
+TEST(ParserTest, StructLiteral) {
+    auto r = parse(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: i64 = 0\n"
+        "    Point { x: 1, y: 2 }\n"
+        "}");
+    // We just check it parses without error
+    // The StructLit should be the result expression
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_NE(body->result, nullptr);
+    EXPECT_EQ(body->result->kind, Expr::Kind::StructLit);
+    auto* sl = static_cast<StructLitExpr*>(body->result);
+    EXPECT_EQ(sl->struct_name, "Point");
+    ASSERT_EQ(sl->field_count, 2u);
+    EXPECT_EQ(sl->fields[0].name, "x");
+    EXPECT_EQ(sl->fields[1].name, "y");
+}
+
+TEST(ParserTest, FieldAccess) {
+    auto r = parse(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: i64 = 0\n"
+        "    p.x\n"
+        "}");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_NE(body->result, nullptr);
+    EXPECT_EQ(body->result->kind, Expr::Kind::FieldAccess);
+    auto* fa = static_cast<FieldAccessExpr*>(body->result);
+    EXPECT_EQ(fa->field_name, "x");
+}
+
+TEST(ParserTest, NestedFieldAccess) {
+    auto r = parse(
+        "struct Inner { v: i64 }\n"
+        "struct Outer { inner: Inner }\n"
+        "fn main() -> i64 {\n"
+        "    val o: i64 = 0\n"
+        "    o.inner.v\n"
+        "}");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_NE(body->result, nullptr);
+    EXPECT_EQ(body->result->kind, Expr::Kind::FieldAccess);
+    auto* fa = static_cast<FieldAccessExpr*>(body->result);
+    EXPECT_EQ(fa->field_name, "v");
+    EXPECT_EQ(fa->object->kind, Expr::Kind::FieldAccess);
+}
+
+TEST(ParserTest, FieldAssign) {
+    auto r = parse(
+        "struct Point { var x: i64, var y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    var p: i64 = 0\n"
+        "    p.x = 42\n"
+        "    0\n"
+        "}");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_GE(body->stmt_count, 2u);
+    // Second stmt should be FieldAssign
+    auto* stmt = body->stmts[1];
+    EXPECT_EQ(stmt->kind, Stmt::Kind::FieldAssign);
+    auto* fas = static_cast<FieldAssignStmt*>(stmt);
+    EXPECT_EQ(fas->target->kind, Expr::Kind::FieldAccess);
 }

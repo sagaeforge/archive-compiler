@@ -3,6 +3,7 @@
 #include "kern/lexer/Lexer.h"
 #include "kern/support/Arena.h"
 #include "kern/support/Diagnostic.h"
+#include <unordered_set>
 #include <vector>
 
 namespace kern {
@@ -24,6 +25,7 @@ private:
 
     // Declarations
     FnDecl* parseFnDecl();
+    StructDecl* parseStructDecl();
     Param parseParam();
 
     // Types
@@ -36,6 +38,7 @@ private:
     Expr* parseIfExpr();
     Expr* parseBlockExpr();
     Expr* parseCallExpr(std::string_view name, SourceLocation loc);
+    Expr* parseStructLit(std::string_view name, SourceLocation loc);
     Expr* parseMatchExpr();
     Pattern* parsePattern();
 
@@ -55,6 +58,8 @@ private:
     Token current_;
     Token previous_;
     bool has_current_ = false;
+
+    std::unordered_set<std::string_view> struct_names_;
 };
 
 } // namespace kern

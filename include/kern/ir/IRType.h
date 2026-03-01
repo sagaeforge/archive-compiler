@@ -8,7 +8,8 @@ enum class IRType : uint8_t {
     I8, I16, I32, I64,
     U8, U16, U32, U64,
     F32, F64,
-    Bool, Unit, Unknown
+    Bool, Unit, Unknown,
+    Struct
 };
 
 inline int irTypeBitWidth(IRType t) {
@@ -18,6 +19,7 @@ inline int irTypeBitWidth(IRType t) {
         case IRType::I32: case IRType::U32: case IRType::F32: return 32;
         case IRType::I64: case IRType::U64: case IRType::F64: return 64;
         case IRType::Bool: return 8;  // stored as byte in registers
+        case IRType::Struct: return 64; // pointer-sized for addressing
         default: return 64;
     }
 }
@@ -31,6 +33,8 @@ inline bool irTypeIsSigned(IRType t) {
         case IRType::I8: case IRType::I16: case IRType::I32: case IRType::I64:
         case IRType::F32: case IRType::F64:
             return true;
+        case IRType::Struct:
+            return false;
         default:
             return false;
     }
@@ -51,6 +55,7 @@ inline const char* irTypeName(IRType t) {
         case IRType::Bool:    return "bool";
         case IRType::Unit:    return "Unit";
         case IRType::Unknown: return "?";
+        case IRType::Struct:  return "struct";
     }
     return "?";
 }
@@ -69,7 +74,8 @@ inline IRType irTypeFromSemaType(Type t) {
         case Type::F64:   return IRType::F64;
         case Type::Bool:  return IRType::Bool;
         case Type::Unit:  return IRType::Unit;
-        case Type::Error: return IRType::Unknown;
+        case Type::Error:  return IRType::Unknown;
+        case Type::Struct: return IRType::Struct;
     }
     return IRType::Unknown;
 }

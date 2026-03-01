@@ -1,0 +1,10 @@
+struct Point { x: i64, y: i64 }
+
+fn sum_point(p: Point) -> i64 {
+    p.x + p.y
+}
+
+fn main() -> i64 {
+    val p: Point = Point { x: 20, y: 22 }
+    sum_point(p)
+}

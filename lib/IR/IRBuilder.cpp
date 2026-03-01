@@ -34,7 +34,10 @@ const char* irOpcodeName(IROpcode op) {
         case IROpcode::Branch:     return "br";
         case IROpcode::CondBranch: return "condbr";
         case IROpcode::Ret:        return "ret";
-        case IROpcode::Call:       return "call";
+        case IROpcode::Call:        return "call";
+        case IROpcode::StructAlloc: return "struct_alloc";
+        case IROpcode::FieldStore:  return "field_store";
+        case IROpcode::FieldLoad:   return "field_load";
     }
     return "?";
 }
@@ -110,6 +113,19 @@ void dumpIR(const IRModule& mod, std::ostream& out) {
                             out << " %" << instr.operands[0];
                         }
                         break;
+                    case IROpcode::StructAlloc:
+                        out << " " << instr.callee_name
+                            << " (size=" << instr.imm_value << ")";
+                        break;
+                    case IROpcode::FieldStore:
+                        out << " %" << instr.operands[0]
+                            << ", %" << instr.operands[1]
+                            << " (offset=" << instr.imm_value << ")";
+                        break;
+                    case IROpcode::FieldLoad:
+                        out << " %" << instr.operands[0]
+                            << " (offset=" << instr.imm_value << ")";
+                        break;
                     default:
                         for (size_t i = 0; i < instr.operands.size(); ++i) {
                             out << " %" << instr.operands[i];
@@ -145,9 +161,44 @@ ValueId IRBuilder::emit(IRInstr instr) {
     return result;
 }
 
+void IRBuilder::populateStructInfo() {
+    // Copy struct layout info from TypeChecker into IR-level representation
+    // We iterate Module's structs to discover all struct names
+    // and query the TypeChecker for their definitions.
+    // (Called from build() after tc_ is set)
+}
+
+const IRStructInfo* IRBuilder::getStructInfo(const std::string& name) const {
+    auto it = struct_info_.find(name);
+    return it != struct_info_.end() ? &it->second : nullptr;
+}
+
 IRModule IRBuilder::build(Module* mod, const TypeChecker& tc) {
     tc_ = &tc;
     module_.functions.clear();
+    struct_info_.clear();
+
+    // Populate struct info from TypeChecker
+    for (uint32_t i = 0; i < mod->struct_count; ++i) {
+        auto* sd = mod->structs[i];
+        std::string name(sd->name);
+        const StructDef* def = tc_->getStructDef(sd->name);
+        if (!def) continue;
+
+        IRStructInfo info;
+        info.name = name;
+        info.total_size = def->total_size;
+        for (const auto& f : def->fields) {
+            IRStructInfo::FieldInfo fi;
+            fi.name = std::string(f.name);
+            fi.offset = f.offset;
+            fi.type = irTypeFromSemaType(f.type);
+            fi.struct_name = std::string(f.struct_name);
+            info.fields.push_back(std::move(fi));
+        }
+        struct_info_[name] = std::move(info);
+    }
+
     for (uint32_t i = 0; i < mod->fn_count; ++i) {
         if (mod->functions[i]->is_intrinsic) continue;
         buildFunction(mod->functions[i]);
@@ -174,19 +225,20 @@ void IRBuilder::buildFunction(FnDecl* fn) {
         ValueId pv = newValue();
         current_fn_->param_values.push_back(pv);
         current_fn_->param_names.push_back(std::string(fn->params[i].name));
-        auto name = fn->params[i].type.name;
+        auto pname = fn->params[i].type.name;
         IRType pt = IRType::Unknown;
-        if (name == "i8")        pt = IRType::I8;
-        else if (name == "i16")  pt = IRType::I16;
-        else if (name == "i32")  pt = IRType::I32;
-        else if (name == "i64")  pt = IRType::I64;
-        else if (name == "u8")   pt = IRType::U8;
-        else if (name == "u16")  pt = IRType::U16;
-        else if (name == "u32")  pt = IRType::U32;
-        else if (name == "u64")  pt = IRType::U64;
-        else if (name == "f32")   pt = IRType::F32;
-        else if (name == "f64")   pt = IRType::F64;
-        else if (name == "bool") pt = IRType::Bool;
+        if (pname == "i8")        pt = IRType::I8;
+        else if (pname == "i16")  pt = IRType::I16;
+        else if (pname == "i32")  pt = IRType::I32;
+        else if (pname == "i64")  pt = IRType::I64;
+        else if (pname == "u8")   pt = IRType::U8;
+        else if (pname == "u16")  pt = IRType::U16;
+        else if (pname == "u32")  pt = IRType::U32;
+        else if (pname == "u64")  pt = IRType::U64;
+        else if (pname == "f32")  pt = IRType::F32;
+        else if (pname == "f64")  pt = IRType::F64;
+        else if (pname == "bool") pt = IRType::Bool;
+        else if (struct_info_.count(std::string(pname))) pt = IRType::Struct;
         current_fn_->param_types.push_back(pt);
         locals_[fn->params[i].name] = pv;
     }
@@ -525,6 +577,97 @@ ValueId IRBuilder::buildExpr(Expr* expr, bool in_tail_position) {
             return val;
         }
 
+        case Expr::Kind::StructLit: {
+            auto* slit = static_cast<StructLitExpr*>(expr);
+            std::string sname(slit->struct_name);
+            auto* info = getStructInfo(sname);
+            assert(info && "struct info not found");
+
+            // StructAlloc: allocate stack space
+            IRInstr alloc;
+            alloc.op = IROpcode::StructAlloc;
+            alloc.result = newValue();
+            alloc.imm_value = info->total_size;
+            alloc.callee_name = sname;
+            alloc.loc = expr->loc;
+            alloc.type = IRType::Struct;
+            ValueId base = emit(alloc);
+
+            // FieldStore for each field init
+            for (uint32_t i = 0; i < slit->field_count; ++i) {
+                auto& fi = slit->fields[i];
+                ValueId val = buildExpr(fi.value);
+
+                // Find field offset from struct info
+                int32_t offset = 0;
+                IRType ftype = IRType::Unknown;
+                for (const auto& finfo : info->fields) {
+                    if (finfo.name == fi.name) {
+                        offset = finfo.offset;
+                        ftype = finfo.type;
+                        break;
+                    }
+                }
+
+                IRInstr store;
+                store.op = IROpcode::FieldStore;
+                store.operands = {base, val};
+                store.imm_value = offset;
+                store.loc = fi.loc;
+                store.type = ftype;
+                emit(store);
+            }
+
+            return base;
+        }
+
+        case Expr::Kind::FieldAccess: {
+            auto* fa = static_cast<FieldAccessExpr*>(expr);
+            ValueId obj = buildExpr(fa->object);
+
+            // Resolve struct name from object expression
+            std::string_view sname_sv = tc_->structNameOfExpr(fa->object);
+            if (sname_sv.empty()) {
+                // Try local struct name for ident
+                if (fa->object->kind == Expr::Kind::Ident) {
+                    auto* ident = static_cast<IdentExpr*>(fa->object);
+                    sname_sv = tc_->localStructName(ident->name);
+                }
+            }
+            std::string sname(sname_sv);
+            auto* info = getStructInfo(sname);
+            assert(info && "struct info not found for field access");
+
+            int32_t offset = 0;
+            IRType ftype = IRType::Unknown;
+            std::string nested_struct_name;
+            for (const auto& finfo : info->fields) {
+                if (finfo.name == fa->field_name) {
+                    offset = finfo.offset;
+                    ftype = finfo.type;
+                    nested_struct_name = finfo.struct_name;
+                    break;
+                }
+            }
+
+            IRInstr load;
+            load.op = IROpcode::FieldLoad;
+            load.result = newValue();
+            load.operands = {obj};
+            load.imm_value = offset;
+            load.loc = expr->loc;
+            load.type = ftype;
+            if (!nested_struct_name.empty()) {
+                load.callee_name = nested_struct_name;
+                // Encode nested struct size in target_block for CodeGen
+                auto* nested_info = getStructInfo(nested_struct_name);
+                if (nested_info) {
+                    load.target_block = static_cast<uint32_t>(nested_info->total_size);
+                }
+            }
+            return emit(load);
+        }
+
         case Expr::Kind::Match: {
             auto* matchE = static_cast<MatchExpr*>(expr);
             ValueId scrutinee = buildExpr(matchE->scrutinee);
@@ -689,6 +832,57 @@ void IRBuilder::buildStmt(Stmt* stmt) {
         case Stmt::Kind::ExprStmt:
             buildExpr(static_cast<ExprStmt*>(stmt)->expr);
             break;
+        case Stmt::Kind::FieldAssign: {
+            auto* fa_stmt = static_cast<FieldAssignStmt*>(stmt);
+            ValueId val = buildExpr(fa_stmt->value);
+
+            // Walk the FieldAccess chain to find base + total offset
+            // e.g. s.pos.x → chain is [FieldAccess(FieldAccess(Ident "s", "pos"), "x")]
+            // We need: base = locals_["s"], offset = pos.offset + x.offset within pos
+            struct ChainEntry { std::string_view field_name; };
+            std::vector<ChainEntry> chain;
+            Expr* cur = fa_stmt->target;
+            while (cur->kind == Expr::Kind::FieldAccess) {
+                auto* fae = static_cast<FieldAccessExpr*>(cur);
+                chain.push_back({fae->field_name});
+                cur = fae->object;
+            }
+            // cur should be Ident (the base variable)
+            assert(cur->kind == Expr::Kind::Ident);
+            auto* base_ident = static_cast<IdentExpr*>(cur);
+            ValueId base = locals_.at(base_ident->name);
+
+            // Resolve struct name for the base
+            std::string_view sname_sv = tc_->localStructName(base_ident->name);
+            std::string sname(sname_sv);
+
+            // Walk chain in reverse (outermost field first) to accumulate offset
+            int32_t total_offset = 0;
+            IRType store_type = IRType::Unknown;
+            for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+                auto* info = getStructInfo(sname);
+                assert(info && "struct info not found for field assign");
+                for (const auto& finfo : info->fields) {
+                    if (finfo.name == it->field_name) {
+                        total_offset += finfo.offset;
+                        store_type = finfo.type;
+                        if (!finfo.struct_name.empty()) {
+                            sname = std::string(finfo.struct_name);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            IRInstr store;
+            store.op = IROpcode::FieldStore;
+            store.operands = {base, val};
+            store.imm_value = total_offset;
+            store.loc = stmt->loc;
+            store.type = store_type;
+            emit(store);
+            break;
+        }
     }
 }
 

@@ -31,11 +31,13 @@ private:
     std::ostream& out() { return out_ref_ ? *out_ref_ : out_; }
 
     struct Location {
-        enum Kind { Reg, Stack, XmmReg };
+        enum Kind { Reg, Stack, XmmReg, StructBase };
         Kind kind;
         std::string reg;
         int32_t stack_offset = 0;
         IRType type = IRType::Unknown;
+        std::string struct_name; // for StructBase: which struct type
+        int32_t struct_size = 0; // for StructBase: total byte size
     };
 
     std::unordered_map<ValueId, Location> value_locs_;

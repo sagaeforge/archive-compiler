@@ -46,12 +46,29 @@ struct VariablePattern : Pattern {
     std::string_view name;
 };
 
+// --- Field declarations (for struct definitions) ---
+struct FieldDecl {
+    std::string_view name;
+    TypeRef type;
+    bool is_mutable;
+    SourceLocation loc;
+};
+
+// --- Struct declaration ---
+struct StructDecl {
+    std::string_view name;
+    FieldDecl* fields;
+    uint32_t field_count;
+    SourceLocation loc;
+};
+
 // --- Expressions ---
 struct Expr {
     enum class Kind {
         IntLit, FloatLit, BoolLit, Ident,
         BinOp, UnaryOp, Call,
-        If, Block, Return, Match
+        If, Block, Return, Match,
+        StructLit, FieldAccess
     };
     Kind kind;
     SourceLocation loc;
@@ -131,9 +148,26 @@ struct MatchExpr : Expr {
     uint32_t arm_count;
 };
 
+struct FieldInit {
+    std::string_view name;
+    Expr* value;
+    SourceLocation loc;
+};
+
+struct StructLitExpr : Expr {
+    std::string_view struct_name;
+    FieldInit* fields;
+    uint32_t field_count;
+};
+
+struct FieldAccessExpr : Expr {
+    Expr* object;
+    std::string_view field_name;
+};
+
 // --- Statements ---
 struct Stmt {
-    enum class Kind { ValDecl, VarDecl, ExprStmt, Assign };
+    enum class Kind { ValDecl, VarDecl, ExprStmt, Assign, FieldAssign };
     Kind kind;
     SourceLocation loc;
 };
@@ -159,6 +193,11 @@ struct AssignStmt : Stmt {
     Expr* value;
 };
 
+struct FieldAssignStmt : Stmt {
+    Expr* target;   // FieldAccessExpr chain (e.g. s.pos.x)
+    Expr* value;
+};
+
 // --- Declarations ---
 struct FnDecl {
     std::string_view name;
@@ -176,6 +215,8 @@ struct FnDecl {
 struct Module {
     FnDecl** functions;
     uint32_t fn_count;
+    StructDecl** structs;
+    uint32_t struct_count;
 };
 
 // AST dumper

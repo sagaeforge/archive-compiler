@@ -329,3 +329,29 @@ TEST(PurityTest, MatchCalleeInArm) {
     // io_fn is intrinsic (ImpureIo), propagated to f through match arm
     EXPECT_EQ(it->second.purity, Purity::ImpureIo);
 }
+
+// ===== M5a: struct purity tests =====
+
+TEST(PurityTest, StructCreationIsPure) {
+    auto r = analyzePurity(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn make() -> Point { Point { x: 1, y: 2 } }"
+    );
+    auto it = r.results.find("make");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_EQ(it->second.purity, Purity::Pure);
+}
+
+TEST(PurityTest, StructFieldAssignIsImpureMut) {
+    auto r = analyzePurity(
+        "struct Point { var x: i64, var y: i64 }\n"
+        "fn mutate(p: Point) -> i64 {\n"
+        "    var q: Point = p\n"
+        "    q.x = 42\n"
+        "    q.x\n"
+        "}"
+    );
+    auto it = r.results.find("mutate");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_EQ(it->second.purity, Purity::ImpureMut);
+}

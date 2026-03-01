@@ -3,9 +3,22 @@
 #include "kern/parser/AST.h"
 #include "kern/sema/TypeChecker.h"
 #include <unordered_map>
+#include <string>
 #include <string_view>
 
 namespace kern {
+
+struct IRStructInfo {
+    std::string name;
+    int32_t total_size;
+    struct FieldInfo {
+        std::string name;
+        int32_t offset;
+        IRType type;
+        std::string struct_name; // for nested structs
+    };
+    std::vector<FieldInfo> fields;
+};
 
 class IRBuilder {
 public:
@@ -28,8 +41,12 @@ private:
     uint32_t current_block_ = 0;
     const TypeChecker* tc_ = nullptr;
 
+    void populateStructInfo();
+    const IRStructInfo* getStructInfo(const std::string& name) const;
+
     std::unordered_map<std::string_view, ValueId> locals_;
     uint32_t label_counter_ = 0;
+    std::unordered_map<std::string, IRStructInfo> struct_info_;
 };
 
 } // namespace kern

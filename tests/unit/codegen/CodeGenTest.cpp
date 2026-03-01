@@ -523,3 +523,55 @@ TEST(CodeGenTest, TailCallFloatArgs) {
         "fn f(a: f64) -> f64 { g(a) }");
     EXPECT_NE(asm_code.find("jmp  _g"), std::string::npos);
 }
+
+// ===== M5a: Struct CodeGen tests =====
+
+TEST(CodeGenTest, StructAllocReservesStack) {
+    std::string asm_code = generateAsm(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = Point { x: 1, y: 2 }\n"
+        "    p.x\n"
+        "}"
+    );
+    // Should have sub rsp for stack frame (struct needs stack space)
+    EXPECT_NE(asm_code.find("sub  rsp"), std::string::npos);
+    // Should store field values to stack via mov
+    EXPECT_NE(asm_code.find("[rbp"), std::string::npos);
+}
+
+TEST(CodeGenTest, StructFieldStoreAndLoad) {
+    std::string asm_code = generateAsm(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = Point { x: 42, y: 99 }\n"
+        "    p.x\n"
+        "}"
+    );
+    // The value 42 and 99 should appear in the asm
+    EXPECT_NE(asm_code.find("42"), std::string::npos);
+    EXPECT_NE(asm_code.find("99"), std::string::npos);
+}
+
+TEST(CodeGenTest, StructFieldAssignGenMov) {
+    std::string asm_code = generateAsm(
+        "struct Point { var x: i64, var y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    var p: Point = Point { x: 1, y: 2 }\n"
+        "    p.x = 42\n"
+        "    p.x\n"
+        "}"
+    );
+    // Should have mov instructions writing 42 to the struct field
+    EXPECT_NE(asm_code.find("42"), std::string::npos);
+}
+
+TEST(CodeGenTest, StructParamUnpack) {
+    std::string asm_code = generateAsm(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn get_x(p: Point) -> i64 { p.x }"
+    );
+    // Struct param should be stored from rdi to stack
+    EXPECT_NE(asm_code.find("rdi"), std::string::npos);
+    EXPECT_NE(asm_code.find("[rbp"), std::string::npos);
+}

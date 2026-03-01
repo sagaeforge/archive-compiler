@@ -858,3 +858,149 @@ TEST(IRTest, MatchVariableBindingInIR) {
     // Should just produce the constant 42 and return it (no branches)
     EXPECT_FALSE(hasOpcode(r.ir.functions[0], IROpcode::CondBranch));
 }
+
+// ===== M5a: Struct IR tests =====
+
+TEST(IRTest, StructAllocAndFieldStore) {
+    auto r = buildIR(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = Point { x: 1, y: 2 }\n"
+        "    p.x\n"
+        "}"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::StructAlloc));
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::FieldStore));
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::FieldLoad));
+}
+
+TEST(IRTest, StructAllocSize) {
+    auto r = buildIR(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = Point { x: 1, y: 2 }\n"
+        "    p.x\n"
+        "}"
+    );
+    auto& fn = r.ir.functions[0];
+    for (auto& block : fn.blocks) {
+        for (auto& instr : block.instrs) {
+            if (instr.op == IROpcode::StructAlloc) {
+                EXPECT_EQ(instr.imm_value, 16); // 2 x i64 = 16 bytes
+                EXPECT_EQ(instr.callee_name, "Point");
+                EXPECT_EQ(instr.type, IRType::Struct);
+            }
+        }
+    }
+}
+
+TEST(IRTest, StructFieldStoreOffsets) {
+    auto r = buildIR(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = Point { x: 10, y: 20 }\n"
+        "    p.y\n"
+        "}"
+    );
+    auto& fn = r.ir.functions[0];
+    std::vector<int64_t> store_offsets;
+    for (auto& block : fn.blocks) {
+        for (auto& instr : block.instrs) {
+            if (instr.op == IROpcode::FieldStore) {
+                store_offsets.push_back(instr.imm_value);
+            }
+        }
+    }
+    ASSERT_EQ(store_offsets.size(), 2u);
+    EXPECT_EQ(store_offsets[0], 0);  // x at offset 0
+    EXPECT_EQ(store_offsets[1], 8);  // y at offset 8
+}
+
+TEST(IRTest, StructFieldLoadOffset) {
+    auto r = buildIR(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = Point { x: 10, y: 20 }\n"
+        "    p.y\n"
+        "}"
+    );
+    auto& fn = r.ir.functions[0];
+    for (auto& block : fn.blocks) {
+        for (auto& instr : block.instrs) {
+            if (instr.op == IROpcode::FieldLoad) {
+                EXPECT_EQ(instr.imm_value, 8);  // y at offset 8
+                EXPECT_EQ(instr.type, IRType::I64);
+            }
+        }
+    }
+}
+
+TEST(IRTest, StructFieldAssignIR) {
+    auto r = buildIR(
+        "struct Point { var x: i64, var y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    var p: Point = Point { x: 1, y: 2 }\n"
+        "    p.x = 42\n"
+        "    p.x\n"
+        "}"
+    );
+    auto& fn = r.ir.functions[0];
+    // Should have StructAlloc, initial FieldStores, assignment FieldStore, and FieldLoad
+    int store_count = 0;
+    for (auto& block : fn.blocks) {
+        for (auto& instr : block.instrs) {
+            if (instr.op == IROpcode::FieldStore) store_count++;
+        }
+    }
+    EXPECT_GE(store_count, 3); // 2 init + 1 assignment
+}
+
+TEST(IRTest, StructNestedFieldAccess) {
+    auto r = buildIR(
+        "struct Vec2 { x: i64, y: i64 }\n"
+        "struct Rect { pos: Vec2, w: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val v: Vec2 = Vec2 { x: 10, y: 20 }\n"
+        "    val r: Rect = Rect { pos: v, w: 100 }\n"
+        "    r.pos.x\n"
+        "}"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    // Should have 2 FieldLoad ops (r.pos then .x)
+    int load_count = 0;
+    for (auto& block : r.ir.functions[0].blocks) {
+        for (auto& instr : block.instrs) {
+            if (instr.op == IROpcode::FieldLoad) load_count++;
+        }
+    }
+    EXPECT_EQ(load_count, 2);
+}
+
+TEST(IRTest, StructDumpIR) {
+    auto r = buildIR(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = Point { x: 1, y: 2 }\n"
+        "    p.x\n"
+        "}"
+    );
+    std::ostringstream out;
+    dumpIR(r.ir, out);
+    std::string dump = out.str();
+    EXPECT_NE(dump.find("struct_alloc"), std::string::npos);
+    EXPECT_NE(dump.find("field_store"), std::string::npos);
+    EXPECT_NE(dump.find("field_load"), std::string::npos);
+    EXPECT_NE(dump.find("Point"), std::string::npos);
+}
+
+TEST(IRTest, StructParamType) {
+    auto r = buildIR(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn get_x(p: Point) -> i64 { p.x }"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    auto& fn = r.ir.functions[0];
+    ASSERT_EQ(fn.param_types.size(), 1u);
+    EXPECT_EQ(fn.param_types[0], IRType::Struct);
+}

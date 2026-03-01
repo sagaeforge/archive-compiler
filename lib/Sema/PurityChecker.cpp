@@ -58,6 +58,18 @@ void PurityChecker::collectCallees(Expr* expr, std::unordered_set<std::string_vi
             }
             break;
         }
+        case Expr::Kind::StructLit: {
+            auto* sl = static_cast<StructLitExpr*>(expr);
+            for (uint32_t i = 0; i < sl->field_count; ++i) {
+                collectCallees(sl->fields[i].value, callees);
+            }
+            break;
+        }
+        case Expr::Kind::FieldAccess: {
+            auto* fa = static_cast<FieldAccessExpr*>(expr);
+            collectCallees(fa->object, callees);
+            break;
+        }
         default:
             break;
     }
@@ -83,6 +95,12 @@ void PurityChecker::collectCalleesStmt(Stmt* stmt, std::unordered_set<std::strin
         case Stmt::Kind::ExprStmt:
             collectCallees(static_cast<ExprStmt*>(stmt)->expr, callees);
             break;
+        case Stmt::Kind::FieldAssign: {
+            auto* fas = static_cast<FieldAssignStmt*>(stmt);
+            collectCallees(fas->target, callees);
+            collectCallees(fas->value, callees);
+            break;
+        }
     }
 }
 
@@ -138,6 +156,17 @@ bool PurityChecker::exprUsesVar(Expr* expr) const {
             }
             return false;
         }
+        case Expr::Kind::StructLit: {
+            auto* sl = static_cast<StructLitExpr*>(expr);
+            for (uint32_t i = 0; i < sl->field_count; ++i) {
+                if (exprUsesVar(sl->fields[i].value)) return true;
+            }
+            return false;
+        }
+        case Expr::Kind::FieldAccess: {
+            auto* fa = static_cast<FieldAccessExpr*>(expr);
+            return exprUsesVar(fa->object);
+        }
         default:
             return false;
     }
@@ -146,6 +175,7 @@ bool PurityChecker::exprUsesVar(Expr* expr) const {
 bool PurityChecker::stmtUsesVar(Stmt* stmt) const {
     if (stmt->kind == Stmt::Kind::VarDecl) return true;
     if (stmt->kind == Stmt::Kind::Assign) return true; // mutation
+    if (stmt->kind == Stmt::Kind::FieldAssign) return true; // mutation
     if (stmt->kind == Stmt::Kind::ValDecl) {
         auto* decl = static_cast<ValDeclStmt*>(stmt);
         return exprUsesVar(decl->init);
@@ -252,6 +282,10 @@ bool PurityChecker::exprHasNonTailCall(Expr* expr, std::string_view fn_name) con
                 } else if (st->kind == Stmt::Kind::Assign) {
                     if (exprHasNonTailCallInner(static_cast<AssignStmt*>(st)->value, fn_name))
                         return true;
+                } else if (st->kind == Stmt::Kind::FieldAssign) {
+                    auto* fas = static_cast<FieldAssignStmt*>(st);
+                    if (exprHasNonTailCallInner(fas->target, fn_name)) return true;
+                    if (exprHasNonTailCallInner(fas->value, fn_name)) return true;
                 }
             }
             // Result is a tail position — recurse with tail-aware check
@@ -295,6 +329,17 @@ bool PurityChecker::exprHasNonTailCall(Expr* expr, std::string_view fn_name) con
                 if (exprHasNonTailCall(m->arms[i].body, fn_name)) return true;
             }
             return false;
+        }
+        case Expr::Kind::StructLit: {
+            auto* sl = static_cast<StructLitExpr*>(expr);
+            for (uint32_t i = 0; i < sl->field_count; ++i) {
+                if (exprHasNonTailCallInner(sl->fields[i].value, fn_name)) return true;
+            }
+            return false;
+        }
+        case Expr::Kind::FieldAccess: {
+            auto* fa = static_cast<FieldAccessExpr*>(expr);
+            return exprHasNonTailCallInner(fa->object, fn_name);
         }
         default:
             return false;
@@ -346,6 +391,10 @@ bool PurityChecker::exprHasNonTailCallInner(Expr* expr, std::string_view fn_name
                 } else if (st->kind == Stmt::Kind::Assign) {
                     if (exprHasNonTailCallInner(static_cast<AssignStmt*>(st)->value, fn_name))
                         return true;
+                } else if (st->kind == Stmt::Kind::FieldAssign) {
+                    auto* fas = static_cast<FieldAssignStmt*>(st);
+                    if (exprHasNonTailCallInner(fas->target, fn_name)) return true;
+                    if (exprHasNonTailCallInner(fas->value, fn_name)) return true;
                 }
             }
             if (block->result) return exprHasNonTailCallInner(block->result, fn_name);
@@ -364,6 +413,17 @@ bool PurityChecker::exprHasNonTailCallInner(Expr* expr, std::string_view fn_name
                 if (exprHasNonTailCallInner(m->arms[i].body, fn_name)) return true;
             }
             return false;
+        }
+        case Expr::Kind::StructLit: {
+            auto* sl = static_cast<StructLitExpr*>(expr);
+            for (uint32_t i = 0; i < sl->field_count; ++i) {
+                if (exprHasNonTailCallInner(sl->fields[i].value, fn_name)) return true;
+            }
+            return false;
+        }
+        case Expr::Kind::FieldAccess: {
+            auto* fa = static_cast<FieldAccessExpr*>(expr);
+            return exprHasNonTailCallInner(fa->object, fn_name);
         }
         default:
             return false;

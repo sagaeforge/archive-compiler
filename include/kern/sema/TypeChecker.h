@@ -12,7 +12,8 @@ enum class Type {
     I8, I16, I32, I64,
     U8, U16, U32, U64,
     F32, F64,
-    Bool, Unit, Error
+    Bool, Unit, Error,
+    Struct
 };
 
 const char* typeName(Type t);
@@ -22,11 +23,30 @@ bool isUnsigned(Type t);
 int bitWidth(Type t);
 bool isFloat(Type t);
 bool intFitsInType(int64_t value, Type t);
+bool isStruct(Type t);
+int sizeBytes(Type t);
+
+struct FieldDef {
+    std::string_view name;
+    Type type;
+    bool is_mutable;
+    int32_t offset;   // byte offset within struct
+    std::string_view struct_name; // if type==Struct, the nested struct name
+};
+
+struct StructDef {
+    std::string_view name;
+    std::vector<FieldDef> fields;
+    int32_t total_size;
+    int32_t alignment;
+};
 
 struct FnSig {
     std::string_view name;
     std::vector<Type> param_types;
+    std::vector<std::string_view> param_struct_names; // parallel to param_types
     Type return_type;
+    std::string_view return_struct_name; // when return_type == Type::Struct
 };
 
 class TypeChecker {
@@ -37,6 +57,11 @@ public:
 
     // Query the type of an expression (after check() has run)
     Type typeOfExpr(const Expr* expr) const;
+
+    // Struct queries (after check() has run)
+    const StructDef* getStructDef(std::string_view name) const;
+    std::string_view structNameOfExpr(const Expr* expr) const;
+    std::string_view localStructName(std::string_view binding) const;
 
 private:
     Type checkFn(FnDecl* fn);
@@ -54,6 +79,11 @@ private:
 
     // Memoized expression types (Expr* -> Type)
     std::unordered_map<const Expr*, Type> expr_types_;
+
+    // Struct support
+    std::unordered_map<std::string_view, StructDef> struct_defs_;
+    std::unordered_map<const Expr*, std::string_view> expr_struct_names_;
+    std::unordered_map<std::string_view, std::string_view> local_struct_names_;
 };
 
 } // namespace kern

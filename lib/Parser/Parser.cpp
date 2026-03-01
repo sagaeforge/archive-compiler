@@ -93,6 +93,15 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
                         dumpExpr(as->value, out, ind + 2);
                         break;
                     }
+                    case Stmt::Kind::FieldAssign: {
+                        auto* fas = static_cast<const FieldAssignStmt*>(st);
+                        out << "FieldAssign\n";
+                        indent(out, ind + 2); out << "target:\n";
+                        dumpExpr(fas->target, out, ind + 3);
+                        indent(out, ind + 2); out << "value:\n";
+                        dumpExpr(fas->value, out, ind + 3);
+                        break;
+                    }
                 }
             }
             if (bl->result) {
@@ -136,10 +145,34 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             }
             break;
         }
+        case Expr::Kind::StructLit: {
+            auto* sl = static_cast<const StructLitExpr*>(expr);
+            out << "StructLit(" << sl->struct_name << ")\n";
+            for (uint32_t i = 0; i < sl->field_count; ++i) {
+                indent(out, ind + 1);
+                out << sl->fields[i].name << ":\n";
+                dumpExpr(sl->fields[i].value, out, ind + 2);
+            }
+            break;
+        }
+        case Expr::Kind::FieldAccess: {
+            auto* fa = static_cast<const FieldAccessExpr*>(expr);
+            out << "FieldAccess(." << fa->field_name << ")\n";
+            dumpExpr(fa->object, out, ind + 1);
+            break;
+        }
     }
 }
 
 void dumpAST(const Module* mod, std::ostream& out, int /*ind*/) {
+    for (uint32_t i = 0; i < mod->struct_count; ++i) {
+        auto* sd = mod->structs[i];
+        out << "StructDecl(" << sd->name << ")\n";
+        for (uint32_t j = 0; j < sd->field_count; ++j) {
+            out << "  " << (sd->fields[j].is_mutable ? "var " : "")
+                << sd->fields[j].name << ": " << sd->fields[j].type.name << "\n";
+        }
+    }
     for (uint32_t i = 0; i < mod->fn_count; ++i) {
         auto* fn = mod->functions[i];
         out << "FnDecl(" << fn->name << "(";
@@ -209,13 +242,20 @@ void Parser::skipNewlines() {
 // --- Module ---
 Module* Parser::parseModule() {
     std::vector<FnDecl*> fns;
+    std::vector<StructDecl*> structs;
     skipNewlines();
     while (!check(TokenKind::Eof)) {
-        if (check(TokenKind::KwFn)) {
+        if (check(TokenKind::KwStruct)) {
+            StructDecl* sd = parseStructDecl();
+            if (sd) {
+                structs.push_back(sd);
+                struct_names_.insert(sd->name);
+            }
+        } else if (check(TokenKind::KwFn)) {
             FnDecl* fn = parseFnDecl();
             if (fn) fns.push_back(fn);
         } else {
-            diag_.error(peek().loc, "expected function declaration");
+            diag_.error(peek().loc, "expected function or struct declaration");
             advance();
         }
         skipNewlines();
@@ -328,7 +368,53 @@ Module* Parser::parseModule() {
     for (size_t j = 0; j < merged.size(); ++j) {
         mod->functions[j] = merged[j];
     }
+    mod->struct_count = static_cast<uint32_t>(structs.size());
+    mod->structs = arena_.makeArray<StructDecl*>(structs.size());
+    for (size_t j = 0; j < structs.size(); ++j) {
+        mod->structs[j] = structs[j];
+    }
     return mod;
+}
+
+// --- Struct Declaration ---
+StructDecl* Parser::parseStructDecl() {
+    SourceLocation loc = peek().loc;
+    expect(TokenKind::KwStruct, "expected 'struct'");
+    Token nameTok = expect(TokenKind::Ident, "expected struct name");
+    skipNewlines();
+    expect(TokenKind::LBrace, "expected '{' after struct name");
+    skipNewlines();
+
+    std::vector<FieldDecl> fields;
+    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        FieldDecl fd;
+        fd.is_mutable = false;
+        if (check(TokenKind::KwVar)) {
+            advance();
+            fd.is_mutable = true;
+        } else if (check(TokenKind::KwVal)) {
+            advance();
+        }
+        Token field_name = expect(TokenKind::Ident, "expected field name");
+        fd.name = field_name.text;
+        fd.loc = field_name.loc;
+        expect(TokenKind::Colon, "expected ':' after field name");
+        fd.type = parseType();
+        fields.push_back(fd);
+        // Skip comma, semicolons, newlines between fields
+        while (match(TokenKind::Comma) || match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+    }
+    expect(TokenKind::RBrace, "expected '}' after struct fields");
+
+    auto* sd = arena_.make<StructDecl>();
+    sd->name = nameTok.text;
+    sd->loc = loc;
+    sd->field_count = static_cast<uint32_t>(fields.size());
+    sd->fields = arena_.makeArray<FieldDecl>(fields.size());
+    for (size_t i = 0; i < fields.size(); ++i) {
+        sd->fields[i] = fields[i];
+    }
+    return sd;
 }
 
 // --- Function Declaration ---
@@ -449,6 +535,7 @@ Parser::InfixBP Parser::infixBP(TokenKind kind) {
         case TokenKind::Minus:   return {11, 12};
         case TokenKind::Star:
         case TokenKind::Slash:   return {20, 21};
+        case TokenKind::Dot:     return {30, 31};
         default:                 return {0, 0};
     }
 }
@@ -490,6 +577,18 @@ Expr* Parser::parseExprInfix(Expr* lhs, uint8_t minBP) {
 
         Token opTok = advance();
         skipNewlines();
+
+        // Dot operator: field access
+        if (op == TokenKind::Dot) {
+            Token field = expect(TokenKind::Ident, "expected field name after '.'");
+            auto* fa = arena_.make<FieldAccessExpr>();
+            fa->kind = Expr::Kind::FieldAccess;
+            fa->loc = opTok.loc;
+            fa->object = lhs;
+            fa->field_name = field.text;
+            lhs = fa;
+            continue;
+        }
 
         // Pipe operator: desugar to CallExpr
         if (op == TokenKind::Pipe) {
@@ -601,11 +700,14 @@ Expr* Parser::parsePrimary() {
         return lit;
     }
 
-    // Identifier or function call
+    // Identifier, function call, or struct literal
     if (tok.kind == TokenKind::Ident) {
         advance();
         if (check(TokenKind::LParen)) {
             return parseCallExpr(tok.text, tok.loc);
+        }
+        if (check(TokenKind::LBrace) && struct_names_.count(tok.text)) {
+            return parseStructLit(tok.text, tok.loc);
         }
         auto* ident = arena_.make<IdentExpr>();
         ident->kind = Expr::Kind::Ident;
@@ -706,34 +808,59 @@ Expr* Parser::parseBlockExpr() {
         if (check(TokenKind::KwVal) || check(TokenKind::KwVar)) {
             stmts.push_back(parseValDecl());
         } else if (check(TokenKind::Ident)) {
-            // Could be assignment (ident = expr) or an expression
+            // Could be assignment, field assignment, or an expression
             Token identTok = peek();
             advance();
             skipNewlines();
+
+            // Build the initial LHS
+            Expr* lhs;
+            if (check(TokenKind::LParen)) {
+                lhs = parseCallExpr(identTok.text, identTok.loc);
+            } else if (check(TokenKind::LBrace) && struct_names_.count(identTok.text)) {
+                lhs = parseStructLit(identTok.text, identTok.loc);
+            } else {
+                auto* ident = arena_.make<IdentExpr>();
+                ident->kind = Expr::Kind::Ident;
+                ident->loc = identTok.loc;
+                ident->name = identTok.text;
+                lhs = ident;
+            }
+
+            // Parse dot chains only (just Dot infix, highest precedence)
+            while (check(TokenKind::Dot)) {
+                Token dotTok = advance();
+                Token field = expect(TokenKind::Ident, "expected field name after '.'");
+                auto* fa = arena_.make<FieldAccessExpr>();
+                fa->kind = Expr::Kind::FieldAccess;
+                fa->loc = dotTok.loc;
+                fa->object = lhs;
+                fa->field_name = field.text;
+                lhs = fa;
+            }
+            skipNewlines();
+
             if (check(TokenKind::Eq)) {
-                // Assignment: ident = expr
                 advance(); // consume '='
                 skipNewlines();
                 Expr* value = parseExpr();
-                auto* assign = arena_.make<AssignStmt>();
-                assign->kind = Stmt::Kind::Assign;
-                assign->loc = identTok.loc;
-                assign->name = identTok.text;
-                assign->value = value;
-                stmts.push_back(assign);
-            } else {
-                // Not assignment — was an expression starting with ident
-                // Build the ident expression, then continue Pratt parsing
-                Expr* lhs;
-                if (check(TokenKind::LParen)) {
-                    lhs = parseCallExpr(identTok.text, identTok.loc);
+                if (lhs->kind == Expr::Kind::FieldAccess) {
+                    auto* fa_stmt = arena_.make<FieldAssignStmt>();
+                    fa_stmt->kind = Stmt::Kind::FieldAssign;
+                    fa_stmt->loc = identTok.loc;
+                    fa_stmt->target = lhs;
+                    fa_stmt->value = value;
+                    stmts.push_back(fa_stmt);
                 } else {
-                    auto* ident = arena_.make<IdentExpr>();
-                    ident->kind = Expr::Kind::Ident;
-                    ident->loc = identTok.loc;
-                    ident->name = identTok.text;
-                    lhs = ident;
+                    // Simple variable assignment
+                    auto* assign = arena_.make<AssignStmt>();
+                    assign->kind = Stmt::Kind::Assign;
+                    assign->loc = identTok.loc;
+                    assign->name = identTok.text;
+                    assign->value = value;
+                    stmts.push_back(assign);
                 }
+            } else {
                 // Continue with infix parsing (reuse Pratt parser)
                 lhs = parseExprInfix(lhs, 0);
                 skipNewlines();
@@ -808,6 +935,38 @@ Expr* Parser::parseCallExpr(std::string_view name, SourceLocation loc) {
         call->args[i] = args[i];
     }
     return call;
+}
+
+// --- Struct Literal ---
+Expr* Parser::parseStructLit(std::string_view name, SourceLocation loc) {
+    expect(TokenKind::LBrace, "expected '{' in struct literal");
+    skipNewlines();
+
+    std::vector<FieldInit> fields;
+    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        FieldInit fi;
+        Token field_name = expect(TokenKind::Ident, "expected field name");
+        fi.name = field_name.text;
+        fi.loc = field_name.loc;
+        expect(TokenKind::Colon, "expected ':' after field name");
+        skipNewlines();
+        fi.value = parseExpr();
+        fields.push_back(fi);
+        // Skip comma, semicolons, newlines between fields
+        while (match(TokenKind::Comma) || match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+    }
+    expect(TokenKind::RBrace, "expected '}' in struct literal");
+
+    auto* sl = arena_.make<StructLitExpr>();
+    sl->kind = Expr::Kind::StructLit;
+    sl->loc = loc;
+    sl->struct_name = name;
+    sl->field_count = static_cast<uint32_t>(fields.size());
+    sl->fields = arena_.makeArray<FieldInit>(fields.size());
+    for (size_t i = 0; i < fields.size(); ++i) {
+        sl->fields[i] = fields[i];
+    }
+    return sl;
 }
 
 // --- Match Expression ---
