@@ -1,0 +1,10 @@
+// Per-CPU data test — uses gs-segment load/store intrinsics
+fn percpu_store(offset: u64, value: u64) -> Unit = intrinsic
+fn percpu_load(offset: u64) -> u64 = intrinsic
+
+fn main() -> i64 {
+    // Store 42 at gs:0, load it back
+    percpu_store(0, 42)
+    val v: i64 = percpu_load(0) as i64
+    v
+}

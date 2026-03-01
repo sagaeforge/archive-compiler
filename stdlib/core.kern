@@ -55,6 +55,23 @@ fn unwrap_err<T, E>(r: Result<T, E>, fallback: E) -> E {
     }
 }
 
+// --- Utility functions ---
+fn min(a: i64, b: i64) -> i64 {
+    if a < b { a } else { b }
+}
+
+fn max(a: i64, b: i64) -> i64 {
+    if a > b { a } else { b }
+}
+
+fn abs(x: i64) -> i64 {
+    if x < 0 { 0 - x } else { x }
+}
+
+fn clamp(x: i64, lo: i64, hi: i64) -> i64 {
+    if x < lo { lo } else if x > hi { hi } else { x }
+}
+
 // --- Print intrinsic (macOS) ---
 fn print_i64(x: i64) -> Unit = intrinsic
 fn print_str(s: String) -> Unit = intrinsic
@@ -63,3 +80,33 @@ fn print_str(s: String) -> Unit = intrinsic
 fn mem_copy(dst: Ptr<var u8>, src: Ptr<u8>, n: u64) -> Unit = intrinsic
 fn mem_set(dst: Ptr<var u8>, val: u8, n: u64) -> Unit = intrinsic
 fn mem_cmp(a: Ptr<u8>, b: Ptr<u8>, n: u64) -> i64 = intrinsic
+
+// --- Pointer arithmetic intrinsics ---
+fn ptr_add_bytes(ptr: Ptr<u8>, n: u64) -> Ptr<u8> = intrinsic
+fn ptr_sub_bytes(ptr: Ptr<u8>, n: u64) -> Ptr<u8> = intrinsic
+
+// --- Atomic intrinsics ---
+fn atomic_load(ptr: Ptr<u64>) -> u64 = intrinsic
+fn atomic_store(ptr: Ptr<var u64>, value: u64) -> Unit = intrinsic
+fn atomic_cas(ptr: Ptr<var u64>, expected: u64, desired: u64) -> u64 = intrinsic
+fn atomic_fetch_add(ptr: Ptr<var u64>, value: u64) -> u64 = intrinsic
+
+// --- Fence intrinsics ---
+fn mfence() -> Unit = intrinsic
+fn sfence() -> Unit = intrinsic
+fn lfence() -> Unit = intrinsic
+fn compiler_barrier() -> Unit = intrinsic
+
+// --- Per-CPU data intrinsics ---
+fn percpu_load(offset: u64) -> u64 = intrinsic
+fn percpu_store(offset: u64, value: u64) -> Unit = intrinsic
+
+// --- Volatile I/O intrinsics ---
+fn volatile_read_u8(ptr: Ptr<u8>) -> u8 = intrinsic
+fn volatile_read_u16(ptr: Ptr<u16>) -> u16 = intrinsic
+fn volatile_read_u32(ptr: Ptr<u32>) -> u32 = intrinsic
+fn volatile_read_u64(ptr: Ptr<u64>) -> u64 = intrinsic
+fn volatile_write_u8(ptr: Ptr<var u8>, value: u8) -> Unit = intrinsic
+fn volatile_write_u16(ptr: Ptr<var u16>, value: u16) -> Unit = intrinsic
+fn volatile_write_u32(ptr: Ptr<var u32>, value: u32) -> Unit = intrinsic
+fn volatile_write_u64(ptr: Ptr<var u64>, value: u64) -> Unit = intrinsic

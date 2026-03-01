@@ -1505,7 +1505,7 @@ private:
   - 5d-f: `/kern:e2e-add` 반복 → 전체 테스트 보강
   - 최종: `/kern:coverage` → **전체 lib/ 98% 달성 확인** → `/kern:layer-check`
 
-### Phase 6: 패키지 매니저 + 표준 라이브러리 — 🟡 부분 완료 (6a: kern.toml+build/init, 6b: core.kern 스켈레톤)
+### Phase 6: 패키지 매니저 + 표준 라이브러리 — ✅ 완료 (6a: kern-pkg, 6b: stdlib/core.kern with Option/Result/utils/intrinsics)
 
 ```
 ┌───────────────────┐  ┌──────────────────────┐
@@ -1575,7 +1575,7 @@ private:
 | 3 | - | 3a, 3b, 3c | 3 | **LIR interpreter** + unit | ✅ 완료 (695 unit + 115 E2E) |
 | 4 | - | 4a, 4b, 4c | 3 | **69 E2E 앵커** (처음!) | ✅ 완료 (4a: 784u+116e, 4b: Debug, 4c: IDE+DiagnosticProvider) |
 | 5 | 5a | 5b, 5c / 5d, 5e, 5f | 2+3 | 전체 E2E + coverage | ✅ 완료 (v1 삭제, LSP wired, kern-fmt, tool tests) |
-| 6 | - | 6a, 6b | 2 | pkg/stdlib 테스트 | 🟡 부분 (6a: kern.toml+build, 6b: core stub) |
+| 6 | - | 6a, 6b | 2 | pkg/stdlib 테스트 | ✅ 완료 (6a: kern-pkg, 6b: stdlib/core.kern Option/Result/utils) |
 | 7 | - | 7a, 7b | 2 | 도구별 통합 테스트 | 🟡 스켈레톤 (kern-dbg CLI, kern-repl full-recompile) |
 
 ---
