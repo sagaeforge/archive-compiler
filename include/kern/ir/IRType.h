@@ -76,6 +76,8 @@ inline IRType irTypeFromSemaType(Type t) {
         case Type::Unit:  return IRType::Unit;
         case Type::Error:  return IRType::Unknown;
         case Type::Struct: return IRType::Struct;
+        case Type::Enum:   return IRType::I64;   // enum tag is an integer
+        case Type::Union:  return IRType::Struct; // union is stack-allocated like struct
     }
     return IRType::Unknown;
 }

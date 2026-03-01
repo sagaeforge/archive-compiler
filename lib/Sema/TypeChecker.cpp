@@ -19,6 +19,8 @@ const char* typeName(Type t) {
         case Type::Unit:   return "Unit";
         case Type::Error:  return "<error>";
         case Type::Struct: return "struct";
+        case Type::Enum:   return "enum";
+        case Type::Union:  return "union";
     }
     return "<unknown>";
 }
@@ -66,9 +68,9 @@ int bitWidth(Type t) {
     }
 }
 
-bool isStruct(Type t) {
-    return t == Type::Struct;
-}
+bool isStruct(Type t) { return t == Type::Struct; }
+bool isEnum(Type t) { return t == Type::Enum; }
+bool isUnion(Type t) { return t == Type::Union; }
 
 int sizeBytes(Type t) {
     switch (t) {
@@ -94,7 +96,7 @@ bool intFitsInType(int64_t value, Type t) {
     }
 }
 
-TypeChecker::TypeChecker(DiagnosticEngine& diag) : diag_(diag) {}
+TypeChecker::TypeChecker(DiagnosticEngine& diag, Arena* arena) : diag_(diag), arena_(arena) {}
 
 Type TypeChecker::resolveType(const TypeRef& ref) {
     if (ref.name == "i8")   return Type::I8;
@@ -110,6 +112,8 @@ Type TypeChecker::resolveType(const TypeRef& ref) {
     if (ref.name == "bool") return Type::Bool;
     if (ref.name == "Unit") return Type::Unit;
     if (struct_defs_.count(ref.name)) return Type::Struct;
+    if (enum_defs_.count(ref.name))  return Type::Enum;
+    if (union_defs_.count(ref.name)) return Type::Union;
     diag_.error(ref.loc, std::string("unknown type '") + std::string(ref.name) + "'");
     return Type::Error;
 }
@@ -133,6 +137,36 @@ std::string_view TypeChecker::structNameOfExpr(const Expr* expr) const {
 std::string_view TypeChecker::localStructName(std::string_view binding) const {
     auto it = local_struct_names_.find(binding);
     return (it != local_struct_names_.end()) ? it->second : std::string_view{};
+}
+
+const EnumDef* TypeChecker::getEnumDef(std::string_view name) const {
+    auto it = enum_defs_.find(name);
+    return (it != enum_defs_.end()) ? &it->second : nullptr;
+}
+
+const UnionDef* TypeChecker::getUnionDef(std::string_view name) const {
+    auto it = union_defs_.find(name);
+    return (it != union_defs_.end()) ? &it->second : nullptr;
+}
+
+std::string_view TypeChecker::enumNameOfExpr(const Expr* expr) const {
+    auto it = expr_enum_names_.find(expr);
+    return (it != expr_enum_names_.end()) ? it->second : std::string_view{};
+}
+
+std::string_view TypeChecker::unionNameOfExpr(const Expr* expr) const {
+    auto it = expr_union_names_.find(expr);
+    return (it != expr_union_names_.end()) ? it->second : std::string_view{};
+}
+
+std::string_view TypeChecker::localEnumName(std::string_view binding) const {
+    auto it = local_enum_names_.find(binding);
+    return (it != local_enum_names_.end()) ? it->second : std::string_view{};
+}
+
+std::string_view TypeChecker::localUnionName(std::string_view binding) const {
+    auto it = local_union_names_.find(binding);
+    return (it != local_union_names_.end()) ? it->second : std::string_view{};
 }
 
 bool TypeChecker::check(Module* mod) {
@@ -196,20 +230,92 @@ bool TypeChecker::check(Module* mod) {
         struct_defs_[sd->name] = def;
     }
 
+    // Register enum definitions
+    for (uint32_t i = 0; i < mod->enum_count; ++i) {
+        auto* ed = mod->enums[i];
+        EnumDef def;
+        def.name = ed->name;
+        def.tag_size = (ed->variant_count <= 256) ? 1 : (ed->variant_count <= 65536 ? 2 : 4);
+        for (uint32_t j = 0; j < ed->variant_count; ++j) {
+            EnumVariantDef vd;
+            vd.name = ed->variants[j].name;
+            vd.tag = static_cast<int32_t>(j);
+            def.variants.push_back(vd);
+        }
+        enum_defs_[ed->name] = def;
+    }
+
+    // Register union definitions
+    for (uint32_t i = 0; i < mod->union_count; ++i) {
+        auto* ud = mod->unions[i];
+        UnionDef def;
+        def.name = ud->name;
+        int32_t max_payload = 0;
+        int32_t max_align = 1;
+
+        for (uint32_t j = 0; j < ud->variant_count; ++j) {
+            UnionVariantDef vd;
+            vd.name = ud->variants[j].name;
+            vd.tag = static_cast<int32_t>(j);
+            vd.payload_size = 0;
+            vd.payload_type = Type::Error;
+            vd.payload_struct_name = {};
+
+            if (ud->variants[j].payload_type) {
+                Type pt = resolveType(*ud->variants[j].payload_type);
+                vd.payload_type = pt;
+                if (pt == Type::Struct) {
+                    vd.payload_struct_name = ud->variants[j].payload_type->name;
+                    auto sit = struct_defs_.find(vd.payload_struct_name);
+                    if (sit != struct_defs_.end()) {
+                        vd.payload_size = sit->second.total_size;
+                        if (sit->second.alignment > max_align)
+                            max_align = sit->second.alignment;
+                    }
+                } else {
+                    vd.payload_size = sizeBytes(pt);
+                    int pa = vd.payload_size > 0 ? vd.payload_size : 1;
+                    if (pa > max_align) max_align = pa;
+                }
+            }
+            if (vd.payload_size > max_payload) max_payload = vd.payload_size;
+            def.variants.push_back(vd);
+        }
+
+        def.tag_size = (ud->variant_count <= 256) ? 1 : (ud->variant_count <= 65536 ? 2 : 4);
+        def.max_payload_size = max_payload;
+        // Pad tag to alignment boundary for payload
+        int32_t data_offset = def.tag_size;
+        if (max_align > 1 && max_payload > 0) {
+            data_offset = (data_offset + max_align - 1) / max_align * max_align;
+        }
+        def.total_size = data_offset + max_payload;
+        // Pad total to max alignment
+        if (max_align > 1) {
+            def.total_size = (def.total_size + max_align - 1) / max_align * max_align;
+        }
+        def.alignment = max_align;
+        union_defs_[ud->name] = def;
+    }
+
     // First pass: register all function signatures
     for (uint32_t i = 0; i < mod->fn_count; ++i) {
         FnDecl* fn = mod->functions[i];
         FnSig sig;
         sig.name = fn->name;
         sig.return_type = resolveType(fn->return_type);
-        if (sig.return_type == Type::Struct) {
+        if (sig.return_type == Type::Struct || sig.return_type == Type::Enum ||
+            sig.return_type == Type::Union) {
             sig.return_struct_name = fn->return_type.name;
         }
         for (uint32_t j = 0; j < fn->param_count; ++j) {
             Type pt = resolveType(fn->params[j].type);
             sig.param_types.push_back(pt);
-            sig.param_struct_names.push_back(
-                pt == Type::Struct ? fn->params[j].type.name : std::string_view{});
+            std::string_view pname = {};
+            if (pt == Type::Struct || pt == Type::Enum || pt == Type::Union) {
+                pname = fn->params[j].type.name;
+            }
+            sig.param_struct_names.push_back(pname);
         }
         fn_table_[fn->name] = sig;
     }
@@ -236,6 +342,8 @@ Type TypeChecker::checkFn(FnDecl* fn) {
     local_vars_.clear();
     mutable_vars_.clear();
     local_struct_names_.clear();
+    local_enum_names_.clear();
+    local_union_names_.clear();
     current_return_type_ = resolveType(fn->return_type);
 
     // Intrinsic functions: signature only, no body to check
@@ -249,6 +357,10 @@ Type TypeChecker::checkFn(FnDecl* fn) {
         local_vars_[fn->params[i].name] = pt;
         if (pt == Type::Struct) {
             local_struct_names_[fn->params[i].name] = fn->params[i].type.name;
+        } else if (pt == Type::Enum) {
+            local_enum_names_[fn->params[i].name] = fn->params[i].type.name;
+        } else if (pt == Type::Union) {
+            local_union_names_[fn->params[i].name] = fn->params[i].type.name;
         }
     }
 
@@ -313,9 +425,13 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
                 result = it->second;
                 if (result == Type::Struct) {
                     auto sn = localStructName(ident->name);
-                    if (!sn.empty()) {
-                        expr_struct_names_[expr] = sn;
-                    }
+                    if (!sn.empty()) expr_struct_names_[expr] = sn;
+                } else if (result == Type::Enum) {
+                    auto en = localEnumName(ident->name);
+                    if (!en.empty()) expr_enum_names_[expr] = en;
+                } else if (result == Type::Union) {
+                    auto un = localUnionName(ident->name);
+                    if (!un.empty()) expr_union_names_[expr] = un;
                 }
             }
             break;
@@ -608,6 +724,86 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
             break;
         }
 
+        case Expr::Kind::EnumAccess: {
+            auto* ea = static_cast<EnumAccessExpr*>(expr);
+            auto it = enum_defs_.find(ea->enum_name);
+            if (it == enum_defs_.end()) {
+                diag_.error(expr->loc, std::string("unknown enum '") +
+                            std::string(ea->enum_name) + "'");
+                result = Type::Error;
+                break;
+            }
+            bool found = false;
+            for (const auto& v : it->second.variants) {
+                if (v.name == ea->variant_name) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                diag_.error(expr->loc, std::string("enum '") + std::string(ea->enum_name) +
+                            "' has no variant '" + std::string(ea->variant_name) + "'");
+                result = Type::Error;
+                break;
+            }
+            result = Type::Enum;
+            expr_enum_names_[expr] = ea->enum_name;
+            break;
+        }
+
+        case Expr::Kind::UnionVariant: {
+            auto* uv = static_cast<UnionVariantExpr*>(expr);
+            auto it = union_defs_.find(uv->union_name);
+            if (it == union_defs_.end()) {
+                diag_.error(expr->loc, std::string("unknown union '") +
+                            std::string(uv->union_name) + "'");
+                result = Type::Error;
+                break;
+            }
+            const UnionVariantDef* vdef = nullptr;
+            for (const auto& v : it->second.variants) {
+                if (v.name == uv->variant_name) {
+                    vdef = &v;
+                    break;
+                }
+            }
+            if (!vdef) {
+                diag_.error(expr->loc, std::string("union '") + std::string(uv->union_name) +
+                            "' has no variant '" + std::string(uv->variant_name) + "'");
+                result = Type::Error;
+                break;
+            }
+            // Check payload
+            if (vdef->payload_type == Type::Error && uv->payload != nullptr) {
+                diag_.error(expr->loc, std::string("variant '") + std::string(uv->variant_name) +
+                            "' takes no payload");
+                result = Type::Error;
+                break;
+            }
+            if (vdef->payload_type != Type::Error && uv->payload == nullptr) {
+                diag_.error(expr->loc, std::string("variant '") + std::string(uv->variant_name) +
+                            "' requires a payload of type " + typeName(vdef->payload_type));
+                result = Type::Error;
+                break;
+            }
+            if (uv->payload) {
+                std::optional<Type> payload_ctx;
+                if (vdef->payload_type != Type::Error) payload_ctx = vdef->payload_type;
+                Type payload_type = checkExpr(uv->payload, payload_ctx);
+                if (payload_type != Type::Error && payload_type != vdef->payload_type) {
+                    diag_.error(uv->payload->loc,
+                        std::string("variant '") + std::string(uv->variant_name) +
+                        "' expects payload of type " + typeName(vdef->payload_type) +
+                        ", got " + typeName(payload_type));
+                    result = Type::Error;
+                    break;
+                }
+            }
+            result = Type::Union;
+            expr_union_names_[expr] = uv->union_name;
+            break;
+        }
+
         case Expr::Kind::Match: {
             auto* matchE = static_cast<MatchExpr*>(expr);
             Type scrut_type = checkExpr(matchE->scrutinee);
@@ -619,9 +815,40 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
             // Save/restore local vars for arm scoping
             auto saved_locals = local_vars_;
 
+            // Resolve enum/union name for scrutinee
+            std::string_view scrut_enum_name;
+            std::string_view scrut_union_name;
+            const EnumDef* scrut_enum = nullptr;
+            const UnionDef* scrut_union = nullptr;
+            if (scrut_type == Type::Enum) {
+                scrut_enum_name = enumNameOfExpr(matchE->scrutinee);
+                if (scrut_enum_name.empty()) {
+                    // Try from ident
+                    if (matchE->scrutinee->kind == Expr::Kind::Ident) {
+                        auto* ident = static_cast<IdentExpr*>(matchE->scrutinee);
+                        scrut_enum_name = localEnumName(ident->name);
+                    }
+                }
+                if (!scrut_enum_name.empty()) {
+                    scrut_enum = getEnumDef(scrut_enum_name);
+                }
+            } else if (scrut_type == Type::Union) {
+                scrut_union_name = unionNameOfExpr(matchE->scrutinee);
+                if (scrut_union_name.empty()) {
+                    if (matchE->scrutinee->kind == Expr::Kind::Ident) {
+                        auto* ident = static_cast<IdentExpr*>(matchE->scrutinee);
+                        scrut_union_name = localUnionName(ident->name);
+                    }
+                }
+                if (!scrut_union_name.empty()) {
+                    scrut_union = getUnionDef(scrut_union_name);
+                }
+            }
+
             Type arm_type = Type::Error;
             bool has_catch_all = false;
             bool has_true = false, has_false = false;
+            std::unordered_set<std::string_view> covered_variants;
 
             for (uint32_t i = 0; i < matchE->arm_count; ++i) {
                 auto& arm = matchE->arms[i];
@@ -647,13 +874,105 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
                         break;
                     case Pattern::Kind::Variable: {
                         auto* vp = static_cast<VariablePattern*>(arm.pattern);
-                        local_vars_[vp->name] = scrut_type;
-                        if (!arm.guard) has_catch_all = true;
+                        // Check if this is actually an enum variant name or union variant name
+                        if (scrut_enum) {
+                            bool is_variant = false;
+                            for (const auto& v : scrut_enum->variants) {
+                                if (v.name == vp->name) {
+                                    is_variant = true;
+                                    covered_variants.insert(v.name);
+                                    // Promote to EnumPattern at semantic level
+                                    arm.pattern->kind = Pattern::Kind::Enum;
+                                    break;
+                                }
+                            }
+                            if (!is_variant) {
+                                // It's a catch-all variable binding
+                                local_vars_[vp->name] = scrut_type;
+                                local_enum_names_[vp->name] = scrut_enum_name;
+                                if (!arm.guard) has_catch_all = true;
+                            }
+                        } else if (scrut_union) {
+                            bool is_variant = false;
+                            for (const auto& v : scrut_union->variants) {
+                                if (v.name == vp->name) {
+                                    is_variant = true;
+                                    covered_variants.insert(v.name);
+                                    // Promote to Union pattern — allocate proper node
+                                    if (arena_) {
+                                        auto* up = arena_->make<UnionPattern>();
+                                        up->kind = Pattern::Kind::Union;
+                                        up->loc = vp->loc;
+                                        up->variant_name = vp->name;
+                                        up->inner = nullptr;
+                                        up->field_bindings = nullptr;
+                                        up->field_binding_count = 0;
+                                        arm.pattern = up;
+                                    } else {
+                                        arm.pattern->kind = Pattern::Kind::Union;
+                                    }
+                                    break;
+                                }
+                            }
+                            if (!is_variant) {
+                                local_vars_[vp->name] = scrut_type;
+                                local_union_names_[vp->name] = scrut_union_name;
+                                if (!arm.guard) has_catch_all = true;
+                            }
+                        } else {
+                            local_vars_[vp->name] = scrut_type;
+                            if (!arm.guard) has_catch_all = true;
+                        }
                         break;
                     }
                     case Pattern::Kind::Wildcard:
                         if (!arm.guard) has_catch_all = true;
                         break;
+                    case Pattern::Kind::Enum: {
+                        auto* ep = static_cast<EnumPattern*>(arm.pattern);
+                        if (scrut_enum) {
+                            covered_variants.insert(ep->variant_name);
+                        }
+                        break;
+                    }
+                    case Pattern::Kind::Union: {
+                        auto* up = static_cast<UnionPattern*>(arm.pattern);
+                        if (scrut_union) {
+                            covered_variants.insert(up->variant_name);
+                            // Find variant def to bind inner pattern
+                            for (const auto& v : scrut_union->variants) {
+                                if (v.name == up->variant_name) {
+                                    if (up->inner && v.payload_type != Type::Error) {
+                                        // Bind inner variable to payload type
+                                        if (up->inner->kind == Pattern::Kind::Variable) {
+                                            auto* inner_vp = static_cast<VariablePattern*>(up->inner);
+                                            local_vars_[inner_vp->name] = v.payload_type;
+                                            if (v.payload_type == Type::Struct) {
+                                                local_struct_names_[inner_vp->name] = v.payload_struct_name;
+                                            }
+                                        }
+                                    }
+                                    if (up->field_binding_count > 0 && v.payload_type == Type::Struct) {
+                                        // Struct destructuring: bind each field
+                                        auto sdef = getStructDef(v.payload_struct_name);
+                                        if (sdef) {
+                                            for (uint32_t fb = 0; fb < up->field_binding_count; ++fb) {
+                                                auto& binding = up->field_bindings[fb];
+                                                for (const auto& fd : sdef->fields) {
+                                                    if (fd.name == binding.field_name) {
+                                                        local_vars_[binding.binding_name] = fd.type;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        break;
+                    }
                 }
 
                 // Check guard
@@ -689,6 +1008,26 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
                 if (!has_catch_all) {
                     diag_.error(matchE->loc,
                         "non-exhaustive match on integer: add a wildcard '_' or variable pattern");
+                }
+            } else if (scrut_enum && !has_catch_all) {
+                for (const auto& v : scrut_enum->variants) {
+                    if (covered_variants.find(v.name) == covered_variants.end()) {
+                        diag_.error(matchE->loc,
+                            std::string("non-exhaustive match on enum '") +
+                            std::string(scrut_enum_name) + "': missing variant '" +
+                            std::string(v.name) + "'");
+                        break;
+                    }
+                }
+            } else if (scrut_union && !has_catch_all) {
+                for (const auto& v : scrut_union->variants) {
+                    if (covered_variants.find(v.name) == covered_variants.end()) {
+                        diag_.error(matchE->loc,
+                            std::string("non-exhaustive match on union '") +
+                            std::string(scrut_union_name) + "': missing variant '" +
+                            std::string(v.name) + "'");
+                        break;
+                    }
                 }
             }
 
@@ -734,6 +1073,10 @@ void TypeChecker::checkStmt(Stmt* stmt) {
             local_vars_[decl->name] = expected;
             if (expected == Type::Struct) {
                 local_struct_names_[decl->name] = decl->type.name;
+            } else if (expected == Type::Enum) {
+                local_enum_names_[decl->name] = decl->type.name;
+            } else if (expected == Type::Union) {
+                local_union_names_[decl->name] = decl->type.name;
             }
             break;
         }
@@ -758,6 +1101,10 @@ void TypeChecker::checkStmt(Stmt* stmt) {
             mutable_vars_.insert(decl->name);
             if (expected == Type::Struct) {
                 local_struct_names_[decl->name] = decl->type.name;
+            } else if (expected == Type::Enum) {
+                local_enum_names_[decl->name] = decl->type.name;
+            } else if (expected == Type::Union) {
+                local_union_names_[decl->name] = decl->type.name;
             }
             break;
         }

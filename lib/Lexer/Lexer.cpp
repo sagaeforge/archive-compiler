@@ -22,6 +22,8 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::KwTrue:     return "true";
         case TokenKind::KwFalse:    return "false";
         case TokenKind::KwStruct:   return "struct";
+        case TokenKind::KwEnum:     return "enum";
+        case TokenKind::KwUnion:    return "union";
         case TokenKind::Plus:       return "+";
         case TokenKind::Minus:      return "-";
         case TokenKind::Star:       return "*";
@@ -36,6 +38,7 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::Arrow:      return "->";
         case TokenKind::FatArrow:   return "=>";
         case TokenKind::Colon:      return ":";
+        case TokenKind::ColonColon: return "::";
         case TokenKind::Dot:        return ".";
         case TokenKind::Pipe:       return "|>";
         case TokenKind::Ampersand:  return "&";
@@ -194,6 +197,8 @@ TokenKind Lexer::identifierKind(std::string_view text) {
     if (text == "true")   return TokenKind::KwTrue;
     if (text == "false")  return TokenKind::KwFalse;
     if (text == "struct") return TokenKind::KwStruct;
+    if (text == "enum")   return TokenKind::KwEnum;
+    if (text == "union")  return TokenKind::KwUnion;
     return TokenKind::Ident;
 }
 
@@ -242,7 +247,9 @@ Token Lexer::nextToken() {
         case '}': return makeToken(TokenKind::RBrace);
         case '[': return makeToken(TokenKind::LBracket);
         case ']': return makeToken(TokenKind::RBracket);
-        case ':': return makeToken(TokenKind::Colon);
+        case ':':
+            if (match(':')) return makeToken(TokenKind::ColonColon);
+            return makeToken(TokenKind::Colon);
         case ',': return makeToken(TokenKind::Comma);
         case ';': return makeToken(TokenKind::Semicolon);
         case '.': return makeToken(TokenKind::Dot);

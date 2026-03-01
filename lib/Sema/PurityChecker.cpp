@@ -70,6 +70,13 @@ void PurityChecker::collectCallees(Expr* expr, std::unordered_set<std::string_vi
             collectCallees(fa->object, callees);
             break;
         }
+        case Expr::Kind::EnumAccess:
+            break;  // no sub-expressions
+        case Expr::Kind::UnionVariant: {
+            auto* uv = static_cast<UnionVariantExpr*>(expr);
+            if (uv->payload) collectCallees(uv->payload, callees);
+            break;
+        }
         default:
             break;
     }
@@ -166,6 +173,12 @@ bool PurityChecker::exprUsesVar(Expr* expr) const {
         case Expr::Kind::FieldAccess: {
             auto* fa = static_cast<FieldAccessExpr*>(expr);
             return exprUsesVar(fa->object);
+        }
+        case Expr::Kind::EnumAccess:
+            return false;  // no sub-expressions
+        case Expr::Kind::UnionVariant: {
+            auto* uv = static_cast<UnionVariantExpr*>(expr);
+            return uv->payload && exprUsesVar(uv->payload);
         }
         default:
             return false;
@@ -341,6 +354,12 @@ bool PurityChecker::exprHasNonTailCall(Expr* expr, std::string_view fn_name) con
             auto* fa = static_cast<FieldAccessExpr*>(expr);
             return exprHasNonTailCallInner(fa->object, fn_name);
         }
+        case Expr::Kind::EnumAccess:
+            return false;  // no sub-expressions
+        case Expr::Kind::UnionVariant: {
+            auto* uv = static_cast<UnionVariantExpr*>(expr);
+            return uv->payload && exprHasNonTailCallInner(uv->payload, fn_name);
+        }
         default:
             return false;
     }
@@ -424,6 +443,12 @@ bool PurityChecker::exprHasNonTailCallInner(Expr* expr, std::string_view fn_name
         case Expr::Kind::FieldAccess: {
             auto* fa = static_cast<FieldAccessExpr*>(expr);
             return exprHasNonTailCallInner(fa->object, fn_name);
+        }
+        case Expr::Kind::EnumAccess:
+            return false;  // no sub-expressions
+        case Expr::Kind::UnionVariant: {
+            auto* uv = static_cast<UnionVariantExpr*>(expr);
+            return uv->payload && exprHasNonTailCallInner(uv->payload, fn_name);
         }
         default:
             return false;

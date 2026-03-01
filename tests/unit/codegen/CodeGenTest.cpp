@@ -18,7 +18,7 @@ static std::string generateAsm(std::string src) {
     Module* mod = parser.parseModule();
     EXPECT_FALSE(diag.hasErrors());
 
-    TypeChecker tc(diag);
+    TypeChecker tc(diag, &arena);
     tc.check(mod);
 
     IRBuilder irBuilder;
@@ -574,4 +574,43 @@ TEST(CodeGenTest, StructParamUnpack) {
     // Struct param should be stored from rdi to stack
     EXPECT_NE(asm_code.find("rdi"), std::string::npos);
     EXPECT_NE(asm_code.find("[rbp"), std::string::npos);
+}
+
+// ===== M5b: Enum/Union CodeGen tests =====
+
+TEST(CodeGenTest, EnumAccessEmitsConstant) {
+    std::string asm_code = generateAsm(
+        "enum Color { Red, Green, Blue }\n"
+        "fn main() -> Color { Color.Blue }"
+    );
+    // Blue is tag 2
+    EXPECT_NE(asm_code.find("2"), std::string::npos);
+    EXPECT_NE(asm_code.find("ret"), std::string::npos);
+}
+
+TEST(CodeGenTest, UnionVariantAllocAndStore) {
+    std::string asm_code = generateAsm(
+        "union Shape { Circle(i64), Square(i64) }\n"
+        "fn main() -> i64 {\n"
+        "    val s: Shape = Shape::Circle(42)\n"
+        "    0\n"
+        "}"
+    );
+    // Should have stack writes for tag and payload
+    EXPECT_NE(asm_code.find("[rbp"), std::string::npos);
+    EXPECT_NE(asm_code.find("42"), std::string::npos);
+}
+
+TEST(CodeGenTest, EnumMatchGenCmp) {
+    std::string asm_code = generateAsm(
+        "enum Color { Red, Green, Blue }\n"
+        "fn f(c: Color) -> i64 {\n"
+        "    match c {\n"
+        "        Red => 1,\n"
+        "        Green => 2,\n"
+        "        Blue => 3\n"
+        "    }\n"
+        "}"
+    );
+    EXPECT_NE(asm_code.find("cmp"), std::string::npos);
 }

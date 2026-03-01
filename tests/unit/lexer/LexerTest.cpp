@@ -337,12 +337,14 @@ TEST(LexerTest, TokenKindNameCoverage) {
         TokenKind::KwMatch, TokenKind::KwReturn,
         TokenKind::KwIf, TokenKind::KwElse,
         TokenKind::KwAnd, TokenKind::KwOr, TokenKind::KwNot,
-        TokenKind::KwTrue, TokenKind::KwFalse, TokenKind::KwStruct,
+        TokenKind::KwTrue, TokenKind::KwFalse,
+        TokenKind::KwStruct, TokenKind::KwEnum, TokenKind::KwUnion,
         TokenKind::Plus, TokenKind::Minus, TokenKind::Star, TokenKind::Slash,
         TokenKind::Eq, TokenKind::EqEq, TokenKind::NotEq,
         TokenKind::Lt, TokenKind::Gt, TokenKind::LtEq, TokenKind::GtEq,
         TokenKind::Arrow, TokenKind::FatArrow,
-        TokenKind::Colon, TokenKind::Dot, TokenKind::Pipe, TokenKind::Ampersand,
+        TokenKind::Colon, TokenKind::ColonColon,
+        TokenKind::Dot, TokenKind::Pipe, TokenKind::Ampersand,
         TokenKind::Comma, TokenKind::Semicolon,
         TokenKind::LParen, TokenKind::RParen,
         TokenKind::LBrace, TokenKind::RBrace,
@@ -467,4 +469,51 @@ TEST(LexerTest, StructIdentifierPrefix) {
     auto r = lex("structure");
     EXPECT_EQ(r[0].kind, TokenKind::Ident);
     EXPECT_EQ(r[0].text, "structure");
+}
+
+// ===== M5b: enum, union keywords + :: token =====
+
+TEST(LexerTest, EnumKeyword) {
+    auto r = lex("enum Color { Red, Green, Blue }");
+    EXPECT_EQ(r[0].kind, TokenKind::KwEnum);
+    EXPECT_EQ(r[0].text, "enum");
+    EXPECT_EQ(r[1].kind, TokenKind::Ident);
+    EXPECT_EQ(r[1].text, "Color");
+}
+
+TEST(LexerTest, UnionKeyword) {
+    auto r = lex("union Shape { Circle(Circle), Empty }");
+    EXPECT_EQ(r[0].kind, TokenKind::KwUnion);
+    EXPECT_EQ(r[0].text, "union");
+    EXPECT_EQ(r[1].kind, TokenKind::Ident);
+    EXPECT_EQ(r[1].text, "Shape");
+}
+
+TEST(LexerTest, ColonColonToken) {
+    auto r = lex("Shape::Circle");
+    EXPECT_EQ(r[0].kind, TokenKind::Ident);
+    EXPECT_EQ(r[0].text, "Shape");
+    EXPECT_EQ(r[1].kind, TokenKind::ColonColon);
+    EXPECT_EQ(r[1].text, "::");
+    EXPECT_EQ(r[2].kind, TokenKind::Ident);
+    EXPECT_EQ(r[2].text, "Circle");
+}
+
+TEST(LexerTest, ColonVsColonColon) {
+    auto r = lex(": :: :");
+    EXPECT_EQ(r[0].kind, TokenKind::Colon);
+    EXPECT_EQ(r[1].kind, TokenKind::ColonColon);
+    EXPECT_EQ(r[2].kind, TokenKind::Colon);
+}
+
+TEST(LexerTest, EnumIdentifierPrefix) {
+    auto r = lex("enumerate");
+    EXPECT_EQ(r[0].kind, TokenKind::Ident);
+    EXPECT_EQ(r[0].text, "enumerate");
+}
+
+TEST(LexerTest, UnionIdentifierPrefix) {
+    auto r = lex("unionize");
+    EXPECT_EQ(r[0].kind, TokenKind::Ident);
+    EXPECT_EQ(r[0].text, "unionize");
 }

@@ -114,7 +114,7 @@ int main(int argc, char** argv) {
     }
 
     // --- Semantic Analysis ---
-    kern::TypeChecker typeChecker(diag);
+    kern::TypeChecker typeChecker(diag, &arena);
     typeChecker.check(mod);
 
     if (diag.hasErrors()) {

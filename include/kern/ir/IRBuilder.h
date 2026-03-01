@@ -20,6 +20,30 @@ struct IRStructInfo {
     std::vector<FieldInfo> fields;
 };
 
+struct IREnumInfo {
+    std::string name;
+    struct VariantInfo {
+        std::string name;
+        int32_t tag;
+    };
+    std::vector<VariantInfo> variants;
+};
+
+struct IRUnionInfo {
+    std::string name;
+    int32_t tag_size;
+    int32_t payload_offset;  // typically 8 (aligned)
+    int32_t total_size;
+    struct VariantInfo {
+        std::string name;
+        int32_t tag;
+        IRType payload_type;
+        std::string payload_struct_name;
+        int32_t payload_size;
+    };
+    std::vector<VariantInfo> variants;
+};
+
 class IRBuilder {
 public:
     IRModule build(Module* mod, const TypeChecker& tc);
@@ -43,10 +67,14 @@ private:
 
     void populateStructInfo();
     const IRStructInfo* getStructInfo(const std::string& name) const;
+    const IREnumInfo* getEnumInfo(const std::string& name) const;
+    const IRUnionInfo* getUnionInfo(const std::string& name) const;
 
     std::unordered_map<std::string_view, ValueId> locals_;
     uint32_t label_counter_ = 0;
     std::unordered_map<std::string, IRStructInfo> struct_info_;
+    std::unordered_map<std::string, IREnumInfo> enum_info_;
+    std::unordered_map<std::string, IRUnionInfo> union_info_;
 };
 
 } // namespace kern

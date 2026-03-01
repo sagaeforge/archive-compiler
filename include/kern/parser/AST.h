@@ -27,7 +27,7 @@ struct Param {
 
 // --- Patterns (for match expressions) ---
 struct Pattern {
-    enum class Kind { IntLit, BoolLit, Wildcard, Variable };
+    enum class Kind { IntLit, BoolLit, Wildcard, Variable, Enum, Union };
     Kind kind;
     SourceLocation loc;
 };
@@ -46,6 +46,23 @@ struct VariablePattern : Pattern {
     std::string_view name;
 };
 
+struct EnumPattern : Pattern {
+    std::string_view variant_name;    // e.g. "Red" in match Color
+};
+
+struct FieldBinding {
+    std::string_view field_name;      // struct field name (e.g. "radius")
+    std::string_view binding_name;    // variable to bind to (e.g. "r")
+    SourceLocation loc;
+};
+
+struct UnionPattern : Pattern {
+    std::string_view variant_name;    // e.g. "Some" or "Circle"
+    Pattern* inner;                   // binding pattern for single-value payload (nullptr for empty)
+    FieldBinding* field_bindings;     // struct destructuring bindings (nullptr if not used)
+    uint32_t field_binding_count;     // number of field bindings
+};
+
 // --- Field declarations (for struct definitions) ---
 struct FieldDecl {
     std::string_view name;
@@ -62,13 +79,41 @@ struct StructDecl {
     SourceLocation loc;
 };
 
+// --- Enum declaration ---
+struct EnumVariant {
+    std::string_view name;
+    SourceLocation loc;
+};
+
+struct EnumDecl {
+    std::string_view name;
+    EnumVariant* variants;
+    uint32_t variant_count;
+    SourceLocation loc;
+};
+
+// --- Union declaration ---
+struct UnionVariantDecl {
+    std::string_view name;
+    TypeRef* payload_type;    // nullptr for empty variants (e.g., None, Empty)
+    SourceLocation loc;
+};
+
+struct UnionDecl {
+    std::string_view name;
+    UnionVariantDecl* variants;
+    uint32_t variant_count;
+    SourceLocation loc;
+};
+
 // --- Expressions ---
 struct Expr {
     enum class Kind {
         IntLit, FloatLit, BoolLit, Ident,
         BinOp, UnaryOp, Call,
         If, Block, Return, Match,
-        StructLit, FieldAccess
+        StructLit, FieldAccess,
+        EnumAccess, UnionVariant
     };
     Kind kind;
     SourceLocation loc;
@@ -165,6 +210,17 @@ struct FieldAccessExpr : Expr {
     std::string_view field_name;
 };
 
+struct EnumAccessExpr : Expr {
+    std::string_view enum_name;       // "Color"
+    std::string_view variant_name;    // "Red"
+};
+
+struct UnionVariantExpr : Expr {
+    std::string_view union_name;      // "Shape"
+    std::string_view variant_name;    // "Circle"
+    Expr* payload;                    // nullptr for empty variants (e.g., Shape::Empty)
+};
+
 // --- Statements ---
 struct Stmt {
     enum class Kind { ValDecl, VarDecl, ExprStmt, Assign, FieldAssign };
@@ -217,6 +273,10 @@ struct Module {
     uint32_t fn_count;
     StructDecl** structs;
     uint32_t struct_count;
+    EnumDecl** enums;
+    uint32_t enum_count;
+    UnionDecl** unions;
+    uint32_t union_count;
 };
 
 // AST dumper

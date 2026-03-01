@@ -26,6 +26,8 @@ private:
     // Declarations
     FnDecl* parseFnDecl();
     StructDecl* parseStructDecl();
+    EnumDecl* parseEnumDecl();
+    UnionDecl* parseUnionDecl();
     Param parseParam();
 
     // Types
@@ -60,6 +62,8 @@ private:
     bool has_current_ = false;
 
     std::unordered_set<std::string_view> struct_names_;
+    std::unordered_set<std::string_view> enum_names_;
+    std::unordered_set<std::string_view> union_names_;
 };
 
 } // namespace kern

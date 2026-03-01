@@ -881,6 +881,32 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
                         xmm_args.push_back({static_cast<size_t>(xmm_count), true, src});
                         xmm_count++;
                     }
+                } else if (arg_type == IRType::Struct) {
+                    // Struct/Union arg: pack from StructBase into 2 GPRs
+                    auto base_it = value_locs_.find(instr.operands[i]);
+                    if (base_it != value_locs_.end() && base_it->second.kind == Location::StructBase) {
+                        int32_t base = base_it->second.stack_offset;
+                        int32_t ssize = base_it->second.struct_size;
+                        // First 8 bytes → GPR
+                        if (gpr_count < MAX_ARG_REGS) {
+                            std::string src = "qword [rbp" + std::to_string(base) + "]";
+                            gpr_args.push_back({static_cast<size_t>(gpr_count), false, src});
+                            gpr_count++;
+                        }
+                        // Second 8 bytes → next GPR (if struct > 8 bytes)
+                        if (ssize > 8 && gpr_count < MAX_ARG_REGS) {
+                            std::string src = "qword [rbp" + std::to_string(base + 8) + "]";
+                            gpr_args.push_back({static_cast<size_t>(gpr_count), false, src});
+                            gpr_count++;
+                        }
+                    } else {
+                        // Fallback: value in register
+                        if (gpr_count < MAX_ARG_REGS) {
+                            std::string src = valReg(instr.operands[i]);
+                            gpr_args.push_back({static_cast<size_t>(gpr_count), false, src});
+                            gpr_count++;
+                        }
+                    }
                 } else {
                     if (gpr_count < MAX_ARG_REGS) {
                         std::string src = valReg(instr.operands[i]);

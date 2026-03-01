@@ -173,10 +173,22 @@ const IRStructInfo* IRBuilder::getStructInfo(const std::string& name) const {
     return it != struct_info_.end() ? &it->second : nullptr;
 }
 
+const IREnumInfo* IRBuilder::getEnumInfo(const std::string& name) const {
+    auto it = enum_info_.find(name);
+    return it != enum_info_.end() ? &it->second : nullptr;
+}
+
+const IRUnionInfo* IRBuilder::getUnionInfo(const std::string& name) const {
+    auto it = union_info_.find(name);
+    return it != union_info_.end() ? &it->second : nullptr;
+}
+
 IRModule IRBuilder::build(Module* mod, const TypeChecker& tc) {
     tc_ = &tc;
     module_.functions.clear();
     struct_info_.clear();
+    enum_info_.clear();
+    union_info_.clear();
 
     // Populate struct info from TypeChecker
     for (uint32_t i = 0; i < mod->struct_count; ++i) {
@@ -197,6 +209,45 @@ IRModule IRBuilder::build(Module* mod, const TypeChecker& tc) {
             info.fields.push_back(std::move(fi));
         }
         struct_info_[name] = std::move(info);
+    }
+
+    // Populate enum info from TypeChecker
+    for (uint32_t i = 0; i < mod->enum_count; ++i) {
+        auto* ed = mod->enums[i];
+        std::string name(ed->name);
+        const EnumDef* def = tc_->getEnumDef(ed->name);
+        if (!def) continue;
+
+        IREnumInfo info;
+        info.name = name;
+        for (const auto& v : def->variants) {
+            info.variants.push_back({std::string(v.name), v.tag});
+        }
+        enum_info_[name] = std::move(info);
+    }
+
+    // Populate union info from TypeChecker
+    for (uint32_t i = 0; i < mod->union_count; ++i) {
+        auto* ud = mod->unions[i];
+        std::string name(ud->name);
+        const UnionDef* def = tc_->getUnionDef(ud->name);
+        if (!def) continue;
+
+        IRUnionInfo info;
+        info.name = name;
+        info.tag_size = def->tag_size;
+        info.payload_offset = 8;  // tag (up to 8 bytes) then payload at offset 8
+        info.total_size = def->total_size;
+        for (const auto& v : def->variants) {
+            IRUnionInfo::VariantInfo vi;
+            vi.name = std::string(v.name);
+            vi.tag = v.tag;
+            vi.payload_type = irTypeFromSemaType(v.payload_type);
+            vi.payload_struct_name = std::string(v.payload_struct_name);
+            vi.payload_size = v.payload_size;
+            info.variants.push_back(std::move(vi));
+        }
+        union_info_[name] = std::move(info);
     }
 
     for (uint32_t i = 0; i < mod->fn_count; ++i) {
@@ -239,6 +290,8 @@ void IRBuilder::buildFunction(FnDecl* fn) {
         else if (pname == "f64")  pt = IRType::F64;
         else if (pname == "bool") pt = IRType::Bool;
         else if (struct_info_.count(std::string(pname))) pt = IRType::Struct;
+        else if (enum_info_.count(std::string(pname))) pt = IRType::I64;
+        else if (union_info_.count(std::string(pname))) pt = IRType::Struct;
         current_fn_->param_types.push_back(pt);
         locals_[fn->params[i].name] = pv;
     }
@@ -673,6 +726,87 @@ ValueId IRBuilder::buildExpr(Expr* expr, bool in_tail_position) {
             ValueId scrutinee = buildExpr(matchE->scrutinee);
             return buildMatchChain(matchE, scrutinee, 0, in_tail_position);
         }
+
+        case Expr::Kind::EnumAccess: {
+            auto* ea = static_cast<EnumAccessExpr*>(expr);
+            std::string ename(ea->enum_name);
+            auto* info = getEnumInfo(ename);
+            assert(info && "enum info not found");
+
+            int32_t tag = 0;
+            for (const auto& v : info->variants) {
+                if (v.name == ea->variant_name) {
+                    tag = v.tag;
+                    break;
+                }
+            }
+
+            IRInstr instr;
+            instr.op = IROpcode::ConstInt;
+            instr.result = newValue();
+            instr.imm_value = tag;
+            instr.loc = expr->loc;
+            instr.type = IRType::I64;
+            return emit(instr);
+        }
+
+        case Expr::Kind::UnionVariant: {
+            auto* uv = static_cast<UnionVariantExpr*>(expr);
+            std::string uname(uv->union_name);
+            auto* info = getUnionInfo(uname);
+            assert(info && "union info not found");
+
+            // Find variant tag and payload info
+            int32_t tag = 0;
+            IRType payload_type = IRType::Unknown;
+            for (const auto& v : info->variants) {
+                if (v.name == uv->variant_name) {
+                    tag = v.tag;
+                    payload_type = v.payload_type;
+                    break;
+                }
+            }
+
+            // Allocate stack space for the union
+            IRInstr alloc;
+            alloc.op = IROpcode::StructAlloc;
+            alloc.result = newValue();
+            alloc.imm_value = info->total_size;
+            alloc.callee_name = uname;
+            alloc.loc = expr->loc;
+            alloc.type = IRType::Struct;
+            ValueId base = emit(alloc);
+
+            // Store tag at offset 0
+            IRInstr tag_const;
+            tag_const.op = IROpcode::ConstInt;
+            tag_const.result = newValue();
+            tag_const.imm_value = tag;
+            tag_const.type = IRType::I64;
+            ValueId tag_val = emit(tag_const);
+
+            IRInstr tag_store;
+            tag_store.op = IROpcode::FieldStore;
+            tag_store.operands = {base, tag_val};
+            tag_store.imm_value = 0;  // tag at offset 0
+            tag_store.loc = expr->loc;
+            tag_store.type = IRType::I64;
+            emit(tag_store);
+
+            // Store payload at offset 8 (if present)
+            if (uv->payload) {
+                ValueId payload_val = buildExpr(uv->payload);
+                IRInstr payload_store;
+                payload_store.op = IROpcode::FieldStore;
+                payload_store.operands = {base, payload_val};
+                payload_store.imm_value = info->payload_offset;
+                payload_store.loc = expr->loc;
+                payload_store.type = payload_type;
+                emit(payload_store);
+            }
+
+            return base;
+        }
     }
 
     IRInstr dummy;
@@ -701,6 +835,39 @@ ValueId IRBuilder::buildMatchChain(MatchExpr* matchE, ValueId scrutinee,
         if (arm.pattern->kind == Pattern::Kind::Variable) {
             auto* vp = static_cast<VariablePattern*>(arm.pattern);
             locals_[vp->name] = scrutinee;
+        }
+        // Union pattern: extract payload and bind inner variable
+        if (arm.pattern->kind == Pattern::Kind::Union) {
+            auto* up = static_cast<UnionPattern*>(arm.pattern);
+            if (up->inner && up->inner->kind == Pattern::Kind::Variable) {
+                auto* inner_vp = static_cast<VariablePattern*>(up->inner);
+                std::string_view uname = tc_->unionNameOfExpr(matchE->scrutinee);
+                if (uname.empty() && matchE->scrutinee->kind == Expr::Kind::Ident) {
+                    auto* ident = static_cast<IdentExpr*>(matchE->scrutinee);
+                    uname = tc_->localUnionName(ident->name);
+                }
+                auto* uinfo = getUnionInfo(std::string(uname));
+                IRType payload_type = IRType::Unknown;
+                std::string payload_struct_name;
+                for (const auto& v : uinfo->variants) {
+                    if (v.name == up->variant_name) {
+                        payload_type = v.payload_type;
+                        payload_struct_name = v.payload_struct_name;
+                        break;
+                    }
+                }
+                IRInstr load;
+                load.op = IROpcode::FieldLoad;
+                load.result = newValue();
+                load.operands = {scrutinee};
+                load.imm_value = uinfo->payload_offset;
+                load.type = payload_type;
+                if (!payload_struct_name.empty()) {
+                    load.callee_name = payload_struct_name;
+                }
+                ValueId payload_val = emit(load);
+                locals_[inner_vp->name] = payload_val;
+            }
         }
         return buildExpr(arm.body, in_tail_position);
     }
@@ -760,6 +927,83 @@ ValueId IRBuilder::buildMatchChain(MatchExpr* matchE, ValueId scrutinee,
             cond = buildExpr(arm.guard);
             break;
         }
+        case Pattern::Kind::Enum: {
+            auto* ep = static_cast<EnumPattern*>(arm.pattern);
+            // Scrutinee is already an i64 tag — compare to variant tag
+            std::string_view ename = tc_->enumNameOfExpr(matchE->scrutinee);
+            if (ename.empty() && matchE->scrutinee->kind == Expr::Kind::Ident) {
+                auto* ident = static_cast<IdentExpr*>(matchE->scrutinee);
+                ename = tc_->localEnumName(ident->name);
+            }
+            auto* einfo = getEnumInfo(std::string(ename));
+            assert(einfo && "enum info not found for match");
+
+            int32_t tag = 0;
+            for (const auto& v : einfo->variants) {
+                if (v.name == ep->variant_name) {
+                    tag = v.tag;
+                    break;
+                }
+            }
+
+            IRInstr pat_const;
+            pat_const.op = IROpcode::ConstInt;
+            pat_const.result = newValue();
+            pat_const.imm_value = tag;
+            pat_const.type = IRType::I64;
+            ValueId pat_val = emit(pat_const);
+
+            IRInstr cmp;
+            cmp.op = IROpcode::ICmpEq;
+            cmp.result = newValue();
+            cmp.operands = {scrutinee, pat_val};
+            cmp.type = IRType::Bool;
+            cond = emit(cmp);
+            break;
+        }
+        case Pattern::Kind::Union: {
+            auto* up = static_cast<UnionPattern*>(arm.pattern);
+            // Scrutinee is a struct base pointer — load tag at offset 0
+            std::string_view uname = tc_->unionNameOfExpr(matchE->scrutinee);
+            if (uname.empty() && matchE->scrutinee->kind == Expr::Kind::Ident) {
+                auto* ident = static_cast<IdentExpr*>(matchE->scrutinee);
+                uname = tc_->localUnionName(ident->name);
+            }
+            auto* uinfo = getUnionInfo(std::string(uname));
+            assert(uinfo && "union info not found for match");
+
+            // Load tag from union base
+            IRInstr tag_load;
+            tag_load.op = IROpcode::FieldLoad;
+            tag_load.result = newValue();
+            tag_load.operands = {scrutinee};
+            tag_load.imm_value = 0;  // tag at offset 0
+            tag_load.type = IRType::I64;
+            ValueId tag_val = emit(tag_load);
+
+            int32_t tag = 0;
+            for (const auto& v : uinfo->variants) {
+                if (v.name == up->variant_name) {
+                    tag = v.tag;
+                    break;
+                }
+            }
+
+            IRInstr pat_const;
+            pat_const.op = IROpcode::ConstInt;
+            pat_const.result = newValue();
+            pat_const.imm_value = tag;
+            pat_const.type = IRType::I64;
+            ValueId pat_val = emit(pat_const);
+
+            IRInstr cmp;
+            cmp.op = IROpcode::ICmpEq;
+            cmp.result = newValue();
+            cmp.operands = {tag_val, pat_val};
+            cmp.type = IRType::Bool;
+            cond = emit(cmp);
+            break;
+        }
     }
 
     // CondBranch: if cond, arm body, else next arm chain
@@ -780,6 +1024,39 @@ ValueId IRBuilder::buildMatchChain(MatchExpr* matchE, ValueId scrutinee,
     if (arm.pattern->kind == Pattern::Kind::Variable) {
         auto* vp = static_cast<VariablePattern*>(arm.pattern);
         locals_[vp->name] = scrutinee;
+    }
+    if (arm.pattern->kind == Pattern::Kind::Union) {
+        auto* up = static_cast<UnionPattern*>(arm.pattern);
+        // Load payload and bind inner variable
+        if (up->inner && up->inner->kind == Pattern::Kind::Variable) {
+            auto* inner_vp = static_cast<VariablePattern*>(up->inner);
+            std::string_view uname = tc_->unionNameOfExpr(matchE->scrutinee);
+            if (uname.empty() && matchE->scrutinee->kind == Expr::Kind::Ident) {
+                auto* ident = static_cast<IdentExpr*>(matchE->scrutinee);
+                uname = tc_->localUnionName(ident->name);
+            }
+            auto* uinfo = getUnionInfo(std::string(uname));
+            IRType payload_type = IRType::Unknown;
+            std::string payload_struct_name;
+            for (const auto& v : uinfo->variants) {
+                if (v.name == up->variant_name) {
+                    payload_type = v.payload_type;
+                    payload_struct_name = v.payload_struct_name;
+                    break;
+                }
+            }
+            IRInstr load;
+            load.op = IROpcode::FieldLoad;
+            load.result = newValue();
+            load.operands = {scrutinee};
+            load.imm_value = uinfo->payload_offset;
+            load.type = payload_type;
+            if (!payload_struct_name.empty()) {
+                load.callee_name = payload_struct_name;
+            }
+            ValueId payload_val = emit(load);
+            locals_[inner_vp->name] = payload_val;
+        }
     }
     ValueId then_val = buildExpr(arm.body, in_tail_position);
     uint32_t then_end = current_block_;

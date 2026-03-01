@@ -26,7 +26,7 @@ static IRResult buildIR(std::string src) {
     Module* mod = parser.parseModule();
     EXPECT_FALSE(r.diag.hasErrors());
 
-    TypeChecker tc(r.diag);
+    TypeChecker tc(r.diag, &r.arena);
     tc.check(mod);
 
     IRBuilder builder;
@@ -476,7 +476,7 @@ static IRResult buildIRWithPurity(std::string src) {
     Module* mod = parser.parseModule();
     EXPECT_FALSE(r.diag.hasErrors());
 
-    TypeChecker tc(r.diag);
+    TypeChecker tc(r.diag, &r.arena);
     tc.check(mod);
 
     PurityChecker pc(r.diag);
@@ -1003,4 +1003,105 @@ TEST(IRTest, StructParamType) {
     auto& fn = r.ir.functions[0];
     ASSERT_EQ(fn.param_types.size(), 1u);
     EXPECT_EQ(fn.param_types[0], IRType::Struct);
+}
+
+// ===== M5b: Enum/Union IR tests =====
+
+TEST(IRTest, EnumAccessEmitsConstInt) {
+    auto r = buildIR(
+        "enum Color { Red, Green, Blue }\n"
+        "fn main() -> Color { Color.Green }"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    auto& fn = r.ir.functions[0];
+    // Color.Green has tag 1
+    bool found = false;
+    for (auto& block : fn.blocks) {
+        for (auto& instr : block.instrs) {
+            if (instr.op == IROpcode::ConstInt && instr.imm_value == 1) {
+                EXPECT_EQ(instr.type, IRType::I64);
+                found = true;
+            }
+        }
+    }
+    EXPECT_TRUE(found);
+}
+
+TEST(IRTest, EnumParamTypeI64) {
+    auto r = buildIR(
+        "enum Color { Red, Green, Blue }\n"
+        "fn f(c: Color) -> i64 { 0 }"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_EQ(r.ir.functions[0].param_types[0], IRType::I64);
+}
+
+TEST(IRTest, EnumMatchIR) {
+    auto r = buildIR(
+        "enum Color { Red, Green, Blue }\n"
+        "fn f(c: Color) -> i64 {\n"
+        "    match c {\n"
+        "        Red => 1,\n"
+        "        Green => 2,\n"
+        "        Blue => 3\n"
+        "    }\n"
+        "}"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::ICmpEq));
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::CondBranch));
+}
+
+TEST(IRTest, UnionVariantEmitsStructAlloc) {
+    auto r = buildIR(
+        "union Shape { Circle(i64), Square(i64) }\n"
+        "fn main() -> Shape { Shape::Circle(10) }"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::StructAlloc));
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::FieldStore));
+}
+
+TEST(IRTest, UnionVariantTagAndPayload) {
+    auto r = buildIR(
+        "union Shape { Circle(i64), Square(i64) }\n"
+        "fn main() -> Shape { Shape::Square(20) }"
+    );
+    auto& fn = r.ir.functions[0];
+    // Should store tag=1 at offset 0 and payload=20 at offset 8
+    std::vector<std::pair<int64_t, int64_t>> stores; // (offset, value stored nearby)
+    for (auto& block : fn.blocks) {
+        for (auto& instr : block.instrs) {
+            if (instr.op == IROpcode::FieldStore) {
+                stores.push_back({instr.imm_value, 0});
+            }
+        }
+    }
+    ASSERT_EQ(stores.size(), 2u);
+    EXPECT_EQ(stores[0].first, 0);  // tag at offset 0
+    EXPECT_EQ(stores[1].first, 8);  // payload at offset 8
+}
+
+TEST(IRTest, UnionMatchLoadsTag) {
+    auto r = buildIR(
+        "union Shape { Circle(i64), Square(i64) }\n"
+        "fn f(s: Shape) -> i64 {\n"
+        "    match s {\n"
+        "        Circle(r) => r,\n"
+        "        Square(side) => side\n"
+        "    }\n"
+        "}"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::FieldLoad));
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::ICmpEq));
+}
+
+TEST(IRTest, UnionParamTypeStruct) {
+    auto r = buildIR(
+        "union Shape { Circle(i64), Square(i64) }\n"
+        "fn f(s: Shape) -> i64 { 0 }"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_EQ(r.ir.functions[0].param_types[0], IRType::Struct);
 }

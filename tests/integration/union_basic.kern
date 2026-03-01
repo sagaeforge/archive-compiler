@@ -1,0 +1,12 @@
+union IntOrBool { AnInt(i64), ABool(bool) }
+
+fn extract(v: IntOrBool) -> i64 {
+    match v {
+        AnInt(n) => n,
+        ABool(b) => if b { 1 } else { 0 }
+    }
+}
+
+fn main() -> i64 {
+    extract(IntOrBool::AnInt(42))
+}

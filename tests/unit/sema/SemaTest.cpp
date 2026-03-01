@@ -24,7 +24,7 @@ static bool checkSource(std::string src, std::string* errors = nullptr) {
         return false;
     }
 
-    TypeChecker tc(diag);
+    TypeChecker tc(diag, &arena);
     tc.check(mod);
     if (errors) {
         std::ostringstream out;
@@ -946,4 +946,104 @@ TEST(SemaTest, StructReturn) {
         "    p.x + p.y\n"
         "}"
     ));
+}
+
+// ===== M5b: Enum + Union type checking =====
+
+TEST(SemaTest, EnumDeclAndAccess) {
+    EXPECT_TRUE(checkSource(
+        "enum Color { Red, Green, Blue }\n"
+        "fn main() -> Color { Color.Red }"));
+}
+
+TEST(SemaTest, EnumParam) {
+    EXPECT_TRUE(checkSource(
+        "enum Color { Red, Green, Blue }\n"
+        "fn pick(c: Color) -> Color { c }\n"
+        "fn main() -> Color { pick(Color.Green) }"));
+}
+
+TEST(SemaTest, EnumMatchExhaustive) {
+    EXPECT_TRUE(checkSource(
+        "enum Color { Red, Green, Blue }\n"
+        "fn to_int(c: Color) -> i64 {\n"
+        "    match c { Red => 0, Green => 1, Blue => 2 }\n"
+        "}\n"
+        "fn main() -> i64 { to_int(Color.Red) }"));
+}
+
+TEST(SemaTest, EnumMatchWithWildcard) {
+    EXPECT_TRUE(checkSource(
+        "enum Color { Red, Green, Blue }\n"
+        "fn is_red(c: Color) -> i64 {\n"
+        "    match c { Red => 1, _ => 0 }\n"
+        "}\n"
+        "fn main() -> i64 { is_red(Color.Red) }"));
+}
+
+TEST(SemaTest, ErrorEnumNonExhaustive) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "enum Color { Red, Green, Blue }\n"
+        "fn bad(c: Color) -> i64 {\n"
+        "    match c { Red => 0, Green => 1 }\n"
+        "}\n"
+        "fn main() -> i64 { bad(Color.Red) }", &errors));
+    EXPECT_NE(errors.find("non-exhaustive"), std::string::npos);
+}
+
+TEST(SemaTest, ErrorEnumUnknownVariant) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "enum Color { Red, Green, Blue }\n"
+        "fn main() -> Color { Color.Yellow }", &errors));
+    EXPECT_NE(errors.find("no variant"), std::string::npos);
+}
+
+TEST(SemaTest, UnionDeclAndCreate) {
+    EXPECT_TRUE(checkSource(
+        "union Option { Some(i64), None }\n"
+        "fn main() -> Option { Option::Some(42) }"));
+}
+
+TEST(SemaTest, UnionEmptyVariant) {
+    EXPECT_TRUE(checkSource(
+        "union Option { Some(i64), None }\n"
+        "fn main() -> Option { Option::None }"));
+}
+
+TEST(SemaTest, UnionMatchExhaustive) {
+    EXPECT_TRUE(checkSource(
+        "union Option { Some(i64), None }\n"
+        "fn value(o: Option) -> i64 {\n"
+        "    match o { Some(x) => x, None => 0 }\n"
+        "}\n"
+        "fn main() -> i64 { value(Option::Some(42)) }"));
+}
+
+TEST(SemaTest, ErrorUnionNonExhaustive) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "union Option { Some(i64), None }\n"
+        "fn bad(o: Option) -> i64 {\n"
+        "    match o { Some(x) => x }\n"
+        "}\n"
+        "fn main() -> i64 { bad(Option::Some(42)) }", &errors));
+    EXPECT_NE(errors.find("non-exhaustive"), std::string::npos);
+}
+
+TEST(SemaTest, ErrorUnionPayloadMissing) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "union Option { Some(i64), None }\n"
+        "fn main() -> Option { Option::Some }", &errors));
+    EXPECT_NE(errors.find("requires a payload"), std::string::npos);
+}
+
+TEST(SemaTest, ErrorUnionUnexpectedPayload) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "union Option { Some(i64), None }\n"
+        "fn main() -> Option { Option::None(42) }", &errors));
+    EXPECT_NE(errors.find("takes no payload"), std::string::npos);
 }

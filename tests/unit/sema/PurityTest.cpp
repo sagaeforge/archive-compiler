@@ -25,7 +25,7 @@ static PurityTestResult analyzePurity(std::string src) {
     Module* mod = parser.parseModule();
     EXPECT_FALSE(r.diag.hasErrors());
 
-    TypeChecker tc(r.diag);
+    TypeChecker tc(r.diag, &r.arena);
     tc.check(mod);
     EXPECT_FALSE(r.diag.hasErrors());
 
@@ -354,4 +354,26 @@ TEST(PurityTest, StructFieldAssignIsImpureMut) {
     auto it = r.results.find("mutate");
     ASSERT_NE(it, r.results.end());
     EXPECT_EQ(it->second.purity, Purity::ImpureMut);
+}
+
+// ===== M5b: enum/union purity tests =====
+
+TEST(PurityTest, EnumAccessIsPure) {
+    auto r = analyzePurity(
+        "enum Color { Red, Green, Blue }\n"
+        "fn get_color() -> Color { Color.Red }"
+    );
+    auto it = r.results.find("get_color");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_EQ(it->second.purity, Purity::Pure);
+}
+
+TEST(PurityTest, UnionCreationIsPure) {
+    auto r = analyzePurity(
+        "union Shape { Circle(i64), Square(i64) }\n"
+        "fn make_circle(r: i64) -> Shape { Shape::Circle(r) }"
+    );
+    auto it = r.results.find("make_circle");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_EQ(it->second.purity, Purity::Pure);
 }

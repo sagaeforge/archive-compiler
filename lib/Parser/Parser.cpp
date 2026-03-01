@@ -138,6 +138,22 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
                     case Pattern::Kind::Variable:
                         out << static_cast<const VariablePattern*>(arm.pattern)->name;
                         break;
+                    case Pattern::Kind::Enum:
+                        out << static_cast<const EnumPattern*>(arm.pattern)->variant_name;
+                        break;
+                    case Pattern::Kind::Union: {
+                        auto* up = static_cast<const UnionPattern*>(arm.pattern);
+                        out << up->variant_name;
+                        if (up->inner) {
+                            out << "(";
+                            if (up->inner->kind == Pattern::Kind::Variable)
+                                out << static_cast<const VariablePattern*>(up->inner)->name;
+                            else
+                                out << "_";
+                            out << ")";
+                        }
+                    }
+                        break;
                 }
                 if (arm.guard) out << " if ...";
                 out << "\n";
@@ -161,6 +177,17 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             dumpExpr(fa->object, out, ind + 1);
             break;
         }
+        case Expr::Kind::EnumAccess: {
+            auto* ea = static_cast<const EnumAccessExpr*>(expr);
+            out << "EnumAccess(" << ea->enum_name << "." << ea->variant_name << ")\n";
+            break;
+        }
+        case Expr::Kind::UnionVariant: {
+            auto* uv = static_cast<const UnionVariantExpr*>(expr);
+            out << "UnionVariant(" << uv->union_name << "::" << uv->variant_name << ")\n";
+            if (uv->payload) dumpExpr(uv->payload, out, ind + 1);
+            break;
+        }
     }
 }
 
@@ -171,6 +198,24 @@ void dumpAST(const Module* mod, std::ostream& out, int /*ind*/) {
         for (uint32_t j = 0; j < sd->field_count; ++j) {
             out << "  " << (sd->fields[j].is_mutable ? "var " : "")
                 << sd->fields[j].name << ": " << sd->fields[j].type.name << "\n";
+        }
+    }
+    for (uint32_t i = 0; i < mod->enum_count; ++i) {
+        auto* ed = mod->enums[i];
+        out << "EnumDecl(" << ed->name << ")\n";
+        for (uint32_t j = 0; j < ed->variant_count; ++j) {
+            out << "  " << ed->variants[j].name << "\n";
+        }
+    }
+    for (uint32_t i = 0; i < mod->union_count; ++i) {
+        auto* ud = mod->unions[i];
+        out << "UnionDecl(" << ud->name << ")\n";
+        for (uint32_t j = 0; j < ud->variant_count; ++j) {
+            out << "  " << ud->variants[j].name;
+            if (ud->variants[j].payload_type) {
+                out << "(" << ud->variants[j].payload_type->name << ")";
+            }
+            out << "\n";
         }
     }
     for (uint32_t i = 0; i < mod->fn_count; ++i) {
@@ -243,6 +288,8 @@ void Parser::skipNewlines() {
 Module* Parser::parseModule() {
     std::vector<FnDecl*> fns;
     std::vector<StructDecl*> structs;
+    std::vector<EnumDecl*> enums;
+    std::vector<UnionDecl*> unions;
     skipNewlines();
     while (!check(TokenKind::Eof)) {
         if (check(TokenKind::KwStruct)) {
@@ -251,11 +298,23 @@ Module* Parser::parseModule() {
                 structs.push_back(sd);
                 struct_names_.insert(sd->name);
             }
+        } else if (check(TokenKind::KwEnum)) {
+            EnumDecl* ed = parseEnumDecl();
+            if (ed) {
+                enums.push_back(ed);
+                enum_names_.insert(ed->name);
+            }
+        } else if (check(TokenKind::KwUnion)) {
+            UnionDecl* ud = parseUnionDecl();
+            if (ud) {
+                unions.push_back(ud);
+                union_names_.insert(ud->name);
+            }
         } else if (check(TokenKind::KwFn)) {
             FnDecl* fn = parseFnDecl();
             if (fn) fns.push_back(fn);
         } else {
-            diag_.error(peek().loc, "expected function or struct declaration");
+            diag_.error(peek().loc, "expected function, struct, enum, or union declaration");
             advance();
         }
         skipNewlines();
@@ -373,6 +432,16 @@ Module* Parser::parseModule() {
     for (size_t j = 0; j < structs.size(); ++j) {
         mod->structs[j] = structs[j];
     }
+    mod->enum_count = static_cast<uint32_t>(enums.size());
+    mod->enums = arena_.makeArray<EnumDecl*>(enums.size());
+    for (size_t j = 0; j < enums.size(); ++j) {
+        mod->enums[j] = enums[j];
+    }
+    mod->union_count = static_cast<uint32_t>(unions.size());
+    mod->unions = arena_.makeArray<UnionDecl*>(unions.size());
+    for (size_t j = 0; j < unions.size(); ++j) {
+        mod->unions[j] = unions[j];
+    }
     return mod;
 }
 
@@ -415,6 +484,75 @@ StructDecl* Parser::parseStructDecl() {
         sd->fields[i] = fields[i];
     }
     return sd;
+}
+
+// --- Enum Declaration ---
+EnumDecl* Parser::parseEnumDecl() {
+    SourceLocation loc = peek().loc;
+    expect(TokenKind::KwEnum, "expected 'enum'");
+    Token nameTok = expect(TokenKind::Ident, "expected enum name");
+    skipNewlines();
+    expect(TokenKind::LBrace, "expected '{' after enum name");
+    skipNewlines();
+
+    std::vector<EnumVariant> variants;
+    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        Token vname = expect(TokenKind::Ident, "expected variant name");
+        EnumVariant ev;
+        ev.name = vname.text;
+        ev.loc = vname.loc;
+        variants.push_back(ev);
+        while (match(TokenKind::Comma) || match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+    }
+    expect(TokenKind::RBrace, "expected '}' after enum variants");
+
+    auto* ed = arena_.make<EnumDecl>();
+    ed->name = nameTok.text;
+    ed->loc = loc;
+    ed->variant_count = static_cast<uint32_t>(variants.size());
+    ed->variants = arena_.makeArray<EnumVariant>(variants.size());
+    for (size_t i = 0; i < variants.size(); ++i) {
+        ed->variants[i] = variants[i];
+    }
+    return ed;
+}
+
+// --- Union Declaration ---
+UnionDecl* Parser::parseUnionDecl() {
+    SourceLocation loc = peek().loc;
+    expect(TokenKind::KwUnion, "expected 'union'");
+    Token nameTok = expect(TokenKind::Ident, "expected union name");
+    skipNewlines();
+    expect(TokenKind::LBrace, "expected '{' after union name");
+    skipNewlines();
+
+    std::vector<UnionVariantDecl> variants;
+    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        Token vname = expect(TokenKind::Ident, "expected variant name");
+        UnionVariantDecl vd;
+        vd.name = vname.text;
+        vd.loc = vname.loc;
+        vd.payload_type = nullptr;
+        if (match(TokenKind::LParen)) {
+            auto* tr = arena_.make<TypeRef>();
+            *tr = parseType();
+            vd.payload_type = tr;
+            expect(TokenKind::RParen, "expected ')' after variant type");
+        }
+        variants.push_back(vd);
+        while (match(TokenKind::Comma) || match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+    }
+    expect(TokenKind::RBrace, "expected '}' after union variants");
+
+    auto* ud = arena_.make<UnionDecl>();
+    ud->name = nameTok.text;
+    ud->loc = loc;
+    ud->variant_count = static_cast<uint32_t>(variants.size());
+    ud->variants = arena_.makeArray<UnionVariantDecl>(variants.size());
+    for (size_t i = 0; i < variants.size(); ++i) {
+        ud->variants[i] = variants[i];
+    }
+    return ud;
 }
 
 // --- Function Declaration ---
@@ -700,7 +838,7 @@ Expr* Parser::parsePrimary() {
         return lit;
     }
 
-    // Identifier, function call, or struct literal
+    // Identifier, function call, struct literal, enum access, or union variant
     if (tok.kind == TokenKind::Ident) {
         advance();
         if (check(TokenKind::LParen)) {
@@ -708,6 +846,39 @@ Expr* Parser::parsePrimary() {
         }
         if (check(TokenKind::LBrace) && struct_names_.count(tok.text)) {
             return parseStructLit(tok.text, tok.loc);
+        }
+        // Union variant: Name::Variant or Name::Variant(payload)
+        if (check(TokenKind::ColonColon) && union_names_.count(tok.text)) {
+            advance(); // consume ::
+            Token variant_tok = expect(TokenKind::Ident, "expected variant name after '::'");
+            auto* uv = arena_.make<UnionVariantExpr>();
+            uv->kind = Expr::Kind::UnionVariant;
+            uv->loc = tok.loc;
+            uv->union_name = tok.text;
+            uv->variant_name = variant_tok.text;
+            uv->payload = nullptr;
+            // Check for struct literal shorthand: Shape::Circle { ... }
+            if (check(TokenKind::LBrace) && struct_names_.count(variant_tok.text)) {
+                uv->payload = parseStructLit(variant_tok.text, variant_tok.loc);
+            } else if (match(TokenKind::LParen)) {
+                // Explicit payload: Shape::Circle(expr) or Option::Some(42)
+                if (!check(TokenKind::RParen)) {
+                    uv->payload = parseExpr();
+                }
+                expect(TokenKind::RParen, "expected ')' after variant payload");
+            }
+            return uv;
+        }
+        // Enum access: Name.Variant
+        if (check(TokenKind::Dot) && enum_names_.count(tok.text)) {
+            advance(); // consume .
+            Token variant_tok = expect(TokenKind::Ident, "expected variant name after '.'");
+            auto* ea = arena_.make<EnumAccessExpr>();
+            ea->kind = Expr::Kind::EnumAccess;
+            ea->loc = tok.loc;
+            ea->enum_name = tok.text;
+            ea->variant_name = variant_tok.text;
+            return ea;
         }
         auto* ident = arena_.make<IdentExpr>();
         ident->kind = Expr::Kind::Ident;
@@ -819,6 +990,33 @@ Expr* Parser::parseBlockExpr() {
                 lhs = parseCallExpr(identTok.text, identTok.loc);
             } else if (check(TokenKind::LBrace) && struct_names_.count(identTok.text)) {
                 lhs = parseStructLit(identTok.text, identTok.loc);
+            } else if (check(TokenKind::ColonColon) && union_names_.count(identTok.text)) {
+                advance(); // consume ::
+                Token variant_tok = expect(TokenKind::Ident, "expected variant name after '::'");
+                auto* uv = arena_.make<UnionVariantExpr>();
+                uv->kind = Expr::Kind::UnionVariant;
+                uv->loc = identTok.loc;
+                uv->union_name = identTok.text;
+                uv->variant_name = variant_tok.text;
+                uv->payload = nullptr;
+                if (check(TokenKind::LBrace) && struct_names_.count(variant_tok.text)) {
+                    uv->payload = parseStructLit(variant_tok.text, variant_tok.loc);
+                } else if (match(TokenKind::LParen)) {
+                    if (!check(TokenKind::RParen)) {
+                        uv->payload = parseExpr();
+                    }
+                    expect(TokenKind::RParen, "expected ')' after variant payload");
+                }
+                lhs = uv;
+            } else if (check(TokenKind::Dot) && enum_names_.count(identTok.text)) {
+                advance(); // consume .
+                Token variant_tok = expect(TokenKind::Ident, "expected variant name after '.'");
+                auto* ea = arena_.make<EnumAccessExpr>();
+                ea->kind = Expr::Kind::EnumAccess;
+                ea->loc = identTok.loc;
+                ea->enum_name = identTok.text;
+                ea->variant_name = variant_tok.text;
+                lhs = ea;
             } else {
                 auto* ident = arena_.make<IdentExpr>();
                 ident->kind = Expr::Kind::Ident;
@@ -1048,7 +1246,7 @@ Pattern* Parser::parsePattern() {
         return pat;
     }
 
-    // Wildcard or variable pattern
+    // Wildcard, variable, enum, or union variant pattern
     if (tok.kind == TokenKind::Ident) {
         advance();
         if (tok.text == "_") {
@@ -1057,6 +1255,53 @@ Pattern* Parser::parsePattern() {
             pat->loc = tok.loc;
             return pat;
         }
+        // Union pattern: Variant(binding) — e.g. Some(x)
+        if (check(TokenKind::LParen)) {
+            advance(); // consume (
+            auto* upat = arena_.make<UnionPattern>();
+            upat->kind = Pattern::Kind::Union;
+            upat->loc = tok.loc;
+            upat->variant_name = tok.text;
+            upat->inner = nullptr;
+            upat->field_bindings = nullptr;
+            upat->field_binding_count = 0;
+            if (!check(TokenKind::RParen)) {
+                upat->inner = parsePattern();
+            }
+            expect(TokenKind::RParen, "expected ')' in union pattern");
+            return upat;
+        }
+        // Struct destructuring pattern: Circle { radius: r, ... }
+        if (check(TokenKind::LBrace) && struct_names_.count(tok.text)) {
+            advance(); // consume {
+            skipNewlines();
+            std::vector<FieldBinding> bindings;
+            while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+                Token fname = expect(TokenKind::Ident, "expected field name in pattern");
+                expect(TokenKind::Colon, "expected ':' after field name in pattern");
+                Token bname = expect(TokenKind::Ident, "expected binding name in pattern");
+                FieldBinding fb;
+                fb.field_name = fname.text;
+                fb.binding_name = bname.text;
+                fb.loc = fname.loc;
+                bindings.push_back(fb);
+                while (match(TokenKind::Comma) || match(TokenKind::Newline)) {}
+            }
+            expect(TokenKind::RBrace, "expected '}' in struct pattern");
+            auto* upat = arena_.make<UnionPattern>();
+            upat->kind = Pattern::Kind::Union;
+            upat->loc = tok.loc;
+            upat->variant_name = tok.text;
+            upat->inner = nullptr;
+            upat->field_binding_count = static_cast<uint32_t>(bindings.size());
+            upat->field_bindings = arena_.makeArray<FieldBinding>(bindings.size());
+            for (size_t i = 0; i < bindings.size(); ++i) {
+                upat->field_bindings[i] = bindings[i];
+            }
+            return upat;
+        }
+        // Plain identifier — could be enum variant or variable binding.
+        // Ambiguous at parse time; TypeChecker resolves based on scrutinee type.
         auto* pat = arena_.make<VariablePattern>();
         pat->kind = Pattern::Kind::Variable;
         pat->loc = tok.loc;

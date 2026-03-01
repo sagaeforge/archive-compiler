@@ -304,7 +304,7 @@ TEST(ParserTest, ErrorUnexpectedTopLevel) {
     EXPECT_TRUE(r.diag.hasErrors());
     std::ostringstream out;
     r.diag.printAll(out);
-    EXPECT_NE(out.str().find("expected function or struct declaration"), std::string::npos);
+    EXPECT_NE(out.str().find("expected function, struct, enum, or union declaration"), std::string::npos);
 }
 
 // --- Error: missing function name ---
@@ -963,4 +963,147 @@ TEST(ParserTest, FieldAssign) {
     EXPECT_EQ(stmt->kind, Stmt::Kind::FieldAssign);
     auto* fas = static_cast<FieldAssignStmt*>(stmt);
     EXPECT_EQ(fas->target->kind, Expr::Kind::FieldAccess);
+}
+
+// ===== M5b: Enum + Union parsing =====
+
+TEST(ParserTest, EnumDecl) {
+    auto r = parse("enum Color { Red, Green, Blue }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    ASSERT_EQ(r.mod->enum_count, 1u);
+    auto* ed = r.mod->enums[0];
+    EXPECT_EQ(ed->name, "Color");
+    ASSERT_EQ(ed->variant_count, 3u);
+    EXPECT_EQ(ed->variants[0].name, "Red");
+    EXPECT_EQ(ed->variants[1].name, "Green");
+    EXPECT_EQ(ed->variants[2].name, "Blue");
+}
+
+TEST(ParserTest, EnumAccess) {
+    auto r = parse(
+        "enum Color { Red, Green, Blue }\n"
+        "fn main() -> i64 { Color.Red }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_NE(body->result, nullptr);
+    EXPECT_EQ(body->result->kind, Expr::Kind::EnumAccess);
+    auto* ea = static_cast<EnumAccessExpr*>(body->result);
+    EXPECT_EQ(ea->enum_name, "Color");
+    EXPECT_EQ(ea->variant_name, "Red");
+}
+
+TEST(ParserTest, UnionDecl) {
+    auto r = parse(
+        "union Option { Some(i64), None }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    ASSERT_EQ(r.mod->union_count, 1u);
+    auto* ud = r.mod->unions[0];
+    EXPECT_EQ(ud->name, "Option");
+    ASSERT_EQ(ud->variant_count, 2u);
+    EXPECT_EQ(ud->variants[0].name, "Some");
+    ASSERT_NE(ud->variants[0].payload_type, nullptr);
+    EXPECT_EQ(ud->variants[0].payload_type->name, "i64");
+    EXPECT_EQ(ud->variants[1].name, "None");
+    EXPECT_EQ(ud->variants[1].payload_type, nullptr);
+}
+
+TEST(ParserTest, UnionVariantExpr) {
+    auto r = parse(
+        "union Option { Some(i64), None }\n"
+        "fn main() -> i64 { Option::Some(42) }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_NE(body->result, nullptr);
+    EXPECT_EQ(body->result->kind, Expr::Kind::UnionVariant);
+    auto* uv = static_cast<UnionVariantExpr*>(body->result);
+    EXPECT_EQ(uv->union_name, "Option");
+    EXPECT_EQ(uv->variant_name, "Some");
+    ASSERT_NE(uv->payload, nullptr);
+    EXPECT_EQ(uv->payload->kind, Expr::Kind::IntLit);
+}
+
+TEST(ParserTest, UnionVariantEmpty) {
+    auto r = parse(
+        "union Option { Some(i64), None }\n"
+        "fn main() -> i64 { Option::None }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_NE(body->result, nullptr);
+    EXPECT_EQ(body->result->kind, Expr::Kind::UnionVariant);
+    auto* uv = static_cast<UnionVariantExpr*>(body->result);
+    EXPECT_EQ(uv->union_name, "Option");
+    EXPECT_EQ(uv->variant_name, "None");
+    EXPECT_EQ(uv->payload, nullptr);
+}
+
+TEST(ParserTest, UnionVariantStructShorthand) {
+    auto r = parse(
+        "struct Circle { radius: i64 }\n"
+        "union Shape { Circle(Circle), Empty }\n"
+        "fn main() -> i64 { Shape::Circle { radius: 5 } }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_NE(body->result, nullptr);
+    EXPECT_EQ(body->result->kind, Expr::Kind::UnionVariant);
+    auto* uv = static_cast<UnionVariantExpr*>(body->result);
+    EXPECT_EQ(uv->union_name, "Shape");
+    EXPECT_EQ(uv->variant_name, "Circle");
+    ASSERT_NE(uv->payload, nullptr);
+    EXPECT_EQ(uv->payload->kind, Expr::Kind::StructLit);
+}
+
+TEST(ParserTest, UnionPatternPayload) {
+    auto r = parse(
+        "union Option { Some(i64), None }\n"
+        "fn main() -> i64 {\n"
+        "    val x: i64 = 0\n"
+        "    match x { Some(v) => v, _ => 0 }\n"
+        "}");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    auto* matchE = static_cast<MatchExpr*>(body->result);
+    ASSERT_GE(matchE->arm_count, 1u);
+    auto* pat = matchE->arms[0].pattern;
+    EXPECT_EQ(pat->kind, Pattern::Kind::Union);
+    auto* up = static_cast<UnionPattern*>(pat);
+    EXPECT_EQ(up->variant_name, "Some");
+    ASSERT_NE(up->inner, nullptr);
+    EXPECT_EQ(up->inner->kind, Pattern::Kind::Variable);
+}
+
+TEST(ParserTest, UnionPatternStructDestructure) {
+    auto r = parse(
+        "struct Circle { radius: i64 }\n"
+        "union Shape { Circle(Circle), Empty }\n"
+        "fn main() -> i64 {\n"
+        "    val x: i64 = 0\n"
+        "    match x { Circle { radius: r } => r, _ => 0 }\n"
+        "}");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    auto* matchE = static_cast<MatchExpr*>(body->result);
+    ASSERT_GE(matchE->arm_count, 1u);
+    auto* pat = matchE->arms[0].pattern;
+    EXPECT_EQ(pat->kind, Pattern::Kind::Union);
+    auto* up = static_cast<UnionPattern*>(pat);
+    EXPECT_EQ(up->variant_name, "Circle");
+    ASSERT_EQ(up->field_binding_count, 1u);
+    EXPECT_EQ(up->field_bindings[0].field_name, "radius");
+    EXPECT_EQ(up->field_bindings[0].binding_name, "r");
+}
+
+TEST(ParserTest, EnumAndUnionDumpAST) {
+    auto r = parse(
+        "enum Color { Red, Green }\n"
+        "union Option { Some(i64), None }\n"
+        "fn main() -> i64 { 0 }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    std::ostringstream out;
+    dumpAST(r.mod, out);
+    std::string dump = out.str();
+    EXPECT_NE(dump.find("EnumDecl(Color)"), std::string::npos);
+    EXPECT_NE(dump.find("Red"), std::string::npos);
+    EXPECT_NE(dump.find("UnionDecl(Option)"), std::string::npos);
+    EXPECT_NE(dump.find("Some(i64)"), std::string::npos);
+    EXPECT_NE(dump.find("None"), std::string::npos);
 }

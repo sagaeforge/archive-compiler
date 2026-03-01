@@ -25,6 +25,8 @@ enum class TokenKind : uint8_t {
     KwTrue,
     KwFalse,
     KwStruct,
+    KwEnum,
+    KwUnion,
 
     // Operators
     Plus,        // +
@@ -41,6 +43,7 @@ enum class TokenKind : uint8_t {
     Arrow,       // ->
     FatArrow,    // =>
     Colon,       // :
+    ColonColon,  // ::
     Dot,         // .
     Pipe,        // |>
     Ampersand,   // &

@@ -1,5 +1,6 @@
 #pragma once
 #include "kern/parser/AST.h"
+#include "kern/support/Arena.h"
 #include "kern/support/Diagnostic.h"
 #include <optional>
 #include <string>
@@ -13,7 +14,7 @@ enum class Type {
     U8, U16, U32, U64,
     F32, F64,
     Bool, Unit, Error,
-    Struct
+    Struct, Enum, Union
 };
 
 const char* typeName(Type t);
@@ -24,6 +25,8 @@ int bitWidth(Type t);
 bool isFloat(Type t);
 bool intFitsInType(int64_t value, Type t);
 bool isStruct(Type t);
+bool isEnum(Type t);
+bool isUnion(Type t);
 int sizeBytes(Type t);
 
 struct FieldDef {
@@ -41,6 +44,34 @@ struct StructDef {
     int32_t alignment;
 };
 
+struct EnumVariantDef {
+    std::string_view name;
+    int32_t tag;  // ordinal (0, 1, 2, ...)
+};
+
+struct EnumDef {
+    std::string_view name;
+    std::vector<EnumVariantDef> variants;
+    int32_t tag_size;  // 1 (u8), 2 (u16), or 4 (u32)
+};
+
+struct UnionVariantDef {
+    std::string_view name;
+    int32_t tag;
+    Type payload_type;               // Error = no payload
+    std::string_view payload_struct_name; // if payload_type == Struct
+    int32_t payload_size;            // 0 for empty variants
+};
+
+struct UnionDef {
+    std::string_view name;
+    std::vector<UnionVariantDef> variants;
+    int32_t tag_size;
+    int32_t max_payload_size;
+    int32_t total_size;              // tag_size + padding + max_payload_size
+    int32_t alignment;
+};
+
 struct FnSig {
     std::string_view name;
     std::vector<Type> param_types;
@@ -51,7 +82,7 @@ struct FnSig {
 
 class TypeChecker {
 public:
-    explicit TypeChecker(DiagnosticEngine& diag);
+    TypeChecker(DiagnosticEngine& diag, Arena* arena = nullptr);
 
     bool check(Module* mod);
 
@@ -63,6 +94,14 @@ public:
     std::string_view structNameOfExpr(const Expr* expr) const;
     std::string_view localStructName(std::string_view binding) const;
 
+    // Enum/Union queries (after check() has run)
+    const EnumDef* getEnumDef(std::string_view name) const;
+    const UnionDef* getUnionDef(std::string_view name) const;
+    std::string_view enumNameOfExpr(const Expr* expr) const;
+    std::string_view unionNameOfExpr(const Expr* expr) const;
+    std::string_view localEnumName(std::string_view binding) const;
+    std::string_view localUnionName(std::string_view binding) const;
+
 private:
     Type checkFn(FnDecl* fn);
     Type checkExpr(Expr* expr, std::optional<Type> ctx = std::nullopt);
@@ -72,6 +111,7 @@ private:
     Type resolveType(const TypeRef& ref);
 
     DiagnosticEngine& diag_;
+    Arena* arena_ = nullptr;
     std::unordered_map<std::string_view, FnSig> fn_table_;
     std::unordered_map<std::string_view, Type> local_vars_;
     std::unordered_set<std::string_view> mutable_vars_;
@@ -84,6 +124,16 @@ private:
     std::unordered_map<std::string_view, StructDef> struct_defs_;
     std::unordered_map<const Expr*, std::string_view> expr_struct_names_;
     std::unordered_map<std::string_view, std::string_view> local_struct_names_;
+
+    // Enum support
+    std::unordered_map<std::string_view, EnumDef> enum_defs_;
+    std::unordered_map<const Expr*, std::string_view> expr_enum_names_;
+    std::unordered_map<std::string_view, std::string_view> local_enum_names_;
+
+    // Union support
+    std::unordered_map<std::string_view, UnionDef> union_defs_;
+    std::unordered_map<const Expr*, std::string_view> expr_union_names_;
+    std::unordered_map<std::string_view, std::string_view> local_union_names_;
 };
 
 } // namespace kern
