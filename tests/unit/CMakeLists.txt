@@ -10,8 +10,11 @@ add_executable(kern_tests
     hir/HIRTest.cpp
     hir/HIRBuilderTest.cpp
     hir/HIRPassesTest.cpp
+    lir/LIRTest.cpp
+    lir/LIRBuilderTest.cpp
 )
 target_link_libraries(kern_tests
+    kern_lir
     kern_hir
     kern_codegen
     kern_ir

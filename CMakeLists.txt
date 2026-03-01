@@ -20,6 +20,7 @@ add_subdirectory(lib/Sema)
 add_subdirectory(lib/IR)
 add_subdirectory(lib/CodeGen)
 add_subdirectory(lib/HIR)
+add_subdirectory(lib/LIR)
 
 # Compiler driver
 add_subdirectory(tools/kernc)

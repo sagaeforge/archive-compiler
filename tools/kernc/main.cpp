@@ -5,6 +5,8 @@
 #include "kern/hir/HIRBuilder.h"
 #include "kern/hir/HIRDump.h"
 #include "kern/hir/HIRPasses.h"
+#include "kern/lir/LIRBuilder.h"
+#include "kern/lir/LIRDump.h"
 #include "kern/ir/IRBuilder.h"
 #include "kern/ir/KernIR.h"
 #include "kern/codegen/CodeGen.h"
@@ -26,6 +28,7 @@ static void printUsage(const char* prog) {
               << "  --dump-tokens   Dump token stream\n"
               << "  --dump-ast      Dump AST\n"
               << "  --dump-hir      Dump HIR (typed, desugared)\n"
+              << "  --dump-lir      Dump LIR (lowered SSA)\n"
               << "  --dump-ir       Dump IR\n"
               << "  --dump-purity   Dump purity analysis\n"
               << "  --help          Show this help\n";
@@ -43,6 +46,7 @@ int main(int argc, char** argv) {
     bool dump_tokens = false;
     bool dump_ast = false;
     bool dump_hir = false;
+    bool dump_lir = false;
     bool dump_ir = false;
     bool dump_purity = false;
 
@@ -61,6 +65,8 @@ int main(int argc, char** argv) {
             dump_ast = true;
         } else if (arg == "--dump-hir") {
             dump_hir = true;
+        } else if (arg == "--dump-lir") {
+            dump_lir = true;
         } else if (arg == "--dump-ir") {
             dump_ir = true;
         } else if (arg == "--dump-purity") {
@@ -135,6 +141,28 @@ int main(int argc, char** argv) {
             kern::dumpHIR(hir_mod, hir_ctx.types, std::cout);
         } else {
             hir_ctx.diag.printAll(std::cerr);
+        }
+        if (!dump_lir && !dump_ir && !asm_only) return 0;
+    }
+
+    // --- LIR Pipeline (HIR → LIR lowering) ---
+    if (dump_lir) {
+        kern::CompilationContext lir_ctx;
+        lir_ctx.diag.setSource(source);
+        kern::HIRBuilder hir_builder2(lir_ctx);
+        kern::HIRModule* hir_mod2 = hir_builder2.build(mod);
+
+        if (!lir_ctx.diag.hasErrors()) {
+            kern::HIRPassManager pm2;
+            pm2.add<kern::PurityAnalysisPass>();
+            pm2.add<kern::TailCallAnalysisPass>();
+            pm2.run(*hir_mod2, lir_ctx);
+
+            kern::LIRBuilder lir_builder(lir_ctx);
+            kern::LIRModule* lir_mod = lir_builder.build(hir_mod2);
+            kern::dumpLIR(lir_mod, lir_ctx.types, std::cout);
+        } else {
+            lir_ctx.diag.printAll(std::cerr);
         }
         if (!dump_ir && !asm_only) return 0;
     }
