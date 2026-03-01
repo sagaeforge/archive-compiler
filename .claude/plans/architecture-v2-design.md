@@ -1320,6 +1320,42 @@ target_link_libraries(kern-lsp PRIVATE kern_ide kern_fmt kern_lint)
 
 > **원칙**: 의존성이 없는 작업은 병렬로 실행. 아래 ▸ 표시가 같은 Phase 내 병렬 가능 작업.
 
+### 빅뱅 전략 + Phase별 검증
+
+**빅뱅** = 기존 파이프라인(AST→IR→CodeGen)을 새 파이프라인(AST→HIR→LIR→MachIR→NASM)으로 전면 교체.
+Phase 2~4 동안 **동작하는 컴파일러가 없는 "dark period"** 가 존재한다. 이를 수용하되, 각 Phase에서 레이어별 정확성을 독립 검증한다.
+
+#### Phase별 검증 전략
+
+| Phase | 검증 방법 | 앵커 E2E | 비고 |
+|-------|----------|:---:|------|
+| 2 (HIR) | **HIR interpreter** + unit tests | X | 간단한 tree-walk interpreter로 HIR 의미론 검증. 산술/비교/if/match/call 지원. 메모리/struct는 스킵 가능 |
+| 3a (LIR) | **LIR interpreter** + unit tests | X | SSA 기반 interpreter. block arguments + VReg 해석. 기존 fib/arith 같은 핵심 테스트 케이스를 interpreter로 실행하여 exit code 비교 |
+| 4a (Backend) | MachIR → NASM 후 **실제 실행** | **O** | 이 시점에서 처음으로 69개 앵커 E2E 테스트 가능 |
+| 5a (통합) | **전체 파이프라인** E2E 검증 | **O** | 기존 파이프라인 삭제, 새 파이프라인으로 교체 |
+
+#### HIR/LIR Interpreter 설계 (검증 전용, 프로덕션 코드 아님)
+
+```cpp
+// tests/unit/hir/HIRInterpreter.h — 테스트 전용
+class HIRInterpreter {
+    CompilationContext& ctx_;
+    std::unordered_map<std::string_view, int64_t> globals_;  // fn name → callable
+public:
+    // HIRModule의 "main" 함수를 실행하고 반환값(i64 exit code)을 돌려줌
+    int64_t run(const HIRModule& module);
+private:
+    int64_t evalExpr(const HIRExpr* expr, Env& env);
+    int64_t evalCall(std::string_view fn, std::span<int64_t> args);
+};
+```
+
+- **범위**: 정수 연산, 비교, if/else, match, 함수 호출, tail call만 지원
+- **미지원**: float, struct, ptr, string (이들은 unit test로 개별 검증)
+- **목적**: `tests/integration/`의 순수 정수 계산 E2E 케이스(fib, arith, comparison 등)를 파이프라인 연결 전에 HIR/LIR 단독으로 검증
+
+이렇게 하면 Phase 2 완료 시점에 HIR interpreter로 ~30개 정수 기반 테스트를 돌릴 수 있고, Phase 3 완료 시점에 LIR interpreter로 같은 테스트를 돌릴 수 있다. Phase 4a에서 처음으로 실제 바이너리 E2E 검증.
+
 ### Phase 0: 준비 — ✅ 완료
 
 - [ ] git tag `v0.5-m5` (M5 완료 후)
