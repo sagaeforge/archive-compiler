@@ -167,13 +167,59 @@ std::vector<LiveInterval>
 RegisterAllocator::computeIntervals(const MachFunction& fn) {
     std::unordered_map<uint32_t, LiveInterval> interval_map;
 
+    // Build label→block index map and block→global idx ranges
+    std::unordered_map<std::string_view, uint32_t> label_to_block;
+    std::vector<uint32_t> block_start(fn.block_count);
+    std::vector<uint32_t> block_end(fn.block_count);
+
     uint32_t global_idx = 0;
     for (uint32_t b = 0; b < fn.block_count; ++b) {
+        label_to_block[fn.blocks[b].label] = b;
+        block_start[b] = global_idx;
         for (uint32_t i = 0; i < fn.blocks[b].instr_count; ++i) {
             const auto& instr = fn.blocks[b].instrs[i];
             scanOperandDefs(instr, global_idx, interval_map);
             scanOperandUses(instr, global_idx, interval_map);
             global_idx++;
+        }
+        block_end[b] = global_idx > 0 ? global_idx - 1 : 0;
+    }
+
+    // Detect loop back-edges (jumps from later blocks to earlier blocks)
+    // and extend live intervals of vregs that are live across the loop.
+    // A back-edge from block B to block H (where H <= B) means
+    // any vreg defined before end of B and used within [H..B] must
+    // remain live until end of B.
+    for (uint32_t b = 0; b < fn.block_count; ++b) {
+        for (uint32_t i = 0; i < fn.blocks[b].instr_count; ++i) {
+            const auto& instr = fn.blocks[b].instrs[i];
+            if (instr.op != X86Op::Jmp && instr.op != X86Op::Jcc) continue;
+
+            // Find target label
+            for (uint8_t j = 0; j < instr.operand_count; ++j) {
+                const auto& op = instr.operand(j);
+                if (op.kind != MachOperand::Kind::Label) continue;
+
+                auto it = label_to_block.find(op.label);
+                if (it == label_to_block.end()) continue;
+
+                uint32_t target_block = it->second;
+                if (target_block >= b) continue; // forward edge, not a loop
+
+                // Back-edge: target_block < b
+                // Extend all intervals that start before the loop header
+                // and are used within the loop body to the end of the
+                // back-edge block.
+                uint32_t loop_start = block_start[target_block];
+                uint32_t loop_end = block_end[b];
+
+                for (auto& [_, li] : interval_map) {
+                    if (li.start <= loop_start && li.end >= loop_start &&
+                        li.end < loop_end) {
+                        li.end = loop_end;
+                    }
+                }
+            }
         }
     }
 
