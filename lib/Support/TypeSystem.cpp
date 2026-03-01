@@ -68,7 +68,8 @@ TypeId TypeTable::makeFn(std::span<const TypeId> params, TypeId ret) {
     return add(ti);
 }
 
-TypeId TypeTable::makeStruct(std::string_view name, std::span<const FieldInfo> fields) {
+TypeId TypeTable::makeStruct(std::string_view name, std::span<const FieldInfo> fields,
+                             bool is_packed, uint32_t explicit_align) {
     auto* field_copy = arena_.makeArray<FieldInfo>(fields.size());
     uint32_t offset = 0;
     uint32_t max_align = 1;
@@ -76,13 +77,15 @@ TypeId TypeTable::makeStruct(std::string_view name, std::span<const FieldInfo> f
     for (size_t i = 0; i < fields.size(); ++i) {
         field_copy[i] = fields[i];
         uint32_t field_size = sizeOf(fields[i].type);
-        uint32_t field_align = alignOf(fields[i].type);
+        uint32_t field_align = is_packed ? 1 : alignOf(fields[i].type);
         // Align offset
         offset = (offset + field_align - 1) & ~(field_align - 1);
         field_copy[i].offset = static_cast<int32_t>(offset);
         offset += field_size;
         if (field_align > max_align) max_align = field_align;
     }
+    // Override alignment if explicit
+    if (explicit_align > 0) max_align = explicit_align;
     // Pad total size to alignment
     uint32_t total_size = (offset + max_align - 1) & ~(max_align - 1);
 
@@ -93,6 +96,7 @@ TypeId TypeTable::makeStruct(std::string_view name, std::span<const FieldInfo> f
     ti.struct_.field_count = static_cast<uint32_t>(fields.size());
     ti.struct_.size = total_size;
     ti.struct_.align = max_align;
+    ti.struct_.is_packed = is_packed;
     return add(ti);
 }
 

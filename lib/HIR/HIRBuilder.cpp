@@ -39,6 +39,47 @@ static TypeId mergeTypes(TypeId a, TypeId b) {
     return a; // assumes they match
 }
 
+// Constant-fold an HIR expression to an integer value (for static_assert).
+// Returns true if successfully folded, storing result in *out.
+static bool constEvalInt(HIRExpr* expr, int64_t* out) {
+    if (expr->kind == HIRExpr::Kind::IntLit) {
+        *out = static_cast<HIRIntLitExpr*>(expr)->value;
+        return true;
+    }
+    if (expr->kind == HIRExpr::Kind::BoolLit) {
+        *out = static_cast<HIRBoolLitExpr*>(expr)->value ? 1 : 0;
+        return true;
+    }
+    if (expr->kind == HIRExpr::Kind::BinOp) {
+        auto* bin = static_cast<HIRBinOpExpr*>(expr);
+        int64_t lv, rv;
+        if (!constEvalInt(bin->lhs, &lv) || !constEvalInt(bin->rhs, &rv))
+            return false;
+        switch (bin->op) {
+            case HIRBinOp::Add:   *out = lv + rv; return true;
+            case HIRBinOp::Sub:   *out = lv - rv; return true;
+            case HIRBinOp::Mul:   *out = lv * rv; return true;
+            case HIRBinOp::Div:   if (rv == 0) return false; *out = lv / rv; return true;
+            case HIRBinOp::Mod:   if (rv == 0) return false; *out = lv % rv; return true;
+            case HIRBinOp::Eq:    *out = (lv == rv) ? 1 : 0; return true;
+            case HIRBinOp::NotEq: *out = (lv != rv) ? 1 : 0; return true;
+            case HIRBinOp::Lt:    *out = (lv < rv)  ? 1 : 0; return true;
+            case HIRBinOp::LtEq:  *out = (lv <= rv) ? 1 : 0; return true;
+            case HIRBinOp::Gt:    *out = (lv > rv)  ? 1 : 0; return true;
+            case HIRBinOp::GtEq:  *out = (lv >= rv) ? 1 : 0; return true;
+            case HIRBinOp::BitAnd: *out = lv & rv; return true;
+            case HIRBinOp::BitOr:  *out = lv | rv; return true;
+            case HIRBinOp::BitXor: *out = lv ^ rv; return true;
+            case HIRBinOp::Shl:   *out = lv << rv; return true;
+            case HIRBinOp::Shr:   *out = lv >> rv; return true;
+            case HIRBinOp::And:   *out = (lv && rv) ? 1 : 0; return true;
+            case HIRBinOp::Or:    *out = (lv || rv) ? 1 : 0; return true;
+        }
+        return false;
+    }
+    return false;
+}
+
 bool HIRBuilder::intFitsInType(int64_t value, TypeId type) const {
     if (!isIntegerType(type)) return false;
     auto bw = ctx_.types.bitWidth(type);
@@ -111,6 +152,22 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
         named_types_["String"] = tid;
         return tid;
     }
+    // Slice<T> = { data: Ptr<T>, len: u64 }
+    if (ref.name == "Slice" && ref.pointee) {
+        TypeId elem_type = resolveType(*ref.pointee);
+        // Create a unique name for this slice instantiation
+        std::string slice_name = "Slice_" + std::string(ctx_.types.name(elem_type));
+        auto interned = ctx_.strings.intern(slice_name);
+        auto it = named_types_.find(interned);
+        if (it != named_types_.end()) return it->second;
+        FieldInfo fields[] = {
+            {ctx_.strings.intern("data"), ctx_.types.makePtr(elem_type, false), false, 0},
+            {ctx_.strings.intern("len"), TypeTable::U64, false, 8},
+        };
+        TypeId tid = ctx_.types.makeStruct(interned, fields);
+        named_types_[interned] = tid;
+        return tid;
+    }
     auto it = named_types_.find(ref.name);
     if (it != named_types_.end()) return it->second;
     ctx_.diag.error(ref.loc, std::string("unknown type '") + std::string(ref.name) + "'");
@@ -140,24 +197,15 @@ void HIRBuilder::registerStructDecls(const Module* ast) {
     for (uint32_t i = 0; i < ast->struct_count; ++i) {
         auto* sd = ast->structs[i];
         std::vector<FieldInfo> fields;
-        int32_t offset = 0;
-        int32_t max_align = 1;
 
         for (uint32_t j = 0; j < sd->field_count; ++j) {
             auto& f = sd->fields[j];
             TypeId ft = resolveType(f.type);
-            int32_t field_size = static_cast<int32_t>(ctx_.types.sizeOf(ft));
-            int32_t field_align = static_cast<int32_t>(ctx_.types.alignOf(ft));
-            if (field_align < 1) field_align = 1;
-
-            // Natural alignment
-            offset = (offset + field_align - 1) / field_align * field_align;
-            fields.push_back({ctx_.strings.intern(f.name), ft, f.is_mutable, offset});
-            offset += field_size;
-            if (field_align > max_align) max_align = field_align;
+            fields.push_back({ctx_.strings.intern(f.name), ft, f.is_mutable, -1});
         }
 
-        TypeId tid = ctx_.types.makeStruct(ctx_.strings.intern(sd->name), fields);
+        TypeId tid = ctx_.types.makeStruct(ctx_.strings.intern(sd->name), fields,
+                                            sd->is_packed, sd->explicit_align);
         named_types_[sd->name] = tid;
     }
 }
@@ -222,10 +270,41 @@ void HIRBuilder::registerFnSigs(const Module* ast) {
 HIRModule* HIRBuilder::build(const Module* ast) {
     if (!ast) return nullptr;
 
+    // Register type aliases first (they may be used by other types)
+    for (uint32_t i = 0; i < ast->type_alias_count; ++i) {
+        auto* ta = ast->type_aliases[i];
+        TypeId target = resolveType(ta->target);
+        named_types_[ta->name] = target;
+    }
+
+    // Register newtypes as single-field structs
+    for (uint32_t i = 0; i < ast->newtype_count; ++i) {
+        auto* nt = ast->newtypes[i];
+        TypeId inner = resolveType(nt->inner);
+        FieldInfo field = {ctx_.strings.intern("inner"), inner, false, 0};
+        TypeId tid = ctx_.types.makeStruct(ctx_.strings.intern(nt->name), {&field, 1});
+        named_types_[nt->name] = tid;
+    }
+
     registerStructDecls(ast);
     registerEnumDecls(ast);
     registerUnionDecls(ast);
     registerFnSigs(ast);
+
+    // Evaluate static_assert declarations
+    for (uint32_t i = 0; i < ast->static_assert_count; ++i) {
+        auto* sa = ast->static_asserts[i];
+        HIRExpr* cond = buildExpr(sa->condition);
+        int64_t val;
+        if (constEvalInt(cond, &val)) {
+            if (val == 0) {
+                ctx_.diag.error(sa->loc, std::string("static assertion failed: ") +
+                                std::string(sa->message));
+            }
+        } else {
+            ctx_.diag.error(sa->loc, "static_assert condition must be a compile-time constant");
+        }
+    }
 
     auto* mod = ctx_.arena.make<HIRModule>();
 
@@ -348,6 +427,26 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
         case Expr::Kind::InlineAsm:  return buildInlineAsm(expr);
         case Expr::Kind::ArrayLit:   return buildArrayLit(expr);
         case Expr::Kind::IndexAccess:return buildIndexAccess(expr);
+        case Expr::Kind::Sizeof: {
+            auto* se = static_cast<const SizeofExpr*>(expr);
+            TypeId tid = resolveType(se->target);
+            auto* e = ctx_.arena.make<HIRIntLitExpr>();
+            e->kind = HIRExpr::Kind::IntLit;
+            e->loc = expr->loc;
+            e->value = static_cast<int64_t>(ctx_.types.sizeOf(tid));
+            e->type = TypeTable::U64;
+            return e;
+        }
+        case Expr::Kind::Alignof: {
+            auto* ae = static_cast<const AlignofExpr*>(expr);
+            TypeId tid = resolveType(ae->target);
+            auto* e = ctx_.arena.make<HIRIntLitExpr>();
+            e->kind = HIRExpr::Kind::IntLit;
+            e->loc = expr->loc;
+            e->value = static_cast<int64_t>(ctx_.types.alignOf(tid));
+            e->type = TypeTable::U64;
+            return e;
+        }
     }
     return errorExpr(expr->loc);
 }

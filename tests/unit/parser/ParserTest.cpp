@@ -304,7 +304,7 @@ TEST(ParserTest, ErrorUnexpectedTopLevel) {
     EXPECT_TRUE(r.diag.hasErrors());
     std::ostringstream out;
     r.diag.printAll(out);
-    EXPECT_NE(out.str().find("expected function, struct, enum, or union declaration"), std::string::npos);
+    EXPECT_NE(out.str().find("expected function, struct, enum, union, type, or newtype declaration"), std::string::npos);
 }
 
 // --- Error: missing function name ---

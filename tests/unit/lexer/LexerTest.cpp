@@ -419,7 +419,7 @@ TEST(LexerTest, EqualVariants) {
 // --- Unknown character error ---
 TEST(LexerTest, UnknownCharacterError) {
     DiagnosticEngine diag;
-    auto r = lexWithErrors("@", diag);
+    auto r = lexWithErrors("$", diag);
     EXPECT_TRUE(diag.hasErrors());
     bool found_error = false;
     for (auto& t : r.tokens) {

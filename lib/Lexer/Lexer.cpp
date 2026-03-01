@@ -32,6 +32,12 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::KwAsm:      return "asm";
         case TokenKind::KwVolatile: return "volatile";
         case TokenKind::KwNoreturn: return "noreturn";
+        case TokenKind::KwType:     return "type";
+        case TokenKind::KwNewtype:  return "newtype";
+        case TokenKind::KwModule:   return "module";
+        case TokenKind::KwImport:   return "import";
+        case TokenKind::KwSizeof:   return "sizeof";
+        case TokenKind::KwAlignof:  return "alignof";
         case TokenKind::Plus:       return "+";
         case TokenKind::Minus:      return "-";
         case TokenKind::Star:       return "*";
@@ -57,6 +63,7 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::Dot:        return ".";
         case TokenKind::Pipe:       return "|>";
         case TokenKind::Ampersand:  return "&";
+        case TokenKind::At:         return "@";
         case TokenKind::Comma:      return ",";
         case TokenKind::Semicolon:  return ";";
         case TokenKind::LParen:     return "(";
@@ -221,6 +228,12 @@ TokenKind Lexer::identifierKind(std::string_view text) {
     if (text == "asm")      return TokenKind::KwAsm;
     if (text == "volatile") return TokenKind::KwVolatile;
     if (text == "noreturn") return TokenKind::KwNoreturn;
+    if (text == "type")     return TokenKind::KwType;
+    if (text == "newtype")  return TokenKind::KwNewtype;
+    if (text == "module")   return TokenKind::KwModule;
+    if (text == "import")   return TokenKind::KwImport;
+    if (text == "sizeof")   return TokenKind::KwSizeof;
+    if (text == "alignof")  return TokenKind::KwAlignof;
     return TokenKind::Ident;
 }
 
@@ -323,6 +336,7 @@ Token Lexer::nextToken() {
         case '%': return makeToken(TokenKind::Percent);
         case '^': return makeToken(TokenKind::BitXor);
         case '~': return makeToken(TokenKind::Tilde);
+        case '@': return makeToken(TokenKind::At);
 
         case '!':
             if (match('=')) return makeToken(TokenKind::NotEq);

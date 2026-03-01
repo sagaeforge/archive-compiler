@@ -74,7 +74,8 @@ int CompilerPipeline::assemble(const std::string& asm_file,
 
 int CompilerPipeline::link(const std::string& obj_file,
                             const std::string& output_file,
-                            std::ostream& err) {
+                            std::ostream& err,
+                            const std::string& linker_script) {
     // Find macOS SDK library path
     std::string sdk_lib_path;
     {
@@ -96,6 +97,9 @@ int CompilerPipeline::link(const std::string& obj_file,
     if (!sdk_lib_path.empty()) {
         cmd += " -L" + sdk_lib_path;
     }
+    if (!linker_script.empty()) {
+        cmd += " -T " + linker_script;
+    }
     cmd += " -lSystem 2>&1";
 
     int ret = std::system(cmd.c_str());
@@ -108,11 +112,15 @@ int CompilerPipeline::link(const std::string& obj_file,
 
 int CompilerPipeline::linkFreestanding(const std::string& obj_file,
                                         const std::string& output_file,
-                                        std::ostream& err) {
+                                        std::ostream& err,
+                                        const std::string& linker_script) {
     // Freestanding: no _start wrapper, no libc, just raw object → binary
     std::string cmd = "ld " + obj_file + " -o " + output_file +
-                      " -e _main -platform_version macos 14.0.0 14.0.0 -arch x86_64"
-                      " -static 2>&1";
+                      " -e _main -platform_version macos 14.0.0 14.0.0 -arch x86_64";
+    if (!linker_script.empty()) {
+        cmd += " -T " + linker_script;
+    }
+    cmd += " -static 2>&1";
 
     int ret = std::system(cmd.c_str());
     if (ret != 0) {
@@ -245,10 +253,11 @@ int CompilerPipeline::run(const std::string& source, const CompileOptions& opts,
     }
 
     if (opts.freestanding) {
-        if (linkFreestanding(obj_file, opts.output_file, err) != 0) {
+        if (linkFreestanding(obj_file, opts.output_file, err,
+                             opts.linker_script) != 0) {
             return 1;
         }
-    } else if (link(obj_file, opts.output_file, err) != 0) {
+    } else if (link(obj_file, opts.output_file, err, opts.linker_script) != 0) {
         return 1;
     }
 

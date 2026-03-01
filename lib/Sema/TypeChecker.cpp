@@ -1253,6 +1253,14 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
             diag_.error(expr->loc, "index access not yet implemented");
             result = Type::Error;
             break;
+        case Expr::Kind::Sizeof:
+            diag_.error(expr->loc, "sizeof not yet implemented");
+            result = Type::Error;
+            break;
+        case Expr::Kind::Alignof:
+            diag_.error(expr->loc, "alignof not yet implemented");
+            result = Type::Error;
+            break;
     }
 
     expr_types_[expr] = result;

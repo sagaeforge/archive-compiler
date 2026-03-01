@@ -399,6 +399,22 @@ void Formatter::formatExpr(const Expr* expr) {
             out_ << "]";
             break;
         }
+
+        case Expr::Kind::Sizeof: {
+            auto* sz = static_cast<const SizeofExpr*>(expr);
+            out_ << "sizeof(";
+            formatTypeRef(sz->target);
+            out_ << ")";
+            break;
+        }
+
+        case Expr::Kind::Alignof: {
+            auto* al = static_cast<const AlignofExpr*>(expr);
+            out_ << "alignof(";
+            formatTypeRef(al->target);
+            out_ << ")";
+            break;
+        }
     }
 }
 

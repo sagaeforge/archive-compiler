@@ -28,6 +28,8 @@ private:
     StructDecl* parseStructDecl();
     EnumDecl* parseEnumDecl();
     UnionDecl* parseUnionDecl();
+    TypeAliasDecl* parseTypeAlias();
+    NewtypeDecl* parseNewtype();
     Param parseParam();
 
     // Types

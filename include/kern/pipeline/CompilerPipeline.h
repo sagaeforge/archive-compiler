@@ -20,6 +20,7 @@ struct CompileOptions {
     bool dump_machir = false;
     bool dump_purity = false;
     bool freestanding = false;
+    std::string linker_script;   // --linker-script <file>
 };
 
 // Orchestrates the full compilation pipeline:
@@ -46,9 +47,9 @@ private:
     int assemble(const std::string& asm_file, const std::string& obj_file,
                  std::ostream& err);
     int link(const std::string& obj_file, const std::string& output_file,
-             std::ostream& err);
+             std::ostream& err, const std::string& linker_script = "");
     int linkFreestanding(const std::string& obj_file, const std::string& output_file,
-                         std::ostream& err);
+                         std::ostream& err, const std::string& linker_script = "");
 };
 
 } // namespace kern

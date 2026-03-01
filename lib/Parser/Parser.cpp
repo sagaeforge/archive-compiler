@@ -282,6 +282,16 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             dumpExpr(ia->index, out, ind + 2);
             break;
         }
+        case Expr::Kind::Sizeof: {
+            auto* sz = static_cast<const SizeofExpr*>(expr);
+            out << "Sizeof(" << sz->target.name << ")\n";
+            break;
+        }
+        case Expr::Kind::Alignof: {
+            auto* al = static_cast<const AlignofExpr*>(expr);
+            out << "Alignof(" << al->target.name << ")\n";
+            break;
+        }
     }
 }
 
@@ -384,11 +394,42 @@ Module* Parser::parseModule() {
     std::vector<StructDecl*> structs;
     std::vector<EnumDecl*> enums;
     std::vector<UnionDecl*> unions;
+    std::vector<TypeAliasDecl*> type_aliases;
+    std::vector<NewtypeDecl*> newtypes;
+    std::vector<StaticAssertDecl*> static_asserts;
     skipNewlines();
     while (!check(TokenKind::Eof)) {
+        // Parse annotations (@packed, @align(N), @section("name"))
+        bool is_packed = false;
+        uint32_t explicit_align = 0;
+        std::string_view section_name;
+        while (check(TokenKind::At)) {
+            advance(); // consume '@'
+            Token anno = expect(TokenKind::Ident, "expected annotation name after '@'");
+            if (anno.text == "packed") {
+                is_packed = true;
+            } else if (anno.text == "align") {
+                expect(TokenKind::LParen, "expected '(' after @align");
+                Token val = expect(TokenKind::IntLit, "expected integer in @align(N)");
+                explicit_align = static_cast<uint32_t>(std::stoull(std::string(val.text)));
+                expect(TokenKind::RParen, "expected ')' after @align(N)");
+            } else if (anno.text == "section") {
+                expect(TokenKind::LParen, "expected '(' after @section");
+                Token val = expect(TokenKind::StringLit, "expected string in @section(\"name\")");
+                section_name = val.text;
+                expect(TokenKind::RParen, "expected ')' after @section(\"name\")");
+            } else {
+                diag_.error(anno.loc, std::string("unknown annotation '@") +
+                            std::string(anno.text) + "'");
+            }
+            skipNewlines();
+        }
+
         if (check(TokenKind::KwStruct)) {
             StructDecl* sd = parseStructDecl();
             if (sd) {
+                sd->is_packed = is_packed;
+                sd->explicit_align = explicit_align;
                 structs.push_back(sd);
                 struct_names_.insert(sd->name);
             }
@@ -407,8 +448,29 @@ Module* Parser::parseModule() {
         } else if (check(TokenKind::KwFn)) {
             FnDecl* fn = parseFnDecl();
             if (fn) fns.push_back(fn);
+        } else if (check(TokenKind::KwType)) {
+            auto* ta = parseTypeAlias();
+            if (ta) type_aliases.push_back(ta);
+        } else if (check(TokenKind::KwNewtype)) {
+            auto* nt = parseNewtype();
+            if (nt) {
+                newtypes.push_back(nt);
+                struct_names_.insert(nt->name);
+            }
+        } else if (peek().kind == TokenKind::Ident && peek().text == "static_assert") {
+            advance(); // consume 'static_assert'
+            expect(TokenKind::LParen, "expected '(' after static_assert");
+            Expr* cond = parseExpr();
+            expect(TokenKind::Comma, "expected ',' after static_assert condition");
+            Token msg_tok = expect(TokenKind::StringLit, "expected string literal message");
+            expect(TokenKind::RParen, "expected ')' after static_assert");
+            auto* sa = arena_.make<StaticAssertDecl>();
+            sa->condition = cond;
+            sa->message = msg_tok.text;
+            sa->loc = cond->loc;
+            static_asserts.push_back(sa);
         } else {
-            diag_.error(peek().loc, "expected function, struct, enum, or union declaration");
+            diag_.error(peek().loc, "expected function, struct, enum, union, type, or newtype declaration");
             advance();
         }
         skipNewlines();
@@ -536,7 +598,51 @@ Module* Parser::parseModule() {
     for (size_t j = 0; j < unions.size(); ++j) {
         mod->unions[j] = unions[j];
     }
+    mod->type_alias_count = static_cast<uint32_t>(type_aliases.size());
+    mod->type_aliases = arena_.makeArray<TypeAliasDecl*>(type_aliases.size());
+    for (size_t j = 0; j < type_aliases.size(); ++j) {
+        mod->type_aliases[j] = type_aliases[j];
+    }
+    mod->newtype_count = static_cast<uint32_t>(newtypes.size());
+    mod->newtypes = arena_.makeArray<NewtypeDecl*>(newtypes.size());
+    for (size_t j = 0; j < newtypes.size(); ++j) {
+        mod->newtypes[j] = newtypes[j];
+    }
+    mod->static_assert_count = static_cast<uint32_t>(static_asserts.size());
+    mod->static_asserts = arena_.makeArray<StaticAssertDecl*>(static_asserts.size());
+    for (size_t j = 0; j < static_asserts.size(); ++j) {
+        mod->static_asserts[j] = static_asserts[j];
+    }
     return mod;
+}
+
+// --- Type Alias: type Name = TargetType ---
+TypeAliasDecl* Parser::parseTypeAlias() {
+    SourceLocation loc = peek().loc;
+    advance(); // consume 'type'
+    Token nameTok = expect(TokenKind::Ident, "expected type alias name");
+    expect(TokenKind::Eq, "expected '=' in type alias");
+    TypeRef target = parseType();
+    auto* ta = arena_.make<TypeAliasDecl>();
+    ta->name = nameTok.text;
+    ta->target = target;
+    ta->loc = loc;
+    return ta;
+}
+
+// --- Newtype: newtype Name(InnerType) ---
+NewtypeDecl* Parser::parseNewtype() {
+    SourceLocation loc = peek().loc;
+    advance(); // consume 'newtype'
+    Token nameTok = expect(TokenKind::Ident, "expected newtype name");
+    expect(TokenKind::LParen, "expected '(' after newtype name");
+    TypeRef inner = parseType();
+    expect(TokenKind::RParen, "expected ')' after newtype inner type");
+    auto* nt = arena_.make<NewtypeDecl>();
+    nt->name = nameTok.text;
+    nt->inner = inner;
+    nt->loc = loc;
+    return nt;
 }
 
 // --- Struct Declaration ---
@@ -786,6 +892,19 @@ TypeRef Parser::parseType() {
         ref.loc = tok.loc;
         ref.pointee = pointee;
         ref.is_ptr_var = is_var;
+        return ref;
+    }
+    // Slice<T> — fat pointer: {data: Ptr<T>, len: u64}
+    if (tok.text == "Slice" && check(TokenKind::Lt)) {
+        advance(); // consume '<'
+        auto* elem = arena_.make<TypeRef>();
+        *elem = parseType();
+        expect(TokenKind::Gt, "expected '>' after Slice type parameter");
+        TypeRef ref;
+        ref.kind = TypeRef::Kind::Named;
+        ref.name = "Slice";
+        ref.loc = tok.loc;
+        ref.pointee = elem;  // reuse pointee field for element type
         return ref;
     }
     return {TypeRef::Kind::Named, tok.text, tok.loc};
@@ -1173,6 +1292,32 @@ Expr* Parser::parsePrimary() {
     // If expression
     if (tok.kind == TokenKind::KwIf) {
         return parseIfExpr();
+    }
+
+    // sizeof(Type) -> compile-time integer constant
+    if (tok.kind == TokenKind::KwSizeof) {
+        advance(); // consume 'sizeof'
+        expect(TokenKind::LParen, "expected '(' after 'sizeof'");
+        TypeRef target = parseType();
+        expect(TokenKind::RParen, "expected ')' after sizeof type");
+        auto* e = arena_.make<SizeofExpr>();
+        e->kind = Expr::Kind::Sizeof;
+        e->loc = tok.loc;
+        e->target = target;
+        return e;
+    }
+
+    // alignof(Type) -> compile-time integer constant
+    if (tok.kind == TokenKind::KwAlignof) {
+        advance(); // consume 'alignof'
+        expect(TokenKind::LParen, "expected '(' after 'alignof'");
+        TypeRef target = parseType();
+        expect(TokenKind::RParen, "expected ')' after alignof type");
+        auto* e = arena_.make<AlignofExpr>();
+        e->kind = Expr::Kind::Alignof;
+        e->loc = tok.loc;
+        e->target = target;
+        return e;
     }
 
     // Inline assembly: asm { "line1"; "line2"; }

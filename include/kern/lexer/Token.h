@@ -35,6 +35,12 @@ enum class TokenKind : uint8_t {
     KwAsm,
     KwVolatile,
     KwNoreturn,
+    KwType,
+    KwNewtype,
+    KwModule,
+    KwImport,
+    KwSizeof,
+    KwAlignof,
 
     // Operators
     Plus,        // +
@@ -62,6 +68,7 @@ enum class TokenKind : uint8_t {
     Dot,         // .
     Pipe,        // |>
     Ampersand,   // &
+    At,          // @
     Comma,       // ,
     Semicolon,   // ;
 

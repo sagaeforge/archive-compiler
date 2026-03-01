@@ -881,6 +881,8 @@ ValueId IRBuilder::buildExpr(Expr* expr, bool in_tail_position) {
         case Expr::Kind::InlineAsm:
         case Expr::Kind::ArrayLit:
         case Expr::Kind::IndexAccess:
+        case Expr::Kind::Sizeof:
+        case Expr::Kind::Alignof:
             break;  // not yet implemented in v1 IR
     }
 

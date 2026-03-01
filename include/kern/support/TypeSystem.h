@@ -56,6 +56,7 @@ struct StructData {
     uint32_t field_count;
     uint32_t size;
     uint32_t align;
+    bool is_packed;
 };
 
 struct EnumData {
@@ -147,7 +148,8 @@ public:
     // Convenience constructors — return TypeId
     TypeId makePtr(TypeId pointee, bool is_mutable);
     TypeId makeFn(std::span<const TypeId> params, TypeId ret);
-    TypeId makeStruct(std::string_view name, std::span<const FieldInfo> fields);
+    TypeId makeStruct(std::string_view name, std::span<const FieldInfo> fields,
+                      bool is_packed = false, uint32_t explicit_align = 0);
     TypeId makeEnum(std::string_view name, std::span<const std::string_view> variant_names,
                     std::span<const int64_t> values);
     TypeId makeUnion(std::string_view name, std::span<const VariantInfo> variants);

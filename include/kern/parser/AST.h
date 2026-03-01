@@ -81,6 +81,8 @@ struct StructDecl {
     FieldDecl* fields;
     uint32_t field_count;
     SourceLocation loc;
+    bool is_packed = false;         // @packed
+    uint32_t explicit_align = 0;   // @align(N), 0 = natural alignment
 };
 
 // --- Enum declaration ---
@@ -110,6 +112,27 @@ struct UnionDecl {
     SourceLocation loc;
 };
 
+// --- Type alias ---
+struct TypeAliasDecl {
+    std::string_view name;
+    TypeRef target;
+    SourceLocation loc;
+};
+
+// --- Newtype ---
+struct NewtypeDecl {
+    std::string_view name;
+    TypeRef inner;
+    SourceLocation loc;
+};
+
+// --- Static assert ---
+struct StaticAssertDecl {
+    Expr* condition;
+    std::string_view message;
+    SourceLocation loc;
+};
+
 // --- Expressions ---
 struct Expr {
     enum class Kind {
@@ -119,7 +142,8 @@ struct Expr {
         StructLit, FieldAccess,
         EnumAccess, UnionVariant,
         Loop, InlineAsm,
-        ArrayLit, IndexAccess
+        ArrayLit, IndexAccess,
+        Sizeof, Alignof
     };
     Kind kind;
     SourceLocation loc;
@@ -248,6 +272,14 @@ struct CastExpr : Expr {
     TypeRef target;
 };
 
+struct SizeofExpr : Expr {
+    TypeRef target;
+};
+
+struct AlignofExpr : Expr {
+    TypeRef target;
+};
+
 struct LoopBinding {
     std::string_view name;
     Expr* init;
@@ -342,6 +374,12 @@ struct Module {
     uint32_t enum_count;
     UnionDecl** unions;
     uint32_t union_count;
+    TypeAliasDecl** type_aliases;
+    uint32_t type_alias_count;
+    NewtypeDecl** newtypes;
+    uint32_t newtype_count;
+    StaticAssertDecl** static_asserts;
+    uint32_t static_assert_count;
 };
 
 // AST dumper

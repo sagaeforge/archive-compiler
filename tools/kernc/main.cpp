@@ -18,6 +18,7 @@ static void printUsage(const char* prog) {
               << "  --dump-machir   Dump MachIR (x86-64 instructions)\n"
               << "  --dump-purity   Dump purity analysis\n"
               << "  --freestanding  No _start wrapper, no libc linking\n"
+              << "  --linker-script <file>  Use custom linker script\n"
               << "  --help          Show this help\n";
 }
 
@@ -52,6 +53,8 @@ int main(int argc, char** argv) {
             opts.dump_purity = true;
         } else if (arg == "--freestanding") {
             opts.freestanding = true;
+        } else if (arg == "--linker-script" && i + 1 < argc) {
+            opts.linker_script = argv[++i];
         } else if (arg[0] != '-') {
             opts.input_file = arg;
         } else {
