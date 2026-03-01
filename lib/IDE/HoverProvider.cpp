@@ -1,7 +1,6 @@
 #include "kern/ide/HoverProvider.h"
 #include "kern/ide/IDEContext.h"
 #include "kern/hir/HIR.h"
-#include "kern/ir/Metadata.h"
 
 namespace kern {
 

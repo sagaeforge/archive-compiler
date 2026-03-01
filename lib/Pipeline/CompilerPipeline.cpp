@@ -10,7 +10,6 @@
 #include "kern/backend/X86Backend.h"
 #include "kern/backend/Emitter.h"
 #include "kern/backend/MachIRDump.h"
-#include "kern/ir/Metadata.h"
 
 #include <fstream>
 #include <sstream>

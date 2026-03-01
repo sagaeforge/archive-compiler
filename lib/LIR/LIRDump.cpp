@@ -1,5 +1,5 @@
 #include "kern/lir/LIRDump.h"
-#include "kern/ir/Metadata.h"
+#include "kern/hir/HIR.h"
 
 namespace kern {
 

@@ -1,7 +1,6 @@
 #include "kern/hir/HIRBuilder.h"
 #include "kern/hir/HIRDump.h"
 #include "kern/hir/HIRPasses.h"
-#include "kern/ir/Metadata.h"
 #include "kern/lexer/Lexer.h"
 #include "kern/parser/Parser.h"
 #include <gtest/gtest.h>

@@ -3,10 +3,6 @@ add_executable(kern_tests
     support/DiagnosticTest.cpp
     lexer/LexerTest.cpp
     parser/ParserTest.cpp
-    sema/SemaTest.cpp
-    sema/PurityTest.cpp
-    ir/IRTest.cpp
-    codegen/CodeGenTest.cpp
     hir/HIRTest.cpp
     hir/HIRBuilderTest.cpp
     hir/HIRPassesTest.cpp
@@ -29,9 +25,6 @@ target_link_libraries(kern_tests
     kern_backend
     kern_lir
     kern_hir
-    kern_codegen
-    kern_ir
-    kern_sema
     kern_parser
     kern_lexer
     kern_support

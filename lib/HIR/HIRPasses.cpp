@@ -1,6 +1,5 @@
 #include "kern/hir/HIRPasses.h"
 #include "kern/support/CompilationContext.h"
-#include "kern/ir/Metadata.h"
 #include <queue>
 #include <unordered_map>
 #include <unordered_set>
