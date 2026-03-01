@@ -1,0 +1,10 @@
+fn compose<A, B, C>(f: fn(B) -> C, g: fn(A) -> B, x: A) -> C {
+    f(g(x))
+}
+
+fn double(x: i64) -> i64 { x * 2 }
+fn inc(x: i64) -> i64 { x + 1 }
+
+fn main() -> i64 {
+    compose(inc, double, 20) + 1
+}
