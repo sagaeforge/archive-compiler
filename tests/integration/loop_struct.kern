@@ -1,0 +1,12 @@
+struct Acc { sum: i64, count: i64 }
+
+fn main() -> i64 {
+    val total: i64 = loop(sum = 0, count = 0) {
+        if count >= 7 {
+            break sum + count
+        }
+        continue(sum + count, count + 1)
+    }
+    val r: Acc = Acc { sum: total, count: 7 }
+    r.sum + r.count
+}

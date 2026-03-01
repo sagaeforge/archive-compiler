@@ -1,0 +1,16 @@
+fn classify(x: i64) -> i64 {
+    match x {
+        v if v > 100 => 3
+        v if v > 10 => 2
+        v if v > 0 => 1
+        _ => 0
+    }
+}
+
+fn main() -> i64 {
+    val a: i64 = classify(200)
+    val b: i64 = classify(50)
+    val c: i64 = classify(5)
+    val d: i64 = classify(0 - 1)
+    a * 10 + b * 3 + c + d
+}
