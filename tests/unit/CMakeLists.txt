@@ -6,6 +6,7 @@ add_executable(kern_tests
     hir/HIRTest.cpp
     hir/HIRBuilderTest.cpp
     hir/HIRPassesTest.cpp
+    hir/MonomorphizationTest.cpp
     lir/LIRTest.cpp
     lir/LIRBuilderTest.cpp
     backend/MachIRTest.cpp
