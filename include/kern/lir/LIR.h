@@ -57,6 +57,8 @@ enum class LIROp : uint8_t {
 
     // Calls
     Call,           // direct call by name
+    CallIndirect,   // indirect call through function pointer
+    FnRef,          // get address of named function
 
     // Block parameter (phi replacement)
     BlockArg,       // loads block parameter by index
@@ -94,6 +96,12 @@ struct LIRFieldPtrPayload  { VReg base; uint32_t offset; };
 struct LIRStructAllocPayload { uint32_t size; uint32_t align; };
 struct LIRBlockArgPayload  { uint32_t index; };
 struct LIRCastPayload      { VReg operand; TypeId src_type; };
+struct LIRCallIndirectPayload {
+    VReg callee;                // vreg holding the function pointer
+    VReg* args;
+    uint32_t arg_count;
+};
+struct LIRFnRefPayload { std::string_view fn_name; };
 struct LIRInlineAsmPayload { const char** lines; uint32_t* line_lengths; uint32_t line_count; };
 
 struct LIRInstr {
@@ -125,6 +133,8 @@ struct LIRInstr {
         LIRStructAllocPayload struct_alloc;
         LIRBlockArgPayload  block_arg;
         LIRCastPayload      cast;
+        LIRCallIndirectPayload call_indirect;
+        LIRFnRefPayload     fn_ref;
         LIRInlineAsmPayload inline_asm;
     };
 };
@@ -161,6 +171,8 @@ struct LIRFunction {
     bool is_recursive;
     bool is_tail_recursive;
     bool is_intrinsic;
+    bool is_naked;
+    bool is_interrupt;
 };
 
 // ============================================================================

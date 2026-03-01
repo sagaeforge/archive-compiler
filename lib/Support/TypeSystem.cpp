@@ -57,6 +57,19 @@ TypeId TypeTable::makePtr(TypeId pointee, bool is_mutable) {
 }
 
 TypeId TypeTable::makeFn(std::span<const TypeId> params, TypeId ret) {
+    // Deduplicate: return existing TypeId if same function type exists
+    for (uint32_t i = 0; i < types_.size(); ++i) {
+        if (types_[i]->kind == TypeKind::Fn &&
+            types_[i]->fn.param_count == static_cast<uint32_t>(params.size()) &&
+            types_[i]->fn.return_type == ret) {
+            bool match = true;
+            for (uint32_t j = 0; j < params.size(); ++j) {
+                if (types_[i]->fn.params[j] != params[j]) { match = false; break; }
+            }
+            if (match) return static_cast<TypeId>(i);
+        }
+    }
+
     auto* param_copy = arena_.makeArray<TypeId>(params.size());
     std::memcpy(param_copy, params.data(), params.size() * sizeof(TypeId));
 

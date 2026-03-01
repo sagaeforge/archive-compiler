@@ -93,6 +93,8 @@ struct HIRExpr {
         ArrayLit,
         IndexAccess,
         InlineAsm,
+        FnRef,          // reference to a function → function pointer
+        CallIndirect,   // indirect call through function pointer
     };
 
     Kind kind;
@@ -148,6 +150,8 @@ struct HIRCallExpr : HIRExpr {
     HIRExpr** args;
     uint32_t arg_count;
     bool is_tail_call;        // filled by TailCallAnalysisPass
+    TypeId* type_args = nullptr;   // resolved type arguments (for generic calls)
+    uint32_t type_arg_count = 0;
 };
 
 struct HIRIfExpr : HIRExpr {
@@ -247,6 +251,17 @@ struct HIRInlineAsmExpr : HIRExpr {
     uint32_t line_count;
 };
 
+struct HIRFnRefExpr : HIRExpr {
+    std::string_view fn_name;   // interned — name of the referenced function
+};
+
+struct HIRCallIndirectExpr : HIRExpr {
+    HIRExpr* callee;            // expression yielding a function pointer
+    HIRExpr** args;
+    uint32_t arg_count;
+    bool is_tail_call;
+};
+
 struct HIRAddrOfExpr : HIRExpr {
     HIRExpr* operand;
     bool is_mutable;  // &var vs &
@@ -317,6 +332,11 @@ struct HIRParam {
     SourceLocation loc;
 };
 
+struct HIRTypeParam {
+    std::string_view name;  // interned
+    TypeId type_var_id;     // TypeVar TypeId in TypeTable
+};
+
 struct HIRFnDecl {
     std::string_view name;  // interned
     HIRParam* params;
@@ -324,11 +344,17 @@ struct HIRFnDecl {
     TypeId return_type;
     HIRExpr* body;           // nullable (intrinsic)
 
+    // Generic type parameters
+    HIRTypeParam* type_params = nullptr;
+    uint32_t type_param_count = 0;
+
     // Metadata (filled by passes)
     uint8_t purity;          // Purity enum value (stored as uint8_t to avoid circular include)
     bool is_recursive;
     bool is_tail_recursive;
     bool is_intrinsic;
+    bool is_naked;           // @naked — skip prologue/epilogue
+    bool is_interrupt;       // @interrupt — iretq return, save all regs
 
     SourceLocation loc;
 };

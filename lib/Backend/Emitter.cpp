@@ -313,13 +313,35 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
 // ============================================================================
 
 void NASMEmitter::emitPrologue(const MachFunction& fn) {
-    out_ << "    push rbp\n";
-    out_ << "    mov rbp, rsp\n";
+    if (fn.is_interrupt) {
+        // Interrupt handler: save ALL GPRs
+        out_ << "    push rax\n";
+        out_ << "    push rbx\n";
+        out_ << "    push rcx\n";
+        out_ << "    push rdx\n";
+        out_ << "    push rsi\n";
+        out_ << "    push rdi\n";
+        out_ << "    push rbp\n";
+        out_ << "    push r8\n";
+        out_ << "    push r9\n";
+        out_ << "    push r10\n";
+        out_ << "    push r11\n";
+        out_ << "    push r12\n";
+        out_ << "    push r13\n";
+        out_ << "    push r14\n";
+        out_ << "    push r15\n";
+        out_ << "    mov rbp, rsp\n";
+    } else {
+        out_ << "    push rbp\n";
+        out_ << "    mov rbp, rsp\n";
+    }
 
-    // Push callee-saved registers
-    for (uint32_t i = 0; i < NUM_CALLEE_SAVED; ++i) {
-        if (fn.callee_saved_used[i]) {
-            out_ << "    push " << physRegName(CALLEE_SAVED_GPRS[i]) << "\n";
+    // Push callee-saved registers (skip for interrupt — already saved all)
+    if (!fn.is_interrupt) {
+        for (uint32_t i = 0; i < NUM_CALLEE_SAVED; ++i) {
+            if (fn.callee_saved_used[i]) {
+                out_ << "    push " << physRegName(CALLEE_SAVED_GPRS[i]) << "\n";
+            }
         }
     }
 
@@ -335,15 +357,35 @@ void NASMEmitter::emitEpilogue(const MachFunction& fn) {
         out_ << "    add rsp, " << fn.stack_size << "\n";
     }
 
-    // Pop callee-saved registers (reverse order)
-    for (int i = NUM_CALLEE_SAVED - 1; i >= 0; --i) {
-        if (fn.callee_saved_used[i]) {
-            out_ << "    pop " << physRegName(CALLEE_SAVED_GPRS[i]) << "\n";
+    if (fn.is_interrupt) {
+        // Interrupt handler: restore ALL GPRs + iretq
+        out_ << "    mov rsp, rbp\n";
+        out_ << "    pop r15\n";
+        out_ << "    pop r14\n";
+        out_ << "    pop r13\n";
+        out_ << "    pop r12\n";
+        out_ << "    pop r11\n";
+        out_ << "    pop r10\n";
+        out_ << "    pop r9\n";
+        out_ << "    pop r8\n";
+        out_ << "    pop rbp\n";
+        out_ << "    pop rdi\n";
+        out_ << "    pop rsi\n";
+        out_ << "    pop rdx\n";
+        out_ << "    pop rcx\n";
+        out_ << "    pop rbx\n";
+        out_ << "    pop rax\n";
+        out_ << "    iretq\n";
+    } else {
+        // Pop callee-saved registers (reverse order)
+        for (int i = NUM_CALLEE_SAVED - 1; i >= 0; --i) {
+            if (fn.callee_saved_used[i]) {
+                out_ << "    pop " << physRegName(CALLEE_SAVED_GPRS[i]) << "\n";
+            }
         }
+        out_ << "    pop rbp\n";
+        out_ << "    ret\n";
     }
-
-    out_ << "    pop rbp\n";
-    out_ << "    ret\n";
 }
 
 // ============================================================================
@@ -354,7 +396,10 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
     if (fn.is_intrinsic) return;
 
     out_ << "_" << fn.name << ":\n";
-    emitPrologue(fn);
+
+    if (!fn.is_naked) {
+        emitPrologue(fn);
+    }
 
     for (uint32_t b = 0; b < fn.block_count; ++b) {
         const auto& block = fn.blocks[b];
@@ -365,6 +410,19 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
 
         for (uint32_t i = 0; i < block.instr_count; ++i) {
             const auto& instr = block.instrs[i];
+
+            // For naked functions, skip all frame-related pseudo-instructions
+            if (fn.is_naked) {
+                if (instr.op == X86Op::Ret || instr.op == X86Op::Pseudo_FrameSetup ||
+                    instr.op == X86Op::Pseudo_FrameDestroy) {
+                    if (instr.op == X86Op::Ret) {
+                        out_ << "    ret\n";
+                    }
+                    continue;
+                }
+                emitInstr(instr);
+                continue;
+            }
 
             // Replace ret with epilogue
             if (instr.op == X86Op::Ret) {

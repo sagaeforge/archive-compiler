@@ -85,6 +85,8 @@ private:
     void selectBlockArg(const LIRInstr& instr);
     void selectCast(const LIRInstr& instr);
     void selectInlineAsm(const LIRInstr& instr);
+    void selectFnRef(const LIRInstr& instr);
+    void selectCallIndirect(const LIRInstr& instr);
 
     // Division: special handling for idiv/div
     void selectDiv(const LIRInstr& instr, bool is_mod);

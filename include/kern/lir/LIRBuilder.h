@@ -45,6 +45,8 @@ private:
     VReg lowerArrayLit(const HIRArrayLitExpr* expr);
     VReg lowerIndexAccess(const HIRIndexAccessExpr* expr);
     VReg lowerInlineAsm(const HIRInlineAsmExpr* expr);
+    VReg lowerFnRef(const HIRFnRefExpr* expr);
+    VReg lowerCallIndirect(const HIRCallIndirectExpr* expr);
 
     // And/Or short-circuit (phi-slot pattern)
     VReg lowerAndOr(VReg lhs, const HIRExpr* rhs_expr, bool is_and, SourceLocation loc);

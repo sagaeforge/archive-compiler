@@ -137,6 +137,15 @@ static void collectCallees(const HIRExpr* expr,
         }
         case HIRExpr::Kind::InlineAsm:
             break;
+        case HIRExpr::Kind::FnRef:
+            break;
+        case HIRExpr::Kind::CallIndirect: {
+            auto* e = static_cast<const HIRCallIndirectExpr*>(expr);
+            collectCallees(e->callee, out);
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                collectCallees(e->args[i], out);
+            break;
+        }
     }
 }
 
@@ -287,6 +296,15 @@ static bool exprUsesVar(const HIRExpr* expr) {
         }
         case HIRExpr::Kind::InlineAsm:
             return false;
+        case HIRExpr::Kind::FnRef:
+            return false;
+        case HIRExpr::Kind::CallIndirect: {
+            auto* e = static_cast<const HIRCallIndirectExpr*>(expr);
+            if (exprUsesVar(e->callee)) return true;
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (exprUsesVar(e->args[i])) return true;
+            return false;
+        }
     }
     return false;
 }
@@ -422,6 +440,15 @@ static bool exprUsesPtrWrite(const HIRExpr* expr) {
         }
         case HIRExpr::Kind::InlineAsm:
             return false;
+        case HIRExpr::Kind::FnRef:
+            return false;
+        case HIRExpr::Kind::CallIndirect: {
+            auto* e = static_cast<const HIRCallIndirectExpr*>(expr);
+            if (exprUsesPtrWrite(e->callee)) return true;
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (exprUsesPtrWrite(e->args[i])) return true;
+            return false;
+        }
     }
     return false;
 }
@@ -544,6 +571,15 @@ static bool exprUsesInlineAsm(const HIRExpr* expr) {
         case HIRExpr::Kind::IndexAccess: {
             auto* e = static_cast<const HIRIndexAccessExpr*>(expr);
             return exprUsesInlineAsm(e->array) || exprUsesInlineAsm(e->index);
+        }
+        case HIRExpr::Kind::FnRef:
+            return false;
+        case HIRExpr::Kind::CallIndirect: {
+            auto* e = static_cast<const HIRCallIndirectExpr*>(expr);
+            if (exprUsesInlineAsm(e->callee)) return true;
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (exprUsesInlineAsm(e->args[i])) return true;
+            return false;
         }
     }
     return false;
@@ -807,6 +843,16 @@ static void markTailCalls(HIRExpr* expr, bool in_tail_pos,
         }
         case HIRExpr::Kind::InlineAsm:
             break;
+        case HIRExpr::Kind::FnRef:
+            break;
+        case HIRExpr::Kind::CallIndirect: {
+            auto* e = static_cast<HIRCallIndirectExpr*>(expr);
+            e->is_tail_call = in_tail_pos;
+            markTailCalls(e->callee, false, fn_name);
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                markTailCalls(e->args[i], false, fn_name);
+            break;
+        }
     }
 }
 
@@ -943,6 +989,15 @@ static bool hasCallTo(const HIRExpr* expr, std::string_view fn_name) {
         }
         case HIRExpr::Kind::InlineAsm:
             return false;
+        case HIRExpr::Kind::FnRef:
+            return false;
+        case HIRExpr::Kind::CallIndirect: {
+            auto* e = static_cast<const HIRCallIndirectExpr*>(expr);
+            if (hasCallTo(e->callee, fn_name)) return true;
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (hasCallTo(e->args[i], fn_name)) return true;
+            return false;
+        }
     }
     return false;
 }
@@ -1076,6 +1131,16 @@ static bool hasNonTailCall(const HIRExpr* expr, std::string_view fn_name, bool i
         }
         case HIRExpr::Kind::InlineAsm:
             return false;
+        case HIRExpr::Kind::FnRef:
+            return false;
+        case HIRExpr::Kind::CallIndirect: {
+            auto* e = static_cast<const HIRCallIndirectExpr*>(expr);
+            // Indirect calls cannot be self-recursive (unknown callee), just traverse subexprs
+            if (hasNonTailCall(e->callee, fn_name, false)) return true;
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (hasNonTailCall(e->args[i], fn_name, false)) return true;
+            return false;
+        }
     }
     return false;
 }

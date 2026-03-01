@@ -388,6 +388,27 @@ void dumpHIRExpr(const HIRExpr* expr, const TypeTable& types, std::ostream& out,
             out << "inline_asm " << ia->line_count << " lines";
             break;
         }
+
+        case HIRExpr::Kind::FnRef: {
+            auto* f = static_cast<const HIRFnRefExpr*>(expr);
+            out << "fn_ref " << f->fn_name;
+            break;
+        }
+
+        case HIRExpr::Kind::CallIndirect: {
+            auto* c = static_cast<const HIRCallIndirectExpr*>(expr);
+            out << "call_indirect";
+            if (c->is_tail_call) out << " [tail]";
+            out << "\n";
+            indent(out, ind + 1); out << "callee:\n";
+            dumpHIRExpr(c->callee, types, out, ind + 2);
+            for (uint32_t i = 0; i < c->arg_count; ++i)
+                dumpHIRExpr(c->args[i], types, out, ind + 1);
+            indent(out, ind);
+            out << ")";
+            out << " : " << types.name(expr->type) << "\n";
+            return;
+        }
     }
 
     // Simple nodes (leaf expressions) — type printed inline

@@ -113,6 +113,8 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     auto* mf = ctx_.arena.make<MachFunction>();
     mf->name = fn.name;
     mf->is_intrinsic = fn.is_intrinsic;
+    mf->is_naked = fn.is_naked;
+    mf->is_interrupt = fn.is_interrupt;
     mf->next_vreg = fn.next_vreg;
     next_vreg_ = fn.next_vreg;
     struct_alloc_bytes_ = 0;
@@ -234,6 +236,8 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
         case LIROp::BlockArg:    selectBlockArg(instr); break;
         case LIROp::Cast:        selectCast(instr); break;
         case LIROp::InlineAsm:   selectInlineAsm(instr); break;
+        case LIROp::CallIndirect: selectCallIndirect(instr); break;
+        case LIROp::FnRef:       selectFnRef(instr); break;
     }
 }
 
@@ -883,6 +887,84 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
     } else {
         emit(makeCall(MachOperand::lbl(callee_label)));
     }
+
+    // Move return value
+    if (instr.result != INVALID_VREG) {
+        if (float_vregs_.count(instr.result)) {
+            MachInstr mi(X86Op::Movsd);
+            mi.width = 64;
+            mi.operand_count = 2;
+            mi.inline_ops[0] = MachOperand::virt(instr.result);
+            mi.inline_ops[1] = MachOperand::precolored(PhysReg::XMM0);
+            emit(mi);
+        } else {
+            emit(makeMov(MachOperand::virt(instr.result),
+                         MachOperand::precolored(PhysReg::RAX), 64));
+        }
+    }
+}
+
+void InstructionSelector::selectFnRef(const LIRInstr& instr) {
+    // lea vreg, [_fnname]  — get address of function
+    char buf[256];
+    int len = snprintf(buf, sizeof(buf), "_%.*s",
+                       static_cast<int>(instr.fn_ref.fn_name.size()),
+                       instr.fn_ref.fn_name.data());
+    auto callee_label = ctx_.strings.intern(std::string_view(buf, len));
+    emit(makeLea(MachOperand::virt(instr.result),
+                 MachOperand::lbl(callee_label), 64));
+}
+
+void InstructionSelector::selectCallIndirect(const LIRInstr& instr) {
+    const auto& ci = instr.call_indirect;
+
+    // Set up arguments via parallel move (same as direct call)
+    uint32_t gpr_idx = 0;
+    uint32_t xmm_idx = 0;
+
+    for (uint32_t i = 0; i < ci.arg_count; ++i) {
+        VReg arg = ci.args[i];
+        if (float_vregs_.count(arg)) {
+            if (xmm_idx < MAX_XMM_ARGS) {
+                MachInstr mi(X86Op::Movsd);
+                mi.width = 64;
+                mi.operand_count = 2;
+                mi.inline_ops[0] = MachOperand::precolored(XMM_ARG_REGS[xmm_idx]);
+                mi.inline_ops[1] = MachOperand::virt(arg);
+                emit(mi);
+                xmm_idx++;
+            }
+        } else if (struct_vregs_.count(arg)) {
+            uint32_t size = struct_vreg_sizes_[arg];
+            uint32_t num_regs = (size <= 8) ? 1 : 2;
+            for (uint32_t r = 0; r < num_regs && gpr_idx < MAX_GPR_ARGS; ++r) {
+                VReg field_ptr = freshVReg();
+                if (r == 0) {
+                    emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
+                } else {
+                    emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
+                    emit(makeAlu(X86Op::Add, MachOperand::virt(field_ptr),
+                                 MachOperand::immediate(r * 8), 64));
+                }
+                MachInstr load(X86Op::MovLoad);
+                load.width = 64;
+                load.operand_count = 2;
+                load.inline_ops[0] = MachOperand::precolored(GPR_ARG_REGS[gpr_idx]);
+                load.inline_ops[1] = MachOperand::virt(field_ptr);
+                emit(load);
+                gpr_idx++;
+            }
+        } else {
+            if (gpr_idx < MAX_GPR_ARGS) {
+                emit(makeMov(MachOperand::precolored(GPR_ARG_REGS[gpr_idx]),
+                             MachOperand::virt(arg), 64));
+                gpr_idx++;
+            }
+        }
+    }
+
+    // Indirect call: call [callee_vreg]
+    emit(makeCall(MachOperand::virt(ci.callee)));
 
     // Move return value
     if (instr.result != INVALID_VREG) {

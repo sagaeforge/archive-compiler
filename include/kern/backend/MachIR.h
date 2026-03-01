@@ -285,6 +285,8 @@ struct MachFunction {
     uint32_t next_vreg = 0;         // for vreg tracking
     bool callee_saved_used[NUM_CALLEE_SAVED] = {};
     bool is_intrinsic = false;
+    bool is_naked = false;
+    bool is_interrupt = false;
 };
 
 // ============================================================================

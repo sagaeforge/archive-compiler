@@ -123,6 +123,13 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
     if (ref.kind == TypeRef::Kind::Never) {
         return TypeTable::Never;
     }
+    if (ref.kind == TypeRef::Kind::Fn) {
+        std::vector<TypeId> params;
+        for (uint32_t i = 0; i < ref.fn_param_count; ++i)
+            params.push_back(resolveType(ref.fn_params[i]));
+        TypeId ret = ref.fn_return ? resolveType(*ref.fn_return) : TypeTable::Unit;
+        return ctx_.types.makeFn(params, ret);
+    }
     if (ref.kind == TypeRef::Kind::Array) {
         TypeId elem = ref.array_element ? resolveType(*ref.array_element) : TypeTable::Error;
         return ctx_.types.makeArrayType(elem, ref.array_size);
@@ -243,6 +250,20 @@ void HIRBuilder::registerUnionDecls(const Module* ast) {
 void HIRBuilder::registerFnSigs(const Module* ast) {
     for (uint32_t i = 0; i < ast->fn_count; ++i) {
         auto* fn = ast->functions[i];
+
+        // Temporarily register type params for resolveType
+        std::vector<std::pair<std::string_view, TypeId>> saved;
+        for (uint32_t t = 0; t < fn->type_param_count; ++t) {
+            auto interned = ctx_.strings.intern(fn->type_params[t].name);
+            if (named_types_.count(interned)) {
+                saved.push_back({interned, named_types_[interned]});
+            }
+            TypeInfo ti{};
+            ti.kind = TypeKind::TypeVar;
+            ti.type_var.name = interned;
+            named_types_[interned] = ctx_.types.add(ti);
+        }
+
         FnSig sig;
         sig.name = fn->name;
         sig.return_type = resolveType(fn->return_type);
@@ -250,6 +271,14 @@ void HIRBuilder::registerFnSigs(const Module* ast) {
             sig.param_types.push_back(resolveType(fn->params[j].type));
         }
         fn_table_[fn->name] = sig;
+
+        // Restore shadowed types
+        for (uint32_t t = 0; t < fn->type_param_count; ++t) {
+            named_types_.erase(ctx_.strings.intern(fn->type_params[t].name));
+        }
+        for (auto& [name, tid] : saved) {
+            named_types_[name] = tid;
+        }
     }
 
     // Validate parameter count limit (System V ABI: 6 integer regs)
@@ -358,9 +387,31 @@ HIRModule* HIRBuilder::build(const Module* ast) {
 HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
     local_vars_.clear();
     mutable_vars_.clear();
+
+    // Save and register type parameters for this function
+    std::vector<std::pair<std::string_view, TypeId>> saved_type_params;
+    auto* hfn = ctx_.arena.make<HIRFnDecl>();
+    hfn->type_param_count = fn->type_param_count;
+    if (fn->type_param_count > 0) {
+        hfn->type_params = ctx_.arena.makeArray<HIRTypeParam>(fn->type_param_count);
+        for (uint32_t i = 0; i < fn->type_param_count; ++i) {
+            auto interned = ctx_.strings.intern(fn->type_params[i].name);
+            // Create a TypeVar in the TypeTable
+            TypeInfo ti{};
+            ti.kind = TypeKind::TypeVar;
+            ti.type_var.name = interned;
+            TypeId tv_id = ctx_.types.add(ti);
+            hfn->type_params[i] = {interned, tv_id};
+            // Register as named type so resolveType("T") works
+            if (named_types_.count(interned)) {
+                saved_type_params.push_back({interned, named_types_[interned]});
+            }
+            named_types_[interned] = tv_id;
+        }
+    }
+
     current_return_type_ = resolveType(fn->return_type);
 
-    auto* hfn = ctx_.arena.make<HIRFnDecl>();
     hfn->name = ctx_.strings.intern(fn->name);
     hfn->param_count = fn->param_count;
     hfn->params = ctx_.arena.makeArray<HIRParam>(fn->param_count);
@@ -369,6 +420,8 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
     hfn->is_recursive = false;
     hfn->is_tail_recursive = false;
     hfn->is_intrinsic = fn->is_intrinsic;
+    hfn->is_naked = fn->is_naked;
+    hfn->is_interrupt = fn->is_interrupt;
     hfn->loc = fn->loc;
 
     // Register parameters
@@ -379,22 +432,42 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
         local_vars_[interned_name] = pt;
     }
 
+    auto cleanup_type_params = [&]() {
+        // Restore shadowed named types
+        for (uint32_t i = 0; i < fn->type_param_count; ++i) {
+            auto interned = hfn->type_params[i].name;
+            named_types_.erase(interned);
+        }
+        for (auto& [name, tid] : saved_type_params) {
+            named_types_[name] = tid;
+        }
+    };
+
     if (fn->is_intrinsic) {
         hfn->body = nullptr;
+        cleanup_type_params();
+        return hfn;
+    }
+
+    // Skip body building for generic functions — they'll be monomorphized later
+    if (fn->type_param_count > 0) {
+        hfn->body = buildExpr(fn->body, current_return_type_);
+        cleanup_type_params();
         return hfn;
     }
 
     // Build body
     hfn->body = buildExpr(fn->body, current_return_type_);
 
-    // Check return type match (Never is bottom type, compatible with anything)
-    if (hfn->body && hfn->body->type != TypeTable::Error &&
+    // Check return type match (skip for naked/interrupt — user controls return via asm)
+    if (!hfn->is_naked && !hfn->is_interrupt && hfn->body && hfn->body->type != TypeTable::Error &&
         !typesMatch(hfn->body->type, current_return_type_)) {
         ctx_.diag.error(fn->loc, std::string("function '") + std::string(fn->name) +
                     "' declared to return " + ctx_.types.name(current_return_type_) +
                     " but body has type " + ctx_.types.name(hfn->body->type));
     }
 
+    cleanup_type_params();
     return hfn;
 }
 
@@ -522,19 +595,40 @@ HIRExpr* HIRBuilder::buildStringLit(const Expr* expr) {
 
 HIRExpr* HIRBuilder::buildIdent(const Expr* expr) {
     auto* ident = static_cast<const IdentExpr*>(expr);
+
+    auto it = local_vars_.find(ident->name);
+    if (it != local_vars_.end()) {
+        auto* e = ctx_.arena.make<HIRIdentExpr>();
+        e->kind = HIRExpr::Kind::Ident;
+        e->loc = expr->loc;
+        e->name = ctx_.strings.intern(ident->name);
+        e->type = it->second;
+        return e;
+    }
+
+    // Check if it's a function name → FnRef (function pointer)
+    auto fn_it = fn_table_.find(ident->name);
+    if (fn_it != fn_table_.end()) {
+        auto& sig = fn_it->second;
+        // Build function type: fn(param_types...) -> return_type
+        std::vector<TypeId> param_types(sig.param_types.begin(), sig.param_types.end());
+        TypeId fn_type = ctx_.types.makeFn(param_types, sig.return_type);
+
+        auto* e = ctx_.arena.make<HIRFnRefExpr>();
+        e->kind = HIRExpr::Kind::FnRef;
+        e->loc = expr->loc;
+        e->fn_name = ctx_.strings.intern(ident->name);
+        e->type = fn_type;
+        return e;
+    }
+
     auto* e = ctx_.arena.make<HIRIdentExpr>();
     e->kind = HIRExpr::Kind::Ident;
     e->loc = expr->loc;
     e->name = ctx_.strings.intern(ident->name);
-
-    auto it = local_vars_.find(ident->name);
-    if (it == local_vars_.end()) {
-        ctx_.diag.error(expr->loc, std::string("undeclared identifier '") +
-                    std::string(ident->name) + "'");
-        e->type = TypeTable::Error;
-    } else {
-        e->type = it->second;
-    }
+    ctx_.diag.error(expr->loc, std::string("undeclared identifier '") +
+                std::string(ident->name) + "'");
+    e->type = TypeTable::Error;
     return e;
 }
 
@@ -788,6 +882,54 @@ HIRExpr* HIRBuilder::buildUnaryOp(const Expr* expr) {
 
 HIRExpr* HIRBuilder::buildCall(const Expr* expr) {
     auto* call = static_cast<const CallExpr*>(expr);
+
+    // Check if callee is a local variable (indirect call through function pointer)
+    auto local_it = local_vars_.find(call->callee);
+    if (local_it != local_vars_.end()) {
+        TypeId var_type = local_it->second;
+        if (var_type < ctx_.types.size() && ctx_.types.get(var_type).kind == TypeKind::Fn) {
+            auto& ti = ctx_.types.get(var_type);
+            auto* e = ctx_.arena.make<HIRCallIndirectExpr>();
+            e->kind = HIRExpr::Kind::CallIndirect;
+            e->loc = expr->loc;
+            e->is_tail_call = false;
+
+            // Build the callee expression (load the variable)
+            auto* callee_expr = ctx_.arena.make<HIRIdentExpr>();
+            callee_expr->kind = HIRExpr::Kind::Ident;
+            callee_expr->loc = expr->loc;
+            callee_expr->name = ctx_.strings.intern(call->callee);
+            callee_expr->type = var_type;
+            e->callee = callee_expr;
+
+            if (call->arg_count != ti.fn.param_count) {
+                ctx_.diag.error(expr->loc, std::string("function pointer expects ") +
+                    std::to_string(ti.fn.param_count) + " arguments, got " +
+                    std::to_string(call->arg_count));
+                e->type = TypeTable::Error;
+                e->args = nullptr;
+                e->arg_count = 0;
+                return e;
+            }
+
+            e->arg_count = call->arg_count;
+            e->args = ctx_.arena.makeArray<HIRExpr*>(call->arg_count);
+            for (uint32_t i = 0; i < call->arg_count; ++i) {
+                TypeId expected = ti.fn.params[i];
+                e->args[i] = buildExpr(call->args[i], expected);
+                if (e->args[i]->type != TypeTable::Error && e->args[i]->type != expected) {
+                    ctx_.diag.error(call->args[i]->loc,
+                        std::string("argument type mismatch: expected ") +
+                        ctx_.types.name(expected) + ", got " +
+                        ctx_.types.name(e->args[i]->type));
+                }
+            }
+            e->type = ti.fn.return_type;
+            return e;
+        }
+    }
+
+    // Direct call
     auto* e = ctx_.arena.make<HIRCallExpr>();
     e->kind = HIRExpr::Kind::Call;
     e->loc = expr->loc;
@@ -817,17 +959,52 @@ HIRExpr* HIRBuilder::buildCall(const Expr* expr) {
 
     e->arg_count = call->arg_count;
     e->args = ctx_.arena.makeArray<HIRExpr*>(call->arg_count);
+
+    // Check if this is a generic function call (any param is TypeVar)
+    bool is_generic_call = false;
+    for (size_t i = 0; i < sig.param_types.size(); ++i) {
+        if (ctx_.types.get(sig.param_types[i]).kind == TypeKind::TypeVar) {
+            is_generic_call = true;
+            break;
+        }
+    }
+    if (!is_generic_call && ctx_.types.get(sig.return_type).kind == TypeKind::TypeVar) {
+        is_generic_call = true;
+    }
+
+    // Build type substitution map for generic calls
+    std::unordered_map<TypeId, TypeId> type_subst;
+
     for (uint32_t i = 0; i < call->arg_count; ++i) {
-        e->args[i] = buildExpr(call->args[i], sig.param_types[i]);
-        if (e->args[i]->type != TypeTable::Error && e->args[i]->type != sig.param_types[i]) {
+        TypeId expected = sig.param_types[i];
+        // For generic calls, don't pass TypeVar as context type
+        std::optional<TypeId> ctx_t;
+        if (!is_generic_call || ctx_.types.get(expected).kind != TypeKind::TypeVar) {
+            ctx_t = expected;
+        }
+        e->args[i] = buildExpr(call->args[i], ctx_t);
+
+        if (is_generic_call && ctx_.types.get(expected).kind == TypeKind::TypeVar) {
+            // Infer: TypeVar → actual arg type
+            type_subst[expected] = e->args[i]->type;
+        } else if (e->args[i]->type != TypeTable::Error && e->args[i]->type != expected) {
             ctx_.diag.error(call->args[i]->loc,
                 std::string("argument type mismatch: expected ") +
-                ctx_.types.name(sig.param_types[i]) + ", got " +
+                ctx_.types.name(expected) + ", got " +
                 ctx_.types.name(e->args[i]->type));
         }
     }
 
-    e->type = sig.return_type;
+    // For generic calls, substitute TypeVars in return type
+    TypeId ret_type = sig.return_type;
+    if (is_generic_call) {
+        auto it2 = type_subst.find(ret_type);
+        if (it2 != type_subst.end()) {
+            ret_type = it2->second;
+        }
+    }
+
+    e->type = ret_type;
     return e;
 }
 

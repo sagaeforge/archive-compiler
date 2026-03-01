@@ -1,0 +1,10 @@
+@naked fn raw_42() -> i64 {
+    asm {
+        "mov rax, 42"
+        "ret"
+    }
+}
+
+fn main() -> i64 {
+    raw_42()
+}

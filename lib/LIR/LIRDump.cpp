@@ -51,7 +51,9 @@ const char* lirOpName(LIROp op) {
         case LIROp::Call:        return "call";
         case LIROp::BlockArg:    return "block_arg";
         case LIROp::Cast:        return "cast";
-        case LIROp::InlineAsm:   return "inline_asm";
+        case LIROp::InlineAsm:      return "inline_asm";
+        case LIROp::CallIndirect:   return "call_indirect";
+        case LIROp::FnRef:          return "fn_ref";
     }
     return "?";
 }
@@ -153,6 +155,18 @@ void dumpLIRInstr(const LIRInstr& i, const TypeTable& types, std::ostream& out) 
                 out << "\n      ; " << std::string_view(i.inline_asm.lines[l],
                                                          i.inline_asm.line_lengths[l]);
             }
+            break;
+        case LIROp::CallIndirect:
+            out << " %v" << i.call_indirect.callee;
+            out << "(";
+            for (uint32_t a = 0; a < i.call_indirect.arg_count; ++a) {
+                if (a > 0) out << ", ";
+                out << "%v" << i.call_indirect.args[a];
+            }
+            out << ")";
+            break;
+        case LIROp::FnRef:
+            out << " @" << i.fn_ref.fn_name;
             break;
     }
 

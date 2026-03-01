@@ -195,6 +195,8 @@ LIRFunction LIRBuilder::buildFunction(const HIRFnDecl* fn) {
     lir_fn.is_recursive = fn->is_recursive;
     lir_fn.is_tail_recursive = fn->is_tail_recursive;
     lir_fn.is_intrinsic = fn->is_intrinsic;
+    lir_fn.is_naked = fn->is_naked;
+    lir_fn.is_interrupt = fn->is_interrupt;
 
     if (fn->param_count > 0) {
         lir_fn.param_types = ctx_.arena.makeArray<TypeId>(fn->param_count);
@@ -333,6 +335,10 @@ VReg LIRBuilder::lowerExpr(const HIRExpr* expr) {
             return lowerIndexAccess(static_cast<const HIRIndexAccessExpr*>(expr));
         case HIRExpr::Kind::InlineAsm:
             return lowerInlineAsm(static_cast<const HIRInlineAsmExpr*>(expr));
+        case HIRExpr::Kind::FnRef:
+            return lowerFnRef(static_cast<const HIRFnRefExpr*>(expr));
+        case HIRExpr::Kind::CallIndirect:
+            return lowerCallIndirect(static_cast<const HIRCallIndirectExpr*>(expr));
     }
     return INVALID_VREG;
 }
@@ -596,6 +602,41 @@ VReg LIRBuilder::lowerCall(const HIRCallExpr* expr) {
     i.call.args = args;
     i.call.arg_count = expr->arg_count;
     i.call.is_tail = expr->is_tail_call;
+    i.loc = expr->loc;
+    emit(i);
+    return r;
+}
+
+VReg LIRBuilder::lowerFnRef(const HIRFnRefExpr* expr) {
+    VReg r = freshVReg();
+    LIRInstr i{};
+    i.op = LIROp::FnRef;
+    i.result = r;
+    i.type = expr->type;
+    i.fn_ref.fn_name = expr->fn_name;
+    i.loc = expr->loc;
+    emit(i);
+    return r;
+}
+
+VReg LIRBuilder::lowerCallIndirect(const HIRCallIndirectExpr* expr) {
+    VReg callee = lowerExpr(expr->callee);
+    VReg* args = nullptr;
+    if (expr->arg_count > 0) {
+        args = ctx_.arena.makeArray<VReg>(expr->arg_count);
+        for (uint32_t a = 0; a < expr->arg_count; ++a) {
+            args[a] = lowerExpr(expr->args[a]);
+        }
+    }
+
+    VReg r = (expr->type == TypeTable::Unit) ? INVALID_VREG : freshVReg();
+    LIRInstr i{};
+    i.op = LIROp::CallIndirect;
+    i.result = r;
+    i.type = expr->type;
+    i.call_indirect.callee = callee;
+    i.call_indirect.args = args;
+    i.call_indirect.arg_count = expr->arg_count;
     i.loc = expr->loc;
     emit(i);
     return r;

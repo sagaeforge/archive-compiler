@@ -4,6 +4,7 @@
 #include "kern/hir/HIRBuilder.h"
 #include "kern/hir/HIRDump.h"
 #include "kern/hir/HIRPasses.h"
+#include "kern/hir/MonomorphizationPass.h"
 #include "kern/lir/LIRBuilder.h"
 #include "kern/lir/LIRDump.h"
 #include "kern/backend/X86Backend.h"
@@ -30,6 +31,11 @@ HIRModule* CompilerPipeline::buildHIR(Module* ast) {
     HIRBuilder builder(ctx_);
     HIRModule* hir = builder.build(ast);
     if (ctx_.diag.hasErrors()) return nullptr;
+
+    // Monomorphization — specialize generic functions before passes
+    MonomorphizationPass mono(ctx_);
+    hir = mono.run(hir);
+    if (!hir || ctx_.diag.hasErrors()) return nullptr;
 
     // Run HIR passes
     HIRPassManager pm;

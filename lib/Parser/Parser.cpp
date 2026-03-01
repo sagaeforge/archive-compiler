@@ -401,6 +401,8 @@ Module* Parser::parseModule() {
     while (!check(TokenKind::Eof)) {
         // Parse annotations (@packed, @align(N), @section("name"))
         bool is_packed = false;
+        bool is_naked = false;
+        bool is_interrupt = false;
         uint32_t explicit_align = 0;
         std::string_view section_name;
         while (check(TokenKind::At)) {
@@ -408,6 +410,12 @@ Module* Parser::parseModule() {
             Token anno = expect(TokenKind::Ident, "expected annotation name after '@'");
             if (anno.text == "packed") {
                 is_packed = true;
+            } else if (anno.text == "naked") {
+                is_naked = true;
+            } else if (anno.text == "interrupt") {
+                is_interrupt = true;
+            } else if (anno.text == "const") {
+                // @const fn — compile-time evaluable (handled elsewhere)
             } else if (anno.text == "align") {
                 expect(TokenKind::LParen, "expected '(' after @align");
                 Token val = expect(TokenKind::IntLit, "expected integer in @align(N)");
@@ -447,7 +455,11 @@ Module* Parser::parseModule() {
             }
         } else if (check(TokenKind::KwFn)) {
             FnDecl* fn = parseFnDecl();
-            if (fn) fns.push_back(fn);
+            if (fn) {
+                fn->is_naked = is_naked;
+                fn->is_interrupt = is_interrupt;
+                fns.push_back(fn);
+            }
         } else if (check(TokenKind::KwType)) {
             auto* ta = parseTypeAlias();
             if (ta) type_aliases.push_back(ta);
@@ -650,6 +662,24 @@ StructDecl* Parser::parseStructDecl() {
     SourceLocation loc = peek().loc;
     expect(TokenKind::KwStruct, "expected 'struct'");
     Token nameTok = expect(TokenKind::Ident, "expected struct name");
+
+    // Parse optional type parameters: struct Vec<T> { ... }
+    std::vector<TypeParam> type_params;
+    if (check(TokenKind::Lt)) {
+        advance();
+        while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
+            Token tp = expect(TokenKind::Ident, "expected type parameter name");
+            TypeParam p;
+            p.name = tp.text;
+            p.loc = tp.loc;
+            type_params.push_back(p);
+            if (!check(TokenKind::Gt)) {
+                expect(TokenKind::Comma, "expected ',' or '>' in type parameter list");
+            }
+        }
+        expect(TokenKind::Gt, "expected '>' after type parameters");
+    }
+
     skipNewlines();
     expect(TokenKind::LBrace, "expected '{' after struct name");
     skipNewlines();
@@ -682,6 +712,13 @@ StructDecl* Parser::parseStructDecl() {
     sd->fields = arena_.makeArray<FieldDecl>(fields.size());
     for (size_t i = 0; i < fields.size(); ++i) {
         sd->fields[i] = fields[i];
+    }
+    sd->type_param_count = static_cast<uint32_t>(type_params.size());
+    if (!type_params.empty()) {
+        sd->type_params = arena_.makeArray<TypeParam>(type_params.size());
+        for (size_t i = 0; i < type_params.size(); ++i) {
+            sd->type_params[i] = type_params[i];
+        }
     }
     return sd;
 }
@@ -762,6 +799,23 @@ FnDecl* Parser::parseFnDecl() {
 
     Token nameTok = expect(TokenKind::Ident, "expected function name");
 
+    // Parse optional type parameters: <T, U, ...>
+    std::vector<TypeParam> type_params;
+    if (check(TokenKind::Lt)) {
+        advance(); // consume '<'
+        while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
+            Token tp = expect(TokenKind::Ident, "expected type parameter name");
+            TypeParam p;
+            p.name = tp.text;
+            p.loc = tp.loc;
+            type_params.push_back(p);
+            if (!check(TokenKind::Gt)) {
+                expect(TokenKind::Comma, "expected ',' or '>' in type parameter list");
+            }
+        }
+        expect(TokenKind::Gt, "expected '>' after type parameters");
+    }
+
     expect(TokenKind::LParen, "expected '(' after function name");
 
     std::vector<Param> params;
@@ -841,6 +895,13 @@ FnDecl* Parser::parseFnDecl() {
     fn->is_intrinsic = is_intrinsic;
     fn->has_pattern_params = has_pattern_params;
     fn->pattern_param = pattern_param;
+    fn->type_param_count = static_cast<uint32_t>(type_params.size());
+    if (!type_params.empty()) {
+        fn->type_params = arena_.makeArray<TypeParam>(type_params.size());
+        for (size_t i = 0; i < type_params.size(); ++i) {
+            fn->type_params[i] = type_params[i];
+        }
+    }
     return fn;
 }
 
@@ -873,6 +934,32 @@ TypeRef Parser::parseType() {
         ref.loc = bracket.loc;
         ref.array_element = elem;
         ref.array_size = arr_size;
+        return ref;
+    }
+    // Function type: fn(T1, T2) -> Ret
+    if (check(TokenKind::KwFn)) {
+        Token fn_tok = advance(); // consume 'fn'
+        expect(TokenKind::LParen, "expected '(' in function type");
+        std::vector<TypeRef> params;
+        while (!check(TokenKind::RParen) && !check(TokenKind::Eof)) {
+            params.push_back(parseType());
+            if (check(TokenKind::Comma)) advance();
+        }
+        expect(TokenKind::RParen, "expected ')' in function type");
+        expect(TokenKind::Arrow, "expected '->' in function type");
+        auto* ret = arena_.make<TypeRef>();
+        *ret = parseType();
+        TypeRef ref;
+        ref.kind = TypeRef::Kind::Fn;
+        ref.name = "fn";
+        ref.loc = fn_tok.loc;
+        ref.fn_param_count = static_cast<uint32_t>(params.size());
+        if (!params.empty()) {
+            ref.fn_params = arena_.makeArray<TypeRef>(params.size());
+            for (size_t i = 0; i < params.size(); ++i)
+                ref.fn_params[i] = params[i];
+        }
+        ref.fn_return = ret;
         return ref;
     }
     Token tok = expect(TokenKind::Ident, "expected type name");

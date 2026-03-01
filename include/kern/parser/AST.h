@@ -20,6 +20,10 @@ struct TypeRef {
     bool is_ptr_var = false;     // for Ptr<var T>: mutable pointer
     TypeRef* array_element = nullptr;  // for [T; N]: element type
     uint32_t array_size = 0;           // for [T; N]: count
+    // For Fn type: fn(T1, T2) -> Ret
+    TypeRef* fn_params = nullptr;      // arena array of param types
+    uint32_t fn_param_count = 0;
+    TypeRef* fn_return = nullptr;      // return type
 };
 
 // --- Parameter ---
@@ -67,6 +71,12 @@ struct UnionPattern : Pattern {
     uint32_t field_binding_count;     // number of field bindings
 };
 
+// --- Type parameter (for generics) ---
+struct TypeParam {
+    std::string_view name;   // e.g. "T"
+    SourceLocation loc;
+};
+
 // --- Field declarations (for struct definitions) ---
 struct FieldDecl {
     std::string_view name;
@@ -83,6 +93,8 @@ struct StructDecl {
     SourceLocation loc;
     bool is_packed = false;         // @packed
     uint32_t explicit_align = 0;   // @align(N), 0 = natural alignment
+    TypeParam* type_params = nullptr;
+    uint32_t type_param_count = 0;
 };
 
 // --- Enum declaration ---
@@ -198,6 +210,8 @@ struct CallExpr : Expr {
     std::string_view callee;
     Expr** args;
     uint32_t arg_count;
+    TypeRef* type_args = nullptr;    // explicit type arguments: f<i64>(x)
+    uint32_t type_arg_count = 0;
 };
 
 struct IfExpr : Expr {
@@ -360,8 +374,13 @@ struct FnDecl {
     Expr* body; // BlockExpr (nullptr for intrinsics)
     SourceLocation loc;
     bool is_intrinsic = false;
+    bool is_const = false;           // const fn — compile-time evaluable
+    bool is_naked = false;           // @naked annotation
+    bool is_interrupt = false;       // @interrupt annotation
     bool has_pattern_params = false; // function-level pattern matching
     Pattern* pattern_param = nullptr; // pattern for first param (when has_pattern_params)
+    TypeParam* type_params = nullptr; // generic type parameters (<T, U>)
+    uint32_t type_param_count = 0;
 };
 
 // --- Module ---
