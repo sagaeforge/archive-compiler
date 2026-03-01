@@ -151,7 +151,13 @@ void Formatter::formatTypeRef(const TypeRef& t) {
         case TypeRef::Kind::Array:
             out_ << "[";
             if (t.array_element) formatTypeRef(*t.array_element);
-            out_ << "; " << t.array_size << "]";
+            if (!t.array_size_name.empty())
+                out_ << "; " << t.array_size_name << "]";
+            else
+                out_ << "; " << t.array_size << "]";
+            break;
+        case TypeRef::Kind::ConstVal:
+            out_ << t.const_value;
             break;
     }
 }

@@ -238,6 +238,14 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
         case LIROp::InlineAsm:   selectInlineAsm(instr); break;
         case LIROp::CallIndirect: selectCallIndirect(instr); break;
         case LIROp::FnRef:       selectFnRef(instr); break;
+        case LIROp::AtomicLoad:     selectAtomicLoad(instr); break;
+        case LIROp::AtomicStore:    selectAtomicStore(instr); break;
+        case LIROp::AtomicCas:      selectAtomicCas(instr); break;
+        case LIROp::AtomicFetchAdd: selectAtomicFetchAdd(instr); break;
+        case LIROp::Fence:          selectFence(instr); break;
+        case LIROp::CompilerFence:  break;  // no instruction emitted
+        case LIROp::PercpuLoad:     selectPercpuLoad(instr); break;
+        case LIROp::PercpuStore:    selectPercpuStore(instr); break;
     }
 }
 
@@ -1099,6 +1107,115 @@ void InstructionSelector::selectInlineAsm(const LIRInstr& instr) {
     mi.asm_data.lines = instr.inline_asm.lines;
     mi.asm_data.line_lengths = instr.inline_asm.line_lengths;
     mi.asm_data.line_count = instr.inline_asm.line_count;
+    emit(mi);
+}
+
+// ============================================================================
+// Atomic operations
+// ============================================================================
+
+void InstructionSelector::selectAtomicLoad(const LIRInstr& instr) {
+    // Atomic load: mov dst, [ptr] (x86 aligned loads are naturally atomic)
+    MachInstr mi(X86Op::MovLoad);
+    mi.width = widthOf(instr.type);
+    mi.operand_count = 2;
+    mi.inline_ops[0] = MachOperand::virt(instr.result);
+    mi.inline_ops[1] = MachOperand::virt(instr.atomic_load.ptr);
+    emit(mi);
+
+    // For SeqCst: add mfence after
+    if (instr.atomic_load.order == MemOrder::SeqCst) {
+        MachInstr fence(X86Op::Mfence);
+        fence.operand_count = 0;
+        emit(fence);
+    }
+}
+
+void InstructionSelector::selectAtomicStore(const LIRInstr& instr) {
+    // For SeqCst: use xchg (implicitly locked). Otherwise: mov [ptr], value
+    if (instr.atomic_store.order == MemOrder::SeqCst) {
+        MachInstr mi(X86Op::Xchg);
+        mi.width = 64;
+        mi.operand_count = 2;
+        mi.inline_ops[0] = MachOperand::virt(instr.atomic_store.ptr);
+        mi.inline_ops[1] = MachOperand::virt(instr.atomic_store.value);
+        emit(mi);
+    } else {
+        MachInstr mi(X86Op::MovStore);
+        mi.width = 64;
+        mi.operand_count = 2;
+        mi.inline_ops[0] = MachOperand::virt(instr.atomic_store.ptr);
+        mi.inline_ops[1] = MachOperand::virt(instr.atomic_store.value);
+        emit(mi);
+    }
+}
+
+void InstructionSelector::selectAtomicCas(const LIRInstr& instr) {
+    // lock cmpxchg [ptr], desired
+    // Move expected → result vreg (will become rax)
+    MachInstr mov_exp(X86Op::Mov);
+    mov_exp.width = 64;
+    mov_exp.operand_count = 2;
+    mov_exp.inline_ops[0] = MachOperand::virt(instr.result);
+    mov_exp.inline_ops[1] = MachOperand::virt(instr.atomic_cas.expected);
+    emit(mov_exp);
+
+    MachInstr mi(X86Op::LockCmpxchg);
+    mi.width = 64;
+    mi.operand_count = 3;
+    mi.inline_ops[0] = MachOperand::virt(instr.result);
+    mi.inline_ops[1] = MachOperand::virt(instr.atomic_cas.ptr);
+    mi.inline_ops[2] = MachOperand::virt(instr.atomic_cas.desired);
+    emit(mi);
+}
+
+void InstructionSelector::selectAtomicFetchAdd(const LIRInstr& instr) {
+    // lock xadd [ptr], value → returns old value
+    MachInstr mi(X86Op::LockXadd);
+    mi.width = 64;
+    mi.operand_count = 3;
+    mi.inline_ops[0] = MachOperand::virt(instr.result);
+    mi.inline_ops[1] = MachOperand::virt(instr.atomic_fetch_add.ptr);
+    mi.inline_ops[2] = MachOperand::virt(instr.atomic_fetch_add.value);
+    emit(mi);
+}
+
+void InstructionSelector::selectFence(const LIRInstr& instr) {
+    X86Op fence_op;
+    switch (instr.fence.order) {
+        case MemOrder::SeqCst:
+        case MemOrder::AcqRel:
+            fence_op = X86Op::Mfence;
+            break;
+        case MemOrder::Acquire:
+            fence_op = X86Op::Lfence;
+            break;
+        case MemOrder::Release:
+            fence_op = X86Op::Sfence;
+            break;
+        case MemOrder::Relaxed:
+            return;  // no fence needed
+    }
+    MachInstr mi(fence_op);
+    mi.operand_count = 0;
+    emit(mi);
+}
+
+void InstructionSelector::selectPercpuLoad(const LIRInstr& instr) {
+    MachInstr mi(X86Op::GsLoad);
+    mi.width = widthOf(instr.type);
+    mi.operand_count = 2;
+    mi.inline_ops[0] = MachOperand::virt(instr.result);
+    mi.inline_ops[1] = MachOperand::virt(instr.percpu_load.offset);
+    emit(mi);
+}
+
+void InstructionSelector::selectPercpuStore(const LIRInstr& instr) {
+    MachInstr mi(X86Op::GsStore);
+    mi.width = 64;
+    mi.operand_count = 2;
+    mi.inline_ops[0] = MachOperand::virt(instr.percpu_store.offset);
+    mi.inline_ops[1] = MachOperand::virt(instr.percpu_store.value);
     emit(mi);
 }
 

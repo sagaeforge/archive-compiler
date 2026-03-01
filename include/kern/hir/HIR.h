@@ -334,7 +334,9 @@ struct HIRParam {
 
 struct HIRTypeParam {
     std::string_view name;  // interned
-    TypeId type_var_id;     // TypeVar TypeId in TypeTable
+    TypeId type_var_id;     // TypeVar TypeId in TypeTable (or const param's type for const generics)
+    bool is_const = false;  // true for `const N: u64`
+    TypeId const_type = INVALID_TYPE;  // resolved type of the const param (e.g. U64)
 };
 
 struct HIRFnDecl {

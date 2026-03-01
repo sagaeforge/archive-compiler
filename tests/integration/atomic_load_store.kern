@@ -1,0 +1,13 @@
+fn atomic_load(ptr: Ptr<i64>, order: i64) -> i64 = intrinsic
+fn atomic_store(ptr: Ptr<var i64>, value: i64) -> Unit = intrinsic
+fn lfence() -> Unit = intrinsic
+fn sfence() -> Unit = intrinsic
+
+fn main() -> i64 {
+    var x: i64 = 0
+    atomic_store(&var x, 42)
+    sfence()
+    lfence()
+    val result: i64 = atomic_load(&x, 0)
+    result
+}

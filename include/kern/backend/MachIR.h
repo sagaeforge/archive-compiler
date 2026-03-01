@@ -188,6 +188,18 @@ enum class X86Op : uint8_t {
 
     // Raw assembly passthrough
     InlineAsm,
+
+    // Atomic operations
+    LockCmpxchg,    // lock cmpxchg [ptr], desired (uses rax as expected)
+    LockXadd,       // lock xadd [ptr], value
+    Xchg,           // xchg [ptr], value (implicitly locked)
+    Mfence,         // mfence
+    Sfence,         // sfence
+    Lfence,         // lfence
+
+    // Per-CPU data (GS segment)
+    GsLoad,         // mov dst, [gs:offset]
+    GsStore,        // mov [gs:offset], src
 };
 
 const char* x86OpName(X86Op op);

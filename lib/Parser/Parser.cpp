@@ -801,15 +801,25 @@ StructDecl* Parser::parseStructDecl() {
     expect(TokenKind::KwStruct, "expected 'struct'");
     Token nameTok = expect(TokenKind::Ident, "expected struct name");
 
-    // Parse optional type parameters: struct Vec<T> { ... }
+    // Parse optional type parameters: struct Vec<T> { ... } or struct Buffer<T, const N: u64> { ... }
     std::vector<TypeParam> type_params;
     if (check(TokenKind::Lt)) {
         advance();
         while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
-            Token tp = expect(TokenKind::Ident, "expected type parameter name");
             TypeParam p;
-            p.name = tp.text;
-            p.loc = tp.loc;
+            if (check(TokenKind::KwConst)) {
+                advance(); // consume 'const'
+                Token tp = expect(TokenKind::Ident, "expected const parameter name");
+                p.name = tp.text;
+                p.loc = tp.loc;
+                p.is_const = true;
+                expect(TokenKind::Colon, "expected ':' after const parameter name");
+                p.const_type = parseType();
+            } else {
+                Token tp = expect(TokenKind::Ident, "expected type parameter name");
+                p.name = tp.text;
+                p.loc = tp.loc;
+            }
             type_params.push_back(p);
             if (!check(TokenKind::Gt)) {
                 expect(TokenKind::Comma, "expected ',' or '>' in type parameter list");
@@ -898,13 +908,23 @@ UnionDecl* Parser::parseUnionDecl() {
     expect(TokenKind::KwUnion, "expected 'union'");
     Token nameTok = expect(TokenKind::Ident, "expected union name");
 
-    // Parse optional type parameters: <T, U, ...>
+    // Parse optional type parameters: <T, U, ...> or <T, const N: u64>
     std::vector<TypeParam> type_params;
     if (check(TokenKind::Lt)) {
         advance(); // consume '<'
         while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
-            Token tp = expect(TokenKind::Ident, "expected type parameter name");
-            TypeParam p; p.name = tp.text; p.loc = tp.loc;
+            TypeParam p;
+            if (check(TokenKind::KwConst)) {
+                advance();
+                Token tp = expect(TokenKind::Ident, "expected const parameter name");
+                p.name = tp.text; p.loc = tp.loc;
+                p.is_const = true;
+                expect(TokenKind::Colon, "expected ':' after const parameter name");
+                p.const_type = parseType();
+            } else {
+                Token tp = expect(TokenKind::Ident, "expected type parameter name");
+                p.name = tp.text; p.loc = tp.loc;
+            }
             type_params.push_back(p);
             if (!check(TokenKind::Gt)) {
                 expect(TokenKind::Comma, "expected ',' or '>' in type parameter list");
@@ -959,15 +979,25 @@ FnDecl* Parser::parseFnDecl() {
 
     Token nameTok = expect(TokenKind::Ident, "expected function name");
 
-    // Parse optional type parameters: <T, U, ...>
+    // Parse optional type parameters: <T, U, ...> or <T, const N: u64>
     std::vector<TypeParam> type_params;
     if (check(TokenKind::Lt)) {
         advance(); // consume '<'
         while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
-            Token tp = expect(TokenKind::Ident, "expected type parameter name");
             TypeParam p;
-            p.name = tp.text;
-            p.loc = tp.loc;
+            if (check(TokenKind::KwConst)) {
+                advance();
+                Token tp = expect(TokenKind::Ident, "expected const parameter name");
+                p.name = tp.text;
+                p.loc = tp.loc;
+                p.is_const = true;
+                expect(TokenKind::Colon, "expected ':' after const parameter name");
+                p.const_type = parseType();
+            } else {
+                Token tp = expect(TokenKind::Ident, "expected type parameter name");
+                p.name = tp.text;
+                p.loc = tp.loc;
+            }
             type_params.push_back(p);
             if (!check(TokenKind::Gt)) {
                 expect(TokenKind::Comma, "expected ',' or '>' in type parameter list");
@@ -1073,27 +1103,48 @@ Param Parser::parseParam() {
 }
 
 TypeRef Parser::parseType() {
+    // Const value in type position (for const generics): e.g. Buffer<i64, 4>
+    if (check(TokenKind::IntLit)) {
+        Token tok = advance();
+        TypeRef ref;
+        ref.kind = TypeRef::Kind::ConstVal;
+        ref.name = tok.text;
+        ref.loc = tok.loc;
+        ref.const_value = std::stoll(std::string(tok.text));
+        return ref;
+    }
+
     // Never type: !
     if (check(TokenKind::Exclaim)) {
         Token bang = advance();
-        return {TypeRef::Kind::Never, "!", bang.loc};
+        TypeRef never_ref;
+        never_ref.kind = TypeRef::Kind::Never;
+        never_ref.name = "!";
+        never_ref.loc = bang.loc;
+        return never_ref;
     }
 
-    // Array type: [T; N]
+    // Array type: [T; N] where N is integer literal or const generic param name
     if (check(TokenKind::LBracket)) {
         Token bracket = advance(); // consume '['
         auto* elem = arena_.make<TypeRef>();
         *elem = parseType();
         expect(TokenKind::Semicolon, "expected ';' in array type [T; N]");
-        Token size_tok = expect(TokenKind::IntLit, "expected integer size in array type [T; N]");
-        uint32_t arr_size = static_cast<uint32_t>(std::stoull(std::string(size_tok.text)));
-        expect(TokenKind::RBracket, "expected ']' after array type");
         TypeRef ref;
         ref.kind = TypeRef::Kind::Array;
         ref.name = "Array";
         ref.loc = bracket.loc;
         ref.array_element = elem;
-        ref.array_size = arr_size;
+        if (check(TokenKind::IntLit)) {
+            Token size_tok = advance();
+            ref.array_size = static_cast<uint32_t>(std::stoull(std::string(size_tok.text)));
+        } else if (check(TokenKind::Ident)) {
+            Token name_tok = advance();
+            ref.array_size_name = name_tok.text;
+        } else {
+            diag_.error(peek().loc, "expected integer or const generic parameter for array size");
+        }
+        expect(TokenKind::RBracket, "expected ']' after array type");
         return ref;
     }
     // Function type: fn(T1, T2) -> Ret
@@ -1177,7 +1228,11 @@ TypeRef Parser::parseType() {
         }
         return ref;
     }
-    return {TypeRef::Kind::Named, tok.text, tok.loc};
+    TypeRef named_ref;
+    named_ref.kind = TypeRef::Kind::Named;
+    named_ref.name = tok.text;
+    named_ref.loc = tok.loc;
+    return named_ref;
 }
 
 // --- Expressions ---
@@ -1527,7 +1582,8 @@ Expr* Parser::parsePrimary() {
             while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
                 // If we see something that can't be a type, bail out
                 if (!check(TokenKind::Ident) && !check(TokenKind::LBracket) &&
-                    !check(TokenKind::KwFn) && !check(TokenKind::Exclaim)) {
+                    !check(TokenKind::KwFn) && !check(TokenKind::Exclaim) &&
+                    !check(TokenKind::IntLit)) {
                     valid = false;
                     break;
                 }
@@ -1544,7 +1600,10 @@ Expr* Parser::parsePrimary() {
                 std::string mangled = std::string(tok.text);
                 for (auto& ta : type_args) {
                     mangled += "_";
-                    mangled += ta.name;
+                    if (ta.kind == TypeRef::Kind::ConstVal)
+                        mangled += std::to_string(ta.const_value);
+                    else
+                        mangled += ta.name;
                 }
                 char* buf = arena_.makeArray<char>(mangled.size());
                 std::memcpy(buf, mangled.data(), mangled.size());
@@ -1881,7 +1940,8 @@ Expr* Parser::parseBlockExpr() {
                 bool va = true;
                 while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
                     if (!check(TokenKind::Ident) && !check(TokenKind::LBracket) &&
-                        !check(TokenKind::KwFn) && !check(TokenKind::Exclaim)) {
+                        !check(TokenKind::KwFn) && !check(TokenKind::Exclaim) &&
+                        !check(TokenKind::IntLit)) {
                         va = false; break;
                     }
                     ta.push_back(parseType());
@@ -1894,7 +1954,13 @@ Expr* Parser::parseBlockExpr() {
                     skipNewlines();
 
                     std::string mangled = std::string(identTok.text);
-                    for (auto& t : ta) { mangled += "_"; mangled += t.name; }
+                    for (auto& t : ta) {
+                        mangled += "_";
+                        if (t.kind == TypeRef::Kind::ConstVal)
+                            mangled += std::to_string(t.const_value);
+                        else
+                            mangled += t.name;
+                    }
                     char* buf = arena_.makeArray<char>(mangled.size());
                     std::memcpy(buf, mangled.data(), mangled.size());
                     std::string_view mangled_sv(buf, mangled.size());

@@ -87,6 +87,13 @@ private:
     void selectInlineAsm(const LIRInstr& instr);
     void selectFnRef(const LIRInstr& instr);
     void selectCallIndirect(const LIRInstr& instr);
+    void selectAtomicLoad(const LIRInstr& instr);
+    void selectAtomicStore(const LIRInstr& instr);
+    void selectAtomicCas(const LIRInstr& instr);
+    void selectAtomicFetchAdd(const LIRInstr& instr);
+    void selectFence(const LIRInstr& instr);
+    void selectPercpuLoad(const LIRInstr& instr);
+    void selectPercpuStore(const LIRInstr& instr);
 
     // Division: special handling for idiv/div
     void selectDiv(const LIRInstr& instr, bool is_mod);

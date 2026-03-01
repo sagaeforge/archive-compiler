@@ -303,6 +303,50 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
                 out_.write(instr.asm_data.lines[i], instr.asm_data.line_lengths[i]);
             }
             break;
+
+        case X86Op::LockCmpxchg:
+            // lock cmpxchg [ptr], desired — rax holds expected, result in rax
+            out_ << "lock cmpxchg [";
+            emitOperand(instr.src1(), 64);
+            out_ << "], ";
+            emitOperand(instr.src2(), 64);
+            break;
+        case X86Op::LockXadd:
+            // lock xadd [ptr], value — old value returned in value reg
+            out_ << "lock xadd [";
+            emitOperand(instr.src1(), 64);
+            out_ << "], ";
+            emitOperand(instr.src2(), 64);
+            break;
+        case X86Op::Xchg:
+            // xchg [ptr], value — implicitly locked
+            out_ << "xchg [";
+            emitOperand(instr.dst(), 64);
+            out_ << "], ";
+            emitOperand(instr.src1(), 64);
+            break;
+        case X86Op::Mfence:
+            out_ << "mfence";
+            break;
+        case X86Op::Sfence:
+            out_ << "sfence";
+            break;
+        case X86Op::Lfence:
+            out_ << "lfence";
+            break;
+        case X86Op::GsLoad:
+            out_ << "mov ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", [gs:";
+            emitOperand(instr.src1(), 64);
+            out_ << "]";
+            break;
+        case X86Op::GsStore:
+            out_ << "mov [gs:";
+            emitOperand(instr.dst(), 64);
+            out_ << "], ";
+            emitOperand(instr.src1(), 64);
+            break;
     }
 
     out_ << "\n";

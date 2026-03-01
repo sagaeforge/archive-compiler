@@ -43,6 +43,7 @@ enum class TokenKind : uint8_t {
     KwAlignof,
     KwTrait,
     KwImpl,
+    KwConst,
 
     // Operators
     Plus,        // +

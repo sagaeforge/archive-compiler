@@ -40,6 +40,7 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::KwAlignof:  return "alignof";
         case TokenKind::KwTrait:    return "trait";
         case TokenKind::KwImpl:     return "impl";
+        case TokenKind::KwConst:    return "const";
         case TokenKind::Plus:       return "+";
         case TokenKind::Minus:      return "-";
         case TokenKind::Star:       return "*";
@@ -238,6 +239,7 @@ TokenKind Lexer::identifierKind(std::string_view text) {
     if (text == "alignof")  return TokenKind::KwAlignof;
     if (text == "trait")    return TokenKind::KwTrait;
     if (text == "impl")     return TokenKind::KwImpl;
+    if (text == "const")    return TokenKind::KwConst;
     return TokenKind::Ident;
 }
 

@@ -13,14 +13,15 @@ struct FnDecl;
 
 // --- Type Reference ---
 struct TypeRef {
-    enum class Kind { Named, Ptr, Fn, Never, Array };
+    enum class Kind { Named, Ptr, Fn, Never, Array, ConstVal };
     Kind kind = Kind::Named;
     std::string_view name; // "i64", "bool", "Unit"
     SourceLocation loc;
     TypeRef* pointee = nullptr;  // for Ptr<T>: the inner type
     bool is_ptr_var = false;     // for Ptr<var T>: mutable pointer
     TypeRef* array_element = nullptr;  // for [T; N]: element type
-    uint32_t array_size = 0;           // for [T; N]: count
+    uint32_t array_size = 0;           // for [T; N]: count (0 when using const generic param)
+    std::string_view array_size_name;  // for [T; N] with const generic: "N" (empty if literal)
     // For Fn type: fn(T1, T2) -> Ret
     TypeRef* fn_params = nullptr;      // arena array of param types
     uint32_t fn_param_count = 0;
@@ -28,6 +29,8 @@ struct TypeRef {
     // Generic type arguments: Pair<i64>, Result<T, E>
     TypeRef* type_args = nullptr;
     uint32_t type_arg_count = 0;
+    // For ConstVal: integer constant in type argument position (e.g. Buffer<i64, 4>)
+    int64_t const_value = 0;
 };
 
 // --- Parameter ---
@@ -77,8 +80,10 @@ struct UnionPattern : Pattern {
 
 // --- Type parameter (for generics) ---
 struct TypeParam {
-    std::string_view name;   // e.g. "T"
+    std::string_view name;   // e.g. "T" or "N" (const generic)
     SourceLocation loc;
+    bool is_const = false;   // true for `const N: u64`
+    TypeRef const_type{};    // type of const param (e.g. u64), only valid if is_const
 };
 
 // --- Field declarations (for struct definitions) ---

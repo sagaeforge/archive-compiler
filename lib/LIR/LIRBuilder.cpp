@@ -585,6 +585,149 @@ VReg LIRBuilder::lowerUnaryOp(const HIRUnaryOpExpr* expr) {
 }
 
 VReg LIRBuilder::lowerCall(const HIRCallExpr* expr) {
+    // Check for built-in atomic/fence/percpu intrinsics
+    auto callee = expr->callee;
+
+    // atomic_load(ptr, order) -> value
+    if (callee == "atomic_load" && expr->arg_count == 2) {
+        VReg ptr = lowerExpr(expr->args[0]);
+        VReg order_vreg = lowerExpr(expr->args[1]);
+        (void)order_vreg;  // order extracted as constant below
+        VReg r = freshVReg();
+        LIRInstr i{};
+        i.op = LIROp::AtomicLoad;
+        i.result = r;
+        i.type = expr->type;
+        i.atomic_load.ptr = ptr;
+        i.atomic_load.order = MemOrder::SeqCst;  // default SeqCst
+        i.loc = expr->loc;
+        emit(i);
+        return r;
+    }
+
+    // atomic_store(ptr, value, order)
+    if (callee == "atomic_store" && expr->arg_count >= 2) {
+        VReg ptr = lowerExpr(expr->args[0]);
+        VReg val = lowerExpr(expr->args[1]);
+        LIRInstr i{};
+        i.op = LIROp::AtomicStore;
+        i.result = INVALID_VREG;
+        i.type = TypeTable::Unit;
+        i.atomic_store.ptr = ptr;
+        i.atomic_store.value = val;
+        i.atomic_store.order = MemOrder::SeqCst;
+        i.loc = expr->loc;
+        emit(i);
+        return INVALID_VREG;
+    }
+
+    // atomic_cas(ptr, expected, desired) -> old value
+    if (callee == "atomic_cas" && expr->arg_count >= 3) {
+        VReg ptr = lowerExpr(expr->args[0]);
+        VReg expected = lowerExpr(expr->args[1]);
+        VReg desired = lowerExpr(expr->args[2]);
+        VReg r = freshVReg();
+        LIRInstr i{};
+        i.op = LIROp::AtomicCas;
+        i.result = r;
+        i.type = expr->type;
+        i.atomic_cas.ptr = ptr;
+        i.atomic_cas.expected = expected;
+        i.atomic_cas.desired = desired;
+        i.atomic_cas.order = MemOrder::SeqCst;
+        i.loc = expr->loc;
+        emit(i);
+        return r;
+    }
+
+    // atomic_fetch_add(ptr, value) -> old value
+    if (callee == "atomic_fetch_add" && expr->arg_count >= 2) {
+        VReg ptr = lowerExpr(expr->args[0]);
+        VReg val = lowerExpr(expr->args[1]);
+        VReg r = freshVReg();
+        LIRInstr i{};
+        i.op = LIROp::AtomicFetchAdd;
+        i.result = r;
+        i.type = expr->type;
+        i.atomic_fetch_add.ptr = ptr;
+        i.atomic_fetch_add.value = val;
+        i.atomic_fetch_add.order = MemOrder::SeqCst;
+        i.loc = expr->loc;
+        emit(i);
+        return r;
+    }
+
+    // mfence() / sfence() / lfence() / compiler_barrier()
+    if (callee == "mfence" && expr->arg_count == 0) {
+        LIRInstr i{};
+        i.op = LIROp::Fence;
+        i.result = INVALID_VREG;
+        i.type = TypeTable::Unit;
+        i.fence.order = MemOrder::SeqCst;
+        i.loc = expr->loc;
+        emit(i);
+        return INVALID_VREG;
+    }
+    if (callee == "sfence" && expr->arg_count == 0) {
+        LIRInstr i{};
+        i.op = LIROp::Fence;
+        i.result = INVALID_VREG;
+        i.type = TypeTable::Unit;
+        i.fence.order = MemOrder::Release;
+        i.loc = expr->loc;
+        emit(i);
+        return INVALID_VREG;
+    }
+    if (callee == "lfence" && expr->arg_count == 0) {
+        LIRInstr i{};
+        i.op = LIROp::Fence;
+        i.result = INVALID_VREG;
+        i.type = TypeTable::Unit;
+        i.fence.order = MemOrder::Acquire;
+        i.loc = expr->loc;
+        emit(i);
+        return INVALID_VREG;
+    }
+    if (callee == "compiler_barrier" && expr->arg_count == 0) {
+        LIRInstr i{};
+        i.op = LIROp::CompilerFence;
+        i.result = INVALID_VREG;
+        i.type = TypeTable::Unit;
+        i.loc = expr->loc;
+        emit(i);
+        return INVALID_VREG;
+    }
+
+    // percpu_load(offset) -> value
+    if (callee == "percpu_load" && expr->arg_count == 1) {
+        VReg offset = lowerExpr(expr->args[0]);
+        VReg r = freshVReg();
+        LIRInstr i{};
+        i.op = LIROp::PercpuLoad;
+        i.result = r;
+        i.type = expr->type;
+        i.percpu_load.offset = offset;
+        i.loc = expr->loc;
+        emit(i);
+        return r;
+    }
+
+    // percpu_store(offset, value)
+    if (callee == "percpu_store" && expr->arg_count == 2) {
+        VReg offset = lowerExpr(expr->args[0]);
+        VReg val = lowerExpr(expr->args[1]);
+        LIRInstr i{};
+        i.op = LIROp::PercpuStore;
+        i.result = INVALID_VREG;
+        i.type = TypeTable::Unit;
+        i.percpu_store.offset = offset;
+        i.percpu_store.value = val;
+        i.loc = expr->loc;
+        emit(i);
+        return INVALID_VREG;
+    }
+
+    // Regular call
     VReg* args = nullptr;
     if (expr->arg_count > 0) {
         args = ctx_.arena.makeArray<VReg>(expr->arg_count);

@@ -65,6 +65,20 @@ enum class LIROp : uint8_t {
 
     // Inline assembly
     InlineAsm,      // raw assembly lines (passthrough)
+
+    // Atomic operations
+    AtomicLoad,     // atomic load with memory ordering
+    AtomicStore,    // atomic store with memory ordering
+    AtomicCas,      // compare-and-swap (returns old value)
+    AtomicFetchAdd, // atomic fetch-and-add (returns old value)
+
+    // Fences
+    Fence,          // hardware memory fence (mfence/sfence/lfence)
+    CompilerFence,  // compiler-only barrier (no instruction emitted)
+
+    // Per-CPU data
+    PercpuLoad,     // load via GS segment
+    PercpuStore,    // store via GS segment
 };
 
 const char* lirOpName(LIROp op);
@@ -104,6 +118,23 @@ struct LIRCallIndirectPayload {
 struct LIRFnRefPayload { std::string_view fn_name; };
 struct LIRInlineAsmPayload { const char** lines; uint32_t* line_lengths; uint32_t line_count; };
 
+// Memory ordering for atomic operations
+enum class MemOrder : uint8_t {
+    Relaxed = 0,
+    Acquire = 1,
+    Release = 2,
+    AcqRel  = 3,
+    SeqCst  = 4,
+};
+
+struct LIRAtomicLoadPayload  { VReg ptr; MemOrder order; };
+struct LIRAtomicStorePayload { VReg ptr; VReg value; MemOrder order; };
+struct LIRAtomicCasPayload   { VReg ptr; VReg expected; VReg desired; MemOrder order; };
+struct LIRAtomicFetchAddPayload { VReg ptr; VReg value; MemOrder order; };
+struct LIRFencePayload       { MemOrder order; };
+struct LIRPercpuPayload      { VReg offset; };
+struct LIRPercpuStorePayload { VReg offset; VReg value; };
+
 struct LIRInstr {
     LIROp op;
     VReg result;            // result virtual register (INVALID_VREG if void)
@@ -136,6 +167,13 @@ struct LIRInstr {
         LIRCallIndirectPayload call_indirect;
         LIRFnRefPayload     fn_ref;
         LIRInlineAsmPayload inline_asm;
+        LIRAtomicLoadPayload atomic_load;
+        LIRAtomicStorePayload atomic_store;
+        LIRAtomicCasPayload  atomic_cas;
+        LIRAtomicFetchAddPayload atomic_fetch_add;
+        LIRFencePayload      fence;
+        LIRPercpuPayload     percpu_load;
+        LIRPercpuStorePayload percpu_store;
     };
 };
 

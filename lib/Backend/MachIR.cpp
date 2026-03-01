@@ -118,6 +118,14 @@ const char* x86OpName(X86Op op) {
         case X86Op::Pseudo_FrameDestroy: return "frame_destroy";
         case X86Op::Nop:    return "nop";
         case X86Op::InlineAsm: return "inline_asm";
+        case X86Op::LockCmpxchg: return "lock_cmpxchg";
+        case X86Op::LockXadd:    return "lock_xadd";
+        case X86Op::Xchg:        return "xchg";
+        case X86Op::Mfence:      return "mfence";
+        case X86Op::Sfence:      return "sfence";
+        case X86Op::Lfence:      return "lfence";
+        case X86Op::GsLoad:      return "gs_load";
+        case X86Op::GsStore:     return "gs_store";
     }
     return "?";
 }

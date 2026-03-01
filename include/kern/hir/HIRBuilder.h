@@ -94,6 +94,9 @@ private:
     std::unordered_map<std::string_view, const StructDecl*> generic_structs_;
     std::unordered_map<std::string_view, const UnionDecl*> generic_unions_;
 
+    // Const generic parameter values (name → value), scoped during instantiation
+    std::unordered_map<std::string_view, int64_t> const_values_;
+
     // Lambda lifting: accumulated lifted functions to add to module
     std::vector<HIRFnDecl*> lifted_lambdas_;
     uint32_t lambda_counter_ = 0;

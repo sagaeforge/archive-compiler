@@ -54,6 +54,14 @@ const char* lirOpName(LIROp op) {
         case LIROp::InlineAsm:      return "inline_asm";
         case LIROp::CallIndirect:   return "call_indirect";
         case LIROp::FnRef:          return "fn_ref";
+        case LIROp::AtomicLoad:     return "atomic_load";
+        case LIROp::AtomicStore:    return "atomic_store";
+        case LIROp::AtomicCas:      return "atomic_cas";
+        case LIROp::AtomicFetchAdd: return "atomic_fetch_add";
+        case LIROp::Fence:          return "fence";
+        case LIROp::CompilerFence:  return "compiler_fence";
+        case LIROp::PercpuLoad:     return "percpu_load";
+        case LIROp::PercpuStore:    return "percpu_store";
     }
     return "?";
 }
@@ -167,6 +175,33 @@ void dumpLIRInstr(const LIRInstr& i, const TypeTable& types, std::ostream& out) 
             break;
         case LIROp::FnRef:
             out << " @" << i.fn_ref.fn_name;
+            break;
+        case LIROp::AtomicLoad:
+            out << " %v" << i.atomic_load.ptr << " order=" << static_cast<int>(i.atomic_load.order);
+            break;
+        case LIROp::AtomicStore:
+            out << " %v" << i.atomic_store.ptr << ", %v" << i.atomic_store.value
+                << " order=" << static_cast<int>(i.atomic_store.order);
+            break;
+        case LIROp::AtomicCas:
+            out << " %v" << i.atomic_cas.ptr << ", %v" << i.atomic_cas.expected
+                << ", %v" << i.atomic_cas.desired
+                << " order=" << static_cast<int>(i.atomic_cas.order);
+            break;
+        case LIROp::AtomicFetchAdd:
+            out << " %v" << i.atomic_fetch_add.ptr << ", %v" << i.atomic_fetch_add.value
+                << " order=" << static_cast<int>(i.atomic_fetch_add.order);
+            break;
+        case LIROp::Fence:
+            out << " order=" << static_cast<int>(i.fence.order);
+            break;
+        case LIROp::CompilerFence:
+            break;
+        case LIROp::PercpuLoad:
+            out << " %v" << i.percpu_load.offset;
+            break;
+        case LIROp::PercpuStore:
+            out << " %v" << i.percpu_store.offset << ", %v" << i.percpu_store.value;
             break;
     }
 

@@ -133,7 +133,23 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
     }
     if (ref.kind == TypeRef::Kind::Array) {
         TypeId elem = ref.array_element ? resolveType(*ref.array_element) : TypeTable::Error;
-        return ctx_.types.makeArrayType(elem, ref.array_size);
+        uint32_t size = ref.array_size;
+        if (!ref.array_size_name.empty()) {
+            auto it = const_values_.find(ref.array_size_name);
+            if (it != const_values_.end()) {
+                size = static_cast<uint32_t>(it->second);
+            } else {
+                ctx_.diag.error(ref.loc, std::string("unknown const generic parameter '") +
+                    std::string(ref.array_size_name) + "'");
+                return TypeTable::Error;
+            }
+        }
+        return ctx_.types.makeArrayType(elem, size);
+    }
+    if (ref.kind == TypeRef::Kind::ConstVal) {
+        // Const values in type position are not real types — handled during instantiation
+        ctx_.diag.error(ref.loc, "integer constant cannot be used as a type");
+        return TypeTable::Error;
     }
     if (ref.name == "i8")   return TypeTable::I8;
     if (ref.name == "i16")  return TypeTable::I16;
@@ -176,19 +192,29 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
         named_types_[interned] = tid;
         return tid;
     }
-    // Generic type instantiation: Name<T1, T2, ...>
+    // Generic type instantiation: Name<T1, T2, ...> or Name<T1, 4, ...>
     if (ref.type_arg_count > 0) {
-        // Resolve all type arguments first
+        // Resolve type arguments and extract const values
         std::vector<TypeId> type_args;
+        std::vector<std::pair<uint32_t, int64_t>> const_arg_values; // index → value
         for (uint32_t i = 0; i < ref.type_arg_count; ++i) {
-            type_args.push_back(resolveType(ref.type_args[i]));
+            if (ref.type_args[i].kind == TypeRef::Kind::ConstVal) {
+                type_args.push_back(INVALID_TYPE); // placeholder
+                const_arg_values.push_back({i, ref.type_args[i].const_value});
+            } else {
+                type_args.push_back(resolveType(ref.type_args[i]));
+            }
         }
 
-        // Build mangled name: Name_T1_T2
+        // Build mangled name: Name_T1_4
         std::string mangled = std::string(ref.name);
-        for (auto ta : type_args) {
+        for (uint32_t i = 0; i < ref.type_arg_count; ++i) {
             mangled += "_";
-            mangled += ctx_.types.name(ta);
+            if (ref.type_args[i].kind == TypeRef::Kind::ConstVal) {
+                mangled += std::to_string(ref.type_args[i].const_value);
+            } else {
+                mangled += ctx_.types.name(type_args[i]);
+            }
         }
         auto interned_mangled = ctx_.strings.intern(mangled);
 
@@ -208,14 +234,27 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
                 return TypeTable::Error;
             }
 
-            // Temporarily register type param substitutions
+            // Temporarily register type param and const param substitutions
             std::vector<std::pair<std::string_view, TypeId>> saved;
+            std::vector<std::pair<std::string_view, int64_t>> saved_const;
             for (uint32_t i = 0; i < sd->type_param_count; ++i) {
                 auto param_name = sd->type_params[i].name;
-                if (named_types_.count(param_name)) {
-                    saved.push_back({param_name, named_types_[param_name]});
+                if (sd->type_params[i].is_const) {
+                    // Find the const value for this index
+                    int64_t cv = 0;
+                    for (auto& [idx, val] : const_arg_values) {
+                        if (idx == i) { cv = val; break; }
+                    }
+                    if (const_values_.count(param_name)) {
+                        saved_const.push_back({param_name, const_values_[param_name]});
+                    }
+                    const_values_[param_name] = cv;
+                } else {
+                    if (named_types_.count(param_name)) {
+                        saved.push_back({param_name, named_types_[param_name]});
+                    }
+                    named_types_[param_name] = type_args[i];
                 }
-                named_types_[param_name] = type_args[i];
             }
 
             // Build concrete struct fields
@@ -230,12 +269,19 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
                                                 sd->is_packed, sd->explicit_align);
             named_types_[interned_mangled] = tid;
 
-            // Restore type param names
+            // Restore type param and const param names
             for (uint32_t i = 0; i < sd->type_param_count; ++i) {
-                named_types_.erase(sd->type_params[i].name);
+                if (sd->type_params[i].is_const) {
+                    const_values_.erase(sd->type_params[i].name);
+                } else {
+                    named_types_.erase(sd->type_params[i].name);
+                }
             }
             for (auto& [name, old_tid] : saved) {
                 named_types_[name] = old_tid;
+            }
+            for (auto& [name, old_val] : saved_const) {
+                const_values_[name] = old_val;
             }
 
             return tid;
@@ -253,14 +299,26 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
                 return TypeTable::Error;
             }
 
-            // Temporarily register type param substitutions
+            // Temporarily register type param and const param substitutions
             std::vector<std::pair<std::string_view, TypeId>> saved;
+            std::vector<std::pair<std::string_view, int64_t>> saved_const;
             for (uint32_t i = 0; i < ud->type_param_count; ++i) {
                 auto param_name = ud->type_params[i].name;
-                if (named_types_.count(param_name)) {
-                    saved.push_back({param_name, named_types_[param_name]});
+                if (ud->type_params[i].is_const) {
+                    int64_t cv = 0;
+                    for (auto& [idx, val] : const_arg_values) {
+                        if (idx == i) { cv = val; break; }
+                    }
+                    if (const_values_.count(param_name)) {
+                        saved_const.push_back({param_name, const_values_[param_name]});
+                    }
+                    const_values_[param_name] = cv;
+                } else {
+                    if (named_types_.count(param_name)) {
+                        saved.push_back({param_name, named_types_[param_name]});
+                    }
+                    named_types_[param_name] = type_args[i];
                 }
-                named_types_[param_name] = type_args[i];
             }
 
             // Build concrete union variants
@@ -276,12 +334,19 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
             TypeId tid = ctx_.types.makeUnion(interned_mangled, variants);
             named_types_[interned_mangled] = tid;
 
-            // Restore type param names
+            // Restore type param and const param names
             for (uint32_t i = 0; i < ud->type_param_count; ++i) {
-                named_types_.erase(ud->type_params[i].name);
+                if (ud->type_params[i].is_const) {
+                    const_values_.erase(ud->type_params[i].name);
+                } else {
+                    named_types_.erase(ud->type_params[i].name);
+                }
             }
             for (auto& [name, old_tid] : saved) {
                 named_types_[name] = old_tid;
+            }
+            for (auto& [name, old_val] : saved_const) {
+                const_values_[name] = old_val;
             }
 
             return tid;
@@ -571,17 +636,23 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
         hfn->type_params = ctx_.arena.makeArray<HIRTypeParam>(fn->type_param_count);
         for (uint32_t i = 0; i < fn->type_param_count; ++i) {
             auto interned = ctx_.strings.intern(fn->type_params[i].name);
-            // Create a TypeVar in the TypeTable
-            TypeInfo ti{};
-            ti.kind = TypeKind::TypeVar;
-            ti.type_var.name = interned;
-            TypeId tv_id = ctx_.types.add(ti);
-            hfn->type_params[i] = {interned, tv_id};
-            // Register as named type so resolveType("T") works
-            if (named_types_.count(interned)) {
-                saved_type_params.push_back({interned, named_types_[interned]});
+            if (fn->type_params[i].is_const) {
+                // Const generic: resolve the const param's type, register as const
+                TypeId ct = resolveType(fn->type_params[i].const_type);
+                hfn->type_params[i] = {interned, ct, true, ct};
+                // Don't register in named_types_; const params live in const_values_
+            } else {
+                // Type generic: create a TypeVar
+                TypeInfo ti{};
+                ti.kind = TypeKind::TypeVar;
+                ti.type_var.name = interned;
+                TypeId tv_id = ctx_.types.add(ti);
+                hfn->type_params[i] = {interned, tv_id, false, INVALID_TYPE};
+                if (named_types_.count(interned)) {
+                    saved_type_params.push_back({interned, named_types_[interned]});
+                }
+                named_types_[interned] = tv_id;
             }
-            named_types_[interned] = tv_id;
         }
     }
 
@@ -608,10 +679,14 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
     }
 
     auto cleanup_type_params = [&]() {
-        // Restore shadowed named types
+        // Restore shadowed named types and const values
         for (uint32_t i = 0; i < fn->type_param_count; ++i) {
             auto interned = hfn->type_params[i].name;
-            named_types_.erase(interned);
+            if (hfn->type_params[i].is_const) {
+                const_values_.erase(interned);
+            } else {
+                named_types_.erase(interned);
+            }
         }
         for (auto& [name, tid] : saved_type_params) {
             named_types_[name] = tid;
