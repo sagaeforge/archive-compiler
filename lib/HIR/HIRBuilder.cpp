@@ -84,6 +84,12 @@ static bool containsTypeVar(const TypeTable& types, TypeId tid) {
     if (info.kind == TypeKind::Array) {
         return containsTypeVar(types, info.array.element);
     }
+    if (info.kind == TypeKind::Fn) {
+        for (uint32_t i = 0; i < info.fn.param_count; ++i) {
+            if (containsTypeVar(types, info.fn.params[i])) return true;
+        }
+        return containsTypeVar(types, info.fn.return_type);
+    }
     return false;
 }
 
@@ -127,7 +133,41 @@ static bool deepTypeMatch(const TypeTable& types, TypeId expected, TypeId actual
         return ei.array.count == ai.array.count &&
                deepTypeMatch(types, ei.array.element, ai.array.element, subst);
     }
+    if (ei.kind == TypeKind::Fn) {
+        if (ei.fn.param_count != ai.fn.param_count) return false;
+        for (uint32_t i = 0; i < ei.fn.param_count; ++i) {
+            if (!deepTypeMatch(types, ei.fn.params[i], ai.fn.params[i], subst))
+                return false;
+        }
+        return deepTypeMatch(types, ei.fn.return_type, ai.fn.return_type, subst);
+    }
     return false;
+}
+
+// Recursively substitute TypeVars in a type using the substitution map.
+// Returns the substituted TypeId, creating new types as needed.
+static TypeId substituteTypeVars(TypeTable& types, TypeId tid,
+                                  const std::unordered_map<TypeId, TypeId>& subst) {
+    auto it = subst.find(tid);
+    if (it != subst.end()) return it->second;
+
+    const auto& info = types.get(tid);
+    if (info.kind == TypeKind::Fn) {
+        bool changed = false;
+        std::vector<TypeId> new_params(info.fn.param_count);
+        for (uint32_t i = 0; i < info.fn.param_count; ++i) {
+            new_params[i] = substituteTypeVars(types, info.fn.params[i], subst);
+            if (new_params[i] != info.fn.params[i]) changed = true;
+        }
+        TypeId new_ret = substituteTypeVars(types, info.fn.return_type, subst);
+        if (new_ret != info.fn.return_type) changed = true;
+        if (!changed) return tid;
+        return types.makeFn(new_params, new_ret);
+    }
+    // For other composite types (Struct, Union, Ptr, Array) we could add
+    // substitution here, but currently generic structs/unions are handled
+    // via separate monomorphization paths.
+    return tid;
 }
 
 // When merging two branch types, pick the non-Never type.
@@ -1647,10 +1687,7 @@ HIRExpr* HIRBuilder::buildCall(const Expr* expr) {
     // For generic calls, substitute TypeVars in return type
     TypeId ret_type = sig.return_type;
     if (is_generic_call) {
-        auto it2 = type_subst.find(ret_type);
-        if (it2 != type_subst.end()) {
-            ret_type = it2->second;
-        }
+        ret_type = substituteTypeVars(ctx_.types, ret_type, type_subst);
     }
 
     e->type = ret_type;

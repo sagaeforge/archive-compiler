@@ -1,0 +1,8 @@
+fn make_const<T>(v: T) -> fn() -> T {
+    { => v }
+}
+
+fn main() -> i64 {
+    val f: fn() -> i64 = make_const(42)
+    f()
+}
