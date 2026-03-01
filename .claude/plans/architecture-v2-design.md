@@ -1444,7 +1444,7 @@ private:
   - 3b: `/kern:add-tool kern-fmt` → Formatter 구현 → `/kern:test fmt`
   - 3c: `/kern:add-lint <rule>` 반복 → LintEngine 구현 → `/kern:test lint`
 
-### Phase 4: Backend + Debug + IDE — 4a ✅ 완료 (784 unit + 116 E2E, commit 25573fb), 4b/4c 미착수
+### Phase 4: Backend + Debug + IDE — ✅ 전체 완료 (4a: 784u+116e commit 25573fb, 4b/4c: commit 9ce95aa)
 
 ```
 ┌──────────────────────────────────┐  ┌──────────────────────┐  ┌─────────────────┐
@@ -1467,7 +1467,7 @@ private:
   - 4c: IDEContext 구현 → Completion/Hover/GoTo → `/kern:test ide`
   - 각 완료 후: `/kern:layer-check` (역방향 의존 전무 확인)
 
-### Phase 5: 통합 + 도구 어셈블리 — 순차 + 병렬
+### Phase 5: 통합 + 도구 어셈블리 — ✅ 완료 (5a-5f, v1 삭제, LSP wired, tool tests)
 
 ```
 5a. CompilerPipeline으로 전체 연결
@@ -1505,7 +1505,7 @@ private:
   - 5d-f: `/kern:e2e-add` 반복 → 전체 테스트 보강
   - 최종: `/kern:coverage` → **전체 lib/ 98% 달성 확인** → `/kern:layer-check`
 
-### Phase 6: 패키지 매니저 + 표준 라이브러리 (미래)
+### Phase 6: 패키지 매니저 + 표준 라이브러리 — 🟡 부분 완료 (6a: kern.toml+build/init, 6b: core.kern 스켈레톤)
 
 ```
 ┌───────────────────┐  ┌──────────────────────┐
@@ -1521,7 +1521,7 @@ private:
   - 6a: `/kern:add-tool kern-pkg` → kern.toml 파서 → 의존성 해석 → `/kern:test pkg`
   - 6b: `/kern:add-type` (Result, Maybe 등) → stdlib .kern 소스 작성 → `/kern:build`
 
-### Phase 7: 고난이도 도구 (Phase 5에서 분리)
+### Phase 7: 고난이도 도구 — 🟡 스켈레톤 완료 (kern-dbg CLI + kern-repl full-recompile)
 
 > kern-dbg와 kern-repl은 선행 인프라가 충분히 성숙한 후에 착수.
 
@@ -1573,10 +1573,10 @@ private:
 | 1 | 1c | 1a, 1b | 2 | unit tests | ✅ 완료 |
 | 2 | 2a, 2b, 2f | 2c, 2d, 2e | 3 | **HIR interpreter** + unit | ✅ 완료 (660 unit + 115 E2E) |
 | 3 | - | 3a, 3b, 3c | 3 | **LIR interpreter** + unit | ✅ 완료 (695 unit + 115 E2E) |
-| 4 | - | 4a, 4b, 4c | 3 | **69 E2E 앵커** (처음!) | 🟡 4a 완료 (784 unit + 116 E2E), 4b/4c 미착수 |
-| 5 | 5a | 5b, 5c / 5d, 5e, 5f | 2+3 | 전체 E2E + coverage | ⏳ Phase 4 대기 |
-| 6 | - | 6a, 6b | 2 | pkg/stdlib 테스트 | ⏳ Phase 5 대기 |
-| 7 | - | 7a, 7b | 2 | 도구별 통합 테스트 | ⏳ Phase 6 대기 |
+| 4 | - | 4a, 4b, 4c | 3 | **69 E2E 앵커** (처음!) | ✅ 완료 (4a: 784u+116e, 4b: Debug, 4c: IDE+DiagnosticProvider) |
+| 5 | 5a | 5b, 5c / 5d, 5e, 5f | 2+3 | 전체 E2E + coverage | ✅ 완료 (v1 삭제, LSP wired, kern-fmt, tool tests) |
+| 6 | - | 6a, 6b | 2 | pkg/stdlib 테스트 | 🟡 부분 (6a: kern.toml+build, 6b: core stub) |
+| 7 | - | 7a, 7b | 2 | 도구별 통합 테스트 | 🟡 스켈레톤 (kern-dbg CLI, kern-repl full-recompile) |
 
 ---
 
