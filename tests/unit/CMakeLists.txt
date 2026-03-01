@@ -19,8 +19,10 @@ add_executable(kern_tests
     debug/DebugInfoTest.cpp
     ide/IDETest.cpp
     fmt/FormatterTest.cpp
+    pkg/ManifestTest.cpp
 )
 target_link_libraries(kern_tests
+    kern_pkg
     kern_fmt
     kern_ide
     kern_debug

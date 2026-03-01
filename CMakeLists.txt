@@ -25,12 +25,14 @@ add_subdirectory(lib/Backend)
 add_subdirectory(lib/Debug)
 add_subdirectory(lib/IDE)
 add_subdirectory(lib/Fmt)
+add_subdirectory(lib/Pkg)
 add_subdirectory(lib/Pipeline)
 
 # Tools
 add_subdirectory(tools/kernc)
 add_subdirectory(tools/kern-fmt)
 add_subdirectory(tools/kern-lsp)
+add_subdirectory(tools/kern-pkg)
 
 # Testing
 option(KERN_BUILD_TESTS "Build tests" ON)

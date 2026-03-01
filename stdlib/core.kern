@@ -1,0 +1,17 @@
+// Kern Standard Library — Core Module
+// Requires: generics (Phase C1) for full implementation
+// Currently: type stubs and intrinsic declarations
+
+// --- Print intrinsic (macOS) ---
+fn print_i64(x: i64) -> Unit = intrinsic
+fn print_str(s: String) -> Unit = intrinsic
+
+// --- Memory intrinsics ---
+fn mem_copy(dst: Ptr<var u8>, src: Ptr<u8>, n: u64) -> Unit = intrinsic
+fn mem_set(dst: Ptr<var u8>, val: u8, n: u64) -> Unit = intrinsic
+fn mem_cmp(a: Ptr<u8>, b: Ptr<u8>, n: u64) -> i64 = intrinsic
+
+// --- Pointer arithmetic intrinsics ---
+// (Will be implemented as LIR PtrAdd in Phase A6)
+// fn ptr_add_bytes(ptr: Ptr<u8>, n: u64) -> Ptr<u8> = intrinsic
+// fn ptr_sub_bytes(ptr: Ptr<u8>, n: u64) -> Ptr<u8> = intrinsic
