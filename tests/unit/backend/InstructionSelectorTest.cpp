@@ -319,3 +319,52 @@ TEST_F(InstructionSelectorTest, LogicalAndOr) {
     // Short-circuit generates branches
     EXPECT_TRUE(hasOp(fn, X86Op::Test));
 }
+
+TEST_F(InstructionSelectorTest, LargeStructReturnHiddenPtr) {
+    // Closure with 3 captures → 32B struct → >16B → hidden pointer ABI
+    auto* mod = selectAll(
+        "fn make(a: i64, b: i64, c: i64) -> fn(i64) -> i64 {\n"
+        "    { x: i64 => x + a + b + c }\n"
+        "}\n"
+        "fn main() -> i64 {\n"
+        "    val f: fn(i64) -> i64 = make(1, 2, 3)\n"
+        "    f(10)\n"
+        "}\n");
+    ASSERT_NE(mod, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+    // make() should have MovStore instructions (writing to hidden ptr buffer)
+    // and main() should have a call to _make
+    bool found_make = false;
+    for (uint32_t i = 0; i < mod->fn_count; ++i) {
+        if (mod->functions[i].name.find("make") != std::string_view::npos) {
+            found_make = true;
+            // >16B ret: must have MovStore to write through hidden ptr
+            EXPECT_TRUE(hasOp(mod->functions[i], X86Op::MovStore));
+        }
+    }
+    EXPECT_TRUE(found_make);
+}
+
+TEST_F(InstructionSelectorTest, SmallStructReturnPacked) {
+    // 16B struct return (2 fields) → packed into RAX+RDX
+    auto* mod = selectAll(
+        "struct Pair { x: i64, y: i64 }\n"
+        "fn make_pair(a: i64, b: i64) -> Pair {\n"
+        "    Pair { x: a, y: b }\n"
+        "}\n"
+        "fn main() -> i64 {\n"
+        "    val p: Pair = make_pair(10, 32)\n"
+        "    p.x + p.y\n"
+        "}\n");
+    ASSERT_NE(mod, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+    // make_pair should pack into RAX via MovLoad (reading from struct base)
+    bool found_make_pair = false;
+    for (uint32_t i = 0; i < mod->fn_count; ++i) {
+        if (mod->functions[i].name.find("make_pair") != std::string_view::npos) {
+            found_make_pair = true;
+            EXPECT_TRUE(hasOp(mod->functions[i], X86Op::MovLoad));
+        }
+    }
+    EXPECT_TRUE(found_make_pair);
+}
