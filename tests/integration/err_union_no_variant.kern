@@ -1,0 +1,5 @@
+union Option { Some(i64), None }
+
+fn main() -> i64 {
+    Option::Bogus(1)
+}

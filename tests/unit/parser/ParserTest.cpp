@@ -1259,3 +1259,99 @@ TEST(ParserTest, StringLitEmpty) {
     auto* sl = static_cast<StringLitExpr*>(decl->init);
     EXPECT_EQ(sl->length, 0u);
 }
+
+// ===== M5 Parser error path coverage =====
+
+// --- Struct declaration: missing name ---
+TEST(ParserTest, ErrorStructMissingName) {
+    auto r = parse("struct { x: i64 }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected struct name"), std::string::npos);
+}
+
+// --- Struct declaration: missing '{' ---
+TEST(ParserTest, ErrorStructMissingLBrace) {
+    auto r = parse("struct Foo x: i64 }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected '{' after struct name"), std::string::npos);
+}
+
+// --- Struct declaration: missing ':' after field name ---
+TEST(ParserTest, ErrorStructFieldMissingColon) {
+    auto r = parse("struct Foo { x i64 }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected ':'"), std::string::npos);
+}
+
+// --- Enum declaration: missing name ---
+TEST(ParserTest, ErrorEnumMissingName) {
+    auto r = parse("enum { Red, Green }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected enum name"), std::string::npos);
+}
+
+// --- Enum declaration: missing '{' ---
+TEST(ParserTest, ErrorEnumMissingLBrace) {
+    auto r = parse("enum Color Red, Green }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected '{' after enum name"), std::string::npos);
+}
+
+// --- Union declaration: missing name ---
+TEST(ParserTest, ErrorUnionMissingName) {
+    auto r = parse("union { Some(i64), None }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected union name"), std::string::npos);
+}
+
+// --- Union declaration: missing '{' ---
+TEST(ParserTest, ErrorUnionMissingLBrace) {
+    auto r = parse("union Shape Circle(i64) }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected '{' after union name"), std::string::npos);
+}
+
+// --- Union declaration: missing ')' after variant type ---
+TEST(ParserTest, ErrorUnionVariantMissingRParen) {
+    auto r = parse("union Shape { Circle(i64 }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected ')'"), std::string::npos);
+}
+
+// --- Ptr type: missing '>' ---
+TEST(ParserTest, ErrorPtrMissingGt) {
+    auto r = parse("fn f(p: Ptr<i64) -> i64 { 0 }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected '>'"), std::string::npos);
+}
+
+// --- Match: invalid pattern token ---
+TEST(ParserTest, ErrorInvalidPatternToken) {
+    auto r = parse(
+        "fn main() -> i64 {\n"
+        "    val x: i64 = 0\n"
+        "    match x { [1] => 0, _ => 1 }\n"
+        "}");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected pattern"), std::string::npos);
+}

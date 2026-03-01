@@ -1207,3 +1207,151 @@ TEST(SemaTest, StringParam) {
         "fn get_len(s: String) -> u64 { s.len }\n"
         "fn main() -> u64 { get_len(\"hello\") }"));
 }
+
+// ===== M5 error path coverage =====
+
+// --- Struct: unknown struct in literal ---
+// Note: Parser requires struct name in struct_names_ to parse as StructLit,
+// so "unknown struct" TC error is unreachable via normal input. This test
+// verifies the parser correctly rejects unknown names as struct literals.
+TEST(SemaTest, ErrorUnknownStructLiteralParseFail) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 { Bogus { x: 1 } \n 0 }", &errors));
+    EXPECT_NE(errors.find("unexpected token"), std::string::npos);
+}
+
+// --- Struct: field access on non-struct type ---
+TEST(SemaTest, ErrorFieldAccessNonStruct) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 {\n"
+        "    val x: i64 = 42\n"
+        "    x.foo\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("field access requires struct type"), std::string::npos);
+}
+
+// --- Struct: val type mismatch struct vs primitive ---
+TEST(SemaTest, ErrorValStructVsPrimitive) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "struct Point { x: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    val p: Point = 42\n"
+        "    0\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("val type mismatch"), std::string::npos);
+}
+
+// --- Struct: var type mismatch struct vs primitive ---
+TEST(SemaTest, ErrorVarStructVsPrimitive) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "struct Point { x: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    var p: Point = 42\n"
+        "    0\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("var type mismatch"), std::string::npos);
+}
+
+// --- Struct: field assignment type mismatch ---
+TEST(SemaTest, ErrorFieldAssignTypeMismatch) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "struct Point { var x: i64, var y: i64 }\n"
+        "fn main() -> i64 {\n"
+        "    var p: Point = Point { x: 1, y: 2 }\n"
+        "    p.x = true\n"
+        "    0\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("field assignment type mismatch: expected i64, got bool"), std::string::npos);
+}
+
+// --- Enum: undeclared name used with dot access ---
+// Parser requires enum in enum_names_ to parse as EnumAccess,
+// so undeclared names are treated as identifier + field access.
+TEST(SemaTest, ErrorUndeclaredEnumAsIdent) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 { Bogus.Red }", &errors));
+    EXPECT_NE(errors.find("undeclared identifier 'Bogus'"), std::string::npos);
+}
+
+// --- Union: undeclared name used with :: ---
+// Parser requires union in union_names_ to parse as UnionVariant,
+// so undeclared names produce a parse error on '::'.
+TEST(SemaTest, ErrorUndeclaredUnionParseError) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 { Bogus::Some(1) }", &errors));
+    EXPECT_NE(errors.find("unexpected token"), std::string::npos);
+}
+
+// --- Union: no such variant ---
+TEST(SemaTest, ErrorUnionNoVariant) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "union Option { Some(i64), None }\n"
+        "fn main() -> i64 { Option::Bogus(1) }", &errors));
+    EXPECT_NE(errors.find("union 'Option' has no variant 'Bogus'"), std::string::npos);
+}
+
+// --- Union: payload type mismatch ---
+TEST(SemaTest, ErrorUnionPayloadTypeMismatch) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "union Option { Some(i64), None }\n"
+        "fn main() -> i64 {\n"
+        "    val x: Option = Option::Some(true)\n"
+        "    0\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("variant 'Some' expects payload of type i64, got bool"), std::string::npos);
+}
+
+// --- Ptr: deref assignment type mismatch ---
+TEST(SemaTest, ErrorDerefAssignTypeMismatch) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 {\n"
+        "    var x: i64 = 0\n"
+        "    val p: Ptr<var i64> = &var x\n"
+        "    *p = true\n"
+        "    0\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("deref assignment type mismatch: expected i64, got bool"), std::string::npos);
+}
+
+// --- Match: integer pattern on non-integer scrutinee ---
+TEST(SemaTest, ErrorIntPatternOnBool) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 {\n"
+        "    val b: bool = true\n"
+        "    match b { 1 => 1, _ => 0 }\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("integer pattern incompatible with scrutinee type bool"), std::string::npos);
+}
+
+// --- Match: bool pattern on non-bool scrutinee ---
+TEST(SemaTest, ErrorBoolPatternOnInt) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 {\n"
+        "    val n: i64 = 42\n"
+        "    match n { true => 1, _ => 0 }\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("bool pattern incompatible with non-bool scrutinee"), std::string::npos);
+}
+
+// --- Match: guard must be bool ---
+TEST(SemaTest, ErrorMatchGuardNotBool) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 {\n"
+        "    val n: i64 = 42\n"
+        "    match n { x if x + 1 => 1, _ => 0 }\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("match guard must be bool"), std::string::npos);
+}
