@@ -1,0 +1,15 @@
+fn atomic_cas(ptr: Ptr<var i64>, expected: i64, desired: i64) -> i64 = intrinsic
+
+fn main() -> i64 {
+    var value: i64 = 99
+    val old: i64 = atomic_cas(&var value, 10, 42)
+    if old == 99 {
+        if value == 99 {
+            42
+        } else {
+            1
+        }
+    } else {
+        2
+    }
+}

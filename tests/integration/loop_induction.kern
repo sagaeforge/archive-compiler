@@ -1,0 +1,11 @@
+fn main() -> i64 {
+    loop(i = 0, sum = 0) {
+        val next_sum: i64 = sum + i
+        val next_i: i64 = i + 1
+        if next_i == 7 {
+            break next_sum
+        } else {
+            continue(next_i, next_sum)
+        }
+    }
+}
