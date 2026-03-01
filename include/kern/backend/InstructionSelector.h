@@ -72,6 +72,7 @@ private:
     void selectUnaryNeg(const LIRInstr& instr);
     void selectUnaryFNeg(const LIRInstr& instr);
     void selectUnaryNot(const LIRInstr& instr);
+    void selectUnaryBNot(const LIRInstr& instr);
     void selectAddrOf(const LIRInstr& instr);
     void selectLoad(const LIRInstr& instr);
     void selectStore(const LIRInstr& instr);
@@ -82,9 +83,14 @@ private:
     void selectRet(const LIRInstr& instr);
     void selectCall(const LIRInstr& instr);
     void selectBlockArg(const LIRInstr& instr);
+    void selectCast(const LIRInstr& instr);
+    void selectInlineAsm(const LIRInstr& instr);
 
     // Division: special handling for idiv/div
     void selectDiv(const LIRInstr& instr, bool is_mod);
+
+    // Shift: special handling for shl/shr/sar (count in cl)
+    void selectShift(const LIRInstr& instr);
 
     // Map LIR comparison op to x86 CondCode
     static CondCode mapICmpCC(LIROp op);

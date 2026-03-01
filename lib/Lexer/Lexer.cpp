@@ -25,10 +25,24 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::KwStruct:   return "struct";
         case TokenKind::KwEnum:     return "enum";
         case TokenKind::KwUnion:    return "union";
+        case TokenKind::KwLoop:     return "loop";
+        case TokenKind::KwBreak:    return "break";
+        case TokenKind::KwContinue: return "continue";
+        case TokenKind::KwAs:       return "as";
+        case TokenKind::KwAsm:      return "asm";
+        case TokenKind::KwVolatile: return "volatile";
+        case TokenKind::KwNoreturn: return "noreturn";
         case TokenKind::Plus:       return "+";
         case TokenKind::Minus:      return "-";
         case TokenKind::Star:       return "*";
         case TokenKind::Slash:      return "/";
+        case TokenKind::Percent:    return "%";
+        case TokenKind::BitOr:      return "|";
+        case TokenKind::BitXor:     return "^";
+        case TokenKind::Tilde:      return "~";
+        case TokenKind::Shl:        return "<<";
+        case TokenKind::Shr:        return ">>";
+        case TokenKind::Exclaim:    return "!";
         case TokenKind::Eq:         return "=";
         case TokenKind::EqEq:       return "==";
         case TokenKind::NotEq:      return "!=";
@@ -197,9 +211,16 @@ TokenKind Lexer::identifierKind(std::string_view text) {
     if (text == "not")    return TokenKind::KwNot;
     if (text == "true")   return TokenKind::KwTrue;
     if (text == "false")  return TokenKind::KwFalse;
-    if (text == "struct") return TokenKind::KwStruct;
-    if (text == "enum")   return TokenKind::KwEnum;
-    if (text == "union")  return TokenKind::KwUnion;
+    if (text == "struct")   return TokenKind::KwStruct;
+    if (text == "enum")     return TokenKind::KwEnum;
+    if (text == "union")    return TokenKind::KwUnion;
+    if (text == "loop")     return TokenKind::KwLoop;
+    if (text == "break")    return TokenKind::KwBreak;
+    if (text == "continue") return TokenKind::KwContinue;
+    if (text == "as")       return TokenKind::KwAs;
+    if (text == "asm")      return TokenKind::KwAsm;
+    if (text == "volatile") return TokenKind::KwVolatile;
+    if (text == "noreturn") return TokenKind::KwNoreturn;
     return TokenKind::Ident;
 }
 
@@ -299,21 +320,27 @@ Token Lexer::nextToken() {
             if (match('>')) return makeToken(TokenKind::FatArrow);
             return makeToken(TokenKind::Eq);
 
+        case '%': return makeToken(TokenKind::Percent);
+        case '^': return makeToken(TokenKind::BitXor);
+        case '~': return makeToken(TokenKind::Tilde);
+
         case '!':
             if (match('=')) return makeToken(TokenKind::NotEq);
-            return errorToken("unexpected character '!', did you mean 'not'?");
+            return makeToken(TokenKind::Exclaim);
 
         case '<':
+            if (match('<')) return makeToken(TokenKind::Shl);
             if (match('=')) return makeToken(TokenKind::LtEq);
             return makeToken(TokenKind::Lt);
 
         case '>':
+            if (match('>')) return makeToken(TokenKind::Shr);
             if (match('=')) return makeToken(TokenKind::GtEq);
             return makeToken(TokenKind::Gt);
 
         case '|':
             if (match('>')) return makeToken(TokenKind::Pipe);
-            return errorToken("unexpected character '|', did you mean '|>'?");
+            return makeToken(TokenKind::BitOr);
 
         default:
             return errorToken("unexpected character");

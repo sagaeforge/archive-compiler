@@ -37,6 +37,26 @@ void LIRBuilder::emitBranch(uint32_t target) {
     i.result = INVALID_VREG;
     i.type = TypeTable::Unit;
     i.branch.target = target;
+    i.branch.args = nullptr;
+    i.branch.arg_count = 0;
+    emit(i);
+}
+
+void LIRBuilder::emitBranchWithArgs(uint32_t target, const std::vector<VReg>& args) {
+    LIRInstr i{};
+    i.op = LIROp::Branch;
+    i.result = INVALID_VREG;
+    i.type = TypeTable::Unit;
+    i.branch.target = target;
+    i.branch.arg_count = static_cast<uint32_t>(args.size());
+    if (!args.empty()) {
+        i.branch.args = ctx_.arena.makeArray<VReg>(args.size());
+        for (size_t j = 0; j < args.size(); ++j) {
+            i.branch.args[j] = args[j];
+        }
+    } else {
+        i.branch.args = nullptr;
+    }
     emit(i);
 }
 
@@ -299,6 +319,20 @@ VReg LIRBuilder::lowerExpr(const HIRExpr* expr) {
             return lowerAddrOf(static_cast<const HIRAddrOfExpr*>(expr));
         case HIRExpr::Kind::Deref:
             return lowerDeref(static_cast<const HIRDerefExpr*>(expr));
+        case HIRExpr::Kind::Cast:
+            return lowerCast(static_cast<const HIRCastExpr*>(expr));
+        case HIRExpr::Kind::Loop:
+            return lowerLoop(static_cast<const HIRLoopExpr*>(expr));
+        case HIRExpr::Kind::Break:
+            return lowerBreak(static_cast<const HIRBreakExpr*>(expr));
+        case HIRExpr::Kind::Continue:
+            return lowerContinue(static_cast<const HIRContinueExpr*>(expr));
+        case HIRExpr::Kind::ArrayLit:
+            return lowerArrayLit(static_cast<const HIRArrayLitExpr*>(expr));
+        case HIRExpr::Kind::IndexAccess:
+            return lowerIndexAccess(static_cast<const HIRIndexAccessExpr*>(expr));
+        case HIRExpr::Kind::InlineAsm:
+            return lowerInlineAsm(static_cast<const HIRInlineAsmExpr*>(expr));
     }
     return INVALID_VREG;
 }
@@ -390,6 +424,59 @@ VReg LIRBuilder::lowerBinOp(const HIRBinOpExpr* expr) {
     VReg lhs = lowerExpr(expr->lhs);
     VReg rhs = lowerExpr(expr->rhs);
 
+    // Pointer arithmetic: scale integer operand by sizeof(pointee)
+    auto lhs_kind = (expr->lhs->type < ctx_.types.size())
+        ? ctx_.types.get(expr->lhs->type).kind : TypeKind::Primitive;
+    auto rhs_kind = (expr->rhs->type < ctx_.types.size())
+        ? ctx_.types.get(expr->rhs->type).kind : TypeKind::Primitive;
+    bool lhs_is_ptr = (lhs_kind == TypeKind::Ptr || lhs_kind == TypeKind::PtrMut);
+    bool rhs_is_ptr = (rhs_kind == TypeKind::Ptr || rhs_kind == TypeKind::PtrMut);
+
+    if ((expr->op == HIRBinOp::Add || expr->op == HIRBinOp::Sub) &&
+        (lhs_is_ptr || rhs_is_ptr)) {
+        // Get pointee size
+        TypeId ptr_type = lhs_is_ptr ? expr->lhs->type : expr->rhs->type;
+        TypeId pointee = ctx_.types.get(ptr_type).ptr.pointee;
+        uint32_t elem_size = ctx_.types.sizeOf(pointee);
+
+        VReg int_operand = lhs_is_ptr ? rhs : lhs;
+        VReg ptr_operand = lhs_is_ptr ? lhs : rhs;
+
+        // Scale: int_operand * elem_size
+        if (elem_size > 1) {
+            VReg scale = freshVReg();
+            LIRInstr sc{};
+            sc.op = LIROp::ConstInt;
+            sc.result = scale;
+            sc.type = TypeTable::I64;
+            sc.const_int.value = static_cast<int64_t>(elem_size);
+            sc.loc = expr->loc;
+            emit(sc);
+
+            VReg scaled = freshVReg();
+            LIRInstr mul{};
+            mul.op = LIROp::Mul;
+            mul.result = scaled;
+            mul.type = TypeTable::I64;
+            mul.bin.lhs = int_operand;
+            mul.bin.rhs = scale;
+            mul.loc = expr->loc;
+            emit(mul);
+            int_operand = scaled;
+        }
+
+        VReg r = freshVReg();
+        LIRInstr i{};
+        i.op = (expr->op == HIRBinOp::Add) ? LIROp::Add : LIROp::Sub;
+        i.result = r;
+        i.type = expr->type;
+        i.bin.lhs = ptr_operand;
+        i.bin.rhs = int_operand;
+        i.loc = expr->loc;
+        emit(i);
+        return r;
+    }
+
     bool is_float = ctx_.types.isFloat(expr->lhs->type);
     LIROp lir_op;
 
@@ -398,6 +485,12 @@ VReg LIRBuilder::lowerBinOp(const HIRBinOpExpr* expr) {
         case HIRBinOp::Sub:   lir_op = is_float ? LIROp::FSub : LIROp::Sub; break;
         case HIRBinOp::Mul:   lir_op = is_float ? LIROp::FMul : LIROp::Mul; break;
         case HIRBinOp::Div:   lir_op = is_float ? LIROp::FDiv : LIROp::Div; break;
+        case HIRBinOp::Mod:   lir_op = LIROp::Mod; break;
+        case HIRBinOp::BitAnd: lir_op = LIROp::BAnd; break;
+        case HIRBinOp::BitOr:  lir_op = LIROp::BOr; break;
+        case HIRBinOp::BitXor: lir_op = LIROp::BXor; break;
+        case HIRBinOp::Shl:   lir_op = LIROp::Shl; break;
+        case HIRBinOp::Shr:   lir_op = LIROp::Shr; break;
         case HIRBinOp::Eq:    lir_op = is_float ? LIROp::FCmpEq : LIROp::ICmpEq; break;
         case HIRBinOp::NotEq: lir_op = is_float ? LIROp::FCmpNe : LIROp::ICmpNe; break;
         case HIRBinOp::Lt:    lir_op = is_float ? LIROp::FCmpLt : LIROp::ICmpLt; break;
@@ -463,6 +556,17 @@ VReg LIRBuilder::lowerUnaryOp(const HIRUnaryOpExpr* expr) {
             VReg r = freshVReg();
             LIRInstr i{};
             i.op = LIROp::Not;
+            i.result = r;
+            i.type = expr->type;
+            i.unary.operand = operand;
+            i.loc = expr->loc;
+            emit(i);
+            return r;
+        }
+        case HIRUnaryOp::BitNot: {
+            VReg r = freshVReg();
+            LIRInstr i{};
+            i.op = LIROp::BNot;  // bitwise complement (x86 NOT)
             i.result = r;
             i.type = expr->type;
             i.unary.operand = operand;
@@ -1026,6 +1130,123 @@ VReg LIRBuilder::lowerDeref(const HIRDerefExpr* expr) {
     return r;
 }
 
+VReg LIRBuilder::lowerCast(const HIRCastExpr* expr) {
+    VReg operand = lowerExpr(expr->operand);
+    VReg r = freshVReg();
+    LIRInstr i{};
+    i.op = LIROp::Cast;
+    i.result = r;
+    i.type = expr->type;
+    i.cast.operand = operand;
+    i.cast.src_type = expr->operand->type;
+    i.loc = expr->loc;
+    emit(i);
+    return r;
+}
+
+// ============================================================================
+// Loop / Break / Continue lowering
+// ============================================================================
+
+VReg LIRBuilder::lowerLoop(const HIRLoopExpr* expr) {
+    // Loop with accumulator pattern:
+    // 1. Evaluate init values
+    // 2. Create header block with parameters (accumulators)
+    // 3. Lower body in header block context
+    // 4. Break -> branch to exit block with value
+    // 5. Continue -> branch back to header with new acc values
+
+    // Save current loop context
+    auto saved_loop_header = current_loop_header_;
+    auto saved_loop_exit = current_loop_exit_;
+    auto saved_loop_result = current_loop_result_;
+
+    // Evaluate initial values
+    std::vector<VReg> init_vals;
+    for (uint32_t i = 0; i < expr->binding_count; ++i) {
+        init_vals.push_back(lowerExpr(expr->bindings[i].init));
+    }
+
+    // Create header and exit blocks
+    uint32_t header_bb = newBlock("loop_header");
+    uint32_t exit_bb = newBlock("loop_exit");
+
+    // Set block parameter types for header
+    for (uint32_t i = 0; i < expr->binding_count; ++i) {
+        blocks_[header_bb].param_types.push_back(expr->bindings[i].type);
+    }
+
+    // Result vreg (allocated in exit block)
+    VReg result = freshVReg();
+    blocks_[exit_bb].param_types.push_back(expr->type);
+
+    // Branch to header with initial values
+    emitBranchWithArgs(header_bb, init_vals);
+
+    // Switch to header block
+    switchToBlock(header_bb);
+
+    // Bind loop variables to block args
+    current_loop_header_ = header_bb;
+    current_loop_exit_ = exit_bb;
+    current_loop_result_ = result;
+
+    for (uint32_t i = 0; i < expr->binding_count; ++i) {
+        VReg arg_vreg = freshVReg();
+        LIRInstr arg_i{};
+        arg_i.op = LIROp::BlockArg;
+        arg_i.result = arg_vreg;
+        arg_i.type = expr->bindings[i].type;
+        arg_i.block_arg.index = i;
+        arg_i.loc = expr->bindings[i].loc;
+        emit(arg_i);
+        locals_[expr->bindings[i].name] = arg_vreg;
+    }
+
+    // Lower body
+    lowerExpr(expr->body);
+
+    // Switch to exit block
+    switchToBlock(exit_bb);
+
+    // Load the result from block arg
+    LIRInstr exit_arg{};
+    exit_arg.op = LIROp::BlockArg;
+    exit_arg.result = result;
+    exit_arg.type = expr->type;
+    exit_arg.block_arg.index = 0;
+    exit_arg.loc = expr->loc;
+    emit(exit_arg);
+
+    // Restore loop context
+    current_loop_header_ = saved_loop_header;
+    current_loop_exit_ = saved_loop_exit;
+    current_loop_result_ = saved_loop_result;
+
+    return result;
+}
+
+VReg LIRBuilder::lowerBreak(const HIRBreakExpr* expr) {
+    std::vector<VReg> args;
+    if (expr->value) {
+        args.push_back(lowerExpr(expr->value));
+    }
+    // Branch to loop exit block, passing the break value as block arg
+    emitBranchWithArgs(current_loop_exit_, args);
+    return args.empty() ? INVALID_VREG : args[0];
+}
+
+VReg LIRBuilder::lowerContinue(const HIRContinueExpr* expr) {
+    // Lower continue args (new accumulator values)
+    std::vector<VReg> args;
+    for (uint32_t i = 0; i < expr->arg_count; ++i) {
+        args.push_back(lowerExpr(expr->args[i]));
+    }
+    // Branch back to loop header with new accumulator values
+    emitBranchWithArgs(current_loop_header_, args);
+    return INVALID_VREG;
+}
+
 // ============================================================================
 // Statement lowering
 // ============================================================================
@@ -1134,7 +1355,201 @@ void LIRBuilder::lowerStmt(const HIRStmt* stmt) {
             emit(store);
             break;
         }
+        case HIRStmt::Kind::IndexAssign: {
+            auto* s = static_cast<const HIRIndexAssignStmt*>(stmt);
+            VReg base = lowerExpr(s->array);
+            VReg idx = lowerExpr(s->index);
+            VReg val = lowerExpr(s->value);
+
+            // Get element size from array type
+            TypeId arr_type = s->array->type;
+            uint32_t elem_size = 8; // default
+            if (arr_type < ctx_.types.size()) {
+                const auto& ti = ctx_.types.get(arr_type);
+                if (ti.kind == TypeKind::Array) {
+                    elem_size = ctx_.types.sizeOf(ti.array.element);
+                }
+            }
+
+            // offset = idx * elem_size
+            VReg offset_vreg = freshVReg();
+            LIRInstr mul{};
+            mul.op = LIROp::Mul;
+            mul.result = offset_vreg;
+            mul.type = TypeTable::I64;
+            mul.bin.lhs = idx;
+            // Create a constant for elem_size
+            VReg es = freshVReg();
+            LIRInstr es_instr{};
+            es_instr.op = LIROp::ConstInt;
+            es_instr.result = es;
+            es_instr.type = TypeTable::I64;
+            es_instr.const_int.value = static_cast<int64_t>(elem_size);
+            emit(es_instr);
+            mul.bin.rhs = es;
+            mul.loc = s->loc;
+            emit(mul);
+
+            // ptr = base + offset (FieldPtr with dynamic offset via Add)
+            VReg elem_ptr = freshVReg();
+            LIRInstr add{};
+            add.op = LIROp::Add;
+            add.result = elem_ptr;
+            add.type = TypeTable::I64;
+            add.bin.lhs = base;
+            add.bin.rhs = offset_vreg;
+            add.loc = s->loc;
+            emit(add);
+
+            // Store value at elem_ptr
+            LIRInstr store{};
+            store.op = LIROp::Store;
+            store.result = INVALID_VREG;
+            store.type = TypeTable::Unit;
+            store.store.ptr = elem_ptr;
+            store.store.value = val;
+            store.loc = s->loc;
+            emit(store);
+            break;
+        }
     }
+}
+
+// ============================================================================
+// ArrayLit / IndexAccess / InlineAsm
+// ============================================================================
+
+VReg LIRBuilder::lowerArrayLit(const HIRArrayLitExpr* expr) {
+    // Get element type and size from the array type
+    TypeId arr_type = expr->type;
+    uint32_t elem_size = 8; // default
+    if (arr_type < ctx_.types.size()) {
+        const auto& ti = ctx_.types.get(arr_type);
+        if (ti.kind == TypeKind::Array) {
+            elem_size = ctx_.types.sizeOf(ti.array.element);
+        }
+    }
+
+    uint32_t total_size = elem_size * expr->element_count;
+    if (total_size < 8) total_size = 8; // minimum allocation
+
+    // StructAlloc for the array
+    VReg base = freshVReg();
+    LIRInstr alloc{};
+    alloc.op = LIROp::StructAlloc;
+    alloc.result = base;
+    alloc.type = expr->type;
+    alloc.struct_alloc.size = total_size;
+    alloc.struct_alloc.align = 8;
+    alloc.loc = expr->loc;
+    emit(alloc);
+
+    // FieldStore for each element: base + elem_size * index
+    for (uint32_t i = 0; i < expr->element_count; ++i) {
+        VReg val = lowerExpr(expr->elements[i]);
+        uint32_t offset = elem_size * i;
+
+        VReg fp = freshVReg();
+        LIRInstr fp_instr{};
+        fp_instr.op = LIROp::FieldPtr;
+        fp_instr.result = fp;
+        fp_instr.type = TypeTable::I64;
+        fp_instr.field_ptr.base = base;
+        fp_instr.field_ptr.offset = offset;
+        fp_instr.loc = expr->loc;
+        emit(fp_instr);
+
+        LIRInstr store{};
+        store.op = LIROp::Store;
+        store.result = INVALID_VREG;
+        store.type = TypeTable::Unit;
+        store.store.ptr = fp;
+        store.store.value = val;
+        store.loc = expr->loc;
+        emit(store);
+    }
+
+    return base;
+}
+
+VReg LIRBuilder::lowerIndexAccess(const HIRIndexAccessExpr* expr) {
+    VReg base = lowerExpr(expr->array);
+    VReg idx = lowerExpr(expr->index);
+
+    // Get element type and size from array type
+    TypeId arr_type = expr->array->type;
+    uint32_t elem_size = 8; // default
+    if (arr_type < ctx_.types.size()) {
+        const auto& ti = ctx_.types.get(arr_type);
+        if (ti.kind == TypeKind::Array) {
+            elem_size = ctx_.types.sizeOf(ti.array.element);
+        }
+    }
+
+    // offset = idx * elem_size
+    VReg es = freshVReg();
+    LIRInstr es_instr{};
+    es_instr.op = LIROp::ConstInt;
+    es_instr.result = es;
+    es_instr.type = TypeTable::I64;
+    es_instr.const_int.value = static_cast<int64_t>(elem_size);
+    emit(es_instr);
+
+    VReg offset_vreg = freshVReg();
+    LIRInstr mul{};
+    mul.op = LIROp::Mul;
+    mul.result = offset_vreg;
+    mul.type = TypeTable::I64;
+    mul.bin.lhs = idx;
+    mul.bin.rhs = es;
+    mul.loc = expr->loc;
+    emit(mul);
+
+    // ptr = base + offset
+    VReg elem_ptr = freshVReg();
+    LIRInstr add{};
+    add.op = LIROp::Add;
+    add.result = elem_ptr;
+    add.type = TypeTable::I64;
+    add.bin.lhs = base;
+    add.bin.rhs = offset_vreg;
+    add.loc = expr->loc;
+    emit(add);
+
+    // Load value at elem_ptr
+    VReg result = freshVReg();
+    LIRInstr load{};
+    load.op = LIROp::Load;
+    load.result = result;
+    load.type = expr->type;
+    load.load.ptr = elem_ptr;
+    load.loc = expr->loc;
+    emit(load);
+
+    return result;
+}
+
+VReg LIRBuilder::lowerInlineAsm(const HIRInlineAsmExpr* expr) {
+    // Copy lines into arena-allocated arrays
+    auto** lines = ctx_.arena.makeArray<const char*>(expr->line_count);
+    auto* lengths = ctx_.arena.makeArray<uint32_t>(expr->line_count);
+    for (uint32_t i = 0; i < expr->line_count; ++i) {
+        lines[i] = expr->lines[i].text;
+        lengths[i] = expr->lines[i].length;
+    }
+
+    VReg result = freshVReg();
+    LIRInstr instr{};
+    instr.op = LIROp::InlineAsm;
+    instr.result = result;
+    instr.type = TypeTable::Unit;
+    instr.inline_asm.lines = lines;
+    instr.inline_asm.line_lengths = lengths;
+    instr.inline_asm.line_count = expr->line_count;
+    instr.loc = expr->loc;
+    emit(instr);
+
+    return result;
 }
 
 // ============================================================================

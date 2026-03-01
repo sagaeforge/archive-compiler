@@ -15,6 +15,11 @@ const char* lirOpName(LIROp op) {
         case LIROp::Mul:         return "mul";
         case LIROp::Div:         return "div";
         case LIROp::Mod:         return "mod";
+        case LIROp::BAnd:        return "band";
+        case LIROp::BOr:         return "bor";
+        case LIROp::BXor:        return "bxor";
+        case LIROp::Shl:         return "shl";
+        case LIROp::Shr:         return "shr";
         case LIROp::FAdd:        return "fadd";
         case LIROp::FSub:        return "fsub";
         case LIROp::FMul:        return "fmul";
@@ -34,6 +39,7 @@ const char* lirOpName(LIROp op) {
         case LIROp::Neg:         return "neg";
         case LIROp::FNeg:        return "fneg";
         case LIROp::Not:         return "not";
+        case LIROp::BNot:        return "bnot";
         case LIROp::AddrOf:      return "addr_of";
         case LIROp::Load:        return "load";
         case LIROp::Store:       return "store";
@@ -44,6 +50,8 @@ const char* lirOpName(LIROp op) {
         case LIROp::Ret:         return "ret";
         case LIROp::Call:        return "call";
         case LIROp::BlockArg:    return "block_arg";
+        case LIROp::Cast:        return "cast";
+        case LIROp::InlineAsm:   return "inline_asm";
     }
     return "?";
 }
@@ -73,6 +81,8 @@ void dumpLIRInstr(const LIRInstr& i, const TypeTable& types, std::ostream& out) 
             break;
         case LIROp::Add: case LIROp::Sub: case LIROp::Mul:
         case LIROp::Div: case LIROp::Mod:
+        case LIROp::BAnd: case LIROp::BOr: case LIROp::BXor:
+        case LIROp::Shl: case LIROp::Shr:
         case LIROp::FAdd: case LIROp::FSub: case LIROp::FMul:
         case LIROp::FDiv:
         case LIROp::ICmpEq: case LIROp::ICmpNe: case LIROp::ICmpLt:
@@ -81,7 +91,7 @@ void dumpLIRInstr(const LIRInstr& i, const TypeTable& types, std::ostream& out) 
         case LIROp::FCmpLe: case LIROp::FCmpGt: case LIROp::FCmpGe:
             out << " %v" << i.bin.lhs << ", %v" << i.bin.rhs;
             break;
-        case LIROp::Neg: case LIROp::FNeg: case LIROp::Not:
+        case LIROp::Neg: case LIROp::FNeg: case LIROp::Not: case LIROp::BNot:
             out << " %v" << i.unary.operand;
             break;
         case LIROp::AddrOf:
@@ -101,6 +111,14 @@ void dumpLIRInstr(const LIRInstr& i, const TypeTable& types, std::ostream& out) 
             break;
         case LIROp::Branch:
             out << " bb" << i.branch.target;
+            if (i.branch.arg_count > 0) {
+                out << "(";
+                for (uint32_t a = 0; a < i.branch.arg_count; ++a) {
+                    if (a > 0) out << ", ";
+                    out << "%v" << i.branch.args[a];
+                }
+                out << ")";
+            }
             break;
         case LIROp::CondBranch:
             out << " %v" << i.cond_branch.cond
@@ -123,6 +141,18 @@ void dumpLIRInstr(const LIRInstr& i, const TypeTable& types, std::ostream& out) 
             break;
         case LIROp::BlockArg:
             out << " $" << i.block_arg.index;
+            break;
+        case LIROp::Cast:
+            out << " %v" << i.cast.operand
+                << " : " << types.name(i.cast.src_type)
+                << " -> " << types.name(i.type);
+            break;
+        case LIROp::InlineAsm:
+            out << " " << i.inline_asm.line_count << " lines";
+            for (uint32_t l = 0; l < i.inline_asm.line_count; ++l) {
+                out << "\n      ; " << std::string_view(i.inline_asm.lines[l],
+                                                         i.inline_asm.line_lengths[l]);
+            }
             break;
     }
 

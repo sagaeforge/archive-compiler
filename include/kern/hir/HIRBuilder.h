@@ -49,6 +49,11 @@ private:
     HIRExpr* buildFieldAccess(const Expr* expr);
     HIRExpr* buildEnumAccess(const Expr* expr);
     HIRExpr* buildUnionVariant(const Expr* expr);
+    HIRExpr* buildCast(const Expr* expr);
+    HIRExpr* buildLoop(const Expr* expr, std::optional<TypeId> ctx_type);
+    HIRExpr* buildArrayLit(const Expr* expr);
+    HIRExpr* buildIndexAccess(const Expr* expr);
+    HIRExpr* buildInlineAsm(const Expr* expr);
 
     // Statement building
     HIRStmt* buildStmt(const Stmt* stmt);

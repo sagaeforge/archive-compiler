@@ -86,6 +86,13 @@ struct HIRExpr {
         UnionVariant,
         AddrOf,
         Deref,
+        Cast,
+        Loop,
+        Break,
+        Continue,
+        ArrayLit,
+        IndexAccess,
+        InlineAsm,
     };
 
     Kind kind;
@@ -115,9 +122,10 @@ struct HIRIdentExpr : HIRExpr {
 };
 
 enum class HIRBinOp : uint8_t {
-    Add, Sub, Mul, Div,
+    Add, Sub, Mul, Div, Mod,
     Eq, NotEq, Lt, LtEq, Gt, GtEq,
-    And, Or
+    And, Or,
+    BitAnd, BitOr, BitXor, Shl, Shr
 };
 
 struct HIRBinOpExpr : HIRExpr {
@@ -127,7 +135,7 @@ struct HIRBinOpExpr : HIRExpr {
 };
 
 enum class HIRUnaryOp : uint8_t {
-    Neg, Not, Deref, AddrOf, AddrOfVar
+    Neg, Not, BitNot, Deref, AddrOf, AddrOfVar
 };
 
 struct HIRUnaryOpExpr : HIRExpr {
@@ -192,6 +200,53 @@ struct HIRUnionVariantExpr : HIRExpr {
     HIRExpr* payload;               // nullable (empty variant)
 };
 
+struct HIRCastExpr : HIRExpr {
+    HIRExpr* operand;
+    TypeId target_type;  // type being cast to (same as this->type)
+};
+
+struct HIRLoopBinding {
+    std::string_view name;  // interned
+    TypeId type;
+    HIRExpr* init;
+    SourceLocation loc;
+};
+
+struct HIRLoopExpr : HIRExpr {
+    HIRLoopBinding* bindings;
+    uint32_t binding_count;
+    HIRExpr* body;
+};
+
+struct HIRBreakExpr : HIRExpr {
+    HIRExpr* value;   // nullable — break value
+};
+
+struct HIRContinueExpr : HIRExpr {
+    HIRExpr** args;
+    uint32_t arg_count;  // new accumulator values
+};
+
+struct HIRArrayLitExpr : HIRExpr {
+    HIRExpr** elements;
+    uint32_t element_count;
+};
+
+struct HIRIndexAccessExpr : HIRExpr {
+    HIRExpr* array;
+    HIRExpr* index;
+};
+
+struct HIRInlineAsmLine {
+    const char* text;
+    uint32_t length;
+};
+
+struct HIRInlineAsmExpr : HIRExpr {
+    HIRInlineAsmLine* lines;
+    uint32_t line_count;
+};
+
 struct HIRAddrOfExpr : HIRExpr {
     HIRExpr* operand;
     bool is_mutable;  // &var vs &
@@ -207,7 +262,7 @@ struct HIRDerefExpr : HIRExpr {
 
 struct HIRStmt {
     enum class Kind : uint8_t {
-        ValDecl, VarDecl, ExprStmt, Assign, FieldAssign, DerefAssign
+        ValDecl, VarDecl, ExprStmt, Assign, FieldAssign, DerefAssign, IndexAssign
     };
     Kind kind;
     SourceLocation loc;
@@ -241,6 +296,12 @@ struct HIRFieldAssignStmt : HIRStmt {
 
 struct HIRDerefAssignStmt : HIRStmt {
     HIRExpr* target;   // deref or field via pointer
+    HIRExpr* value;
+};
+
+struct HIRIndexAssignStmt : HIRStmt {
+    HIRExpr* array;
+    HIRExpr* index;
     HIRExpr* value;
 };
 

@@ -53,11 +53,11 @@ MachModule* CompilerPipeline::buildMachIR(LIRModule* lir) {
 }
 
 void CompilerPipeline::emitASM(MachModule* mach, LIRModule* lir,
-                                std::ostream& asm_out) {
+                                std::ostream& asm_out, bool freestanding) {
     X86Backend backend(ctx_);
     // Use emitter directly since we already have allocated MachIR
     NASMEmitter emitter(asm_out);
-    emitter.emitModule(*mach, *lir);
+    emitter.emitModule(*mach, *lir, freestanding);
 }
 
 int CompilerPipeline::assemble(const std::string& asm_file,
@@ -101,6 +101,22 @@ int CompilerPipeline::link(const std::string& obj_file,
     int ret = std::system(cmd.c_str());
     if (ret != 0) {
         err << "error: linker failed\n";
+        err << "  command: " << cmd << "\n";
+    }
+    return ret;
+}
+
+int CompilerPipeline::linkFreestanding(const std::string& obj_file,
+                                        const std::string& output_file,
+                                        std::ostream& err) {
+    // Freestanding: no _start wrapper, no libc, just raw object → binary
+    std::string cmd = "ld " + obj_file + " -o " + output_file +
+                      " -e _main -platform_version macos 14.0.0 14.0.0 -arch x86_64"
+                      " -static 2>&1";
+
+    int ret = std::system(cmd.c_str());
+    if (ret != 0) {
+        err << "error: linker failed (freestanding)\n";
         err << "  command: " << cmd << "\n";
     }
     return ret;
@@ -213,7 +229,7 @@ int CompilerPipeline::run(const std::string& source, const CompileOptions& opts,
             err << "error: cannot create assembly file '" << asm_file << "'\n";
             return 1;
         }
-        emitASM(mach, lir, asm_out);
+        emitASM(mach, lir, asm_out, opts.freestanding);
     }
 
     if (opts.asm_only) {
@@ -228,7 +244,11 @@ int CompilerPipeline::run(const std::string& source, const CompileOptions& opts,
         return 1;
     }
 
-    if (link(obj_file, opts.output_file, err) != 0) {
+    if (opts.freestanding) {
+        if (linkFreestanding(obj_file, opts.output_file, err) != 0) {
+            return 1;
+        }
+    } else if (link(obj_file, opts.output_file, err) != 0) {
         return 1;
     }
 

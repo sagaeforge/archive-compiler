@@ -21,6 +21,12 @@ void TypeTable::registerPrimitives() {
         auto* ti = arena_.make<TypeInfo>(TypeInfo::makePrimitive(p));
         types_.push_back(ti);
     }
+
+    // Index 13: Never (bottom type !)
+    TypeInfo never_info{};
+    never_info.kind = TypeKind::Never;
+    auto* never_ti = arena_.make<TypeInfo>(never_info);
+    types_.push_back(never_ti);
 }
 
 TypeId TypeTable::add(TypeInfo info) {
@@ -124,6 +130,21 @@ TypeId TypeTable::makeUnion(std::string_view name, std::span<const VariantInfo> 
     return add(ti);
 }
 
+TypeId TypeTable::makeArrayType(TypeId element, uint32_t count) {
+    // Deduplicate: search for existing array type with same element + count
+    for (size_t i = 0; i < types_.size(); ++i) {
+        const auto& t = *types_[i];
+        if (t.kind == TypeKind::Array && t.array.element == element && t.array.count == count) {
+            return static_cast<TypeId>(i);
+        }
+    }
+    TypeInfo ti{};
+    ti.kind = TypeKind::Array;
+    ti.array.element = element;
+    ti.array.count = count;
+    return add(ti);
+}
+
 uint32_t TypeTable::sizeOf(TypeId id) const {
     const auto& ti = get(id);
     switch (ti.kind) {
@@ -161,6 +182,8 @@ uint32_t TypeTable::sizeOf(TypeId id) const {
         return sizeOf(ti.array.element) * ti.array.count;
     case TypeKind::TypeVar:
         return 0;  // unknown at this point
+    case TypeKind::Never:
+        return 0;  // never type has no size
     }
     return 0;
 }
@@ -188,6 +211,8 @@ uint32_t TypeTable::alignOf(TypeId id) const {
     case TypeKind::Array:
         return alignOf(ti.array.element);
     case TypeKind::TypeVar:
+        return 1;
+    case TypeKind::Never:
         return 1;
     }
     return 1;
@@ -263,6 +288,7 @@ const char* TypeTable::name(TypeId id) const {
     case TypeKind::Fn:     return "Fn";
     case TypeKind::Array:  return "Array";
     case TypeKind::TypeVar: return "TypeVar";
+    case TypeKind::Never:  return "!";
     }
     return "?";
 }

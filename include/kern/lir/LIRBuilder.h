@@ -38,6 +38,13 @@ private:
     VReg lowerUnionVariant(const HIRUnionVariantExpr* expr);
     VReg lowerAddrOf(const HIRAddrOfExpr* expr);
     VReg lowerDeref(const HIRDerefExpr* expr);
+    VReg lowerCast(const HIRCastExpr* expr);
+    VReg lowerLoop(const HIRLoopExpr* expr);
+    VReg lowerBreak(const HIRBreakExpr* expr);
+    VReg lowerContinue(const HIRContinueExpr* expr);
+    VReg lowerArrayLit(const HIRArrayLitExpr* expr);
+    VReg lowerIndexAccess(const HIRIndexAccessExpr* expr);
+    VReg lowerInlineAsm(const HIRInlineAsmExpr* expr);
 
     // And/Or short-circuit (phi-slot pattern)
     VReg lowerAndOr(VReg lhs, const HIRExpr* rhs_expr, bool is_and, SourceLocation loc);
@@ -55,6 +62,7 @@ private:
     uint32_t newBlock(std::string_view label);
     void switchToBlock(uint32_t block_idx);
     void emitBranch(uint32_t target);
+    void emitBranchWithArgs(uint32_t target, const std::vector<VReg>& args);
     void emitCondBranch(VReg cond, uint32_t true_bb, uint32_t false_bb);
 
     // Global data
@@ -95,6 +103,11 @@ private:
 
     // Block label counter for uniqueness
     uint32_t label_counter_ = 0;
+
+    // Loop context (for break/continue lowering)
+    uint32_t current_loop_header_ = 0;
+    uint32_t current_loop_exit_ = 0;
+    VReg current_loop_result_ = INVALID_VREG;
 };
 
 } // namespace kern

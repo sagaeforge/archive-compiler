@@ -31,6 +31,7 @@ enum class TypeKind : uint8_t {
     Fn,
     Array,
     TypeVar,
+    Never,  // bottom type (!)
 };
 
 struct FieldInfo {
@@ -131,7 +132,8 @@ public:
     static constexpr TypeId Bool  = 10;
     static constexpr TypeId Unit  = 11;
     static constexpr TypeId Error = 12;
-    static constexpr TypeId PRIMITIVE_COUNT = 13;
+    static constexpr TypeId Never = 13;  // bottom type (!)
+    static constexpr TypeId PRIMITIVE_COUNT = 14;
 
     // Register a new type and return its TypeId.
     TypeId add(TypeInfo info);
@@ -149,6 +151,7 @@ public:
     TypeId makeEnum(std::string_view name, std::span<const std::string_view> variant_names,
                     std::span<const int64_t> values);
     TypeId makeUnion(std::string_view name, std::span<const VariantInfo> variants);
+    TypeId makeArrayType(TypeId element, uint32_t count);
 
     // Type queries
     uint32_t sizeOf(TypeId id) const;

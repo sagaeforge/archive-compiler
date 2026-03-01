@@ -188,9 +188,14 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
 
         case LIROp::Add:
         case LIROp::Sub:
-        case LIROp::Mul:         selectBinOp(instr); break;
-        case LIROp::Div:         selectDiv(instr, false); break;
-        case LIROp::Mod:         selectDiv(instr, true); break;
+        case LIROp::Mul:
+        case LIROp::BAnd:
+        case LIROp::BOr:
+        case LIROp::BXor:       selectBinOp(instr); break;
+        case LIROp::Shl:
+        case LIROp::Shr:        selectShift(instr); break;
+        case LIROp::Div:        selectDiv(instr, false); break;
+        case LIROp::Mod:        selectDiv(instr, true); break;
 
         case LIROp::FAdd:
         case LIROp::FSub:
@@ -214,6 +219,7 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
         case LIROp::Neg:         selectUnaryNeg(instr); break;
         case LIROp::FNeg:        selectUnaryFNeg(instr); break;
         case LIROp::Not:         selectUnaryNot(instr); break;
+        case LIROp::BNot:        selectUnaryBNot(instr); break;
 
         case LIROp::AddrOf:      selectAddrOf(instr); break;
         case LIROp::Load:        selectLoad(instr); break;
@@ -226,6 +232,8 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
         case LIROp::Ret:         selectRet(instr); break;
         case LIROp::Call:        selectCall(instr); break;
         case LIROp::BlockArg:    selectBlockArg(instr); break;
+        case LIROp::Cast:        selectCast(instr); break;
+        case LIROp::InlineAsm:   selectInlineAsm(instr); break;
     }
 }
 
@@ -322,9 +330,12 @@ void InstructionSelector::selectBinOp(const LIRInstr& instr) {
 
     X86Op op;
     switch (instr.op) {
-        case LIROp::Add: op = X86Op::Add; break;
-        case LIROp::Sub: op = X86Op::Sub; break;
-        case LIROp::Mul: op = X86Op::IMul; break;
+        case LIROp::Add:  op = X86Op::Add; break;
+        case LIROp::Sub:  op = X86Op::Sub; break;
+        case LIROp::Mul:  op = X86Op::IMul; break;
+        case LIROp::BAnd: op = X86Op::And; break;
+        case LIROp::BOr:  op = X86Op::Or; break;
+        case LIROp::BXor: op = X86Op::Xor; break;
         default: op = X86Op::Add; break;
     }
 
@@ -377,6 +388,46 @@ void InstructionSelector::selectDiv(const LIRInstr& instr, bool is_mod) {
     PhysReg result_reg = is_mod ? PhysReg::RDX : PhysReg::RAX;
     emit(makeMov(MachOperand::virt(dst),
                  MachOperand::precolored(result_reg), w));
+}
+
+// ============================================================================
+// Shift Ops (need count in CL register)
+// ============================================================================
+
+void InstructionSelector::selectShift(const LIRInstr& instr) {
+    uint8_t w = widthOf(instr.type);
+    VReg dst = instr.result;
+    VReg lhs = instr.bin.lhs;
+    VReg rhs = instr.bin.rhs;
+
+    // x86 pattern: mov dst, lhs; mov cl, rhs; shl/shr dst, cl
+    emit(makeMov(MachOperand::virt(dst), MachOperand::virt(lhs), w));
+
+    // Move shift count to CL (RCX low byte)
+    emit(makeMov(MachOperand::precolored(PhysReg::RCX),
+                 MachOperand::virt(rhs), w));
+
+    // Determine signed vs unsigned for right shift
+    X86Op op;
+    if (instr.op == LIROp::Shl) {
+        op = X86Op::Shl;
+    } else {
+        // Shr: use SAR for signed types, SHR for unsigned
+        bool is_signed = true;
+        if (instr.type < ctx_.types.size()) {
+            const auto& info = ctx_.types.get(instr.type);
+            if (info.kind == TypeKind::Primitive) {
+                auto p = info.primitive.prim;
+                is_signed = !(p == PrimitiveKind::U8 || p == PrimitiveKind::U16 ||
+                              p == PrimitiveKind::U32 || p == PrimitiveKind::U64);
+            }
+        }
+        op = is_signed ? X86Op::Sar : X86Op::Shr;
+    }
+
+    // Shift uses CL as implicit second operand
+    emit(makeAlu(op, MachOperand::virt(dst),
+                 MachOperand::precolored(PhysReg::RCX), w));
 }
 
 // ============================================================================
@@ -555,6 +606,21 @@ void InstructionSelector::selectUnaryNot(const LIRInstr& instr) {
     emit(makeSetcc(CondCode::E, MachOperand::virt(dst)));
 }
 
+void InstructionSelector::selectUnaryBNot(const LIRInstr& instr) {
+    uint8_t w = widthOf(instr.type);
+    VReg src = instr.unary.operand;
+    VReg dst = instr.result;
+
+    // mov dst, src; not dst
+    emit(makeMov(MachOperand::virt(dst), MachOperand::virt(src), w));
+
+    MachInstr not_instr(X86Op::Not);
+    not_instr.width = w;
+    not_instr.operand_count = 1;
+    not_instr.inline_ops[0] = MachOperand::virt(dst);
+    emit(not_instr);
+}
+
 // ============================================================================
 // Memory Operations
 // ============================================================================
@@ -668,6 +734,27 @@ void InstructionSelector::selectStructAlloc(const LIRInstr& instr) {
 
 void InstructionSelector::selectBranch(const LIRInstr& instr,
                                         const LIRFunction& fn) {
+    // If branch has arguments, emit moves to the target block's BlockArg vregs
+    if (instr.branch.arg_count > 0) {
+        uint32_t target_bb = instr.branch.target;
+        const auto& target_block = fn.blocks[target_bb];
+        // Find BlockArg instructions in target block to get their result vregs
+        std::vector<VReg> param_vregs;
+        for (uint32_t i = 0; i < target_block.instr_count; ++i) {
+            if (target_block.instrs[i].op == LIROp::BlockArg) {
+                param_vregs.push_back(target_block.instrs[i].result);
+            } else {
+                break; // BlockArgs are always at the start of a block
+            }
+        }
+        // Emit moves: branch arg[i] → target block_arg vreg[i]
+        uint32_t count = std::min(instr.branch.arg_count,
+                                  static_cast<uint32_t>(param_vregs.size()));
+        for (uint32_t i = 0; i < count; ++i) {
+            emit(makeMov(MachOperand::virt(param_vregs[i]),
+                         MachOperand::virt(instr.branch.args[i]), 64));
+        }
+    }
     auto label = blockLabel(fn, instr.branch.target);
     emit(makeJmp(MachOperand::lbl(label)));
 }
@@ -862,6 +949,75 @@ void InstructionSelector::selectBlockArg(const LIRInstr& instr) {
         return;
     }
     // Non-entry block args are handled by predecessor branch moves (no-op here).
+}
+
+void InstructionSelector::selectCast(const LIRInstr& instr) {
+    VReg src = instr.cast.operand;
+    VReg dst = instr.result;
+    TypeId src_type = instr.cast.src_type;
+    TypeId dst_type = instr.type;
+
+    uint8_t src_w = widthOf(src_type);
+    uint8_t dst_w = widthOf(dst_type);
+
+    // Ptr<->int: both are 64-bit, just mov
+    auto src_kind = (src_type < ctx_.types.size()) ? ctx_.types.get(src_type).kind : TypeKind::Primitive;
+    auto dst_kind = (dst_type < ctx_.types.size()) ? ctx_.types.get(dst_type).kind : TypeKind::Primitive;
+    if (src_kind == TypeKind::Ptr || src_kind == TypeKind::PtrMut ||
+        dst_kind == TypeKind::Ptr || dst_kind == TypeKind::PtrMut) {
+        emit(makeMov(MachOperand::virt(dst), MachOperand::virt(src), 64));
+        return;
+    }
+
+    if (dst_w > src_w) {
+        // Widening: zero-extend or sign-extend
+        bool is_signed = ctx_.types.isSigned(src_type);
+        if (!is_signed) {
+            // Zero-extend: mov + mask
+            emit(makeMov(MachOperand::virt(dst), MachOperand::virt(src), 64));
+            int64_t mask = (src_w == 8) ? 0xFF :
+                           (src_w == 16) ? 0xFFFF :
+                           (src_w == 32) ? 0xFFFFFFFF : -1;
+            if (mask != -1) {
+                emit(makeAlu(X86Op::And, MachOperand::virt(dst),
+                             MachOperand::immediate(mask), 64));
+            }
+        } else {
+            // Sign-extend: shl + sar to propagate sign bit
+            emit(makeMov(MachOperand::virt(dst), MachOperand::virt(src), 64));
+            uint8_t shift = 64 - src_w;
+            emit(makeMov(MachOperand::precolored(PhysReg::RCX),
+                         MachOperand::immediate(shift), 64));
+            emit(makeAlu(X86Op::Shl, MachOperand::virt(dst),
+                         MachOperand::precolored(PhysReg::RCX), 64));
+            emit(makeMov(MachOperand::precolored(PhysReg::RCX),
+                         MachOperand::immediate(shift), 64));
+            emit(makeAlu(X86Op::Sar, MachOperand::virt(dst),
+                         MachOperand::precolored(PhysReg::RCX), 64));
+        }
+    } else if (dst_w < src_w) {
+        // Narrowing: mov + mask to truncate
+        // mov dst, src; and dst, mask
+        emit(makeMov(MachOperand::virt(dst), MachOperand::virt(src), 64));
+        int64_t mask = (dst_w == 8) ? 0xFF :
+                       (dst_w == 16) ? 0xFFFF :
+                       (dst_w == 32) ? 0xFFFFFFFF : -1;
+        emit(makeAlu(X86Op::And, MachOperand::virt(dst),
+                     MachOperand::immediate(mask), 64));
+    } else {
+        // Same width: just mov
+        emit(makeMov(MachOperand::virt(dst), MachOperand::virt(src), 64));
+    }
+}
+
+void InstructionSelector::selectInlineAsm(const LIRInstr& instr) {
+    // Emit raw assembly lines as InlineAsm MachInstr
+    MachInstr mi(X86Op::InlineAsm);
+    mi.operand_count = 0;
+    mi.asm_data.lines = instr.inline_asm.lines;
+    mi.asm_data.line_lengths = instr.inline_asm.line_lengths;
+    mi.asm_data.line_count = instr.inline_asm.line_count;
+    emit(mi);
 }
 
 } // namespace kern

@@ -100,6 +100,43 @@ static void collectCallees(const HIRExpr* expr,
             collectCallees(e->operand, out);
             break;
         }
+        case HIRExpr::Kind::Cast: {
+            auto* e = static_cast<const HIRCastExpr*>(expr);
+            collectCallees(e->operand, out);
+            break;
+        }
+        case HIRExpr::Kind::Loop: {
+            auto* e = static_cast<const HIRLoopExpr*>(expr);
+            for (uint32_t i = 0; i < e->binding_count; ++i)
+                collectCallees(e->bindings[i].init, out);
+            collectCallees(e->body, out);
+            break;
+        }
+        case HIRExpr::Kind::Break: {
+            auto* e = static_cast<const HIRBreakExpr*>(expr);
+            collectCallees(e->value, out);
+            break;
+        }
+        case HIRExpr::Kind::Continue: {
+            auto* e = static_cast<const HIRContinueExpr*>(expr);
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                collectCallees(e->args[i], out);
+            break;
+        }
+        case HIRExpr::Kind::ArrayLit: {
+            auto* e = static_cast<const HIRArrayLitExpr*>(expr);
+            for (uint32_t i = 0; i < e->element_count; ++i)
+                collectCallees(e->elements[i], out);
+            break;
+        }
+        case HIRExpr::Kind::IndexAccess: {
+            auto* e = static_cast<const HIRIndexAccessExpr*>(expr);
+            collectCallees(e->array, out);
+            collectCallees(e->index, out);
+            break;
+        }
+        case HIRExpr::Kind::InlineAsm:
+            break;
     }
 }
 
@@ -128,6 +165,13 @@ static void collectCalleesStmt(const HIRStmt* stmt,
         case HIRStmt::Kind::DerefAssign: {
             auto* s = static_cast<const HIRDerefAssignStmt*>(stmt);
             collectCallees(s->target, out);
+            collectCallees(s->value, out);
+            break;
+        }
+        case HIRStmt::Kind::IndexAssign: {
+            auto* s = static_cast<const HIRIndexAssignStmt*>(stmt);
+            collectCallees(s->array, out);
+            collectCallees(s->index, out);
             collectCallees(s->value, out);
             break;
         }
@@ -211,6 +255,38 @@ static bool exprUsesVar(const HIRExpr* expr) {
             auto* e = static_cast<const HIRDerefExpr*>(expr);
             return exprUsesVar(e->operand);
         }
+        case HIRExpr::Kind::Cast: {
+            auto* e = static_cast<const HIRCastExpr*>(expr);
+            return exprUsesVar(e->operand);
+        }
+        case HIRExpr::Kind::Loop: {
+            auto* e = static_cast<const HIRLoopExpr*>(expr);
+            for (uint32_t i = 0; i < e->binding_count; ++i)
+                if (exprUsesVar(e->bindings[i].init)) return true;
+            return exprUsesVar(e->body);
+        }
+        case HIRExpr::Kind::Break: {
+            auto* e = static_cast<const HIRBreakExpr*>(expr);
+            return exprUsesVar(e->value);
+        }
+        case HIRExpr::Kind::Continue: {
+            auto* e = static_cast<const HIRContinueExpr*>(expr);
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (exprUsesVar(e->args[i])) return true;
+            return false;
+        }
+        case HIRExpr::Kind::ArrayLit: {
+            auto* e = static_cast<const HIRArrayLitExpr*>(expr);
+            for (uint32_t i = 0; i < e->element_count; ++i)
+                if (exprUsesVar(e->elements[i])) return true;
+            return false;
+        }
+        case HIRExpr::Kind::IndexAccess: {
+            auto* e = static_cast<const HIRIndexAccessExpr*>(expr);
+            return exprUsesVar(e->array) || exprUsesVar(e->index);
+        }
+        case HIRExpr::Kind::InlineAsm:
+            return false;
     }
     return false;
 }
@@ -230,6 +306,8 @@ static bool stmtUsesVar(const HIRStmt* stmt) {
             return exprUsesVar(static_cast<const HIRExprStmt*>(stmt)->expr);
         case HIRStmt::Kind::DerefAssign:
             return false; // ptr write, not var mutation
+        case HIRStmt::Kind::IndexAssign:
+            return true; // array mutation counts as var mutation
     }
     return false;
 }
@@ -312,6 +390,38 @@ static bool exprUsesPtrWrite(const HIRExpr* expr) {
             auto* e = static_cast<const HIRDerefExpr*>(expr);
             return exprUsesPtrWrite(e->operand);
         }
+        case HIRExpr::Kind::Cast: {
+            auto* e = static_cast<const HIRCastExpr*>(expr);
+            return exprUsesPtrWrite(e->operand);
+        }
+        case HIRExpr::Kind::Loop: {
+            auto* e = static_cast<const HIRLoopExpr*>(expr);
+            for (uint32_t i = 0; i < e->binding_count; ++i)
+                if (exprUsesPtrWrite(e->bindings[i].init)) return true;
+            return exprUsesPtrWrite(e->body);
+        }
+        case HIRExpr::Kind::Break: {
+            auto* e = static_cast<const HIRBreakExpr*>(expr);
+            return exprUsesPtrWrite(e->value);
+        }
+        case HIRExpr::Kind::Continue: {
+            auto* e = static_cast<const HIRContinueExpr*>(expr);
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (exprUsesPtrWrite(e->args[i])) return true;
+            return false;
+        }
+        case HIRExpr::Kind::ArrayLit: {
+            auto* e = static_cast<const HIRArrayLitExpr*>(expr);
+            for (uint32_t i = 0; i < e->element_count; ++i)
+                if (exprUsesPtrWrite(e->elements[i])) return true;
+            return false;
+        }
+        case HIRExpr::Kind::IndexAccess: {
+            auto* e = static_cast<const HIRIndexAccessExpr*>(expr);
+            return exprUsesPtrWrite(e->array) || exprUsesPtrWrite(e->index);
+        }
+        case HIRExpr::Kind::InlineAsm:
+            return false;
     }
     return false;
 }
@@ -332,6 +442,136 @@ static bool stmtUsesPtrWrite(const HIRStmt* stmt) {
         case HIRStmt::Kind::FieldAssign: {
             auto* s = static_cast<const HIRFieldAssignStmt*>(stmt);
             return exprUsesPtrWrite(s->target) || exprUsesPtrWrite(s->value);
+        }
+        case HIRStmt::Kind::IndexAssign: {
+            auto* s = static_cast<const HIRIndexAssignStmt*>(stmt);
+            return exprUsesPtrWrite(s->array) || exprUsesPtrWrite(s->index) ||
+                   exprUsesPtrWrite(s->value);
+        }
+    }
+    return false;
+}
+
+// ============================================================================
+// Helper: check if HIR function body contains inline asm (→ ImpureIo)
+// ============================================================================
+
+static bool exprUsesInlineAsm(const HIRExpr* expr);
+static bool stmtUsesInlineAsm(const HIRStmt* stmt);
+
+static bool exprUsesInlineAsm(const HIRExpr* expr) {
+    if (!expr) return false;
+    switch (expr->kind) {
+        case HIRExpr::Kind::InlineAsm:
+            return true;
+        case HIRExpr::Kind::IntLit:
+        case HIRExpr::Kind::FloatLit:
+        case HIRExpr::Kind::BoolLit:
+        case HIRExpr::Kind::StringLit:
+        case HIRExpr::Kind::Ident:
+        case HIRExpr::Kind::EnumAccess:
+            return false;
+        case HIRExpr::Kind::BinOp: {
+            auto* e = static_cast<const HIRBinOpExpr*>(expr);
+            return exprUsesInlineAsm(e->lhs) || exprUsesInlineAsm(e->rhs);
+        }
+        case HIRExpr::Kind::UnaryOp:
+            return exprUsesInlineAsm(static_cast<const HIRUnaryOpExpr*>(expr)->operand);
+        case HIRExpr::Kind::Call: {
+            auto* e = static_cast<const HIRCallExpr*>(expr);
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (exprUsesInlineAsm(e->args[i])) return true;
+            return false;
+        }
+        case HIRExpr::Kind::If: {
+            auto* e = static_cast<const HIRIfExpr*>(expr);
+            return exprUsesInlineAsm(e->condition) || exprUsesInlineAsm(e->then_branch) ||
+                   exprUsesInlineAsm(e->else_branch);
+        }
+        case HIRExpr::Kind::Match: {
+            auto* e = static_cast<const HIRMatchExpr*>(expr);
+            if (exprUsesInlineAsm(e->scrutinee)) return true;
+            for (uint32_t i = 0; i < e->arm_count; ++i) {
+                if (e->arms[i].guard && exprUsesInlineAsm(e->arms[i].guard)) return true;
+                if (exprUsesInlineAsm(e->arms[i].body)) return true;
+            }
+            return false;
+        }
+        case HIRExpr::Kind::Block: {
+            auto* e = static_cast<const HIRBlockExpr*>(expr);
+            for (uint32_t i = 0; i < e->stmt_count; ++i)
+                if (stmtUsesInlineAsm(e->stmts[i])) return true;
+            return exprUsesInlineAsm(e->result);
+        }
+        case HIRExpr::Kind::Return:
+            return exprUsesInlineAsm(static_cast<const HIRReturnExpr*>(expr)->value);
+        case HIRExpr::Kind::StructLit: {
+            auto* e = static_cast<const HIRStructLitExpr*>(expr);
+            for (uint32_t i = 0; i < e->field_count; ++i)
+                if (exprUsesInlineAsm(e->fields[i].value)) return true;
+            return false;
+        }
+        case HIRExpr::Kind::FieldAccess:
+            return exprUsesInlineAsm(static_cast<const HIRFieldAccessExpr*>(expr)->object);
+        case HIRExpr::Kind::UnionVariant:
+            return exprUsesInlineAsm(static_cast<const HIRUnionVariantExpr*>(expr)->payload);
+        case HIRExpr::Kind::AddrOf:
+            return exprUsesInlineAsm(static_cast<const HIRAddrOfExpr*>(expr)->operand);
+        case HIRExpr::Kind::Deref:
+            return exprUsesInlineAsm(static_cast<const HIRDerefExpr*>(expr)->operand);
+        case HIRExpr::Kind::Cast:
+            return exprUsesInlineAsm(static_cast<const HIRCastExpr*>(expr)->operand);
+        case HIRExpr::Kind::Loop: {
+            auto* e = static_cast<const HIRLoopExpr*>(expr);
+            for (uint32_t i = 0; i < e->binding_count; ++i)
+                if (exprUsesInlineAsm(e->bindings[i].init)) return true;
+            return exprUsesInlineAsm(e->body);
+        }
+        case HIRExpr::Kind::Break:
+            return exprUsesInlineAsm(static_cast<const HIRBreakExpr*>(expr)->value);
+        case HIRExpr::Kind::Continue: {
+            auto* e = static_cast<const HIRContinueExpr*>(expr);
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (exprUsesInlineAsm(e->args[i])) return true;
+            return false;
+        }
+        case HIRExpr::Kind::ArrayLit: {
+            auto* e = static_cast<const HIRArrayLitExpr*>(expr);
+            for (uint32_t i = 0; i < e->element_count; ++i)
+                if (exprUsesInlineAsm(e->elements[i])) return true;
+            return false;
+        }
+        case HIRExpr::Kind::IndexAccess: {
+            auto* e = static_cast<const HIRIndexAccessExpr*>(expr);
+            return exprUsesInlineAsm(e->array) || exprUsesInlineAsm(e->index);
+        }
+    }
+    return false;
+}
+
+static bool stmtUsesInlineAsm(const HIRStmt* stmt) {
+    if (!stmt) return false;
+    switch (stmt->kind) {
+        case HIRStmt::Kind::ValDecl:
+            return exprUsesInlineAsm(static_cast<const HIRValDeclStmt*>(stmt)->init);
+        case HIRStmt::Kind::VarDecl:
+            return exprUsesInlineAsm(static_cast<const HIRVarDeclStmt*>(stmt)->init);
+        case HIRStmt::Kind::ExprStmt:
+            return exprUsesInlineAsm(static_cast<const HIRExprStmt*>(stmt)->expr);
+        case HIRStmt::Kind::Assign:
+            return exprUsesInlineAsm(static_cast<const HIRAssignStmt*>(stmt)->value);
+        case HIRStmt::Kind::FieldAssign: {
+            auto* s = static_cast<const HIRFieldAssignStmt*>(stmt);
+            return exprUsesInlineAsm(s->target) || exprUsesInlineAsm(s->value);
+        }
+        case HIRStmt::Kind::DerefAssign: {
+            auto* s = static_cast<const HIRDerefAssignStmt*>(stmt);
+            return exprUsesInlineAsm(s->target) || exprUsesInlineAsm(s->value);
+        }
+        case HIRStmt::Kind::IndexAssign: {
+            auto* s = static_cast<const HIRIndexAssignStmt*>(stmt);
+            return exprUsesInlineAsm(s->array) || exprUsesInlineAsm(s->index) ||
+                   exprUsesInlineAsm(s->value);
         }
     }
     return false;
@@ -413,6 +653,10 @@ void PurityAnalysisPass::run(HIRModule& module, CompilationContext& ctx) {
             // Local: pointer writes → ImpureMem (overrides ImpureMut)
             if (exprUsesPtrWrite(fn->body)) {
                 purity = Purity::ImpureMem;
+            }
+            // Local: inline asm → ImpureIo (overrides all)
+            if (exprUsesInlineAsm(fn->body)) {
+                purity = Purity::ImpureIo;
             }
             // Propagate from callees
             for (auto& callee : call_graph[name]) {
@@ -525,6 +769,44 @@ static void markTailCalls(HIRExpr* expr, bool in_tail_pos,
             markTailCalls(e->operand, false, fn_name);
             break;
         }
+        case HIRExpr::Kind::Cast: {
+            auto* e = static_cast<HIRCastExpr*>(expr);
+            markTailCalls(e->operand, false, fn_name);
+            break;
+        }
+        case HIRExpr::Kind::Loop: {
+            auto* e = static_cast<HIRLoopExpr*>(expr);
+            for (uint32_t i = 0; i < e->binding_count; ++i)
+                markTailCalls(e->bindings[i].init, false, fn_name);
+            markTailCalls(e->body, in_tail_pos, fn_name);
+            break;
+        }
+        case HIRExpr::Kind::Break: {
+            auto* e = static_cast<HIRBreakExpr*>(expr);
+            // break value exits to loop's continuation, NOT tail position
+            markTailCalls(e->value, false, fn_name);
+            break;
+        }
+        case HIRExpr::Kind::Continue: {
+            auto* e = static_cast<HIRContinueExpr*>(expr);
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                markTailCalls(e->args[i], false, fn_name);
+            break;
+        }
+        case HIRExpr::Kind::ArrayLit: {
+            auto* e = static_cast<HIRArrayLitExpr*>(expr);
+            for (uint32_t i = 0; i < e->element_count; ++i)
+                markTailCalls(e->elements[i], false, fn_name);
+            break;
+        }
+        case HIRExpr::Kind::IndexAccess: {
+            auto* e = static_cast<HIRIndexAccessExpr*>(expr);
+            markTailCalls(e->array, false, fn_name);
+            markTailCalls(e->index, false, fn_name);
+            break;
+        }
+        case HIRExpr::Kind::InlineAsm:
+            break;
     }
 }
 
@@ -552,6 +834,13 @@ static void markTailCallsStmt(HIRStmt* stmt, std::string_view fn_name) {
         case HIRStmt::Kind::DerefAssign: {
             auto* s = static_cast<HIRDerefAssignStmt*>(stmt);
             markTailCalls(s->target, false, fn_name);
+            markTailCalls(s->value, false, fn_name);
+            break;
+        }
+        case HIRStmt::Kind::IndexAssign: {
+            auto* s = static_cast<HIRIndexAssignStmt*>(stmt);
+            markTailCalls(s->array, false, fn_name);
+            markTailCalls(s->index, false, fn_name);
             markTailCalls(s->value, false, fn_name);
             break;
         }
@@ -626,6 +915,34 @@ static bool hasCallTo(const HIRExpr* expr, std::string_view fn_name) {
             return hasCallTo(static_cast<const HIRAddrOfExpr*>(expr)->operand, fn_name);
         case HIRExpr::Kind::Deref:
             return hasCallTo(static_cast<const HIRDerefExpr*>(expr)->operand, fn_name);
+        case HIRExpr::Kind::Cast:
+            return hasCallTo(static_cast<const HIRCastExpr*>(expr)->operand, fn_name);
+        case HIRExpr::Kind::Loop: {
+            auto* e = static_cast<const HIRLoopExpr*>(expr);
+            for (uint32_t i = 0; i < e->binding_count; ++i)
+                if (hasCallTo(e->bindings[i].init, fn_name)) return true;
+            return hasCallTo(e->body, fn_name);
+        }
+        case HIRExpr::Kind::Break:
+            return hasCallTo(static_cast<const HIRBreakExpr*>(expr)->value, fn_name);
+        case HIRExpr::Kind::Continue: {
+            auto* e = static_cast<const HIRContinueExpr*>(expr);
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (hasCallTo(e->args[i], fn_name)) return true;
+            return false;
+        }
+        case HIRExpr::Kind::ArrayLit: {
+            auto* e = static_cast<const HIRArrayLitExpr*>(expr);
+            for (uint32_t i = 0; i < e->element_count; ++i)
+                if (hasCallTo(e->elements[i], fn_name)) return true;
+            return false;
+        }
+        case HIRExpr::Kind::IndexAccess: {
+            auto* e = static_cast<const HIRIndexAccessExpr*>(expr);
+            return hasCallTo(e->array, fn_name) || hasCallTo(e->index, fn_name);
+        }
+        case HIRExpr::Kind::InlineAsm:
+            return false;
     }
     return false;
 }
@@ -648,6 +965,11 @@ static bool hasCallToStmt(const HIRStmt* stmt, std::string_view fn_name) {
         case HIRStmt::Kind::DerefAssign: {
             auto* s = static_cast<const HIRDerefAssignStmt*>(stmt);
             return hasCallTo(s->target, fn_name) || hasCallTo(s->value, fn_name);
+        }
+        case HIRStmt::Kind::IndexAssign: {
+            auto* s = static_cast<const HIRIndexAssignStmt*>(stmt);
+            return hasCallTo(s->array, fn_name) || hasCallTo(s->index, fn_name) ||
+                   hasCallTo(s->value, fn_name);
         }
     }
     return false;
@@ -725,6 +1047,35 @@ static bool hasNonTailCall(const HIRExpr* expr, std::string_view fn_name, bool i
             return hasNonTailCall(static_cast<const HIRAddrOfExpr*>(expr)->operand, fn_name, false);
         case HIRExpr::Kind::Deref:
             return hasNonTailCall(static_cast<const HIRDerefExpr*>(expr)->operand, fn_name, false);
+        case HIRExpr::Kind::Cast:
+            return hasNonTailCall(static_cast<const HIRCastExpr*>(expr)->operand, fn_name, false);
+        case HIRExpr::Kind::Loop: {
+            auto* e = static_cast<const HIRLoopExpr*>(expr);
+            for (uint32_t i = 0; i < e->binding_count; ++i)
+                if (hasNonTailCall(e->bindings[i].init, fn_name, false)) return true;
+            return hasNonTailCall(e->body, fn_name, in_tail_pos);
+        }
+        case HIRExpr::Kind::Break:
+            return hasNonTailCall(static_cast<const HIRBreakExpr*>(expr)->value, fn_name, false);
+        case HIRExpr::Kind::Continue: {
+            auto* e = static_cast<const HIRContinueExpr*>(expr);
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (hasNonTailCall(e->args[i], fn_name, false)) return true;
+            return false;
+        }
+        case HIRExpr::Kind::ArrayLit: {
+            auto* e = static_cast<const HIRArrayLitExpr*>(expr);
+            for (uint32_t i = 0; i < e->element_count; ++i)
+                if (hasNonTailCall(e->elements[i], fn_name, false)) return true;
+            return false;
+        }
+        case HIRExpr::Kind::IndexAccess: {
+            auto* e = static_cast<const HIRIndexAccessExpr*>(expr);
+            return hasNonTailCall(e->array, fn_name, false) ||
+                   hasNonTailCall(e->index, fn_name, false);
+        }
+        case HIRExpr::Kind::InlineAsm:
+            return false;
     }
     return false;
 }
@@ -748,6 +1099,12 @@ static bool hasNonTailCallStmt(const HIRStmt* stmt, std::string_view fn_name) {
         case HIRStmt::Kind::DerefAssign: {
             auto* s = static_cast<const HIRDerefAssignStmt*>(stmt);
             return hasNonTailCall(s->target, fn_name, false) ||
+                   hasNonTailCall(s->value, fn_name, false);
+        }
+        case HIRStmt::Kind::IndexAssign: {
+            auto* s = static_cast<const HIRIndexAssignStmt*>(stmt);
+            return hasNonTailCall(s->array, fn_name, false) ||
+                   hasNonTailCall(s->index, fn_name, false) ||
                    hasNonTailCall(s->value, fn_name, false);
         }
     }

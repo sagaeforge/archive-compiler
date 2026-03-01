@@ -191,9 +191,9 @@ TEST_F(LIRBuilderTest, FunctionCall) {
 
 TEST_F(LIRBuilderTest, TailCall) {
     auto* mod = buildLIR(
-        "fn loop(n: i64) -> i64 {\n"
+        "fn countdown(n: i64) -> i64 {\n"
         "    if n <= 0 { n }\n"
-        "    else { loop(n - 1) }\n"
+        "    else { countdown(n - 1) }\n"
         "}"
     );
     ASSERT_NE(mod, nullptr);

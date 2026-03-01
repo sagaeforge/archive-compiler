@@ -12,7 +12,9 @@ public:
     explicit NASMEmitter(std::ostream& out) : out_(out) {}
 
     // Emit a complete module: .rodata + .text sections
-    void emitModule(const MachModule& mod, const LIRModule& lir_mod);
+    // If freestanding=true, omits _start wrapper
+    void emitModule(const MachModule& mod, const LIRModule& lir_mod,
+                    bool freestanding = false);
 
     // Emit a single function (with prologue/epilogue)
     void emitFunction(const MachFunction& fn);

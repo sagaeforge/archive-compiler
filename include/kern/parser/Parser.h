@@ -42,6 +42,7 @@ private:
     Expr* parseCallExpr(std::string_view name, SourceLocation loc);
     Expr* parseStructLit(std::string_view name, SourceLocation loc);
     Expr* parseMatchExpr();
+    Expr* parseLoopExpr();
     Pattern* parsePattern();
 
     // Statements

@@ -17,6 +17,7 @@ static void printUsage(const char* prog) {
               << "  --dump-lir      Dump LIR (lowered SSA)\n"
               << "  --dump-machir   Dump MachIR (x86-64 instructions)\n"
               << "  --dump-purity   Dump purity analysis\n"
+              << "  --freestanding  No _start wrapper, no libc linking\n"
               << "  --help          Show this help\n";
 }
 
@@ -49,6 +50,8 @@ int main(int argc, char** argv) {
             opts.dump_machir = true;
         } else if (arg == "--dump-purity") {
             opts.dump_purity = true;
+        } else if (arg == "--freestanding") {
+            opts.freestanding = true;
         } else if (arg[0] != '-') {
             opts.input_file = arg;
         } else {

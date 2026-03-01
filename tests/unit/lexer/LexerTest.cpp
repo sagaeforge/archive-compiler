@@ -226,23 +226,20 @@ TEST(LexerTest, UnterminatedBlockComment) {
     EXPECT_TRUE(diag.hasErrors());
 }
 
-// --- Error: bare ! character ---
+// --- Bare ! is now Exclaim token (bitwise NOT prefix) ---
 TEST(LexerTest, BareExclamation) {
-    DiagnosticEngine diag;
-    auto r = lexWithErrors("!", diag);
-    EXPECT_TRUE(diag.hasErrors());
-    bool found_error = false;
-    for (auto& t : r.tokens) {
-        if (t.kind == TokenKind::Error) found_error = true;
-    }
-    EXPECT_TRUE(found_error);
+    auto r = lex("!");
+    ASSERT_GE(r.size(), 2u);
+    EXPECT_EQ(r[0].kind, TokenKind::Exclaim);
+    EXPECT_EQ(r[1].kind, TokenKind::Eof);
 }
 
-// --- Error: bare | character ---
+// --- Bare | is now BitOr token ---
 TEST(LexerTest, BarePipe) {
-    DiagnosticEngine diag;
-    auto r = lexWithErrors("|", diag);
-    EXPECT_TRUE(diag.hasErrors());
+    auto r = lex("|");
+    ASSERT_GE(r.size(), 2u);
+    EXPECT_EQ(r[0].kind, TokenKind::BitOr);
+    EXPECT_EQ(r[1].kind, TokenKind::Eof);
 }
 
 // --- Newlines are tokens (not skipped) ---

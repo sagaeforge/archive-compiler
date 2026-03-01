@@ -875,6 +875,13 @@ ValueId IRBuilder::buildExpr(Expr* expr, bool in_tail_position) {
 
             return base;
         }
+
+        case Expr::Kind::Cast:
+        case Expr::Kind::Loop:
+        case Expr::Kind::InlineAsm:
+        case Expr::Kind::ArrayLit:
+        case Expr::Kind::IndexAccess:
+            break;  // not yet implemented in v1 IR
     }
 
     IRInstr dummy;
@@ -1311,6 +1318,10 @@ void IRBuilder::buildStmt(Stmt* stmt) {
             }
             break;
         }
+        case Stmt::Kind::Break:
+        case Stmt::Kind::Continue:
+        case Stmt::Kind::IndexAssign:
+            break;  // not yet implemented in v1 IR
     }
 }
 

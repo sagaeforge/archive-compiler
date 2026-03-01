@@ -43,7 +43,7 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             break;
         case Expr::Kind::BinOp: {
             auto* b = static_cast<const BinOpExpr*>(expr);
-            const char* ops[] = {"+", "-", "*", "/", "==", "!=", "<", "<=", ">", ">=", "and", "or"};
+            const char* ops[] = {"+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "and", "or", "&", "|", "^", "<<", ">>"};
             out << "BinOp(" << ops[static_cast<int>(b->op)] << ")\n";
             dumpExpr(b->lhs, out, ind + 1);
             dumpExpr(b->rhs, out, ind + 1);
@@ -51,7 +51,7 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
         }
         case Expr::Kind::UnaryOp: {
             auto* u = static_cast<const UnaryOpExpr*>(expr);
-            const char* ops[] = {"-", "not", "*", "&", "&var"};
+            const char* ops[] = {"-", "not", "~", "*", "&", "&var"};
             out << "UnaryOp(" << ops[static_cast<int>(u->op)] << ")\n";
             dumpExpr(u->operand, out, ind + 1);
             break;
@@ -123,6 +123,31 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
                         dumpExpr(da->target, out, ind + 3);
                         indent(out, ind + 2); out << "value:\n";
                         dumpExpr(da->value, out, ind + 3);
+                        break;
+                    }
+                    case Stmt::Kind::Break: {
+                        auto* bs = static_cast<const BreakStmt*>(st);
+                        out << "Break\n";
+                        if (bs->value) dumpExpr(bs->value, out, ind + 2);
+                        break;
+                    }
+                    case Stmt::Kind::Continue: {
+                        auto* cs = static_cast<const ContinueStmt*>(st);
+                        out << "Continue(" << cs->arg_count << " args)\n";
+                        for (uint32_t ci = 0; ci < cs->arg_count; ++ci) {
+                            dumpExpr(cs->args[ci], out, ind + 2);
+                        }
+                        break;
+                    }
+                    case Stmt::Kind::IndexAssign: {
+                        auto* ias = static_cast<const IndexAssignStmt*>(st);
+                        out << "IndexAssign\n";
+                        indent(out, ind + 2); out << "array:\n";
+                        dumpExpr(ias->array, out, ind + 3);
+                        indent(out, ind + 2); out << "index:\n";
+                        dumpExpr(ias->index, out, ind + 3);
+                        indent(out, ind + 2); out << "value:\n";
+                        dumpExpr(ias->value, out, ind + 3);
                         break;
                     }
                 }
@@ -209,6 +234,52 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             auto* uv = static_cast<const UnionVariantExpr*>(expr);
             out << "UnionVariant(" << uv->union_name << "::" << uv->variant_name << ")\n";
             if (uv->payload) dumpExpr(uv->payload, out, ind + 1);
+            break;
+        }
+        case Expr::Kind::Cast: {
+            auto* c = static_cast<const CastExpr*>(expr);
+            out << "CastExpr(" << c->target.name << ")\n";
+            dumpExpr(c->operand, out, ind + 1);
+            break;
+        }
+        case Expr::Kind::Loop: {
+            auto* lp = static_cast<const LoopExpr*>(expr);
+            out << "LoopExpr\n";
+            for (uint32_t i = 0; i < lp->binding_count; ++i) {
+                indent(out, ind + 1);
+                out << "binding " << lp->bindings[i].name << ":\n";
+                dumpExpr(lp->bindings[i].init, out, ind + 2);
+            }
+            for (uint32_t i = 0; i < lp->stmt_count; ++i) {
+                indent(out, ind + 1);
+                out << "stmt:\n";
+            }
+            if (lp->result) {
+                indent(out, ind + 1); out << "result:\n";
+                dumpExpr(lp->result, out, ind + 2);
+            }
+            break;
+        }
+        case Expr::Kind::InlineAsm: {
+            auto* ia = static_cast<const InlineAsmExpr*>(expr);
+            out << "InlineAsm(" << ia->line_count << " lines)\n";
+            break;
+        }
+        case Expr::Kind::ArrayLit: {
+            auto* al = static_cast<const ArrayLitExpr*>(expr);
+            out << "ArrayLit(" << al->count << " elements)\n";
+            for (uint32_t i = 0; i < al->count; ++i) {
+                dumpExpr(al->elements[i], out, ind + 1);
+            }
+            break;
+        }
+        case Expr::Kind::IndexAccess: {
+            auto* ia = static_cast<const IndexAccessExpr*>(expr);
+            out << "IndexAccess\n";
+            indent(out, ind + 1); out << "array:\n";
+            dumpExpr(ia->array, out, ind + 2);
+            indent(out, ind + 1); out << "index:\n";
+            dumpExpr(ia->index, out, ind + 2);
             break;
         }
     }
@@ -675,6 +746,29 @@ Param Parser::parseParam() {
 }
 
 TypeRef Parser::parseType() {
+    // Never type: !
+    if (check(TokenKind::Exclaim)) {
+        Token bang = advance();
+        return {TypeRef::Kind::Never, "!", bang.loc};
+    }
+
+    // Array type: [T; N]
+    if (check(TokenKind::LBracket)) {
+        Token bracket = advance(); // consume '['
+        auto* elem = arena_.make<TypeRef>();
+        *elem = parseType();
+        expect(TokenKind::Semicolon, "expected ';' in array type [T; N]");
+        Token size_tok = expect(TokenKind::IntLit, "expected integer size in array type [T; N]");
+        uint32_t arr_size = static_cast<uint32_t>(std::stoull(std::string(size_tok.text)));
+        expect(TokenKind::RBracket, "expected ']' after array type");
+        TypeRef ref;
+        ref.kind = TypeRef::Kind::Array;
+        ref.name = "Array";
+        ref.loc = bracket.loc;
+        ref.array_element = elem;
+        ref.array_size = arr_size;
+        return ref;
+    }
     Token tok = expect(TokenKind::Ident, "expected type name");
     if (tok.text == "Ptr" && check(TokenKind::Lt)) {
         advance(); // consume '<'
@@ -701,21 +795,28 @@ TypeRef Parser::parseType() {
 
 Parser::InfixBP Parser::infixBP(TokenKind kind) {
     switch (kind) {
-        case TokenKind::Pipe:    return {1, 2};
-        case TokenKind::KwOr:    return {3, 4};
-        case TokenKind::KwAnd:   return {5, 6};
+        case TokenKind::Pipe:      return {10, 11};
+        case TokenKind::KwOr:      return {20, 21};
+        case TokenKind::KwAnd:     return {30, 31};
         case TokenKind::EqEq:
-        case TokenKind::NotEq:   return {7, 8};
+        case TokenKind::NotEq:     return {40, 41};
         case TokenKind::Lt:
         case TokenKind::LtEq:
         case TokenKind::Gt:
-        case TokenKind::GtEq:    return {9, 10};
+        case TokenKind::GtEq:     return {50, 51};
+        case TokenKind::BitOr:     return {60, 61};
+        case TokenKind::BitXor:    return {70, 71};
+        case TokenKind::Ampersand: return {80, 81};  // bitwise AND (infix)
         case TokenKind::Plus:
-        case TokenKind::Minus:   return {11, 12};
+        case TokenKind::Minus:     return {90, 91};
+        case TokenKind::Shl:
+        case TokenKind::Shr:       return {100, 101};
         case TokenKind::Star:
-        case TokenKind::Slash:   return {20, 21};
-        case TokenKind::Dot:     return {30, 31};
-        default:                 return {0, 0};
+        case TokenKind::Slash:
+        case TokenKind::Percent:   return {110, 111};
+        case TokenKind::KwAs:      return {130, 131};
+        case TokenKind::Dot:       return {200, 201};
+        default:                   return {0, 0};
     }
 }
 
@@ -723,9 +824,10 @@ uint8_t Parser::prefixBP(TokenKind kind) {
     switch (kind) {
         case TokenKind::Minus:
         case TokenKind::KwNot:
+        case TokenKind::Tilde:     // ~x (bitwise NOT)
         case TokenKind::Star:      // *ptr (deref)
         case TokenKind::Ampersand: // &x (addr-of)
-            return 25;
+            return 125;
         default:
             return 0;
     }
@@ -733,19 +835,25 @@ uint8_t Parser::prefixBP(TokenKind kind) {
 
 BinOpKind Parser::tokenToBinOp(TokenKind kind) {
     switch (kind) {
-        case TokenKind::Plus:    return BinOpKind::Add;
-        case TokenKind::Minus:   return BinOpKind::Sub;
-        case TokenKind::Star:    return BinOpKind::Mul;
-        case TokenKind::Slash:   return BinOpKind::Div;
-        case TokenKind::EqEq:    return BinOpKind::Eq;
-        case TokenKind::NotEq:   return BinOpKind::NotEq;
-        case TokenKind::Lt:      return BinOpKind::Lt;
-        case TokenKind::LtEq:    return BinOpKind::LtEq;
-        case TokenKind::Gt:      return BinOpKind::Gt;
-        case TokenKind::GtEq:    return BinOpKind::GtEq;
-        case TokenKind::KwAnd:   return BinOpKind::And;
-        case TokenKind::KwOr:    return BinOpKind::Or;
-        default:                 return BinOpKind::Add; // unreachable
+        case TokenKind::Plus:      return BinOpKind::Add;
+        case TokenKind::Minus:     return BinOpKind::Sub;
+        case TokenKind::Star:      return BinOpKind::Mul;
+        case TokenKind::Slash:     return BinOpKind::Div;
+        case TokenKind::Percent:   return BinOpKind::Mod;
+        case TokenKind::EqEq:      return BinOpKind::Eq;
+        case TokenKind::NotEq:     return BinOpKind::NotEq;
+        case TokenKind::Lt:        return BinOpKind::Lt;
+        case TokenKind::LtEq:      return BinOpKind::LtEq;
+        case TokenKind::Gt:        return BinOpKind::Gt;
+        case TokenKind::GtEq:      return BinOpKind::GtEq;
+        case TokenKind::KwAnd:     return BinOpKind::And;
+        case TokenKind::KwOr:      return BinOpKind::Or;
+        case TokenKind::Ampersand: return BinOpKind::BitAnd;
+        case TokenKind::BitOr:     return BinOpKind::BitOr;
+        case TokenKind::BitXor:    return BinOpKind::BitXor;
+        case TokenKind::Shl:       return BinOpKind::Shl;
+        case TokenKind::Shr:       return BinOpKind::Shr;
+        default:                   return BinOpKind::Add; // unreachable
     }
 }
 
@@ -759,9 +867,27 @@ Expr* Parser::parseExprInfix(Expr* lhs, uint8_t minBP) {
         skipNewlines();
         TokenKind op = peek().kind;
         bool on_new_line = peek().loc.line > lhs_line;
-        if (on_new_line && (op == TokenKind::Star || op == TokenKind::Ampersand)) {
+        if (on_new_line && (op == TokenKind::Star || op == TokenKind::Ampersand ||
+                             op == TokenKind::Tilde)) {
             break;
         }
+        // Index access: arr[idx] — postfix, same precedence as '.'
+        if (op == TokenKind::LBracket && !on_new_line) {
+            if (200 < minBP) break; // same precedence as Dot
+            advance(); // consume '['
+            skipNewlines();
+            Expr* idx = parseExpr();
+            skipNewlines();
+            expect(TokenKind::RBracket, "expected ']' after index");
+            auto* ia = arena_.make<IndexAccessExpr>();
+            ia->kind = Expr::Kind::IndexAccess;
+            ia->loc = lhs->loc;
+            ia->array = lhs;
+            ia->index = idx;
+            lhs = ia;
+            continue;
+        }
+
         auto [lBP, rBP] = infixBP(op);
         if (lBP == 0 || lBP < minBP) break;
 
@@ -815,6 +941,17 @@ Expr* Parser::parseExprInfix(Expr* lhs, uint8_t minBP) {
             continue;
         }
 
+        // Cast operator: expr as Type
+        if (op == TokenKind::KwAs) {
+            auto* cast = arena_.make<CastExpr>();
+            cast->kind = Expr::Kind::Cast;
+            cast->loc = opTok.loc;
+            cast->operand = lhs;
+            cast->target = parseType();
+            lhs = cast;
+            continue;
+        }
+
         Expr* rhs = parseExpr(rBP);
 
         auto* bin = arena_.make<BinOpExpr>();
@@ -839,7 +976,8 @@ Expr* Parser::parsePrimary() {
     Token tok = peek();
 
     // Prefix operators
-    if (tok.kind == TokenKind::Minus || tok.kind == TokenKind::KwNot) {
+    if (tok.kind == TokenKind::Minus || tok.kind == TokenKind::KwNot ||
+        tok.kind == TokenKind::Tilde) {
         Token opTok = advance();
         uint8_t rBP = prefixBP(opTok.kind);
         Expr* operand = parseExpr(rBP);
@@ -847,7 +985,9 @@ Expr* Parser::parsePrimary() {
         auto* unary = arena_.make<UnaryOpExpr>();
         unary->kind = Expr::Kind::UnaryOp;
         unary->loc = opTok.loc;
-        unary->op = (opTok.kind == TokenKind::Minus) ? UnaryOpKind_t::Neg : UnaryOpKind_t::Not;
+        unary->op = (opTok.kind == TokenKind::Minus) ? UnaryOpKind_t::Neg
+                   : (opTok.kind == TokenKind::Tilde) ? UnaryOpKind_t::BitNot
+                   : UnaryOpKind_t::Not;
         unary->operand = operand;
         return unary;
     }
@@ -999,6 +1139,32 @@ Expr* Parser::parsePrimary() {
         return ident;
     }
 
+    // Array literal: [expr1, expr2, ...]
+    if (tok.kind == TokenKind::LBracket) {
+        advance(); // consume '['
+        skipNewlines();
+        std::vector<Expr*> elems;
+        if (!check(TokenKind::RBracket)) {
+            elems.push_back(parseExpr());
+            while (match(TokenKind::Comma)) {
+                skipNewlines();
+                if (check(TokenKind::RBracket)) break; // trailing comma
+                elems.push_back(parseExpr());
+            }
+        }
+        skipNewlines();
+        expect(TokenKind::RBracket, "expected ']' after array elements");
+        auto* arr = arena_.make<ArrayLitExpr>();
+        arr->kind = Expr::Kind::ArrayLit;
+        arr->loc = tok.loc;
+        arr->count = static_cast<uint32_t>(elems.size());
+        arr->elements = arena_.makeArray<Expr*>(elems.size());
+        for (size_t i = 0; i < elems.size(); ++i) {
+            arr->elements[i] = elems[i];
+        }
+        return arr;
+    }
+
     // Match expression
     if (tok.kind == TokenKind::KwMatch) {
         return parseMatchExpr();
@@ -1007,6 +1173,40 @@ Expr* Parser::parsePrimary() {
     // If expression
     if (tok.kind == TokenKind::KwIf) {
         return parseIfExpr();
+    }
+
+    // Inline assembly: asm { "line1"; "line2"; }
+    if (tok.kind == TokenKind::KwAsm) {
+        advance(); // consume 'asm'
+        expect(TokenKind::LBrace, "expected '{' after 'asm'");
+        skipNewlines();
+        std::vector<StringLitExpr*> lines;
+        while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+            Token str_tok = expect(TokenKind::StringLit, "expected string literal in asm block");
+            auto* sle = arena_.make<StringLitExpr>();
+            sle->kind = Expr::Kind::StringLit;
+            sle->loc = str_tok.loc;
+            // Process escape sequences (same as regular string parsing)
+            sle->data = str_tok.text.data() + 1;  // skip opening quote
+            sle->length = static_cast<uint32_t>(str_tok.text.size() - 2);  // skip quotes
+            lines.push_back(sle);
+            while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+        }
+        expect(TokenKind::RBrace, "expected '}' after asm block");
+        auto* asmExpr = arena_.make<InlineAsmExpr>();
+        asmExpr->kind = Expr::Kind::InlineAsm;
+        asmExpr->loc = tok.loc;
+        asmExpr->line_count = static_cast<uint32_t>(lines.size());
+        asmExpr->lines = arena_.makeArray<StringLitExpr*>(lines.size());
+        for (size_t i = 0; i < lines.size(); ++i) {
+            asmExpr->lines[i] = lines[i];
+        }
+        return asmExpr;
+    }
+
+    // Loop expression
+    if (tok.kind == TokenKind::KwLoop) {
+        return parseLoopExpr();
     }
 
     // Block expression
@@ -1105,6 +1305,45 @@ Expr* Parser::parseBlockExpr() {
         // Try to parse val/var declaration
         if (check(TokenKind::KwVal) || check(TokenKind::KwVar)) {
             stmts.push_back(parseValDecl());
+        } else if (check(TokenKind::KwBreak)) {
+            Token brk_tok = advance(); // consume 'break'
+            auto* bs = arena_.make<BreakStmt>();
+            bs->kind = Stmt::Kind::Break;
+            bs->loc = brk_tok.loc;
+            // Check if there's a value to break with
+            if (!check(TokenKind::RBrace) && !check(TokenKind::Newline) &&
+                !check(TokenKind::Semicolon) && !check(TokenKind::Eof)) {
+                bs->value = parseExpr();
+            } else {
+                bs->value = nullptr;
+            }
+            stmts.push_back(bs);
+        } else if (check(TokenKind::KwContinue)) {
+            Token cont_tok = advance(); // consume 'continue'
+            auto* cs = arena_.make<ContinueStmt>();
+            cs->kind = Stmt::Kind::Continue;
+            cs->loc = cont_tok.loc;
+            // Parse accumulator update args: continue(expr1, expr2, ...)
+            if (match(TokenKind::LParen)) {
+                std::vector<Expr*> args;
+                if (!check(TokenKind::RParen)) {
+                    args.push_back(parseExpr());
+                    while (match(TokenKind::Comma)) {
+                        skipNewlines();
+                        args.push_back(parseExpr());
+                    }
+                }
+                expect(TokenKind::RParen, "expected ')' after continue args");
+                cs->arg_count = static_cast<uint32_t>(args.size());
+                cs->args = arena_.makeArray<Expr*>(args.size());
+                for (size_t i = 0; i < args.size(); ++i) {
+                    cs->args[i] = args[i];
+                }
+            } else {
+                cs->arg_count = 0;
+                cs->args = nullptr;
+            }
+            stmts.push_back(cs);
         } else if (check(TokenKind::Ident)) {
             // Could be assignment, field assignment, or an expression
             Token identTok = peek();
@@ -1152,16 +1391,30 @@ Expr* Parser::parseBlockExpr() {
                 lhs = ident;
             }
 
-            // Parse dot chains only (just Dot infix, highest precedence)
-            while (check(TokenKind::Dot)) {
-                Token dotTok = advance();
-                Token field = expect(TokenKind::Ident, "expected field name after '.'");
-                auto* fa = arena_.make<FieldAccessExpr>();
-                fa->kind = Expr::Kind::FieldAccess;
-                fa->loc = dotTok.loc;
-                fa->object = lhs;
-                fa->field_name = field.text;
-                lhs = fa;
+            // Parse dot chains and index access (highest precedence postfix)
+            while (check(TokenKind::Dot) || check(TokenKind::LBracket)) {
+                if (check(TokenKind::Dot)) {
+                    Token dotTok = advance();
+                    Token field = expect(TokenKind::Ident, "expected field name after '.'");
+                    auto* fa = arena_.make<FieldAccessExpr>();
+                    fa->kind = Expr::Kind::FieldAccess;
+                    fa->loc = dotTok.loc;
+                    fa->object = lhs;
+                    fa->field_name = field.text;
+                    lhs = fa;
+                } else {
+                    advance(); // consume '['
+                    skipNewlines();
+                    Expr* idx = parseExpr();
+                    skipNewlines();
+                    expect(TokenKind::RBracket, "expected ']' after index");
+                    auto* ia = arena_.make<IndexAccessExpr>();
+                    ia->kind = Expr::Kind::IndexAccess;
+                    ia->loc = lhs->loc;
+                    ia->array = lhs;
+                    ia->index = idx;
+                    lhs = ia;
+                }
             }
             skipNewlines();
 
@@ -1169,7 +1422,16 @@ Expr* Parser::parseBlockExpr() {
                 advance(); // consume '='
                 skipNewlines();
                 Expr* value = parseExpr();
-                if (lhs->kind == Expr::Kind::FieldAccess) {
+                if (lhs->kind == Expr::Kind::IndexAccess) {
+                    auto* ia_expr = static_cast<IndexAccessExpr*>(lhs);
+                    auto* ias = arena_.make<IndexAssignStmt>();
+                    ias->kind = Stmt::Kind::IndexAssign;
+                    ias->loc = identTok.loc;
+                    ias->array = ia_expr->array;
+                    ias->index = ia_expr->index;
+                    ias->value = value;
+                    stmts.push_back(ias);
+                } else if (lhs->kind == Expr::Kind::FieldAccess) {
                     auto* fa_stmt = arena_.make<FieldAssignStmt>();
                     fa_stmt->kind = Stmt::Kind::FieldAssign;
                     fa_stmt->loc = identTok.loc;
@@ -1205,8 +1467,22 @@ Expr* Parser::parseBlockExpr() {
             Expr* expr = parseExpr();
             skipNewlines();
 
+            // Check for index assignment: arr[idx] = val
+            if (check(TokenKind::Eq) && expr->kind == Expr::Kind::IndexAccess) {
+                advance(); // consume '='
+                skipNewlines();
+                Expr* value = parseExpr();
+                auto* ia_expr = static_cast<IndexAccessExpr*>(expr);
+                auto* ias = arena_.make<IndexAssignStmt>();
+                ias->kind = Stmt::Kind::IndexAssign;
+                ias->loc = expr->loc;
+                ias->array = ia_expr->array;
+                ias->index = ia_expr->index;
+                ias->value = value;
+                stmts.push_back(ias);
+            }
             // Check for deref assignment: *ptr = val or (*ptr).field = val
-            if (check(TokenKind::Eq) && isDerefTarget(expr)) {
+            else if (check(TokenKind::Eq) && isDerefTarget(expr)) {
                 advance(); // consume '='
                 skipNewlines();
                 Expr* value = parseExpr();
@@ -1348,6 +1624,175 @@ Expr* Parser::parseMatchExpr() {
         matchExpr->arms[i] = arms[i];
     }
     return matchExpr;
+}
+
+// loop(acc = init, ...) { body }
+Expr* Parser::parseLoopExpr() {
+    SourceLocation loc = peek().loc;
+    expect(TokenKind::KwLoop, "expected 'loop'");
+
+    // Parse bindings: loop(acc = 0, count = 10) { ... }
+    std::vector<LoopBinding> bindings;
+    if (match(TokenKind::LParen)) {
+        if (!check(TokenKind::RParen)) {
+            do {
+                skipNewlines();
+                LoopBinding b;
+                Token name_tok = expect(TokenKind::Ident, "expected binding name");
+                b.name = name_tok.text;
+                expect(TokenKind::Eq, "expected '=' after binding name");
+                skipNewlines();
+                b.init = parseExpr();
+                bindings.push_back(b);
+            } while (match(TokenKind::Comma));
+        }
+        expect(TokenKind::RParen, "expected ')' after loop bindings");
+    }
+    skipNewlines();
+
+    // Parse body as a block: { stmts... }
+    // We parse the block body inline (not as a full BlockExpr) to get stmts + result
+    expect(TokenKind::LBrace, "expected '{' for loop body");
+    skipNewlines();
+
+    std::vector<Stmt*> stmts;
+    Expr* result = nullptr;
+
+    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        // val/var declarations
+        if (check(TokenKind::KwVal) || check(TokenKind::KwVar)) {
+            stmts.push_back(parseValDecl());
+        } else if (check(TokenKind::KwBreak)) {
+            Token brk_tok = advance();
+            auto* bs = arena_.make<BreakStmt>();
+            bs->kind = Stmt::Kind::Break;
+            bs->loc = brk_tok.loc;
+            if (!check(TokenKind::RBrace) && !check(TokenKind::Newline) &&
+                !check(TokenKind::Semicolon) && !check(TokenKind::Eof)) {
+                bs->value = parseExpr();
+            } else {
+                bs->value = nullptr;
+            }
+            stmts.push_back(bs);
+        } else if (check(TokenKind::KwContinue)) {
+            Token cont_tok = advance();
+            auto* cs = arena_.make<ContinueStmt>();
+            cs->kind = Stmt::Kind::Continue;
+            cs->loc = cont_tok.loc;
+            if (match(TokenKind::LParen)) {
+                std::vector<Expr*> args;
+                if (!check(TokenKind::RParen)) {
+                    args.push_back(parseExpr());
+                    while (match(TokenKind::Comma)) {
+                        skipNewlines();
+                        args.push_back(parseExpr());
+                    }
+                }
+                expect(TokenKind::RParen, "expected ')' after continue args");
+                cs->arg_count = static_cast<uint32_t>(args.size());
+                cs->args = arena_.makeArray<Expr*>(args.size());
+                for (size_t i = 0; i < args.size(); ++i) {
+                    cs->args[i] = args[i];
+                }
+            } else {
+                cs->arg_count = 0;
+                cs->args = nullptr;
+            }
+            stmts.push_back(cs);
+        } else if (check(TokenKind::Ident)) {
+            // Could be assignment or expression
+            Token identTok = peek();
+            advance();
+            skipNewlines();
+
+            Expr* lhs;
+            if (check(TokenKind::LParen)) {
+                lhs = parseCallExpr(identTok.text, identTok.loc);
+            } else {
+                auto* ident = arena_.make<IdentExpr>();
+                ident->kind = Expr::Kind::Ident;
+                ident->loc = identTok.loc;
+                ident->name = identTok.text;
+                lhs = ident;
+            }
+
+            // Parse dot chains
+            while (check(TokenKind::Dot)) {
+                Token dotTok = advance();
+                Token field = expect(TokenKind::Ident, "expected field name after '.'");
+                auto* fa = arena_.make<FieldAccessExpr>();
+                fa->kind = Expr::Kind::FieldAccess;
+                fa->loc = dotTok.loc;
+                fa->object = lhs;
+                fa->field_name = field.text;
+                lhs = fa;
+            }
+            skipNewlines();
+
+            if (check(TokenKind::Eq)) {
+                advance();
+                skipNewlines();
+                Expr* value = parseExpr();
+                if (lhs->kind == Expr::Kind::FieldAccess) {
+                    auto* fa_stmt = arena_.make<FieldAssignStmt>();
+                    fa_stmt->kind = Stmt::Kind::FieldAssign;
+                    fa_stmt->loc = identTok.loc;
+                    fa_stmt->target = lhs;
+                    fa_stmt->value = value;
+                    stmts.push_back(fa_stmt);
+                } else {
+                    auto* assign = arena_.make<AssignStmt>();
+                    assign->kind = Stmt::Kind::Assign;
+                    assign->loc = identTok.loc;
+                    assign->name = identTok.text;
+                    assign->value = value;
+                    stmts.push_back(assign);
+                }
+            } else {
+                lhs = parseExprInfix(lhs, 0);
+                skipNewlines();
+                if (check(TokenKind::RBrace)) {
+                    result = lhs;
+                } else {
+                    auto* exprStmt = arena_.make<ExprStmt>();
+                    exprStmt->kind = Stmt::Kind::ExprStmt;
+                    exprStmt->loc = lhs->loc;
+                    exprStmt->expr = lhs;
+                    stmts.push_back(exprStmt);
+                }
+            }
+        } else {
+            Expr* expr = parseExpr();
+            skipNewlines();
+            if (check(TokenKind::RBrace)) {
+                result = expr;
+            } else {
+                auto* exprStmt = arena_.make<ExprStmt>();
+                exprStmt->kind = Stmt::Kind::ExprStmt;
+                exprStmt->loc = expr->loc;
+                exprStmt->expr = expr;
+                stmts.push_back(exprStmt);
+            }
+        }
+        while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+    }
+    expect(TokenKind::RBrace, "expected '}' after loop body");
+
+    auto* loop = arena_.make<LoopExpr>();
+    loop->kind = Expr::Kind::Loop;
+    loop->loc = loc;
+    loop->binding_count = static_cast<uint32_t>(bindings.size());
+    loop->bindings = arena_.makeArray<LoopBinding>(bindings.size());
+    for (size_t i = 0; i < bindings.size(); ++i) {
+        loop->bindings[i] = bindings[i];
+    }
+    loop->stmt_count = static_cast<uint32_t>(stmts.size());
+    loop->stmts = arena_.makeArray<Stmt*>(stmts.size());
+    for (size_t i = 0; i < stmts.size(); ++i) {
+        loop->stmts[i] = stmts[i];
+    }
+    loop->result = result;
+    return loop;
 }
 
 Pattern* Parser::parsePattern() {

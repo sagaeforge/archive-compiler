@@ -494,6 +494,10 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
             switch (bin->op) {
                 case BinOpKind::Add: case BinOpKind::Sub:
                 case BinOpKind::Mul: case BinOpKind::Div:
+                case BinOpKind::Mod:
+                case BinOpKind::BitAnd: case BinOpKind::BitOr:
+                case BinOpKind::BitXor: case BinOpKind::Shl:
+                case BinOpKind::Shr:
                     operand_ctx = ctx;
                     break;
                 case BinOpKind::Eq:  case BinOpKind::NotEq:
@@ -520,6 +524,32 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
                     if (!(isInteger(lhs) || isFloat(lhs)) || lhs != rhs) {
                         diag_.error(expr->loc,
                             std::string("arithmetic operators require same numeric type operands, got ") +
+                            typeName(lhs) + " and " + typeName(rhs));
+                        result = Type::Error;
+                    } else {
+                        result = lhs;
+                    }
+                    break;
+
+                case BinOpKind::Mod:
+                    if (!isInteger(lhs) || lhs != rhs) {
+                        diag_.error(expr->loc,
+                            std::string("'%' requires same integer type operands, got ") +
+                            typeName(lhs) + " and " + typeName(rhs));
+                        result = Type::Error;
+                    } else {
+                        result = lhs;
+                    }
+                    break;
+
+                case BinOpKind::BitAnd:
+                case BinOpKind::BitOr:
+                case BinOpKind::BitXor:
+                case BinOpKind::Shl:
+                case BinOpKind::Shr:
+                    if (!isInteger(lhs) || lhs != rhs) {
+                        diag_.error(expr->loc,
+                            std::string("bitwise operators require same integer type operands, got ") +
                             typeName(lhs) + " and " + typeName(rhs));
                         result = Type::Error;
                     } else {
@@ -568,6 +598,16 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
                     if (!isSigned(operand) && !isFloat(operand)) {
                         diag_.error(expr->loc,
                             std::string("unary '-' requires signed integer or float operand, got ") +
+                            typeName(operand));
+                        result = Type::Error;
+                    } else {
+                        result = operand;
+                    }
+                    break;
+                case UnaryOpKind_t::BitNot:
+                    if (!isInteger(operand)) {
+                        diag_.error(expr->loc,
+                            std::string("bitwise '~' requires integer operand, got ") +
                             typeName(operand));
                         result = Type::Error;
                     } else {
@@ -1192,6 +1232,27 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
             result = arm_type;
             break;
         }
+
+        case Expr::Kind::Cast:
+            diag_.error(expr->loc, "cast expressions not yet implemented");
+            result = Type::Error;
+            break;
+        case Expr::Kind::Loop:
+            diag_.error(expr->loc, "loop expressions not yet implemented");
+            result = Type::Error;
+            break;
+        case Expr::Kind::InlineAsm:
+            diag_.error(expr->loc, "inline assembly not yet implemented");
+            result = Type::Error;
+            break;
+        case Expr::Kind::ArrayLit:
+            diag_.error(expr->loc, "array literals not yet implemented");
+            result = Type::Error;
+            break;
+        case Expr::Kind::IndexAccess:
+            diag_.error(expr->loc, "index access not yet implemented");
+            result = Type::Error;
+            break;
     }
 
     expr_types_[expr] = result;
@@ -1424,6 +1485,15 @@ void TypeChecker::checkStmt(Stmt* stmt) {
             }
             break;
         }
+        case Stmt::Kind::Break:
+            diag_.error(stmt->loc, "break statements not yet implemented");
+            break;
+        case Stmt::Kind::Continue:
+            diag_.error(stmt->loc, "continue statements not yet implemented");
+            break;
+        case Stmt::Kind::IndexAssign:
+            diag_.error(stmt->loc, "index assignment not yet implemented");
+            break;
     }
 }
 

@@ -1,0 +1,16 @@
+fn diverge(x: i64) -> ! {
+    asm {
+        "ud2"
+    }
+}
+
+fn safe_div(a: i64, b: i64) -> i64 {
+    match b {
+        0 => diverge(0)
+        _ => a / b
+    }
+}
+
+fn main() -> i64 {
+    safe_div(42, 1)
+}

@@ -107,7 +107,9 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             out_ << "movzx ";
             emitOperand(instr.dst(), 64);
             out_ << ", ";
-            out_ << sizePrefix(instr.width) << " ";
+            if (instr.src1().isStack()) {
+                out_ << sizePrefix(instr.width) << " ";
+            }
             emitOperand(instr.src1(), instr.width);
             break;
 
@@ -115,7 +117,9 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             out_ << "movsx ";
             emitOperand(instr.dst(), 64);
             out_ << ", ";
-            out_ << sizePrefix(instr.width) << " ";
+            if (instr.src1().isStack()) {
+                out_ << sizePrefix(instr.width) << " ";
+            }
             emitOperand(instr.src1(), instr.width);
             break;
 
@@ -157,6 +161,15 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             emitOperand(instr.dst(), instr.width);
             out_ << ", ";
             emitOperand(instr.src1(), instr.width);
+            break;
+
+        case X86Op::Shl:
+        case X86Op::Shr:
+        case X86Op::Sar:
+            // x86 shift: op dst, cl
+            out_ << x86OpName(instr.op) << " ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", cl";
             break;
 
         case X86Op::Neg:
@@ -281,6 +294,14 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
 
         case X86Op::Nop:
             out_ << "nop";
+            break;
+
+        case X86Op::InlineAsm:
+            // Emit raw assembly lines directly
+            for (uint32_t i = 0; i < instr.asm_data.line_count; ++i) {
+                if (i > 0) out_ << "\n    ";
+                out_.write(instr.asm_data.lines[i], instr.asm_data.line_lengths[i]);
+            }
             break;
     }
 
@@ -430,7 +451,8 @@ void NASMEmitter::emitStartWrapper() {
 // Module Emission
 // ============================================================================
 
-void NASMEmitter::emitModule(const MachModule& mod, const LIRModule& lir_mod) {
+void NASMEmitter::emitModule(const MachModule& mod, const LIRModule& lir_mod,
+                              bool freestanding) {
     // .rodata first
     emitRodata(lir_mod.globals, lir_mod.global_count);
 
@@ -443,9 +465,14 @@ void NASMEmitter::emitModule(const MachModule& mod, const LIRModule& lir_mod) {
         if (mod.functions[i].name == "main") has_main = true;
     }
 
-    // _start wrapper
-    if (has_main) {
+    // _start wrapper (omitted in freestanding mode)
+    if (has_main && !freestanding) {
         emitStartWrapper();
+    }
+
+    // In freestanding mode, export _main as global entry
+    if (freestanding && has_main) {
+        out_ << "global _main\n";
     }
 }
 

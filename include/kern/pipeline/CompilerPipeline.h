@@ -19,6 +19,7 @@ struct CompileOptions {
     bool dump_lir = false;
     bool dump_machir = false;
     bool dump_purity = false;
+    bool freestanding = false;
 };
 
 // Orchestrates the full compilation pipeline:
@@ -39,12 +40,15 @@ private:
     HIRModule* buildHIR(Module* ast);
     LIRModule* buildLIR(HIRModule* hir);
     MachModule* buildMachIR(LIRModule* lir);
-    void emitASM(MachModule* mach, LIRModule* lir, std::ostream& asm_out);
+    void emitASM(MachModule* mach, LIRModule* lir, std::ostream& asm_out,
+                 bool freestanding = false);
 
     int assemble(const std::string& asm_file, const std::string& obj_file,
                  std::ostream& err);
     int link(const std::string& obj_file, const std::string& output_file,
              std::ostream& err);
+    int linkFreestanding(const std::string& obj_file, const std::string& output_file,
+                         std::ostream& err);
 };
 
 } // namespace kern

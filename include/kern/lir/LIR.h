@@ -25,6 +25,9 @@ enum class LIROp : uint8_t {
     // Integer arithmetic
     Add, Sub, Mul, Div, Mod,
 
+    // Bitwise
+    BAnd, BOr, BXor, Shl, Shr,
+
     // Float arithmetic
     FAdd, FSub, FMul, FDiv,
 
@@ -35,7 +38,10 @@ enum class LIROp : uint8_t {
     FCmpEq, FCmpNe, FCmpLt, FCmpLe, FCmpGt, FCmpGe,
 
     // Unary
-    Neg, FNeg, Not,
+    Neg, FNeg, Not, BNot,
+
+    // Type cast (integer widening/narrowing, int<->ptr)
+    Cast,
 
     // Memory
     AddrOf,         // &x → ptr vreg
@@ -54,6 +60,9 @@ enum class LIROp : uint8_t {
 
     // Block parameter (phi replacement)
     BlockArg,       // loads block parameter by index
+
+    // Inline assembly
+    InlineAsm,      // raw assembly lines (passthrough)
 };
 
 const char* lirOpName(LIROp op);
@@ -75,7 +84,7 @@ struct LIRCallPayload  {
     uint32_t arg_count;
     bool is_tail;
 };
-struct LIRBranchPayload    { uint32_t target; };
+struct LIRBranchPayload    { uint32_t target; VReg* args; uint32_t arg_count; };
 struct LIRCondBrPayload    { VReg cond; uint32_t true_target; uint32_t false_target; };
 struct LIRRetPayload       { VReg value; };
 struct LIRAddrOfPayload    { VReg source; };
@@ -84,6 +93,8 @@ struct LIRStorePayload     { VReg ptr; VReg value; };
 struct LIRFieldPtrPayload  { VReg base; uint32_t offset; };
 struct LIRStructAllocPayload { uint32_t size; uint32_t align; };
 struct LIRBlockArgPayload  { uint32_t index; };
+struct LIRCastPayload      { VReg operand; TypeId src_type; };
+struct LIRInlineAsmPayload { const char** lines; uint32_t* line_lengths; uint32_t line_count; };
 
 struct LIRInstr {
     LIROp op;
@@ -113,6 +124,8 @@ struct LIRInstr {
         LIRFieldPtrPayload  field_ptr;
         LIRStructAllocPayload struct_alloc;
         LIRBlockArgPayload  block_arg;
+        LIRCastPayload      cast;
+        LIRInlineAsmPayload inline_asm;
     };
 };
 

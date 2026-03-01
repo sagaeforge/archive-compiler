@@ -53,6 +53,14 @@ void dumpMachInstr(const MachInstr& instr, std::ostream& out) {
     } else if (instr.op == X86Op::Pseudo_FrameDestroy) {
         out << "frame_destroy\n";
         return;
+    } else if (instr.op == X86Op::InlineAsm) {
+        out << "inline_asm " << instr.asm_data.line_count << " lines";
+        for (uint32_t i = 0; i < instr.asm_data.line_count; ++i) {
+            out << "\n      ; " << std::string_view(instr.asm_data.lines[i],
+                                                     instr.asm_data.line_lengths[i]);
+        }
+        out << "\n";
+        return;
     } else {
         out << x86OpName(instr.op);
     }

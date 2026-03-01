@@ -2,7 +2,7 @@
 
 > 작성일: 2026-03-01
 > 최종 수정: 2026-03-01
-> 상태: **M5a ✅, M5b ✅, M5c ✅, M5d 진행 중**
+> 상태: **M5 전체 완료 ✅** (517 unit + 113 E2E)
 > 선행 조건: M4 완료 (360 unit + 78 E2E)
 
 ---
@@ -17,7 +17,7 @@ M5는 Kern을 원시 타입 전용 언어에서 **복합 타입을 지원하는 
 - **부수효과 없음을 증명**하는 것이 최적화보다 중요. 변할 수 있는 메모리는 프로그래머가 명시적으로 선언
 - 어노테이션은 필요 시 도입 가능 (purity 자동 추론과는 별개 영역)
 
-**순서:** M5a (Struct) ✅ → M5b (Enum + Union) ✅ → M5c (Ptr\<T\>) ✅ → M5d (String) 🔄
+**순서:** M5a (Struct) ✅ → M5b (Enum + Union) ✅ → M5c (Ptr\<T\>) ✅ → M5d (String) ✅ + 에러 경로 커버리지 ✅
 
 ---
 
@@ -527,7 +527,7 @@ update_state(&var my_pcb, 1)     // &var → 변경 가능
 
 ---
 
-## 7. M5d — String (문자열 리터럴) 🔄 진행 중
+## 7. M5d — String (문자열 리터럴) ✅ 완료 (commit 04cec37)
 
 ### 7.1 기능 요구사항
 
@@ -626,7 +626,8 @@ impure(io)     하드웨어 상호작용 (= intrinsic)
 | M5a (Struct) | ~20 | ~6 | 380 unit + 84 E2E | **398 unit + 86 E2E** ✅ |
 | M5b (Enum + Union) | ~20 | ~6 | 400 unit + 90 E2E | **433 unit + 93 E2E** ✅ |
 | M5c (Ptr) | ~15 | ~5 | 415 unit + 95 E2E | **473 unit + 100 E2E** ✅ |
-| M5d (String) | ~10 | ~4 | 425 unit + 99 E2E | 진행 중 🔄 |
+| M5d (String) | ~10 | ~4 | 425 unit + 99 E2E | **494 unit + 105 E2E** ✅ |
+| 에러 경로 커버리지 | +23 | +8 | - | **517 unit + 113 E2E** ✅ |
 
 ---
 
@@ -635,5 +636,6 @@ impure(io)     하드웨어 상호작용 (= intrinsic)
 - [x] ~~M5a 구현~~ → 398 unit + 86 E2E (commit 58d31d4)
 - [x] ~~M5b 구현~~ → 433 unit + 93 E2E (commit a0bbe85)
 - [x] ~~M5c 구현~~ → 473 unit + 100 E2E (commit 8cd3a10)
-- [ ] **M5d (String) 구현** ← 현재 진행 중
-- [ ] M5 완료 후 → v2 아키텍처 마이그레이션 Phase 2 착수 (`.claude/plans/architecture-v2-design.md`)
+- [x] ~~M5d (String) 구현~~ → 494 unit + 105 E2E (commit 04cec37)
+- [x] ~~에러 경로 커버리지~~ → **517 unit + 113 E2E** (commit 0d6fca5)
+- [x] ~~M5 완료~~ → **v2 아키텍처 마이그레이션 Phase 2 착수 가능** (`.claude/plans/architecture-v2-design.md`)

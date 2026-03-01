@@ -28,12 +28,26 @@ enum class TokenKind : uint8_t {
     KwStruct,
     KwEnum,
     KwUnion,
+    KwLoop,
+    KwBreak,
+    KwContinue,
+    KwAs,
+    KwAsm,
+    KwVolatile,
+    KwNoreturn,
 
     // Operators
     Plus,        // +
     Minus,       // -
     Star,        // *
     Slash,       // /
+    Percent,     // %
+    BitOr,       // | (bitwise OR, distinct from |> pipe)
+    BitXor,      // ^
+    Tilde,       // ~
+    Shl,         // <<
+    Shr,         // >>
+    Exclaim,     // !
     Eq,          // =
     EqEq,        // ==
     NotEq,       // !=

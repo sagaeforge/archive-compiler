@@ -86,6 +86,9 @@ const char* x86OpName(X86Op op) {
         case X86Op::Xor:    return "xor";
         case X86Op::And:    return "and";
         case X86Op::Or:     return "or";
+        case X86Op::Shl:    return "shl";
+        case X86Op::Shr:    return "shr";
+        case X86Op::Sar:    return "sar";
         case X86Op::Neg:    return "neg";
         case X86Op::Not:    return "not";
         case X86Op::Cqo:    return "cqo";
@@ -114,6 +117,7 @@ const char* x86OpName(X86Op op) {
         case X86Op::Pseudo_FrameSetup:   return "frame_setup";
         case X86Op::Pseudo_FrameDestroy: return "frame_destroy";
         case X86Op::Nop:    return "nop";
+        case X86Op::InlineAsm: return "inline_asm";
     }
     return "?";
 }

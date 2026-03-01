@@ -145,6 +145,14 @@ void Formatter::formatTypeRef(const TypeRef& t) {
         case TypeRef::Kind::Fn:
             out_ << "fn";
             break;
+        case TypeRef::Kind::Never:
+            out_ << "Never";
+            break;
+        case TypeRef::Kind::Array:
+            out_ << "[";
+            if (t.array_element) formatTypeRef(*t.array_element);
+            out_ << "; " << t.array_size << "]";
+            break;
     }
 }
 
@@ -203,6 +211,7 @@ void Formatter::formatExpr(const Expr* expr) {
             switch (u->op) {
                 case UnaryOpKind::Neg: out_ << "-"; break;
                 case UnaryOpKind::Not: out_ << "not "; break;
+                case UnaryOpKind::BitNot: out_ << "~"; break;
                 case UnaryOpKind::Deref: out_ << "(*"; formatExpr(u->operand); out_ << ")"; return;
                 case UnaryOpKind::AddrOf: out_ << "&"; break;
                 case UnaryOpKind::AddrOfVar: out_ << "&var "; break;
@@ -313,6 +322,83 @@ void Formatter::formatExpr(const Expr* expr) {
             }
             break;
         }
+
+        case Expr::Kind::Cast: {
+            auto* c = static_cast<const CastExpr*>(expr);
+            formatExpr(c->operand);
+            out_ << " as ";
+            formatTypeRef(c->target);
+            break;
+        }
+
+        case Expr::Kind::Loop: {
+            auto* lp = static_cast<const LoopExpr*>(expr);
+            out_ << "loop";
+            if (lp->binding_count > 0) {
+                out_ << "(";
+                for (uint32_t i = 0; i < lp->binding_count; ++i) {
+                    if (i > 0) out_ << ", ";
+                    out_ << lp->bindings[i].name << " = ";
+                    formatExpr(lp->bindings[i].init);
+                }
+                out_ << ")";
+            }
+            out_ << " {\n";
+            indent();
+            for (uint32_t i = 0; i < lp->stmt_count; ++i) {
+                formatStmt(lp->stmts[i]);
+            }
+            if (lp->result) {
+                writeIndent();
+                formatExpr(lp->result);
+                out_ << "\n";
+            }
+            dedent();
+            writeIndent();
+            out_ << "}";
+            break;
+        }
+
+        case Expr::Kind::InlineAsm: {
+            auto* ia = static_cast<const InlineAsmExpr*>(expr);
+            out_ << "asm {\n";
+            indent();
+            for (uint32_t i = 0; i < ia->line_count; ++i) {
+                writeIndent();
+                out_ << "\"";
+                for (uint32_t j = 0; j < ia->lines[i]->length; ++j) {
+                    char c = ia->lines[i]->data[j];
+                    if (c == '"') out_ << "\\\"";
+                    else if (c == '\\') out_ << "\\\\";
+                    else out_ << c;
+                }
+                out_ << "\"\n";
+            }
+            dedent();
+            writeIndent();
+            out_ << "}";
+            break;
+        }
+
+        case Expr::Kind::ArrayLit: {
+            auto* al = static_cast<const ArrayLitExpr*>(expr);
+            out_ << "[";
+            for (uint32_t i = 0; i < al->count; ++i) {
+                if (i > 0) out_ << ", ";
+                formatExpr(al->elements[i]);
+            }
+            out_ << "]";
+            break;
+        }
+
+        case Expr::Kind::IndexAccess: {
+            auto* ia = static_cast<const IndexAccessExpr*>(expr);
+            formatExpr(ia->array);
+            out_ << "[";
+            formatExpr(ia->index);
+            out_ << "]";
+            break;
+        }
     }
 }
 
@@ -362,6 +448,37 @@ void Formatter::formatStmt(const Stmt* stmt) {
             formatExpr(d->target);
             out_ << " = ";
             formatExpr(d->value);
+            break;
+        }
+        case Stmt::Kind::Break: {
+            auto* b = static_cast<const BreakStmt*>(stmt);
+            out_ << "break";
+            if (b->value) {
+                out_ << " ";
+                formatExpr(b->value);
+            }
+            break;
+        }
+        case Stmt::Kind::Continue: {
+            auto* c = static_cast<const ContinueStmt*>(stmt);
+            out_ << "continue";
+            if (c->arg_count > 0) {
+                out_ << "(";
+                for (uint32_t i = 0; i < c->arg_count; ++i) {
+                    if (i > 0) out_ << ", ";
+                    formatExpr(c->args[i]);
+                }
+                out_ << ")";
+            }
+            break;
+        }
+        case Stmt::Kind::IndexAssign: {
+            auto* ia = static_cast<const IndexAssignStmt*>(stmt);
+            formatExpr(ia->array);
+            out_ << "[";
+            formatExpr(ia->index);
+            out_ << "] = ";
+            formatExpr(ia->value);
             break;
         }
     }
@@ -466,6 +583,7 @@ const char* Formatter::binOpStr(BinOpKind op) {
         case BinOpKind::Sub: return "-";
         case BinOpKind::Mul: return "*";
         case BinOpKind::Div: return "/";
+        case BinOpKind::Mod: return "%";
         case BinOpKind::Eq: return "==";
         case BinOpKind::NotEq: return "!=";
         case BinOpKind::Lt: return "<";
@@ -474,6 +592,11 @@ const char* Formatter::binOpStr(BinOpKind op) {
         case BinOpKind::GtEq: return ">=";
         case BinOpKind::And: return "and";
         case BinOpKind::Or: return "or";
+        case BinOpKind::BitAnd: return "&";
+        case BinOpKind::BitOr: return "|";
+        case BinOpKind::BitXor: return "^";
+        case BinOpKind::Shl: return "<<";
+        case BinOpKind::Shr: return ">>";
     }
     return "??";
 }

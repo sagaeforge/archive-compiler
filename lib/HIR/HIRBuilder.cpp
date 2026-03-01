@@ -19,6 +19,26 @@ bool HIRBuilder::isSignedType(TypeId id) const {
     return ctx_.types.isSigned(id);
 }
 
+static bool isPtrType(TypeId id, const TypeTable& types) {
+    if (id >= types.size()) return false;
+    auto k = types.get(id).kind;
+    return k == TypeKind::Ptr || k == TypeKind::PtrMut;
+}
+
+// Never (!) is the bottom type — compatible with any other type.
+static bool typesMatch(TypeId a, TypeId b) {
+    if (a == b) return true;
+    if (a == TypeTable::Never || b == TypeTable::Never) return true;
+    return false;
+}
+
+// When merging two branch types, pick the non-Never type.
+static TypeId mergeTypes(TypeId a, TypeId b) {
+    if (a == TypeTable::Never) return b;
+    if (b == TypeTable::Never) return a;
+    return a; // assumes they match
+}
+
 bool HIRBuilder::intFitsInType(int64_t value, TypeId type) const {
     if (!isIntegerType(type)) return false;
     auto bw = ctx_.types.bitWidth(type);
@@ -58,6 +78,13 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
     if (ref.kind == TypeRef::Kind::Ptr) {
         TypeId pointee = ref.pointee ? resolveType(*ref.pointee) : TypeTable::Error;
         return ctx_.types.makePtr(pointee, ref.is_ptr_var);
+    }
+    if (ref.kind == TypeRef::Kind::Never) {
+        return TypeTable::Never;
+    }
+    if (ref.kind == TypeRef::Kind::Array) {
+        TypeId elem = ref.array_element ? resolveType(*ref.array_element) : TypeTable::Error;
+        return ctx_.types.makeArrayType(elem, ref.array_size);
     }
     if (ref.name == "i8")   return TypeTable::I8;
     if (ref.name == "i16")  return TypeTable::I16;
@@ -281,9 +308,9 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
     // Build body
     hfn->body = buildExpr(fn->body, current_return_type_);
 
-    // Check return type match
+    // Check return type match (Never is bottom type, compatible with anything)
     if (hfn->body && hfn->body->type != TypeTable::Error &&
-        hfn->body->type != current_return_type_) {
+        !typesMatch(hfn->body->type, current_return_type_)) {
         ctx_.diag.error(fn->loc, std::string("function '") + std::string(fn->name) +
                     "' declared to return " + ctx_.types.name(current_return_type_) +
                     " but body has type " + ctx_.types.name(hfn->body->type));
@@ -316,6 +343,11 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
         case Expr::Kind::FieldAccess: return buildFieldAccess(expr);
         case Expr::Kind::EnumAccess:  return buildEnumAccess(expr);
         case Expr::Kind::UnionVariant:return buildUnionVariant(expr);
+        case Expr::Kind::Cast:     return buildCast(expr);
+        case Expr::Kind::Loop:       return buildLoop(expr, ctx_type);
+        case Expr::Kind::InlineAsm:  return buildInlineAsm(expr);
+        case Expr::Kind::ArrayLit:   return buildArrayLit(expr);
+        case Expr::Kind::IndexAccess:return buildIndexAccess(expr);
     }
     return errorExpr(expr->loc);
 }
@@ -409,18 +441,24 @@ HIRExpr* HIRBuilder::buildIdent(const Expr* expr) {
 
 static HIRBinOp convertBinOp(BinOpKind op) {
     switch (op) {
-        case BinOpKind::Add:   return HIRBinOp::Add;
-        case BinOpKind::Sub:   return HIRBinOp::Sub;
-        case BinOpKind::Mul:   return HIRBinOp::Mul;
-        case BinOpKind::Div:   return HIRBinOp::Div;
-        case BinOpKind::Eq:    return HIRBinOp::Eq;
-        case BinOpKind::NotEq: return HIRBinOp::NotEq;
-        case BinOpKind::Lt:    return HIRBinOp::Lt;
-        case BinOpKind::LtEq:  return HIRBinOp::LtEq;
-        case BinOpKind::Gt:    return HIRBinOp::Gt;
-        case BinOpKind::GtEq:  return HIRBinOp::GtEq;
-        case BinOpKind::And:   return HIRBinOp::And;
-        case BinOpKind::Or:    return HIRBinOp::Or;
+        case BinOpKind::Add:    return HIRBinOp::Add;
+        case BinOpKind::Sub:    return HIRBinOp::Sub;
+        case BinOpKind::Mul:    return HIRBinOp::Mul;
+        case BinOpKind::Div:    return HIRBinOp::Div;
+        case BinOpKind::Mod:    return HIRBinOp::Mod;
+        case BinOpKind::Eq:     return HIRBinOp::Eq;
+        case BinOpKind::NotEq:  return HIRBinOp::NotEq;
+        case BinOpKind::Lt:     return HIRBinOp::Lt;
+        case BinOpKind::LtEq:   return HIRBinOp::LtEq;
+        case BinOpKind::Gt:     return HIRBinOp::Gt;
+        case BinOpKind::GtEq:   return HIRBinOp::GtEq;
+        case BinOpKind::And:    return HIRBinOp::And;
+        case BinOpKind::Or:     return HIRBinOp::Or;
+        case BinOpKind::BitAnd: return HIRBinOp::BitAnd;
+        case BinOpKind::BitOr:  return HIRBinOp::BitOr;
+        case BinOpKind::BitXor: return HIRBinOp::BitXor;
+        case BinOpKind::Shl:    return HIRBinOp::Shl;
+        case BinOpKind::Shr:    return HIRBinOp::Shr;
     }
     return HIRBinOp::Add;
 }
@@ -438,6 +476,10 @@ HIRExpr* HIRBuilder::buildBinOp(const Expr* expr, std::optional<TypeId> ctx_type
     switch (bin->op) {
         case BinOpKind::Add: case BinOpKind::Sub:
         case BinOpKind::Mul: case BinOpKind::Div:
+        case BinOpKind::Mod:
+        case BinOpKind::BitAnd: case BinOpKind::BitOr:
+        case BinOpKind::BitXor: case BinOpKind::Shl:
+        case BinOpKind::Shr:
             operand_ctx = ctx_type;
             break;
         case BinOpKind::Eq:  case BinOpKind::NotEq:
@@ -463,10 +505,45 @@ HIRExpr* HIRBuilder::buildBinOp(const Expr* expr, std::optional<TypeId> ctx_type
 
     switch (bin->op) {
         case BinOpKind::Add: case BinOpKind::Sub:
+            // Pointer arithmetic: Ptr<T> + int → Ptr<T>
+            if (isPtrType(lhs_type, ctx_.types) && isIntegerType(rhs_type)) {
+                e->type = lhs_type;
+                break;
+            }
+            if (isIntegerType(lhs_type) && isPtrType(rhs_type, ctx_.types) &&
+                bin->op == BinOpKind::Add) {
+                e->type = rhs_type; // int + Ptr<T> → Ptr<T>
+                break;
+            }
+            [[fallthrough]];
         case BinOpKind::Mul: case BinOpKind::Div:
             if (!(isIntegerType(lhs_type) || isFloatType(lhs_type)) || lhs_type != rhs_type) {
                 ctx_.diag.error(expr->loc,
                     std::string("arithmetic operators require same numeric type operands, got ") +
+                    ctx_.types.name(lhs_type) + " and " + ctx_.types.name(rhs_type));
+                e->type = TypeTable::Error;
+            } else {
+                e->type = lhs_type;
+            }
+            break;
+
+        case BinOpKind::Mod:
+            if (!isIntegerType(lhs_type) || lhs_type != rhs_type) {
+                ctx_.diag.error(expr->loc,
+                    std::string("'%' requires same integer type operands, got ") +
+                    ctx_.types.name(lhs_type) + " and " + ctx_.types.name(rhs_type));
+                e->type = TypeTable::Error;
+            } else {
+                e->type = lhs_type;
+            }
+            break;
+
+        case BinOpKind::BitAnd: case BinOpKind::BitOr:
+        case BinOpKind::BitXor: case BinOpKind::Shl:
+        case BinOpKind::Shr:
+            if (!isIntegerType(lhs_type) || lhs_type != rhs_type) {
+                ctx_.diag.error(expr->loc,
+                    std::string("bitwise operators require same integer type operands, got ") +
                     ctx_.types.name(lhs_type) + " and " + ctx_.types.name(rhs_type));
                 e->type = TypeTable::Error;
             } else {
@@ -565,17 +642,31 @@ HIRExpr* HIRBuilder::buildUnaryOp(const Expr* expr) {
         default: break;
     }
 
-    // Neg, Not
+    // Neg, Not, BitNot
     auto* e = ctx_.arena.make<HIRUnaryOpExpr>();
     e->kind = HIRExpr::Kind::UnaryOp;
     e->loc = expr->loc;
-    e->op = (unary->op == UnaryOpKind_t::Neg) ? HIRUnaryOp::Neg : HIRUnaryOp::Not;
+    if (unary->op == UnaryOpKind_t::Neg)
+        e->op = HIRUnaryOp::Neg;
+    else if (unary->op == UnaryOpKind_t::BitNot)
+        e->op = HIRUnaryOp::BitNot;
+    else
+        e->op = HIRUnaryOp::Not;
     e->operand = buildExpr(unary->operand,
         (unary->op == UnaryOpKind_t::Neg) ? std::nullopt : std::nullopt);
 
     TypeId op_type = e->operand->type;
     if (op_type == TypeTable::Error) {
         e->type = TypeTable::Error;
+    } else if (unary->op == UnaryOpKind_t::BitNot) {
+        if (!isIntegerType(op_type)) {
+            ctx_.diag.error(expr->loc,
+                std::string("bitwise '~' requires integer operand, got ") +
+                ctx_.types.name(op_type));
+            e->type = TypeTable::Error;
+        } else {
+            e->type = op_type;
+        }
     } else if (unary->op == UnaryOpKind_t::Neg) {
         if (!isSignedType(op_type) && !isFloatType(op_type)) {
             ctx_.diag.error(expr->loc,
@@ -658,12 +749,12 @@ HIRExpr* HIRBuilder::buildIf(const Expr* expr, std::optional<TypeId> ctx_type) {
         e->else_branch = buildExpr(ifE->else_branch, ctx_type);
         TypeId then_t = e->then_branch->type;
         TypeId else_t = e->else_branch->type;
-        if (then_t != TypeTable::Error && else_t != TypeTable::Error && then_t != else_t) {
+        if (then_t != TypeTable::Error && else_t != TypeTable::Error && !typesMatch(then_t, else_t)) {
             ctx_.diag.error(expr->loc, std::string("if branches have different types: ") +
                         ctx_.types.name(then_t) + " vs " + ctx_.types.name(else_t));
             e->type = TypeTable::Error;
         } else {
-            e->type = e->then_branch->type;
+            e->type = mergeTypes(then_t, else_t);
         }
     } else {
         e->else_branch = nullptr;
@@ -702,7 +793,7 @@ HIRExpr* HIRBuilder::buildReturn(const Expr* expr) {
 
     if (ret->value) {
         e->value = buildExpr(ret->value, current_return_type_);
-        if (e->value->type != TypeTable::Error && e->value->type != current_return_type_) {
+        if (e->value->type != TypeTable::Error && !typesMatch(e->value->type, current_return_type_)) {
             ctx_.diag.error(expr->loc, std::string("return type mismatch: expected ") +
                         ctx_.types.name(current_return_type_) + ", got " +
                         ctx_.types.name(e->value->type));
@@ -957,6 +1048,195 @@ HIRExpr* HIRBuilder::buildUnionVariant(const Expr* expr) {
 }
 
 // ============================================================================
+// Cast building
+// ============================================================================
+
+HIRExpr* HIRBuilder::buildCast(const Expr* expr) {
+    auto* cast_expr = static_cast<const CastExpr*>(expr);
+    TypeId target_type = resolveType(cast_expr->target);
+    if (target_type == TypeTable::Error) {
+        return errorExpr(expr->loc);
+    }
+
+    HIRExpr* operand = buildExpr(cast_expr->operand);
+    if (operand->type == TypeTable::Error) {
+        return errorExpr(expr->loc);
+    }
+
+    TypeId src_type = operand->type;
+
+    // Validate cast: integers can cast to other integers, ptrs to ints, ints to ptrs
+    bool src_int = isIntegerType(src_type);
+    bool dst_int = isIntegerType(target_type);
+    bool src_ptr = false, dst_ptr = false;
+    if (src_type < ctx_.types.size()) {
+        auto k = ctx_.types.get(src_type).kind;
+        src_ptr = (k == TypeKind::Ptr || k == TypeKind::PtrMut);
+    }
+    if (target_type < ctx_.types.size()) {
+        auto k = ctx_.types.get(target_type).kind;
+        dst_ptr = (k == TypeKind::Ptr || k == TypeKind::PtrMut);
+    }
+
+    bool valid = (src_int && dst_int) ||
+                 (src_int && dst_ptr) ||
+                 (src_ptr && dst_int) ||
+                 (src_ptr && dst_ptr) ||
+                 (src_type == target_type);
+
+    if (!valid) {
+        ctx_.diag.error(expr->loc, std::string("cannot cast ") +
+            ctx_.types.name(src_type) + " to " + ctx_.types.name(target_type));
+        return errorExpr(expr->loc);
+    }
+
+    // If same type, just return the operand
+    if (src_type == target_type) {
+        return operand;
+    }
+
+    auto* e = ctx_.arena.make<HIRCastExpr>();
+    e->kind = HIRExpr::Kind::Cast;
+    e->loc = expr->loc;
+    e->type = target_type;
+    e->operand = operand;
+    e->target_type = target_type;
+    return e;
+}
+
+// ============================================================================
+// Loop building
+// ============================================================================
+
+HIRExpr* HIRBuilder::buildLoop(const Expr* expr, std::optional<TypeId> ctx_type) {
+    auto* loop = static_cast<const LoopExpr*>(expr);
+    auto* e = ctx_.arena.make<HIRLoopExpr>();
+    e->kind = HIRExpr::Kind::Loop;
+    e->loc = expr->loc;
+
+    // Build bindings
+    e->binding_count = loop->binding_count;
+    e->bindings = ctx_.arena.makeArray<HIRLoopBinding>(loop->binding_count);
+
+    for (uint32_t i = 0; i < loop->binding_count; ++i) {
+        auto& src = loop->bindings[i];
+        auto& dst = e->bindings[i];
+        dst.name = ctx_.strings.intern(src.name);
+        dst.loc = src.init->loc;
+        dst.init = buildExpr(src.init);
+        dst.type = dst.init->type;
+        // Register binding in scope
+        local_vars_[dst.name] = dst.type;
+    }
+
+    // Build body as block expression
+    auto* body = ctx_.arena.make<HIRBlockExpr>();
+    body->kind = HIRExpr::Kind::Block;
+    body->loc = expr->loc;
+
+    std::vector<HIRStmt*> stmts_vec;
+    for (uint32_t i = 0; i < loop->stmt_count; ++i) {
+        stmts_vec.push_back(buildStmt(loop->stmts[i]));
+    }
+    body->stmt_count = static_cast<uint32_t>(stmts_vec.size());
+    body->stmts = ctx_.arena.makeArray<HIRStmt*>(body->stmt_count);
+    for (uint32_t i = 0; i < body->stmt_count; ++i) {
+        body->stmts[i] = stmts_vec[i];
+    }
+
+    if (loop->result) {
+        body->result = buildExpr(loop->result);
+        body->type = body->result->type;
+    } else {
+        body->result = nullptr;
+        body->type = TypeTable::Unit;
+    }
+
+    e->body = body;
+    // Loop type = inferred from break values or ctx_type
+    if (ctx_type.has_value()) {
+        e->type = *ctx_type;
+    } else {
+        e->type = TypeTable::Unit;
+    }
+
+    return e;
+}
+
+// ============================================================================
+// Array building
+// ============================================================================
+
+HIRExpr* HIRBuilder::buildArrayLit(const Expr* expr) {
+    auto* arr = static_cast<const ArrayLitExpr*>(expr);
+    auto* e = ctx_.arena.make<HIRArrayLitExpr>();
+    e->kind = HIRExpr::Kind::ArrayLit;
+    e->loc = expr->loc;
+    e->element_count = arr->count;
+    e->elements = ctx_.arena.makeArray<HIRExpr*>(arr->count);
+
+    // Build each element
+    TypeId elem_type = TypeTable::Error;
+    for (uint32_t i = 0; i < arr->count; ++i) {
+        e->elements[i] = buildExpr(arr->elements[i]);
+        if (i == 0) {
+            elem_type = e->elements[i]->type;
+        }
+    }
+
+    // Create array type [ElemType; N]
+    if (elem_type != TypeTable::Error) {
+        e->type = ctx_.types.makeArrayType(elem_type, arr->count);
+    } else {
+        e->type = TypeTable::Error;
+    }
+    return e;
+}
+
+HIRExpr* HIRBuilder::buildIndexAccess(const Expr* expr) {
+    auto* ia = static_cast<const IndexAccessExpr*>(expr);
+    auto* e = ctx_.arena.make<HIRIndexAccessExpr>();
+    e->kind = HIRExpr::Kind::IndexAccess;
+    e->loc = expr->loc;
+    e->array = buildExpr(ia->array);
+    e->index = buildExpr(ia->index);
+
+    // Determine element type from array type
+    TypeId arr_type = e->array->type;
+    if (arr_type != TypeTable::Error && arr_type < ctx_.types.size()) {
+        const auto& ti = ctx_.types.get(arr_type);
+        if (ti.kind == TypeKind::Array) {
+            e->type = ti.array.element;
+        } else {
+            ctx_.diag.error(expr->loc, "index access on non-array type");
+            e->type = TypeTable::Error;
+        }
+    } else {
+        e->type = TypeTable::Error;
+    }
+    return e;
+}
+
+// ============================================================================
+// Inline assembly building
+// ============================================================================
+
+HIRExpr* HIRBuilder::buildInlineAsm(const Expr* expr) {
+    auto* ia = static_cast<const InlineAsmExpr*>(expr);
+    auto* e = ctx_.arena.make<HIRInlineAsmExpr>();
+    e->kind = HIRExpr::Kind::InlineAsm;
+    e->loc = expr->loc;
+    e->type = TypeTable::Unit;
+    e->line_count = ia->line_count;
+    e->lines = ctx_.arena.makeArray<HIRInlineAsmLine>(ia->line_count);
+    for (uint32_t i = 0; i < ia->line_count; ++i) {
+        e->lines[i].text = ia->lines[i]->data;
+        e->lines[i].length = ia->lines[i]->length;
+    }
+    return e;
+}
+
+// ============================================================================
 // Match building
 // ============================================================================
 
@@ -1118,14 +1398,16 @@ HIRExpr* HIRBuilder::buildMatch(const Expr* expr, std::optional<TypeId> ctx_type
 
         e->arms[i] = {hir_pat, hir_guard, hir_body, ast_arm.loc};
 
-        // Track arm type
+        // Track arm type (Never is bottom type, compatible with anything)
         if (hir_body->type != TypeTable::Error) {
             if (arm_type == TypeTable::Error) {
                 arm_type = hir_body->type;
-            } else if (hir_body->type != arm_type) {
+            } else if (!typesMatch(hir_body->type, arm_type)) {
                 ctx_.diag.error(ast_arm.body->loc,
                     std::string("match arm type mismatch: expected ") +
                     ctx_.types.name(arm_type) + ", got " + ctx_.types.name(hir_body->type));
+            } else {
+                arm_type = mergeTypes(arm_type, hir_body->type);
             }
         }
     }
@@ -1410,6 +1692,51 @@ HIRStmt* HIRBuilder::buildStmt(const Stmt* stmt) {
                     std::string("deref assignment type mismatch: expected ") +
                     ctx_.types.name(target_type) + ", got " + ctx_.types.name(s->value->type));
             }
+            return s;
+        }
+        case Stmt::Kind::Break: {
+            auto* bs = static_cast<const BreakStmt*>(stmt);
+            auto* brk = ctx_.arena.make<HIRBreakExpr>();
+            brk->kind = HIRExpr::Kind::Break;
+            brk->loc = stmt->loc;
+            brk->type = TypeTable::Unit;
+            if (bs->value) {
+                brk->value = buildExpr(bs->value);
+                brk->type = brk->value->type;
+            } else {
+                brk->value = nullptr;
+            }
+            auto* es = ctx_.arena.make<HIRExprStmt>();
+            es->kind = HIRStmt::Kind::ExprStmt;
+            es->loc = stmt->loc;
+            es->expr = brk;
+            return es;
+        }
+        case Stmt::Kind::Continue: {
+            auto* cs = static_cast<const ContinueStmt*>(stmt);
+            auto* cont = ctx_.arena.make<HIRContinueExpr>();
+            cont->kind = HIRExpr::Kind::Continue;
+            cont->loc = stmt->loc;
+            cont->type = TypeTable::Unit;
+            cont->arg_count = cs->arg_count;
+            cont->args = ctx_.arena.makeArray<HIRExpr*>(cs->arg_count);
+            for (uint32_t i = 0; i < cs->arg_count; ++i) {
+                cont->args[i] = buildExpr(cs->args[i]);
+            }
+            auto* es = ctx_.arena.make<HIRExprStmt>();
+            es->kind = HIRStmt::Kind::ExprStmt;
+            es->loc = stmt->loc;
+            es->expr = cont;
+            return es;
+        }
+        case Stmt::Kind::IndexAssign: {
+            auto* ias = static_cast<const IndexAssignStmt*>(stmt);
+            auto* s = ctx_.arena.make<HIRIndexAssignStmt>();
+            s->kind = HIRStmt::Kind::IndexAssign;
+            s->loc = stmt->loc;
+            s->array = buildExpr(ias->array);
+            s->index = buildExpr(ias->index);
+            s->value = buildExpr(ias->value);
             return s;
         }
     }

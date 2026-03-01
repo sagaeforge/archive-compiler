@@ -2,8 +2,8 @@
 
 > 생성: 2026-03-01
 > 최종 수정: 2026-03-01
-> 상태: **Phase 0 완료, Phase 1 완료** (M5 완료 대기 중)
-> 전제: M5 완료 후 Phase 2 착수. 기존 `structural-refactoring-requirements.md`의 결정사항을 포함하되, 아키텍처를 근본적으로 재설계
+> 상태: **Phase 0~4a 완료 (784 unit + 116 E2E)** — Phase 4b/4c/5 착수 가능
+> 전제: M5 완료 ✅. 기존 `structural-refactoring-requirements.md`의 결정사항을 포함하되, 아키텍처를 근본적으로 재설계
 
 ---
 
@@ -11,11 +11,12 @@
 
 ### 현재 아키텍처의 근본적 한계
 
-현재 파이프라인:
+현재 파이프라인 (M5 완료 시점 — 517 unit + 113 E2E, 37 opcodes):
 ```
 Source → Lexer → Parser → [TypeChecker 주석] → IRBuilder → CodeGen → NASM 텍스트
                   AST ─────────────────────────→ IR ──────→ 문자열
 ```
+지원 타입: i8-i64, u8-u64, f32/f64, bool, Unit, struct, enum, union, Ptr<T>, Ptr<var T>, String
 
 이것은 **2-레벨 아키텍처**다. AST에서 IR로의 점프가 너무 크고,
 CodeGen은 IR에서 곧바로 텍스트를 뱉는다.
@@ -807,7 +808,7 @@ class NASMEmitter {
     std::ostream& out_;
 public:
     void emit(const MachFunction& fn);
-    void emitRodata(const FloatConstPool& pool, const StringLitPool& pool);
+    void emitRodata(const GlobalData* globals, uint32_t global_count);
 
 private:
     // 단순한 1:1 변환: MachInstr → NASM 텍스트 줄
@@ -1358,8 +1359,8 @@ private:
 
 ### Phase 0: 준비 — ✅ 완료
 
-- [ ] git tag `v0.5-m5` (M5 완료 후)
-- [ ] E2E 앵커 테스트 분리 확인 (M5 완료 후)
+- [ ] git tag `v0.5-m5` ← **M5 완료됨! 태그 생성 필요**
+- [ ] E2E 앵커 테스트 분리 확인 ← **M5 완료됨! 113개 E2E 중 앵커/dump 분리 필요**
 - [x] `cmake/` 공유 모듈 작성: `KernAddLibrary.cmake`, `KernAddTool.cmake`, `KernCoverage.cmake`
 - [x] CMakeLists.txt에 `CMAKE_MODULE_PATH` + `KERN_COVERAGE` 옵션 추가
 - [x] **스킬 12개 전부 작성 완료** (Phase별 점진 작성 계획에서 선행 완료로 변경):
@@ -1399,7 +1400,7 @@ private:
 - **총 42개 신규 unit tests** (StringPool 13 + TypeSystem 23 + CompilationContext 6)
 - 기존 코드 미변경 — 새 파일만 추가
 
-### Phase 2: HIR 레이어 구축
+### Phase 2: HIR 레이어 구축 — ✅ 완료 (660 unit + 115 E2E, commit f12364f)
 
 ```
 2a. HIR.h 노드 정의 + HIRDump
@@ -1421,7 +1422,7 @@ private:
 ▸ **에이전트 워크플로우**: 2c: `/kern:add-pass PurityAnalysis --level hir` → 구현 → `/kern:build`
 ▸ ~~**환경 작성**: `rules/layer-boundaries.md`~~ ✅ Phase 0에서 선행 완료
 
-### Phase 3: LIR 레이어 + 도구 기반 구축 — 대규모 병렬
+### Phase 3: LIR 레이어 — ✅ 완료 (695 unit + 115 E2E, commit 713e664)
 
 ```
 ┌────────────────────────────┐  ┌─────────────────────┐  ┌──────────────────┐
@@ -1443,7 +1444,7 @@ private:
   - 3b: `/kern:add-tool kern-fmt` → Formatter 구현 → `/kern:test fmt`
   - 3c: `/kern:add-lint <rule>` 반복 → LintEngine 구현 → `/kern:test lint`
 
-### Phase 4: Backend + Debug + IDE — 대규모 병렬
+### Phase 4: Backend + Debug + IDE — 4a ✅ 완료 (784 unit + 116 E2E, commit 25573fb), 4b/4c 미착수
 
 ```
 ┌──────────────────────────────────┐  ┌──────────────────────┐  ┌─────────────────┐
@@ -1475,29 +1476,33 @@ private:
     기존 sema/, ir/, codegen/ 삭제
          │
          ▼
-   ┌─────┴─────────────┐──────────────────┐────────────────┐
-   │ 5b. kern-lsp 연결  │ 5c. kern-dbg 연결 │ 5d. kern-repl  │
-   │  (IDE + fmt + lint │ (Debug + 프로세스  │ (Pipeline 전체  │
-   │   + LSP 프로토콜)   │  제어 + 스택워크)  │  + 증분 평가)   │
-   └────────────────────┘──────────────────┘────────────────┘
+   ┌─────┴─────────────┐────────────────┐
+   │ 5b. kern-lsp 연결  │ 5c. kern-fmt    │
+   │  (IDE + fmt + lint │  (포매터 CLI)   │
+   │   + LSP 프로토콜)   │                │
+   └────────────────────┘────────────────┘
                               │
                               ▼
-                    5e. unit 테스트 전면 재작성
-                    5f. dump E2E 업데이트
-                    5g. 도구별 통합 테스트 (tests/tool/)
+                    5d. unit 테스트 전면 재작성
+                    5e. dump E2E 업데이트
+                    5f. 도구별 통합 테스트 (tests/tool/)
 ```
 
-▸ **5b + 5c + 5d 병렬**: 세 도구 모두 라이브러리 조립만 다름.
-▸ **5e + 5f + 5g 병렬**: 테스트 작성은 서로 독립.
+> ⚠️ **kern-dbg, kern-repl은 Phase 7로 분리** (아래 참조).
+> 이유: kern-dbg는 DWARF 생성 + macOS SIP 제약으로 난이도 극상.
+> kern-repl은 증분 컴파일 모델이 필요하며 Arena generation (8.3) 설계 선행 필수.
+> Phase 5의 스코프를 핵심 파이프라인 안정화에 집중한다.
+
+▸ **5b + 5c 병렬**: 두 도구 모두 라이브러리 조립만 다름.
+▸ **5d + 5e + 5f 병렬**: 테스트 작성은 서로 독립.
 ▸ ~~**스킬 작성**: `/kern:add-ast-node`, `/kern:add-tool`, `/kern:add-type`~~ ✅ Phase 0에서 선행 완료
 ▸ **환경 활성화**: `hooks/anchor-protect.sh` (작성 완료, settings.json에 등록 필요)
 ▸ **환경 완성**: CLAUDE.md 최종 교체, `rules/architecture.md` v1 삭제 → v2 교체
 ▸ **에이전트 워크플로우**:
   - 5a: CompilerPipeline 연결 → `/kern:build` → **69개 앵커 E2E 통과 확인** (최우선)
   - 5b: `/kern:add-tool kern-lsp` → LSP 프로토콜 구현 → `tests/tool/lsp/` 테스트
-  - 5c: `/kern:add-tool kern-dbg` → 디버거 CLI 구현 → `tests/tool/dbg/` 테스트
-  - 5d: `/kern:add-tool kern-repl` → REPL 루프 구현 → `tests/tool/repl/` 테스트
-  - 5e-g: `/kern:e2e-add` 반복 → 전체 테스트 보강
+  - 5c: `/kern:add-tool kern-fmt` → 포매터 CLI 구현 → `tests/tool/fmt/` 테스트
+  - 5d-f: `/kern:e2e-add` 반복 → 전체 테스트 보강
   - 최종: `/kern:coverage` → **전체 lib/ 98% 달성 확인** → `/kern:layer-check`
 
 ### Phase 6: 패키지 매니저 + 표준 라이브러리 (미래)
@@ -1515,6 +1520,32 @@ private:
 ▸ **에이전트 워크플로우**:
   - 6a: `/kern:add-tool kern-pkg` → kern.toml 파서 → 의존성 해석 → `/kern:test pkg`
   - 6b: `/kern:add-type` (Result, Maybe 등) → stdlib .kern 소스 작성 → `/kern:build`
+
+### Phase 7: 고난이도 도구 (Phase 5에서 분리)
+
+> kern-dbg와 kern-repl은 선행 인프라가 충분히 성숙한 후에 착수.
+
+```
+┌───────────────────────┐  ┌──────────────────────┐
+│ 7a. kern-dbg           │  │ 7b. kern-repl         │
+│  선행: DWARF 생성 구현  │  │  선행: Arena gen (8.3) │
+│  선행: SourceMap 완성   │  │  선행: 증분 파싱 모델   │
+│  macOS: codesign 필요   │  │                       │
+│  ptrace → mach API      │  │  compile→exec 루프    │
+└───────────────────────┘  └──────────────────────┘
+```
+
+▸ **7a 선행 조건**:
+  - `lib/Debug/DebugInfoBuilder.cpp`가 DWARF `.debug_info`/`.debug_line` 섹션을 NASM으로 emit
+  - `lib/Debug/SourceMap.cpp`가 MachIR instruction → source location 매핑 제공
+  - macOS에서 디버거 실행: `kern-dbg` 바이너리에 `com.apple.security.get-task-allow` entitlement + codesign
+  - ptrace 대신 macOS Mach API (`task_for_pid`, `thread_get_state`) 사용
+  - **현실적 스코프 축소**: 첫 버전은 breakpoint + continue + print 만 지원. step/backtrace는 후속
+
+▸ **7b 선행 조건**:
+  - Arena generation (Section 8.3) 구현 완료
+  - 증분 파싱: 이전 세대의 심볼 테이블을 새 세대가 참조하는 모델
+  - **현실적 스코프 축소**: 첫 버전은 매 표현식마다 full compile + exec. 증분 최적화는 후속
 
 ### 커버리지 게이트 (Phase별)
 
@@ -1536,15 +1567,16 @@ private:
 
 ### 병렬 실행 요약
 
-| Phase | 순차 (선행) | 병렬 가능 항목 | 병렬 수 | 스킬 선행 작업 | 상태 |
-|-------|-----------|--------------|---------|--------------|------|
-| 0 | 전부 순차 | - | - | ~~스킬 12개 전부 작성~~ | ✅ 완료 |
-| 1 | 1c | 1a, 1b | 2 | - (Phase 0 스킬 사용) | ✅ 완료 |
-| 2 | 2a, 2b, 2f | 2c, 2d, 2e | 3 | ✅ 선행 완료 | ⏳ M5 대기 |
-| 3 | - | 3a, 3b, 3c | 3 | ✅ 선행 완료 | ⏳ Phase 2 대기 |
-| 4 | - | 4a, 4b, 4c | 3 | ✅ 선행 완료 | ⏳ Phase 3 대기 |
-| 5 | 5a | 5b, 5c, 5d / 5e, 5f, 5g | 3+3 | ✅ 선행 완료 | ⏳ Phase 4 대기 |
-| 6 | - | 6a, 6b | 2 | - (Phase 5 스킬 사용) | ⏳ Phase 5 대기 |
+| Phase | 순차 (선행) | 병렬 가능 항목 | 병렬 수 | 검증 수단 | 상태 |
+|-------|-----------|--------------|---------|----------|------|
+| 0 | 전부 순차 | - | - | 기존 E2E | ✅ 완료 |
+| 1 | 1c | 1a, 1b | 2 | unit tests | ✅ 완료 |
+| 2 | 2a, 2b, 2f | 2c, 2d, 2e | 3 | **HIR interpreter** + unit | ✅ 완료 (660 unit + 115 E2E) |
+| 3 | - | 3a, 3b, 3c | 3 | **LIR interpreter** + unit | ✅ 완료 (695 unit + 115 E2E) |
+| 4 | - | 4a, 4b, 4c | 3 | **69 E2E 앵커** (처음!) | 🟡 4a 완료 (784 unit + 116 E2E), 4b/4c 미착수 |
+| 5 | 5a | 5b, 5c / 5d, 5e, 5f | 2+3 | 전체 E2E + coverage | ⏳ Phase 4 대기 |
+| 6 | - | 6a, 6b | 2 | pkg/stdlib 테스트 | ⏳ Phase 5 대기 |
+| 7 | - | 7a, 7b | 2 | 도구별 통합 테스트 | ⏳ Phase 6 대기 |
 
 ---
 
@@ -1580,7 +1612,109 @@ private:
 | Function coverage | 100% | llvm-cov |
 | E2E 앵커 통과율 | 100% | run_tests.sh |
 
-### 8.2 커버리지 인프라
+### 8.2 Phase별 중간 레이어 테스트 전략
+
+빅뱅 전환 중 "dark period"(Phase 2~3)에서 각 레이어의 정확성을 보장하기 위한 테스트 전략.
+
+#### Phase 2 (HIR) 테스트
+
+| 테스트 유형 | 대상 | 방법 |
+|-----------|------|------|
+| **Unit: HIRBuilder** | AST → HIR 변환 정확성 | 수동 구성 AST 입력 → HIR 출력 검증 (타입, 디슈가링) |
+| **Unit: HIR Passes** | Purity, TailCall, Exhaustiveness | HIR 입력 구성 → 패스 실행 → 메타데이터 검증 |
+| **Unit: HIRDump** | 텍스트 출력 정확성 | HIR → dump 텍스트 → 스냅샷 비교 |
+| **Integration: HIR Interpreter** | 의미론 검증 | `.kern` 소스 → Parser → HIRBuilder → HIRInterpreter → exit code 비교 |
+
+**HIR Interpreter 대상**: 순수 정수 계산 테스트 (fib, arith, comparison, match, tce 등 ~30개).
+Float/struct/ptr는 unit test로만 검증 (interpreter 미지원).
+
+#### Phase 3 (LIR) 테스트
+
+| 테스트 유형 | 대상 | 방법 |
+|-----------|------|------|
+| **Unit: LIRBuilder** | HIR → LIR lowering 정확성 | HIR 입력 → LIR 출력 검증 (SSA form, VReg 할당) |
+| **Unit: LIR Passes** | TCO, ConstantFolding, DCE | LIR 입력 → 패스 실행 → LIR 출력 검증 |
+| **Unit: LIRDump** | 텍스트 출력 정확성 | LIR → dump 텍스트 → 스냅샷 비교 |
+| **Integration: LIR Interpreter** | 의미론 검증 | `.kern` → ... → LIR → LIRInterpreter → exit code 비교 |
+
+**LIR Interpreter 대상**: HIR interpreter와 동일한 ~30개 + SSA 특유의 block argument 테스트.
+
+#### Phase 4 (Backend) 테스트
+
+| 테스트 유형 | 대상 | 방법 |
+|-----------|------|------|
+| **Unit: InstructionSelector** | LIR → MachIR 패턴 | LIR opcode → MachInstr 검증 |
+| **Unit: RegisterAllocator** | vreg → phys 매핑 | 수동 MachFunction → allocation 검증 |
+| **Unit: NASMEmitter** | MachIR → NASM text | MachInstr → 텍스트 줄 비교 |
+| **E2E: 전체 파이프라인** | 바이너리 정확성 | **69개 앵커 E2E 테스트 — 이 시점에서 처음 실행 가능** |
+
+#### 테스트 헬퍼 구조
+
+```cpp
+// tests/unit/TestHelpers.h — 모든 레이어에서 재사용
+
+// Source → AST (파싱만)
+Module* parseSource(CompilationContext& ctx, std::string_view source);
+
+// Source → HIR (파싱 + 타입 체크 + 디슈가링)
+HIRModule* buildHIR(CompilationContext& ctx, std::string_view source);
+
+// Source → LIR (파싱 + HIR + lowering)
+LIRModule* buildLIR(CompilationContext& ctx, std::string_view source);
+
+// HIR/LIR interpreter로 실행하고 exit code 반환
+int64_t interpretHIR(CompilationContext& ctx, const HIRModule& module);
+int64_t interpretLIR(CompilationContext& ctx, const LIRModule& module);
+```
+
+### 8.3 Arena 수명 관리 — IDE/REPL 시나리오
+
+> Arena는 bump allocator로, 개별 해제가 불가능하다. 단일 파일 컴파일(kernc)에는 문제없지만,
+> IDE(kern-lsp)와 REPL(kern-repl)에서는 반복적 재파싱/재분석이 필요하므로 별도 설계가 필요하다.
+
+#### 문제
+
+| 시나리오 | 문제점 |
+|---------|--------|
+| **kern-lsp**: 파일 수정 시 re-parse/re-check | 매번 새 Arena를 만들면 TypeId가 무효화됨 |
+| **kern-repl**: 매 표현식마다 compile + execute | Arena가 무한 성장 |
+
+#### 해결: Arena Generation (세대별 관리)
+
+```cpp
+// Phase 4c (IDE) 구현 시 도입
+struct ArenaGeneration {
+    Arena arena;                    // 이 세대의 bump allocator
+    uint32_t generation_id;         // 세대 번호
+};
+
+struct IDECompilationContext {
+    // 영구 데이터 (세대 간 공유)
+    Arena permanent_arena;          // TypeTable, StringPool → 영구
+    StringPool strings;             // 문자열은 영구 (새 문자열만 추가, 삭제 안 함)
+    TypeTable types;                // 타입도 영구 (TypeId 안정성 보장)
+    DiagnosticEngine diag;
+
+    // 세대별 데이터 (파일 수정 시 폐기 + 재생성)
+    ArenaGeneration* current_gen;   // AST, HIR 노드 → 현재 세대에 할당
+
+    void resetGeneration() {
+        // 현재 세대의 Arena를 폐기하고 새 세대 생성
+        // TypeTable, StringPool은 보존 (TypeId 안정성)
+        current_gen = new ArenaGeneration{Arena{}, next_gen_id_++};
+    }
+};
+```
+
+**핵심**: `StringPool`과 `TypeTable`은 영구 Arena에, AST/HIR 노드는 세대별 Arena에 할당.
+파일 수정 시 세대별 Arena만 리셋하면 TypeId와 interned string은 보존된다.
+
+**REPL**: 각 평가를 별도 세대로 관리. N번째 입력의 AST/HIR은 N번째 세대에 할당.
+이전 세대의 결과(값)는 별도 결과 저장소에 복사.
+
+**구현 시점**: Phase 4c (kern_ide 라이브러리) 착수 시. Phase 2~3에서는 단일 CompilationContext로 충분.
+
+### 8.4 커버리지 인프라
 
 #### CMake 커버리지 빌드 옵션
 ```cmake
@@ -1660,7 +1794,7 @@ fi
 echo "PASS"
 ```
 
-### 8.3 테스트 3계층 구조
+### 8.5 테스트 3계층 구조
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -1684,7 +1818,7 @@ echo "PASS"
 └─────────────────────────────────────────────────────┘
 ```
 
-### 8.4 라이브러리별 테스트 전략
+### 8.6 라이브러리별 테스트 전략
 
 | 라이브러리 | 단위 테스트 초점 | 커버리지 핵심 영역 | 예상 테스트 수 |
 |-----------|----------------|------------------|--------------|
@@ -1700,7 +1834,7 @@ echo "PASS"
 | **kern_lint** | 규칙별 true positive/false negative, auto-fix 정확성 | 각 규칙의 경계 케이스, false positive 방지 | 30+ |
 | **합계** | | | **660+** |
 
-### 8.5 커버리지 98% 달성 핵심 기법
+### 8.7 커버리지 98% 달성 핵심 기법
 
 #### 1. TDD — 테스트 먼저, 코드 나중
 ```
@@ -1764,7 +1898,7 @@ TEST(TypeSystem, IntFitsInType) {
         path: build-cov/coverage-html/
 ```
 
-### 8.6 E2E 앵커 테스트 원칙 (재확인)
+### 8.8 E2E 앵커 테스트 원칙 (재확인)
 
 > **E2E는 아웃풋에만 의존. 내부 변경에 흔들리면 안 된다.**
 
@@ -1774,7 +1908,7 @@ TEST(TypeSystem, IntFitsInType) {
 | **dump (가변)** | `tests/integration/dump/*.expected` | stdout substring | 내부 포맷 변경 시 업데이트 허용 |
 | **도구** | `tests/tool/{lsp,fmt,lint,dbg}/` | 도구별 프로토콜/포맷 | 도구 API 변경 시 업데이트 |
 
-### 8.7 Phase별 테스트 진행 흐름
+### 8.9 Phase별 테스트 진행 흐름
 
 ```
 Phase 0: 베이스라인 측정 (현재 커버리지 확인)
@@ -1819,18 +1953,103 @@ Phase 6+: 유지 (신규 코드도 98% 필수)
 
 ---
 
-## 9. 미결정 사항
+## 9b. 미결정 사항 (갭 분석 반영)
 
-1. **HIRBuilder에서 TypeCheck 통합 vs 분리**: 즉시 통합 vs TypeChecker→HIRBuilder 2단계 유지 후 나중에 통합
-2. **Match decision tree 구현 시점**: v2 초기 vs M5 이후
-3. **MachIR 상세 opcode set**: LIR→MachIR 1:N 매핑 규칙 구체화 필요
-4. **PassManager에 의존성 DAG 도입 시점**: 초기에는 순서 고정, 나중에 선언적 의존성
-5. **Purity metadata를 HIR.FnDecl에 내장 vs 별도 맵**: 내장이 깔끔하지만 패스 순서에 의존
-6. **디버그 정보 포맷**: 자체 `.kern_debug` 섹션 vs DWARF 호환 (DWARF면 lldb/gdb 재활용 가능)
-7. **LSP JSON 라이브러리**: nlohmann/json (header-only, 편의성) vs simdjson (성능) vs 직접 구현
-8. **REPL 실행 방식**: 매번 바이너리 컴파일+실행 vs JIT-like 인메모리 실행 (미래)
-9. **패키지 매니페스트 포맷**: kern.toml vs kern.json vs kern.yaml
-10. **표준 라이브러리 언어**: Kern 소스로 작성 vs C++로 intrinsic 바인딩
+> 아래 항목 중 ✅ 표시는 이번 갭 분석에서 결정된 것.
+
+1. ✅ **HIRBuilder TypeCheck 통합**: 통합하되, 에러 보고 전략 명세 추가 (Section 3.3 참조). 디슈가링 전 타입 체크 수행, 다중 에러 보고 유지.
+2. ✅ **Match decision tree 시점**: Phase 2에서는 nested if/else 유지. M6 이후 Maranget 알고리즘으로 전환 (Section 3.3 HIRMatchExpr 참조).
+3. ✅ **MachIR operand 모델**: 가변 길이 operand 배열 + pseudo-instructions (Section 3.5 참조). Cqo/Rep_Movsb는 implicit operand.
+4. **PassManager 의존성 DAG**: 초기에는 순서 고정. v3에서 선언적 의존성 도입 검토
+5. ✅ **Purity metadata**: HIR.FnDecl에 내장 (Section 3.3 참조). 패스 순서: PurityAnalysisPass가 TailCallAnalysisPass보다 먼저 실행.
+6. **디버그 정보 포맷**: DWARF 호환 방향 (lldb 재활용). Phase 7a 착수 시 DWARF subset 선정
+7. **LSP JSON 라이브러리**: Phase 5b 착수 시 결정. nlohmann/json이 유력 (header-only, CMake 호환)
+8. ✅ **REPL 실행 방식**: 초기에는 매번 full compile + exec. Arena generation (Section 8.3) 구현 후 증분 최적화
+9. **패키지 매니페스트 포맷**: Phase 6a 착수 시 결정
+10. **표준 라이브러리 언어**: Phase 6b 착수 시 결정. 핵심 타입은 Kern 소스, I/O는 intrinsic 바인딩이 유력
+11. ✅ **모듈 시스템 확장 포인트**: HIRModule에 imports/visibility 예약 필드 추가, LIRFunction에 Linkage 예약 추가 (Section 3.3, 3.4 참조)
+12. ✅ **Pre-colored register**: RegisterAllocator에 fixed interval 지원 추가 (Section 3.5 참조)
+13. ✅ **kern-dbg/repl 스코프**: Phase 7로 분리. Phase 5는 핵심 파이프라인 안정화에 집중 (Section 6 Phase 7 참조)
+
+### 메모리 모델 (향후 정의 필요)
+
+> 커널 언어로서 메모리 순서(ordering)와 동시성 모델 정의가 필요하지만,
+> 현재 Kern은 **단일 스레드 실행** 전제이므로 v2에서는 형식적 메모리 모델을 정의하지 않는다.
+
+**현재 전제 (v2)**:
+- 모든 메모리 접근은 **순차 일관성 (sequential consistency)** — 단일 스레드 내에서 프로그램 순서대로 실행
+- `Ptr<var T>` 쓰기는 같은 스레드 내 후속 `Ptr<T>` 읽기에 즉시 반영
+- 컴파일러는 `Ptr<var T>` 쓰기를 재배치하지 않음 (observable side effect)
+- `Ptr<T>` 읽기만의 함수는 pure → 재배치/제거/메모이제이션 가능
+
+**v3+ (멀티코어 커널 지원 시)**:
+- `volatile Ptr<var T>` 또는 `atomic` 수식자 도입 필요
+- 메모리 순서: Acquire/Release/SeqCst 모델 (C++11 memory order 참조)
+- 이 시점에서 formal memory model 문서 작성
+
+### 성능 벤치마크 계획
+
+> 4-레벨 파이프라인은 2-레벨보다 컴파일 시간이 증가할 수 있다.
+> 이를 측정하고 관리하기 위한 벤치마크 프레임워크.
+
+**측정 대상**:
+| 지표 | 현재 기준 (v1) | v2 목표 |
+|------|:---:|:---:|
+| fib(35) 컴파일 시간 | 측정 필요 | ≤ 2x v1 |
+| 100개 함수 모듈 컴파일 시간 | 측정 필요 | ≤ 3x v1 |
+| fib(35) 실행 시간 | 측정 필요 | ≤ 1.1x v1 (런타임 회귀 없음) |
+| 컴파일러 메모리 사용량 (peak RSS) | 측정 필요 | ≤ 2x v1 |
+
+**실행 계획**:
+- Phase 0: v1 기준값 측정 (M5 완료 후, `time` + `getrusage`)
+- Phase 5a: v2 기준값 측정 (파이프라인 통합 후)
+- 이후: 각 Phase에서 회귀 확인
+
+**벤치마크 스크립트** (`scripts/bench.sh`):
+```bash
+#!/bin/bash
+# 컴파일 시간 측정
+for f in tests/bench/*.kern; do
+    echo "=== $(basename $f) ==="
+    time build/tools/kernc/kernc "$f" -o /tmp/bench_out 2>/dev/null
+done
+
+# 실행 시간 측정 (Rosetta 2)
+for f in tests/bench/*.kern; do
+    build/tools/kernc/kernc "$f" -o /tmp/bench_out 2>/dev/null
+    time /tmp/bench_out
+done
+```
+
+### CMakeLists.txt Phase 1 통합 미비 수정 필요
+
+> ⚠️ 현재 `lib/Support/CMakeLists.txt`에 `StringPool.cpp`와 `TypeSystem.cpp`가 누락되어 있음.
+> Phase 1 완료로 표시되어 있지만 빌드 시스템에 통합되지 않은 상태.
+> Phase 2 착수 전에 반드시 수정 필요:
+
+```cmake
+# lib/Support/CMakeLists.txt — 수정 필요
+add_kern_library(support
+    Arena.cpp
+    Diagnostic.cpp
+    StringPool.cpp      # ← 누락, 추가 필요
+    TypeSystem.cpp       # ← 누락, 추가 필요
+)
+```
+
+### M5 Open Questions 결정 상태
+
+| OQ | 질문 | 상태 | 결정/방향 |
+|:---:|------|:---:|----------|
+| OQ-1 | 재귀 Union (Tree) | 미결정 | M6 제네릭과 함께 `Box<T>` (자동 heap 할당) 도입 예정 |
+| OQ-2 | Struct 비교 (`==`, `!=`) | 미결정 | 구조적 동등성으로 가되, 도출 (derive) 메커니즘 필요. M6 이후 |
+| OQ-3 | 포인터 산술 (`ptr + offset`) | 미결정 | 커널 필수. `unsafe` 블록 내에서만 허용하는 방향. v3 |
+| OQ-4 | String 보간 | 미결정 | M6 (람다/클로저 기반 fmt 함수와 함께) |
+| OQ-5 | with-copy 패턴 | 미결정 | M6에서 `val p2 = p with { x: 99 }` 문법 도입 검토 |
+| OQ-6 | volatile 포인터 | 미결정 | v3 메모리 모델과 함께 |
+| OQ-7 | 레이아웃 어노테이션 | 미결정 | v3 |
+| OQ-8 | Ref<T> 통합 | 미결정 | M6 이후 소유권 시스템 설계 시 |
+| OQ-9 | Variant 추론 실패 에러 | ✅ M5b에서 기본 구현 완료 | 에러 메시지 개선은 HIR 전환 시 |
 
 ---
 
@@ -2655,17 +2874,18 @@ Phase 5+: /kern:add-ast-node <name>, /kern:add-tool <name>, /kern:add-type <name
 ### 완료된 단계
 - [x] ~~Phase 0 (준비)~~ — CMake 모듈 3개, 스킬 12개, Rules 3개, Hooks 2개, Coverage 인프라, CI job
 - [x] ~~Phase 1 (인프라)~~ — StringPool (13 tests), TypeSystem (23 tests), CompilationContext (6 tests)
+- [x] ~~M5 전체 완료~~ — **517 unit + 113 E2E** (M5a struct + M5b enum/union + M5c ptr + M5d string + 에러 경로 커버리지)
+- [x] ~~Phase 2 (HIR)~~ — HIR.h, HIRBuilder, HIRPasses (Purity/TailCall/Exhaustiveness), --dump-hir. **660 unit + 115 E2E** (commit f12364f)
+- [x] ~~Phase 3 (LIR)~~ — LIR.h, LIRBuilder (HIR→LIR SSA lowering), LIRDump, --dump-lir. **695 unit + 115 E2E** (commit 713e664)
+- [x] ~~Phase 4a (Backend)~~ — MachIR, InstructionSelector, RegisterAllocator, NASMEmitter, X86Backend, --dump-machir. **784 unit + 116 E2E** (commit 25573fb)
 
-### 현재 진행
-1. **M5d (String) 개발 완료** ← 현재 진행 중
-
-### 다음 실행 (M5 완료 후)
-2. git tag `v0.5-m5` (현재 상태 보존)
-3. E2E 앵커 테스트 분리 확인 (Phase 0 잔여)
-4. Phase 2 — HIR 레이어 구축 (스킬 전부 선행 완료, 즉시 구현 착수 가능)
-5. Phase 3 — LIR ∥ fmt ∥ lint 병렬 (스킬 선행 완료)
-6. Phase 4 — Backend ∥ Debug ∥ IDE 병렬 + hooks 활성화 (스킬 선행 완료)
-7. Phase 5 — 통합, **앵커 E2E 통과**, LSP/디버거/REPL 도구 어셈블리 (스킬 선행 완료)
-8. Phase 5 완료 시 **전체 lib/ line coverage 98% 달성 확인**
-9. CLAUDE.md 최종 교체, 에이전트 환경 v2 완성
-10. CI에 커버리지 게이트 영구 활성화 (98% 미달 = 빌드 실패)
+### 다음 단계
+1. Phase 4b — kern_debug (DebugInfoBuilder, SourceMap, ValueInspector) — Support만 의존
+2. Phase 4c — kern_ide (IDEContext, Completion, Hover, GoTo, References) — HIR만 의존
+3. Phase 5 — 통합: CompilerPipeline으로 v2 파이프라인 전환, **69개 앵커 E2E 통과 확인**, v1 sema/ir/codegen 제거
+4. Phase 5b/c — kern-lsp + kern-fmt 도구 어셈블리
+5. Phase 6 — kern-pkg + stdlib/core
+6. Phase 7 — kern-dbg + kern-repl (고난이도, 별도 마일스톤)
+7. Phase 5 완료 시 **전체 lib/ line coverage 98% 달성 확인**
+8. CLAUDE.md 최종 교체, 에이전트 환경 v2 완성
+9. CI에 커버리지 게이트 영구 활성화 (98% 미달 = 빌드 실패)

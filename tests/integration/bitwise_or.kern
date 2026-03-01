@@ -1,0 +1,5 @@
+fn main() -> i64 {
+    val a: i64 = 48
+    val b: i64 = 3
+    a | b
+}

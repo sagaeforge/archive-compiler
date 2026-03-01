@@ -12,12 +12,14 @@ struct Stmt;
 
 // --- Type Reference ---
 struct TypeRef {
-    enum class Kind { Named, Ptr, Fn };
+    enum class Kind { Named, Ptr, Fn, Never, Array };
     Kind kind = Kind::Named;
     std::string_view name; // "i64", "bool", "Unit"
     SourceLocation loc;
     TypeRef* pointee = nullptr;  // for Ptr<T>: the inner type
     bool is_ptr_var = false;     // for Ptr<var T>: mutable pointer
+    TypeRef* array_element = nullptr;  // for [T; N]: element type
+    uint32_t array_size = 0;           // for [T; N]: count
 };
 
 // --- Parameter ---
@@ -112,10 +114,12 @@ struct UnionDecl {
 struct Expr {
     enum class Kind {
         IntLit, FloatLit, BoolLit, StringLit, Ident,
-        BinOp, UnaryOp, Call,
+        BinOp, UnaryOp, Call, Cast,
         If, Block, Return, Match,
         StructLit, FieldAccess,
-        EnumAccess, UnionVariant
+        EnumAccess, UnionVariant,
+        Loop, InlineAsm,
+        ArrayLit, IndexAccess
     };
     Kind kind;
     SourceLocation loc;
@@ -144,9 +148,10 @@ struct IdentExpr : Expr {
 };
 
 enum class BinOpKind {
-    Add, Sub, Mul, Div,
+    Add, Sub, Mul, Div, Mod,
     Eq, NotEq, Lt, LtEq, Gt, GtEq,
-    And, Or
+    And, Or,
+    BitAnd, BitOr, BitXor, Shl, Shr
 };
 
 struct BinOpExpr : Expr {
@@ -156,7 +161,7 @@ struct BinOpExpr : Expr {
 };
 
 struct UnaryOpKind_t {
-    enum Value { Neg, Not, Deref, AddrOf, AddrOfVar };
+    enum Value { Neg, Not, BitNot, Deref, AddrOf, AddrOfVar };
 };
 using UnaryOpKind = UnaryOpKind_t::Value;
 
@@ -228,9 +233,42 @@ struct UnionVariantExpr : Expr {
     Expr* payload;                    // nullptr for empty variants (e.g., Shape::Empty)
 };
 
+struct ArrayLitExpr : Expr {
+    Expr** elements;
+    uint32_t count;
+};
+
+struct IndexAccessExpr : Expr {
+    Expr* array;
+    Expr* index;
+};
+
+struct CastExpr : Expr {
+    Expr* operand;
+    TypeRef target;
+};
+
+struct LoopBinding {
+    std::string_view name;
+    Expr* init;
+};
+
+struct LoopExpr : Expr {
+    LoopBinding* bindings;
+    uint32_t binding_count;
+    Stmt** stmts;
+    uint32_t stmt_count;
+    Expr* result;  // nullptr for Unit-returning loops
+};
+
+struct InlineAsmExpr : Expr {
+    StringLitExpr** lines;
+    uint32_t line_count;
+};
+
 // --- Statements ---
 struct Stmt {
-    enum class Kind { ValDecl, VarDecl, ExprStmt, Assign, FieldAssign, DerefAssign };
+    enum class Kind { ValDecl, VarDecl, ExprStmt, Assign, FieldAssign, DerefAssign, Break, Continue, IndexAssign };
     Kind kind;
     SourceLocation loc;
 };
@@ -263,6 +301,21 @@ struct FieldAssignStmt : Stmt {
 
 struct DerefAssignStmt : Stmt {
     Expr* target;   // UnaryOpExpr(Deref) or FieldAccessExpr via (*ptr).field
+    Expr* value;
+};
+
+struct BreakStmt : Stmt {
+    Expr* value;  // nullptr for unit break
+};
+
+struct ContinueStmt : Stmt {
+    Expr** args;
+    uint32_t arg_count;
+};
+
+struct IndexAssignStmt : Stmt {
+    Expr* array;
+    Expr* index;
     Expr* value;
 };
 

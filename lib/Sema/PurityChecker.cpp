@@ -114,6 +114,25 @@ void PurityChecker::collectCalleesStmt(Stmt* stmt, std::unordered_set<std::strin
             collectCallees(da->value, callees);
             break;
         }
+        case Stmt::Kind::Break: {
+            auto* bs = static_cast<BreakStmt*>(stmt);
+            if (bs->value) collectCallees(bs->value, callees);
+            break;
+        }
+        case Stmt::Kind::Continue: {
+            auto* cs = static_cast<ContinueStmt*>(stmt);
+            for (uint32_t i = 0; i < cs->arg_count; ++i) {
+                collectCallees(cs->args[i], callees);
+            }
+            break;
+        }
+        case Stmt::Kind::IndexAssign: {
+            auto* ias = static_cast<IndexAssignStmt*>(stmt);
+            collectCallees(ias->array, callees);
+            collectCallees(ias->index, callees);
+            collectCallees(ias->value, callees);
+            break;
+        }
     }
 }
 

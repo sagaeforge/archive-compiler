@@ -1,0 +1,5 @@
+fn main() -> i64 {
+    val a: i64 = 1
+    val shifted: i64 = a << 5
+    shifted >> 2
+}

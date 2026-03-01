@@ -160,6 +160,7 @@ enum class X86Op : uint8_t {
 
     // Integer arithmetic
     Add, Sub, IMul, IDiv, Xor, And, Or,
+    Shl, Shr, Sar,
     Neg, Not,
 
     // Division prep
@@ -184,6 +185,9 @@ enum class X86Op : uint8_t {
     Pseudo_FrameDestroy,    // epilogue placeholder
 
     Nop,
+
+    // Raw assembly passthrough
+    InlineAsm,
 };
 
 const char* x86OpName(X86Op op);
@@ -202,6 +206,13 @@ const char* condCodeSuffix(CondCode cc);
 
 static constexpr uint8_t MACH_INLINE_OPERANDS = 4;
 
+// Inline assembly payload for MachInstr
+struct MachInlineAsmData {
+    const char** lines;
+    uint32_t* line_lengths;
+    uint32_t line_count;
+};
+
 struct MachInstr {
     X86Op op;
     CondCode cc = CondCode::E;      // for Setcc, Jcc
@@ -212,6 +223,9 @@ struct MachInstr {
         MachOperand inline_ops[MACH_INLINE_OPERANDS];
         MachOperand* heap_ops;
     };
+
+    // For InlineAsm instructions
+    MachInlineAsmData asm_data = {};
 
     MachInstr() : op(X86Op::Nop) {
         std::memset(inline_ops, 0, sizeof(inline_ops));

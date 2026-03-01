@@ -1,0 +1,6 @@
+fn main() -> i64 {
+    val base : i64 = 1000
+    val p : Ptr<i64> = base as Ptr<i64>
+    val q : Ptr<i64> = p + 3
+    q as i64 - base
+}

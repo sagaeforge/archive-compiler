@@ -19,8 +19,14 @@ static const char* binOpName(HIRBinOp op) {
         case HIRBinOp::LtEq:  return "<=";
         case HIRBinOp::Gt:    return ">";
         case HIRBinOp::GtEq:  return ">=";
-        case HIRBinOp::And:   return "&&";
-        case HIRBinOp::Or:    return "||";
+        case HIRBinOp::And:    return "&&";
+        case HIRBinOp::Or:     return "||";
+        case HIRBinOp::Mod:    return "%";
+        case HIRBinOp::BitAnd: return "&";
+        case HIRBinOp::BitOr:  return "|";
+        case HIRBinOp::BitXor: return "^";
+        case HIRBinOp::Shl:    return "<<";
+        case HIRBinOp::Shr:    return ">>";
     }
     return "?";
 }
@@ -29,6 +35,7 @@ static const char* unaryOpName(HIRUnaryOp op) {
     switch (op) {
         case HIRUnaryOp::Neg:       return "-";
         case HIRUnaryOp::Not:       return "!";
+        case HIRUnaryOp::BitNot:    return "~";
         case HIRUnaryOp::Deref:     return "*";
         case HIRUnaryOp::AddrOf:    return "&";
         case HIRUnaryOp::AddrOfVar: return "&var ";
@@ -280,6 +287,107 @@ void dumpHIRExpr(const HIRExpr* expr, const TypeTable& types, std::ostream& out,
             out << " : " << types.name(expr->type) << "\n";
             return;
         }
+
+        case HIRExpr::Kind::Cast: {
+            auto* c = static_cast<const HIRCastExpr*>(expr);
+            out << "cast\n";
+            dumpHIRExpr(c->operand, types, out, ind + 1);
+            indent(out, ind);
+            out << "as " << types.name(c->target_type) << ")";
+            out << " : " << types.name(expr->type) << "\n";
+            return;
+        }
+
+        case HIRExpr::Kind::Loop: {
+            auto* l = static_cast<const HIRLoopExpr*>(expr);
+            out << "loop";
+            if (l->binding_count > 0) {
+                out << "(";
+                for (uint32_t i = 0; i < l->binding_count; ++i) {
+                    if (i > 0) out << ", ";
+                    out << l->bindings[i].name << " = ";
+                    // Inline init dump would be verbose; print on next line
+                }
+                out << ")\n";
+                for (uint32_t i = 0; i < l->binding_count; ++i) {
+                    indent(out, ind + 1);
+                    out << l->bindings[i].name << " =\n";
+                    dumpHIRExpr(l->bindings[i].init, types, out, ind + 2);
+                }
+            } else {
+                out << "\n";
+            }
+            indent(out, ind + 1); out << "body:\n";
+            dumpHIRExpr(l->body, types, out, ind + 2);
+            indent(out, ind);
+            out << ")";
+            out << " : " << types.name(expr->type) << "\n";
+            return;
+        }
+
+        case HIRExpr::Kind::Break: {
+            auto* b = static_cast<const HIRBreakExpr*>(expr);
+            out << "break";
+            if (b->value) {
+                out << "\n";
+                dumpHIRExpr(b->value, types, out, ind + 1);
+                indent(out, ind);
+                out << ")";
+            } else {
+                out << ")";
+            }
+            out << " : " << types.name(expr->type) << "\n";
+            return;
+        }
+
+        case HIRExpr::Kind::Continue: {
+            auto* c = static_cast<const HIRContinueExpr*>(expr);
+            out << "continue";
+            if (c->arg_count > 0) {
+                out << "(";
+                for (uint32_t i = 0; i < c->arg_count; ++i) {
+                    if (i > 0) out << ", ";
+                }
+                out << ")\n";
+                for (uint32_t i = 0; i < c->arg_count; ++i) {
+                    dumpHIRExpr(c->args[i], types, out, ind + 1);
+                }
+                indent(out, ind);
+                out << ")";
+            } else {
+                out << ")";
+            }
+            out << " : " << types.name(expr->type) << "\n";
+            return;
+        }
+
+        case HIRExpr::Kind::ArrayLit: {
+            auto* a = static_cast<const HIRArrayLitExpr*>(expr);
+            out << "array_lit\n";
+            for (uint32_t i = 0; i < a->element_count; ++i)
+                dumpHIRExpr(a->elements[i], types, out, ind + 1);
+            indent(out, ind);
+            out << ")";
+            out << " : " << types.name(expr->type) << "\n";
+            return;
+        }
+
+        case HIRExpr::Kind::IndexAccess: {
+            auto* ia = static_cast<const HIRIndexAccessExpr*>(expr);
+            out << "index_access\n";
+            dumpHIRExpr(ia->array, types, out, ind + 1);
+            dumpHIRExpr(ia->index, types, out, ind + 1);
+            indent(out, ind);
+            out << ")";
+            out << " : " << types.name(expr->type) << "\n";
+            return;
+        }
+
+        case HIRExpr::Kind::InlineAsm: {
+            auto* ia = static_cast<const HIRInlineAsmExpr*>(expr);
+            out << "inline_asm " << ia->line_count << " lines";
+            break;
+        }
     }
 
     // Simple nodes (leaf expressions) — type printed inline
@@ -335,6 +443,18 @@ void dumpHIRStmt(const HIRStmt* stmt, const TypeTable& types, std::ostream& out,
             dumpHIRExpr(d->target, types, out, ind + 2);
             indent(out, ind + 1); out << "value:\n";
             dumpHIRExpr(d->value, types, out, ind + 2);
+            indent(out, ind); out << ")\n";
+            break;
+        }
+        case HIRStmt::Kind::IndexAssign: {
+            auto* ia = static_cast<const HIRIndexAssignStmt*>(stmt);
+            out << "(index_assign\n";
+            indent(out, ind + 1); out << "array:\n";
+            dumpHIRExpr(ia->array, types, out, ind + 2);
+            indent(out, ind + 1); out << "index:\n";
+            dumpHIRExpr(ia->index, types, out, ind + 2);
+            indent(out, ind + 1); out << "value:\n";
+            dumpHIRExpr(ia->value, types, out, ind + 2);
             indent(out, ind); out << ")\n";
             break;
         }
