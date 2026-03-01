@@ -15,7 +15,7 @@ class InstructionSelector {
     std::vector<std::vector<MachInstr>> block_instrs_;  // instrs per block
     uint32_t next_vreg_ = 0;
     uint32_t struct_alloc_bytes_ = 0;  // total stack bytes for struct_alloc
-    std::unordered_set<VReg> float_vregs_;  // vregs that hold float values
+    std::unordered_map<VReg, uint8_t> float_vregs_;  // vreg → width (32 or 64)
     std::unordered_set<VReg> struct_vregs_; // vregs that hold struct base pointers
     std::unordered_map<VReg, uint32_t> struct_vreg_sizes_; // struct vreg → byte size
     std::unordered_set<VReg> stack_ptr_vregs_; // vregs that are stack pointers (from struct_alloc/addr_of)

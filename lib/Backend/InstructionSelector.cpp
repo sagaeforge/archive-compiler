@@ -174,7 +174,7 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
                                        const LIRFunction& fn) {
     // Track float vregs for call arg classification
     if (instr.result != INVALID_VREG && isFloat(instr.type)) {
-        float_vregs_.insert(instr.result);
+        float_vregs_[instr.result] = widthOf(instr.type);
     }
     // Track struct vregs for multi-register ABI passing
     if (instr.result != INVALID_VREG && isStructType(instr.type)) {
@@ -537,9 +537,13 @@ void InstructionSelector::selectFCmp(const LIRInstr& instr) {
     emit(makeAlu(X86Op::Xor, MachOperand::virt(dst),
                  MachOperand::virt(dst), 64));
 
-    // ucomisd lhs, rhs
-    MachInstr ucomi(X86Op::Ucomisd);
-    ucomi.width = 64;  // TODO: check f32 vs f64
+    // ucomiss/ucomisd lhs, rhs
+    uint8_t fw = 64;
+    auto it = float_vregs_.find(lhs);
+    if (it != float_vregs_.end()) fw = it->second;
+    X86Op ucomi_op = (fw == 32) ? X86Op::Ucomiss : X86Op::Ucomisd;
+    MachInstr ucomi(ucomi_op);
+    ucomi.width = fw;
     ucomi.operand_count = 2;
     ucomi.inline_ops[0] = MachOperand::virt(lhs);
     ucomi.inline_ops[1] = MachOperand::virt(rhs);
@@ -795,9 +799,10 @@ void InstructionSelector::selectRet(const LIRInstr& instr) {
 
     if (val != INVALID_VREG) {
         if (float_vregs_.count(val)) {
-            // movsd xmm0, val
-            MachInstr mi(X86Op::Movsd);
-            mi.width = 64;
+            uint8_t fw = float_vregs_[val];
+            X86Op mov_op = (fw == 32) ? X86Op::Movss : X86Op::Movsd;
+            MachInstr mi(mov_op);
+            mi.width = fw;
             mi.operand_count = 2;
             mi.inline_ops[0] = MachOperand::precolored(PhysReg::XMM0);
             mi.inline_ops[1] = MachOperand::virt(val);
@@ -823,9 +828,10 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
         if (float_vregs_.count(arg)) {
             // Float arg → XMM register
             if (xmm_idx < MAX_XMM_ARGS) {
-                X86Op mov_op = X86Op::Movsd;
+                uint8_t fw = float_vregs_[arg];
+                X86Op mov_op = (fw == 32) ? X86Op::Movss : X86Op::Movsd;
                 MachInstr mi(mov_op);
-                mi.width = 64;
+                mi.width = fw;
                 mi.operand_count = 2;
                 mi.inline_ops[0] = MachOperand::precolored(XMM_ARG_REGS[xmm_idx]);
                 mi.inline_ops[1] = MachOperand::virt(arg);
@@ -900,8 +906,10 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
     // Move return value
     if (instr.result != INVALID_VREG) {
         if (float_vregs_.count(instr.result)) {
-            MachInstr mi(X86Op::Movsd);
-            mi.width = 64;
+            uint8_t fw = float_vregs_[instr.result];
+            X86Op mov_op = (fw == 32) ? X86Op::Movss : X86Op::Movsd;
+            MachInstr mi(mov_op);
+            mi.width = fw;
             mi.operand_count = 2;
             mi.inline_ops[0] = MachOperand::virt(instr.result);
             mi.inline_ops[1] = MachOperand::precolored(PhysReg::XMM0);
@@ -935,8 +943,10 @@ void InstructionSelector::selectCallIndirect(const LIRInstr& instr) {
         VReg arg = ci.args[i];
         if (float_vregs_.count(arg)) {
             if (xmm_idx < MAX_XMM_ARGS) {
-                MachInstr mi(X86Op::Movsd);
-                mi.width = 64;
+                uint8_t fw = float_vregs_[arg];
+                X86Op mov_op = (fw == 32) ? X86Op::Movss : X86Op::Movsd;
+                MachInstr mi(mov_op);
+                mi.width = fw;
                 mi.operand_count = 2;
                 mi.inline_ops[0] = MachOperand::precolored(XMM_ARG_REGS[xmm_idx]);
                 mi.inline_ops[1] = MachOperand::virt(arg);
@@ -978,8 +988,10 @@ void InstructionSelector::selectCallIndirect(const LIRInstr& instr) {
     // Move return value
     if (instr.result != INVALID_VREG) {
         if (float_vregs_.count(instr.result)) {
-            MachInstr mi(X86Op::Movsd);
-            mi.width = 64;
+            uint8_t fw = float_vregs_[instr.result];
+            X86Op mov_op = (fw == 32) ? X86Op::Movss : X86Op::Movsd;
+            MachInstr mi(mov_op);
+            mi.width = fw;
             mi.operand_count = 2;
             mi.inline_ops[0] = MachOperand::virt(instr.result);
             mi.inline_ops[1] = MachOperand::precolored(PhysReg::XMM0);
