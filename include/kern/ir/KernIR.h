@@ -46,6 +46,7 @@ struct IRInstr {
 
     // Call
     std::string callee_name;
+    bool is_tail_call = false;
 
     // Branch/CondBranch
     uint32_t target_block = 0;

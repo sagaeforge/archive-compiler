@@ -13,7 +13,7 @@ public:
 
 private:
     void buildFunction(FnDecl* fn);
-    ValueId buildExpr(Expr* expr);
+    ValueId buildExpr(Expr* expr, bool in_tail_position = false);
     void buildStmt(Stmt* stmt);
 
     ValueId emit(IRInstr instr);

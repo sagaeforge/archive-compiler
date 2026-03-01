@@ -1,0 +1,8 @@
+// Function chain tail call: a -> b -> c
+fn c(x: i64) -> i64 { x + 2 }
+fn b(x: i64) -> i64 { c(x + 10) }
+fn a(x: i64) -> i64 { b(x + 20) }
+
+fn main() -> i64 {
+    a(10)
+}

@@ -77,6 +77,9 @@ void dumpIR(const IRModule& mod, std::ostream& out) {
                     }
                     out << " = ";
                 }
+                if (instr.op == IROpcode::Call && instr.is_tail_call) {
+                    out << "tail ";
+                }
                 out << irOpcodeName(instr.op);
 
                 switch (instr.op) {
@@ -187,7 +190,7 @@ void IRBuilder::buildFunction(FnDecl* fn) {
         locals_[fn->params[i].name] = pv;
     }
 
-    ValueId result = buildExpr(fn->body);
+    ValueId result = buildExpr(fn->body, /*in_tail_position=*/true);
 
     auto& instrs = current_fn_->blocks[current_block_].instrs;
     if (instrs.empty() || instrs.back().op != IROpcode::Ret) {
@@ -198,7 +201,7 @@ void IRBuilder::buildFunction(FnDecl* fn) {
     }
 }
 
-ValueId IRBuilder::buildExpr(Expr* expr) {
+ValueId IRBuilder::buildExpr(Expr* expr, bool in_tail_position) {
     IRType expr_type = IRType::Unknown;
     if (tc_) {
         expr_type = irTypeFromSemaType(tc_->typeOfExpr(expr));
@@ -424,6 +427,7 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             instr.operands = std::move(args);
             instr.loc = expr->loc;
             instr.type = expr_type;
+            instr.is_tail_call = in_tail_position;
             return emit(instr);
         }
 
@@ -444,7 +448,7 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             emit(br);
 
             switchToBlock(then_block);
-            ValueId then_val = buildExpr(ifE->then_branch);
+            ValueId then_val = buildExpr(ifE->then_branch, in_tail_position);
             uint32_t then_end_block = current_block_;
 
             IRInstr br_then;
@@ -455,7 +459,7 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             switchToBlock(else_block);
             ValueId else_val;
             if (ifE->else_branch) {
-                else_val = buildExpr(ifE->else_branch);
+                else_val = buildExpr(ifE->else_branch, in_tail_position);
             } else {
                 IRInstr unit;
                 unit.op = IROpcode::ConstInt;
@@ -490,7 +494,7 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
                 buildStmt(block->stmts[i]);
             }
             if (block->result) {
-                return buildExpr(block->result);
+                return buildExpr(block->result, in_tail_position);
             }
             IRInstr unit;
             unit.op = IROpcode::ConstInt;
@@ -504,7 +508,7 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             auto* ret = static_cast<ReturnExpr*>(expr);
             ValueId val;
             if (ret->value) {
-                val = buildExpr(ret->value);
+                val = buildExpr(ret->value, true);
             } else {
                 IRInstr unit;
                 unit.op = IROpcode::ConstInt;

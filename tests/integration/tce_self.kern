@@ -1,0 +1,9 @@
+// Self tail call: sum 1..10 via accumulator
+fn sum_acc(n: i64, acc: i64) -> i64 {
+    if n <= 0 { acc }
+    else { sum_acc(n - 1, acc + n) }
+}
+
+fn main() -> i64 {
+    sum_acc(10, 0)
+}

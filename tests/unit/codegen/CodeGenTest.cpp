@@ -113,8 +113,10 @@ TEST(CodeGenTest, ParameterPassing) {
         "fn add(a: i64, b: i64) -> i64 { a + b }\n"
         "fn main() -> i64 { add(20, 22) }");
     // Parameters passed in rdi, rsi
-    // Caller sets up args before call
-    EXPECT_NE(asm_code.find("call _add"), std::string::npos);
+    // Caller sets up args before call (or jmp for tail call)
+    bool has_call_or_jmp = (asm_code.find("call _add") != std::string::npos) ||
+                           (asm_code.find("jmp  _add") != std::string::npos);
+    EXPECT_TRUE(has_call_or_jmp);
     EXPECT_NE(asm_code.find("rdi"), std::string::npos);
 }
 
@@ -158,15 +160,20 @@ TEST(CodeGenTest, NestedCalls) {
         "fn double_val(x: i64) -> i64 { x + x }\n"
         "fn quad(x: i64) -> i64 { double_val(double_val(x)) }\n"
         "fn main() -> i64 { quad(5) }");
-    // quad needs to save intermediate result across call
-    // Should use callee-saved register push/pop
+    // quad calls double_val twice: inner is normal call, outer is tail call (jmp)
     int call_count = 0;
+    int jmp_count = 0;
     size_t pos = 0;
     while ((pos = asm_code.find("call _double_val", pos)) != std::string::npos) {
         call_count++;
         pos += 16;
     }
-    EXPECT_EQ(call_count, 2); // quad calls double_val twice
+    pos = 0;
+    while ((pos = asm_code.find("jmp  _double_val", pos)) != std::string::npos) {
+        jmp_count++;
+        pos += 16;
+    }
+    EXPECT_EQ(call_count + jmp_count, 2); // quad invokes double_val twice total
 }
 
 // ===== Coverage improvement tests =====
@@ -447,6 +454,71 @@ TEST(CodeGenTest, FloatCallArgs) {
     std::string asm_code = generateAsm(
         "fn add(a: f64, b: f64) -> f64 { a + b }\n"
         "fn main() -> f64 { add(1.0, 2.0) }");
-    EXPECT_NE(asm_code.find("call _add"), std::string::npos);
+    bool has_call_or_jmp_add = (asm_code.find("call _add") != std::string::npos) ||
+                               (asm_code.find("jmp  _add") != std::string::npos);
+    EXPECT_TRUE(has_call_or_jmp_add);
     EXPECT_NE(asm_code.find("xmm0"), std::string::npos);
+}
+
+// ===== TCE: Tail call CodeGen tests =====
+
+// --- Tail call emits jmp, not call ---
+TEST(CodeGenTest, TailCallEmitsJmp) {
+    std::string asm_code = generateAsm(
+        "fn g(x: i64) -> i64 { x }\n"
+        "fn f(x: i64) -> i64 { g(x) }");
+    // f tail-calls g: should have jmp _g, not call _g
+    EXPECT_NE(asm_code.find("jmp  _g"), std::string::npos);
+    // Find the _f function section and check no "call _g" there
+    auto f_pos = asm_code.find("_f:");
+    auto g_pos = asm_code.find("_g:");
+    ASSERT_NE(f_pos, std::string::npos);
+    std::string f_section = asm_code.substr(f_pos, g_pos > f_pos ? g_pos - f_pos : std::string::npos);
+    EXPECT_EQ(f_section.find("call _g"), std::string::npos);
+}
+
+// --- Tail call restores frame (pop rbp before jmp) ---
+TEST(CodeGenTest, TailCallRestoresFrame) {
+    std::string asm_code = generateAsm(
+        "fn g(x: i64) -> i64 { x }\n"
+        "fn f(x: i64) -> i64 { g(x) }");
+    // Deferred epilogue should have "pop rbp" followed by "jmp _g"
+    auto pop_pos = asm_code.rfind("pop  rbp");
+    auto jmp_pos = asm_code.find("jmp  _g");
+    ASSERT_NE(pop_pos, std::string::npos);
+    ASSERT_NE(jmp_pos, std::string::npos);
+    EXPECT_LT(pop_pos, jmp_pos);
+}
+
+// --- Self tail call emits jmp ---
+TEST(CodeGenTest, SelfTailCallEmitsJmp) {
+    std::string asm_code = generateAsm(
+        "fn countdown(n: i64) -> i64 {\n"
+        "    if n <= 0 { 0 } else { countdown(n - 1) }\n"
+        "}");
+    EXPECT_NE(asm_code.find("jmp  _countdown"), std::string::npos);
+}
+
+// --- Non-tail call still uses call ---
+TEST(CodeGenTest, NonTailCallStillUsesCall) {
+    std::string asm_code = generateAsm(
+        "fn g(x: i64) -> i64 { x }\n"
+        "fn f(x: i64) -> i64 { g(x) + 1 }");
+    EXPECT_NE(asm_code.find("call _g"), std::string::npos);
+}
+
+// --- Tail call with different param count ---
+TEST(CodeGenTest, TailCallDifferentParamCount) {
+    std::string asm_code = generateAsm(
+        "fn g(a: i64, b: i64, c: i64) -> i64 { a + b + c }\n"
+        "fn f(x: i64) -> i64 { g(x, x, x) }");
+    EXPECT_NE(asm_code.find("jmp  _g"), std::string::npos);
+}
+
+// --- Tail call with float args ---
+TEST(CodeGenTest, TailCallFloatArgs) {
+    std::string asm_code = generateAsm(
+        "fn g(a: f64) -> f64 { a }\n"
+        "fn f(a: f64) -> f64 { g(a) }");
+    EXPECT_NE(asm_code.find("jmp  _g"), std::string::npos);
 }

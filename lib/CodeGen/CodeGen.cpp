@@ -59,6 +59,8 @@ void CodeGen::initRegs() {
 
     free_regs_ = {"r10", "r11", "rcx", "rdx", "rsi", "rdi"};
     free_xmm_regs_ = {"xmm15", "xmm14", "xmm13", "xmm12", "xmm11", "xmm10", "xmm9", "xmm8"};
+    tail_call_sites_.clear();
+    tail_call_counter_ = 0;
 }
 
 std::string CodeGen::addFloatConst(double value, bool is_f32) {
@@ -265,6 +267,23 @@ void CodeGen::emitFunction(const IRFunction& fn) {
 
     for (uint32_t i = 0; i < fn.blocks.size(); ++i) {
         emitBlock(fn, i);
+    }
+
+    // Deferred tail call epilogues (used_callee_saved_ is now finalized)
+    for (auto& site : tail_call_sites_) {
+        out() << site.label << ":\n";
+        int n_callee = static_cast<int>(used_callee_saved_.size());
+        if (n_callee > 0) {
+            out() << "    lea  rsp, [rbp-" << (n_callee * 8) << "]\n";
+        } else {
+            out() << "    mov  rsp, rbp\n";
+        }
+        for (auto it = used_callee_saved_.rbegin();
+             it != used_callee_saved_.rend(); ++it) {
+            out() << "    pop  " << *it << "\n";
+        }
+        out() << "    pop  rbp\n";
+        out() << "    jmp  _" << site.callee << "\n";
     }
 
     // Now write prologue with correct stack reservation to the real output
@@ -625,6 +644,97 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
         }
 
         case IROpcode::Call: {
+            if (instr.is_tail_call) {
+                // --- TAIL CALL (Phase A: arg setup + jmp to deferred) ---
+
+                // Classify args into GPR and XMM
+                int tc_gpr_count = 0;
+                int tc_xmm_count = 0;
+                struct TailArgInfo { size_t idx; bool is_float; std::string src; };
+                std::vector<TailArgInfo> tc_gpr_args, tc_xmm_args;
+
+                for (size_t i = 0; i < instr.operands.size(); ++i) {
+                    IRType arg_type = getValueType(instr.operands[i]);
+                    if (irTypeIsFloat(arg_type)) {
+                        if (tc_xmm_count < MAX_XMM_ARG_REGS) {
+                            std::string src = valXmmReg(instr.operands[i]);
+                            tc_xmm_args.push_back({static_cast<size_t>(tc_xmm_count), true, src});
+                            tc_xmm_count++;
+                        }
+                    } else {
+                        if (tc_gpr_count < MAX_ARG_REGS) {
+                            std::string src = valReg(instr.operands[i]);
+                            tc_gpr_args.push_back({static_cast<size_t>(tc_gpr_count), false, src});
+                            tc_gpr_count++;
+                        }
+                    }
+                }
+
+                // Move float args into xmm0..7
+                for (auto& a : tc_xmm_args) {
+                    if (a.src != XMM_ARG_REGS[a.idx]) {
+                        IRType at = getValueType(instr.operands[a.idx]);
+                        const char* sfx = (at == IRType::F32) ? "s" : "d";
+                        out() << "    movs" << sfx << " " << XMM_ARG_REGS[a.idx] << ", " << a.src << "\n";
+                    }
+                }
+
+                // GPR parallel move (same algorithm as normal call)
+                size_t tc_n_gpr = tc_gpr_args.size();
+                std::vector<bool> tc_done(tc_n_gpr, false);
+                bool tc_progress = true;
+                while (tc_progress) {
+                    tc_progress = false;
+                    for (size_t i = 0; i < tc_n_gpr; ++i) {
+                        if (tc_done[i]) continue;
+                        if (tc_gpr_args[i].src == ARG_REGS[tc_gpr_args[i].idx]) {
+                            tc_done[i] = true; tc_progress = true; continue;
+                        }
+                        bool blocked = false;
+                        for (size_t j = 0; j < tc_n_gpr; ++j) {
+                            if (j != i && !tc_done[j] && tc_gpr_args[j].src == ARG_REGS[tc_gpr_args[i].idx]) {
+                                blocked = true;
+                                break;
+                            }
+                        }
+                        if (!blocked) {
+                            out() << "    mov  " << ARG_REGS[tc_gpr_args[i].idx] << ", " << tc_gpr_args[i].src << "\n";
+                            tc_done[i] = true;
+                            tc_progress = true;
+                        }
+                    }
+                }
+                for (size_t i = 0; i < tc_n_gpr; ++i) {
+                    if (tc_done[i]) continue;
+                    out() << "    mov  rax, " << tc_gpr_args[i].src << "\n";
+                    size_t cur = i;
+                    while (true) {
+                        size_t next = tc_n_gpr;
+                        for (size_t j = 0; j < tc_n_gpr; ++j) {
+                            if (!tc_done[j] && j != cur && tc_gpr_args[j].src == ARG_REGS[tc_gpr_args[cur].idx]) {
+                                next = j;
+                                break;
+                            }
+                        }
+                        if (next == tc_n_gpr) {
+                            out() << "    mov  " << ARG_REGS[tc_gpr_args[cur].idx] << ", rax\n";
+                            tc_done[cur] = true;
+                            break;
+                        }
+                        out() << "    mov  " << ARG_REGS[tc_gpr_args[cur].idx] << ", " << tc_gpr_args[next].src << "\n";
+                        tc_done[cur] = true;
+                        cur = next;
+                    }
+                }
+
+                // Jump to deferred epilogue block
+                std::string label = "._tail_" + std::to_string(tail_call_counter_++);
+                tail_call_sites_.push_back({label, instr.callee_name});
+                out() << "    jmp  " << label << "\n";
+                break;
+            }
+
+            // --- NORMAL CALL (existing code) ---
             // Save caller-saved GPRs
             std::vector<std::pair<ValueId, std::string>> to_save;
             for (auto& [vid, loc] : value_locs_) {

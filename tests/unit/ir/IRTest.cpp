@@ -640,3 +640,117 @@ TEST(IRTest, DumpIRNoPurityWhenUnknown) {
     EXPECT_EQ(dump.find("[pure]"), std::string::npos);
     EXPECT_EQ(dump.find("[impure"), std::string::npos);
 }
+
+// ===== TCE: Tail call detection tests =====
+
+// Helper to find Call instructions
+static std::vector<const IRInstr*> findCalls(const IRFunction& fn) {
+    std::vector<const IRInstr*> calls;
+    for (const auto& block : fn.blocks) {
+        for (const auto& instr : block.instrs) {
+            if (instr.op == IROpcode::Call) calls.push_back(&instr);
+        }
+    }
+    return calls;
+}
+
+// --- Direct tail call detected ---
+TEST(IRTest, TailCallDetected) {
+    auto r = buildIR(
+        "fn g(x: i64) -> i64 { x }\n"
+        "fn f(x: i64) -> i64 { g(x) }"
+    );
+    auto calls = findCalls(r.ir.functions[1]); // f
+    ASSERT_EQ(calls.size(), 1u);
+    EXPECT_TRUE(calls[0]->is_tail_call);
+}
+
+// --- Non-tail call in BinOp ---
+TEST(IRTest, NonTailCallInBinOp) {
+    auto r = buildIR(
+        "fn g(x: i64) -> i64 { x }\n"
+        "fn f(x: i64) -> i64 { g(x) + 1 }"
+    );
+    auto calls = findCalls(r.ir.functions[1]); // f
+    ASSERT_EQ(calls.size(), 1u);
+    EXPECT_FALSE(calls[0]->is_tail_call);
+}
+
+// --- Tail call in both if/else branches ---
+TEST(IRTest, TailCallInIfBranches) {
+    auto r = buildIR(
+        "fn g(x: i64) -> i64 { x }\n"
+        "fn h(x: i64) -> i64 { x + 1 }\n"
+        "fn f(x: i64) -> i64 { if x > 0 { g(x) } else { h(x) } }"
+    );
+    auto calls = findCalls(r.ir.functions[2]); // f
+    ASSERT_EQ(calls.size(), 2u);
+    EXPECT_TRUE(calls[0]->is_tail_call);
+    EXPECT_TRUE(calls[1]->is_tail_call);
+}
+
+// --- Self tail call detected ---
+TEST(IRTest, SelfTailCallDetected) {
+    auto r = buildIR(
+        "fn countdown(n: i64) -> i64 {\n"
+        "    if n <= 0 { 0 } else { countdown(n - 1) }\n"
+        "}"
+    );
+    auto calls = findCalls(r.ir.functions[0]);
+    ASSERT_EQ(calls.size(), 1u);
+    EXPECT_TRUE(calls[0]->is_tail_call);
+    EXPECT_EQ(calls[0]->callee_name, "countdown");
+}
+
+// --- Fibonacci has no tail calls (both in add operands) ---
+TEST(IRTest, FibHasNoTailCalls) {
+    auto r = buildIR(
+        "fn fib(n: i64) -> i64 {\n"
+        "    if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }\n"
+        "}"
+    );
+    auto calls = findCalls(r.ir.functions[0]);
+    ASSERT_EQ(calls.size(), 2u);
+    EXPECT_FALSE(calls[0]->is_tail_call);
+    EXPECT_FALSE(calls[1]->is_tail_call);
+}
+
+// --- Nested call: outer is tail, inner is not ---
+TEST(IRTest, CallAsArgNotTail) {
+    auto r = buildIR(
+        "fn g(x: i64) -> i64 { x }\n"
+        "fn f(x: i64) -> i64 { g(g(x)) }"
+    );
+    auto calls = findCalls(r.ir.functions[1]); // f
+    ASSERT_EQ(calls.size(), 2u);
+    // Inner g(x) is argument → not tail
+    EXPECT_FALSE(calls[0]->is_tail_call);
+    // Outer g(g(x)) is in tail position
+    EXPECT_TRUE(calls[1]->is_tail_call);
+}
+
+// --- Tail call in block result ---
+TEST(IRTest, TailCallInBlockResult) {
+    auto r = buildIR(
+        "fn g(x: i64) -> i64 { x }\n"
+        "fn f(x: i64) -> i64 {\n"
+        "    val y: i64 = x + 1\n"
+        "    g(y)\n"
+        "}"
+    );
+    auto calls = findCalls(r.ir.functions[1]); // f
+    ASSERT_EQ(calls.size(), 1u);
+    EXPECT_TRUE(calls[0]->is_tail_call);
+}
+
+// --- dumpIR shows "tail call" for tail calls ---
+TEST(IRTest, DumpIRShowsTail) {
+    auto r = buildIR(
+        "fn g(x: i64) -> i64 { x }\n"
+        "fn f(x: i64) -> i64 { g(x) }"
+    );
+    std::ostringstream out;
+    dumpIR(r.ir, out);
+    std::string dump = out.str();
+    EXPECT_NE(dump.find("tail call"), std::string::npos);
+}

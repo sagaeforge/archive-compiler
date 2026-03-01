@@ -1,0 +1,4 @@
+// Verify --dump-ir shows "tail call"
+fn g(x: i64) -> i64 { x }
+fn f(x: i64) -> i64 { g(x) }
+fn main() -> i64 { f(42) }

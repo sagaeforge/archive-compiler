@@ -86,6 +86,14 @@ private:
     void collectMergeBlocks(const IRFunction& fn);
 
     uint32_t current_block_idx_ = 0;
+
+    // Tail call deferred epilogue
+    struct TailCallSite {
+        std::string label;      // ._tail_0, ._tail_1, ...
+        std::string callee;     // jump target function name
+    };
+    std::vector<TailCallSite> tail_call_sites_;
+    uint32_t tail_call_counter_ = 0;
 };
 
 } // namespace kern
