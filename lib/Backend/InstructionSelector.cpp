@@ -124,6 +124,15 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     struct_vreg_sizes_.clear();
     stack_ptr_vregs_.clear();
     gpr_arg_slot_ = 0;
+    fn_return_type_ = fn.return_type;
+    hidden_ret_ptr_ = INVALID_VREG;
+
+    // >16B struct return: the caller passes a hidden pointer in RDI.
+    // We allocate a vreg to hold it and shift gpr_arg_slot_ so the first
+    // visible parameter starts from RSI.
+    if (isStructType(fn.return_type) && sizeOfType(fn.return_type) > 16) {
+        hidden_ret_ptr_ = freshVReg();
+    }
 
     if (fn.is_intrinsic || fn.block_count == 0) {
         mf->block_count = 0;
@@ -798,7 +807,39 @@ void InstructionSelector::selectRet(const LIRInstr& instr) {
     VReg val = instr.ret.value;
 
     if (val != INVALID_VREG) {
-        if (float_vregs_.count(val)) {
+        if (hidden_ret_ptr_ != INVALID_VREG &&
+            struct_vregs_.count(val) && struct_vreg_sizes_.count(val)) {
+            // >16B struct return: copy struct data to [hidden_ret_ptr_] and
+            // return the pointer in RAX.
+            uint32_t sz = struct_vreg_sizes_[val];
+            VReg src = freshVReg();
+            VReg dst = freshVReg();
+            emit(makeMov(MachOperand::virt(src), MachOperand::virt(val), 64));
+            emit(makeMov(MachOperand::virt(dst), MachOperand::virt(hidden_ret_ptr_), 64));
+            for (uint32_t off = 0; off < sz; off += 8) {
+                VReg tmp = freshVReg();
+                MachInstr ld(X86Op::MovLoad);
+                ld.width = 64;
+                ld.operand_count = 2;
+                ld.inline_ops[0] = MachOperand::virt(tmp);
+                ld.inline_ops[1] = MachOperand::virt(src);
+                emit(ld);
+                MachInstr st(X86Op::MovStore);
+                st.width = 64;
+                st.operand_count = 2;
+                st.inline_ops[0] = MachOperand::virt(dst);
+                st.inline_ops[1] = MachOperand::virt(tmp);
+                emit(st);
+                if (off + 8 < sz) {
+                    emit(makeAlu(X86Op::Add, MachOperand::virt(src),
+                                 MachOperand::immediate(8), 64));
+                    emit(makeAlu(X86Op::Add, MachOperand::virt(dst),
+                                 MachOperand::immediate(8), 64));
+                }
+            }
+            emit(makeMov(MachOperand::precolored(PhysReg::RAX),
+                         MachOperand::virt(hidden_ret_ptr_), 64));
+        } else if (float_vregs_.count(val)) {
             uint8_t fw = float_vregs_[val];
             X86Op mov_op = (fw == 32) ? X86Op::Movss : X86Op::Movsd;
             MachInstr mi(mov_op);
@@ -808,7 +849,7 @@ void InstructionSelector::selectRet(const LIRInstr& instr) {
             mi.inline_ops[1] = MachOperand::virt(val);
             emit(mi);
         } else if (struct_vregs_.count(val) && struct_vreg_sizes_.count(val)) {
-            // Struct return: pack fields into RAX (+ RDX for >8B) per SysV ABI.
+            // ≤16B struct return: pack fields into RAX (+ RDX for >8B).
             // Use precolored R11 as base pointer to prevent register allocator
             // from assigning it to RAX/RDX and causing clobber issues.
             uint32_t sz = struct_vreg_sizes_[val];
@@ -844,9 +885,33 @@ void InstructionSelector::selectRet(const LIRInstr& instr) {
 void InstructionSelector::selectCall(const LIRInstr& instr) {
     const auto& call = instr.call;
 
+    // >16B struct return: caller allocates stack space and passes hidden
+    // pointer as the first GPR arg (RDI), shifting visible args by one.
+    bool large_struct_ret = false;
+    VReg ret_buf = INVALID_VREG;
+    if (instr.result != INVALID_VREG && struct_vregs_.count(instr.result)) {
+        uint32_t sz = struct_vreg_sizes_[instr.result];
+        if (sz > 16) {
+            large_struct_ret = true;
+            sz = (sz + 7u) & ~7u;
+            struct_alloc_bytes_ += sz;
+            static constexpr int32_t CS_AREA = NUM_CALLEE_SAVED * 8;
+            int32_t offset = -CS_AREA - static_cast<int32_t>(struct_alloc_bytes_);
+            ret_buf = freshVReg();
+            emit(makeLea(MachOperand::virt(ret_buf), MachOperand::stack(offset)));
+        }
+    }
+
     // Set up arguments via parallel move
     uint32_t gpr_idx = 0;
     uint32_t xmm_idx = 0;
+
+    // Pass hidden return pointer as first GPR arg
+    if (large_struct_ret) {
+        emit(makeMov(MachOperand::precolored(GPR_ARG_REGS[0]),
+                     MachOperand::virt(ret_buf), 64));
+        gpr_idx = 1;
+    }
 
     for (uint32_t i = 0; i < call.arg_count; ++i) {
         VReg arg = call.args[i];
@@ -909,7 +974,8 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
 
     // Can't tail-call if any arg is a stack pointer (struct_alloc/addr_of)
     // because the callee would access the caller's (destroyed) stack frame.
-    bool can_tail = call.is_tail;
+    // Also can't tail-call if we need to pass a hidden return pointer.
+    bool can_tail = call.is_tail && !large_struct_ret;
     if (can_tail) {
         for (uint32_t i = 0; i < call.arg_count; ++i) {
             if (stack_ptr_vregs_.count(call.args[i]) ||
@@ -930,7 +996,13 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
 
     // Move return value
     if (instr.result != INVALID_VREG) {
-        if (float_vregs_.count(instr.result)) {
+        if (large_struct_ret) {
+            // >16B struct return: result is already at ret_buf (callee wrote
+            // through the hidden pointer). Point result vreg to it.
+            emit(makeMov(MachOperand::virt(instr.result),
+                         MachOperand::virt(ret_buf), 64));
+            stack_ptr_vregs_.insert(instr.result);
+        } else if (float_vregs_.count(instr.result)) {
             uint8_t fw = float_vregs_[instr.result];
             X86Op mov_op = (fw == 32) ? X86Op::Movss : X86Op::Movsd;
             MachInstr mi(mov_op);
@@ -940,7 +1012,7 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
             mi.inline_ops[1] = MachOperand::precolored(PhysReg::XMM0);
             emit(mi);
         } else if (struct_vregs_.count(instr.result)) {
-            // Struct return: callee returned struct in RAX (+RDX for >8B).
+            // ≤16B struct return: callee returned struct in RAX (+RDX for >8B).
             // Allocate local stack space and unpack the register values.
             uint32_t sz = struct_vreg_sizes_[instr.result];
             sz = (sz + 7u) & ~7u;
@@ -995,9 +1067,32 @@ void InstructionSelector::selectFnRef(const LIRInstr& instr) {
 void InstructionSelector::selectCallIndirect(const LIRInstr& instr) {
     const auto& ci = instr.call_indirect;
 
+    // >16B struct return: allocate stack space and pass hidden pointer in RDI
+    bool large_struct_ret = false;
+    VReg ret_buf = INVALID_VREG;
+    if (instr.result != INVALID_VREG && struct_vregs_.count(instr.result)) {
+        uint32_t sz = struct_vreg_sizes_[instr.result];
+        if (sz > 16) {
+            large_struct_ret = true;
+            sz = (sz + 7u) & ~7u;
+            struct_alloc_bytes_ += sz;
+            static constexpr int32_t CS_AREA = NUM_CALLEE_SAVED * 8;
+            int32_t offset = -CS_AREA - static_cast<int32_t>(struct_alloc_bytes_);
+            ret_buf = freshVReg();
+            emit(makeLea(MachOperand::virt(ret_buf), MachOperand::stack(offset)));
+        }
+    }
+
     // Set up arguments via parallel move (same as direct call)
     uint32_t gpr_idx = 0;
     uint32_t xmm_idx = 0;
+
+    // Pass hidden return pointer as first GPR arg
+    if (large_struct_ret) {
+        emit(makeMov(MachOperand::precolored(GPR_ARG_REGS[0]),
+                     MachOperand::virt(ret_buf), 64));
+        gpr_idx = 1;
+    }
 
     for (uint32_t i = 0; i < ci.arg_count; ++i) {
         VReg arg = ci.args[i];
@@ -1047,7 +1142,12 @@ void InstructionSelector::selectCallIndirect(const LIRInstr& instr) {
 
     // Move return value
     if (instr.result != INVALID_VREG) {
-        if (float_vregs_.count(instr.result)) {
+        if (large_struct_ret) {
+            // >16B struct return: result is at ret_buf
+            emit(makeMov(MachOperand::virt(instr.result),
+                         MachOperand::virt(ret_buf), 64));
+            stack_ptr_vregs_.insert(instr.result);
+        } else if (float_vregs_.count(instr.result)) {
             uint8_t fw = float_vregs_[instr.result];
             X86Op mov_op = (fw == 32) ? X86Op::Movss : X86Op::Movsd;
             MachInstr mi(mov_op);
@@ -1057,7 +1157,7 @@ void InstructionSelector::selectCallIndirect(const LIRInstr& instr) {
             mi.inline_ops[1] = MachOperand::precolored(PhysReg::XMM0);
             emit(mi);
         } else if (struct_vregs_.count(instr.result)) {
-            // Struct return from indirect call: unpack RAX+RDX
+            // ≤16B struct return from indirect call: unpack RAX+RDX
             uint32_t sz = struct_vreg_sizes_[instr.result];
             sz = (sz + 7u) & ~7u;
             struct_alloc_bytes_ += sz;
@@ -1098,6 +1198,13 @@ void InstructionSelector::selectBlockArg(const LIRInstr& instr) {
     // arriving via ABI registers. Use gpr_arg_slot_ to track cumulative
     // GPR slot usage (multi-register params like 16B structs consume 2 slots).
     if (current_block_ == 0) {
+        // >16B struct return: capture hidden return pointer from first GPR (RDI)
+        // on the first BlockArg. This consumes gpr_arg_slot_ 0.
+        if (hidden_ret_ptr_ != INVALID_VREG && gpr_arg_slot_ == 0) {
+            emit(makeMov(MachOperand::virt(hidden_ret_ptr_),
+                         MachOperand::precolored(GPR_ARG_REGS[0]), 64));
+            gpr_arg_slot_ = 1;  // visible params start from RSI
+        }
         bool is_float_param = isFloat(instr.type);
         bool is_struct = isStructType(instr.type);
 
