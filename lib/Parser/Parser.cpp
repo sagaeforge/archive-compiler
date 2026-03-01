@@ -422,10 +422,75 @@ Module* Parser::parseModule() {
     std::vector<StaticAssertDecl*> static_asserts;
     std::vector<TraitDecl*> traits;
     std::vector<ImplDecl*> impls;
+    std::vector<ImportDecl*> imports;
+    std::string_view module_name;
 
     // Register builtin struct-like types so struct literal syntax works
     struct_names_.insert("Slice");
     skipNewlines();
+
+    // Parse optional module declaration: module kern.memory
+    if (check(TokenKind::KwModule)) {
+        advance();
+        std::string name_buf;
+        Token first = expect(TokenKind::Ident, "expected module name");
+        name_buf = std::string(first.text);
+        while (check(TokenKind::Dot)) {
+            advance();
+            Token part = expect(TokenKind::Ident, "expected module name part after '.'");
+            name_buf += ".";
+            name_buf += std::string(part.text);
+        }
+        char* buf = arena_.makeArray<char>(name_buf.size());
+        std::memcpy(buf, name_buf.data(), name_buf.size());
+        module_name = std::string_view(buf, name_buf.size());
+        skipNewlines();
+    }
+
+    // Parse import declarations: import kern.types (PhysAddr, VirtAddr)
+    while (check(TokenKind::KwImport)) {
+        auto loc = peek().loc;
+        advance();
+        std::string path_buf;
+        Token first = expect(TokenKind::Ident, "expected module path");
+        path_buf = std::string(first.text);
+        while (check(TokenKind::Dot)) {
+            advance();
+            Token part = expect(TokenKind::Ident, "expected module path part after '.'");
+            path_buf += ".";
+            path_buf += std::string(part.text);
+        }
+        char* pbuf = arena_.makeArray<char>(path_buf.size());
+        std::memcpy(pbuf, path_buf.data(), path_buf.size());
+
+        auto* imp = arena_.make<ImportDecl>();
+        imp->module_path = std::string_view(pbuf, path_buf.size());
+        imp->loc = loc;
+        imp->names = nullptr;
+        imp->name_count = 0;
+
+        // Optional: (Name1, Name2, ...)
+        if (check(TokenKind::LParen)) {
+            advance();
+            std::vector<std::string_view> names;
+            while (!check(TokenKind::RParen) && !check(TokenKind::Eof)) {
+                Token n = expect(TokenKind::Ident, "expected import name");
+                names.push_back(n.text);
+                if (check(TokenKind::Comma)) advance();
+            }
+            expect(TokenKind::RParen, "expected ')' after import names");
+            if (!names.empty()) {
+                imp->names = arena_.makeArray<std::string_view>(names.size());
+                for (uint32_t j = 0; j < names.size(); ++j) {
+                    imp->names[j] = names[j];
+                }
+                imp->name_count = static_cast<uint32_t>(names.size());
+            }
+        }
+        imports.push_back(imp);
+        skipNewlines();
+    }
+
     while (!check(TokenKind::Eof)) {
         // Parse annotations (@packed, @align(N), @section("name"))
         bool is_packed = false;
@@ -681,6 +746,12 @@ Module* Parser::parseModule() {
     mod->impls = arena_.makeArray<ImplDecl*>(impls.size());
     for (size_t j = 0; j < impls.size(); ++j) {
         mod->impls[j] = impls[j];
+    }
+    mod->module_name = module_name;
+    mod->import_count = static_cast<uint32_t>(imports.size());
+    mod->imports = arena_.makeArray<ImportDecl*>(imports.size());
+    for (size_t j = 0; j < imports.size(); ++j) {
+        mod->imports[j] = imports[j];
     }
     return mod;
 }

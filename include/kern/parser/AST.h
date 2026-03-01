@@ -435,8 +435,19 @@ struct FnDecl {
     std::string_view section_name;    // @section("name"), empty = default
 };
 
+// --- Import declaration ---
+struct ImportDecl {
+    std::string_view module_path;   // "kern.types"
+    std::string_view* names;        // imported names: (PhysAddr, VirtAddr)
+    uint32_t name_count;
+    SourceLocation loc;
+};
+
 // --- Module ---
 struct Module {
+    std::string_view module_name;   // "kern.memory" or empty
+    ImportDecl** imports;
+    uint32_t import_count;
     FnDecl** functions;
     uint32_t fn_count;
     StructDecl** structs;

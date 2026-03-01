@@ -56,19 +56,27 @@ int main(int argc, char** argv) {
         } else if (arg == "--linker-script" && i + 1 < argc) {
             opts.linker_script = argv[++i];
         } else if (arg[0] != '-') {
-            opts.input_file = arg;
+            opts.input_files.push_back(arg);
+            if (opts.input_file.empty()) opts.input_file = arg;
         } else {
             std::cerr << "Unknown option: " << arg << "\n";
             return 1;
         }
     }
 
-    if (opts.input_file.empty()) {
+    if (opts.input_files.empty()) {
         std::cerr << "error: no input file\n";
         return 1;
     }
 
-    // Read source file
+    // Multi-file compilation: compile each .kern independently, then link
+    if (opts.input_files.size() > 1) {
+        kern::CompilationContext ctx;
+        kern::CompilerPipeline pipeline(ctx);
+        return pipeline.runMultiFile(opts, std::cout, std::cerr);
+    }
+
+    // Single-file path (existing behavior)
     std::ifstream ifs(opts.input_file);
     if (!ifs) {
         std::cerr << "error: cannot open file '" << opts.input_file << "'\n";

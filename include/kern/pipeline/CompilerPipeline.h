@@ -6,11 +6,13 @@
 #include "kern/parser/AST.h"
 #include <ostream>
 #include <string>
+#include <vector>
 
 namespace kern {
 
 struct CompileOptions {
     std::string input_file;
+    std::vector<std::string> input_files;  // multi-file compilation
     std::string output_file = "a.out";
     bool asm_only = false;
     bool dump_tokens = false;
@@ -48,8 +50,16 @@ private:
                  std::ostream& err);
     int link(const std::string& obj_file, const std::string& output_file,
              std::ostream& err, const std::string& linker_script = "");
+    int linkMultiple(const std::vector<std::string>& obj_files,
+                     const std::string& output_file,
+                     std::ostream& err, const std::string& linker_script = "");
     int linkFreestanding(const std::string& obj_file, const std::string& output_file,
                          std::ostream& err, const std::string& linker_script = "");
+
+public:
+    // Multi-file compilation: compile each file to .o, then link
+    int runMultiFile(const CompileOptions& opts,
+                     std::ostream& out, std::ostream& err);
 };
 
 } // namespace kern

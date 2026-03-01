@@ -84,7 +84,7 @@ for kern_file in $(find "$TEST_DIR" -name '*.kern' | sort); do
     fi
 
     # Normal test — compile and run
-    output=$("$KERNC" "$kern_file" -o /tmp/kern_test_bin 2>&1) || true
+    output=$("$KERNC" "$kern_file" $compiler_args -o /tmp/kern_test_bin 2>&1) || true
     if [ ! -f /tmp/kern_test_bin ]; then
         echo "  FAIL  $test_name (compilation failed)"
         echo "        $output"

@@ -13,6 +13,7 @@
 #include "kern/ir/Metadata.h"
 
 #include <fstream>
+#include <sstream>
 #include <cstdlib>
 #include <unistd.h>
 
@@ -272,6 +273,95 @@ int CompilerPipeline::run(const std::string& source, const CompileOptions& opts,
     std::remove(obj_file.c_str());
 
     return 0;
+}
+
+int CompilerPipeline::linkMultiple(const std::vector<std::string>& obj_files,
+                                    const std::string& output_file,
+                                    std::ostream& err,
+                                    const std::string& linker_script) {
+    std::string sdk_lib_path;
+    {
+        FILE* pipe = popen("xcrun --show-sdk-path 2>/dev/null", "r");
+        if (pipe) {
+            char buf[512];
+            if (fgets(buf, sizeof(buf), pipe)) {
+                std::string sdk(buf);
+                while (!sdk.empty() && (sdk.back() == '\n' || sdk.back() == '\r'))
+                    sdk.pop_back();
+                sdk_lib_path = sdk + "/usr/lib";
+            }
+            pclose(pipe);
+        }
+    }
+    std::string cmd = "ld";
+    for (const auto& obj : obj_files) cmd += " " + obj;
+    cmd += " -o " + output_file +
+           " -e _start -platform_version macos 14.0.0 14.0.0 -arch x86_64";
+    if (!sdk_lib_path.empty()) cmd += " -L" + sdk_lib_path;
+    if (!linker_script.empty()) cmd += " -T " + linker_script;
+    cmd += " -lSystem 2>&1";
+    int ret = std::system(cmd.c_str());
+    if (ret != 0) {
+        err << "error: linker failed\n";
+        err << "  command: " << cmd << "\n";
+    }
+    return ret;
+}
+
+int CompilerPipeline::runMultiFile(const CompileOptions& opts,
+                                    std::ostream& /*out*/, std::ostream& err) {
+    std::vector<std::string> obj_files;
+    std::vector<std::string> asm_files;
+
+    for (const auto& input_file : opts.input_files) {
+        // Fresh context for each file
+        CompilationContext file_ctx;
+        CompilerPipeline file_pipeline(file_ctx);
+
+        std::ifstream ifs(input_file);
+        if (!ifs) {
+            err << "error: cannot open file '" << input_file << "'\n";
+            return 1;
+        }
+        std::stringstream ss;
+        ss << ifs.rdbuf();
+        std::string source = ss.str();
+        file_ctx.diag.setSource(source);
+
+        Module* ast = file_pipeline.parse(source, input_file);
+        if (file_ctx.diag.hasErrors()) { file_ctx.diag.printAll(err); return 1; }
+
+        HIRModule* hir = file_pipeline.buildHIR(ast);
+        if (!hir || file_ctx.diag.hasErrors()) { file_ctx.diag.printAll(err); return 1; }
+
+        LIRModule* lir = file_pipeline.buildLIR(hir);
+        MachModule* mach = file_pipeline.buildMachIR(lir);
+
+        std::string asm_file = "/tmp/kern_" + std::to_string(getpid()) + "_" +
+                               std::to_string(obj_files.size()) + ".asm";
+        std::string obj_file = "/tmp/kern_" + std::to_string(getpid()) + "_" +
+                               std::to_string(obj_files.size()) + ".o";
+        {
+            std::ofstream asm_out(asm_file);
+            if (!asm_out) {
+                err << "error: cannot create assembly file '" << asm_file << "'\n";
+                return 1;
+            }
+            file_pipeline.emitASM(mach, lir, asm_out, opts.freestanding);
+        }
+
+        if (file_pipeline.assemble(asm_file, obj_file, err) != 0) return 1;
+        obj_files.push_back(obj_file);
+        asm_files.push_back(asm_file);
+    }
+
+    int ret = linkMultiple(obj_files, opts.output_file, err, opts.linker_script);
+
+    // Clean up temp files
+    for (const auto& f : asm_files) std::remove(f.c_str());
+    for (const auto& f : obj_files) std::remove(f.c_str());
+
+    return ret;
 }
 
 } // namespace kern

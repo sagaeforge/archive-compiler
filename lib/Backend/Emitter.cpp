@@ -560,6 +560,19 @@ void NASMEmitter::emitStartWrapper() {
 
 void NASMEmitter::emitModule(const MachModule& mod, const LIRModule& lir_mod,
                               bool freestanding) {
+    // Emit extern declarations for intrinsic (externally-defined) functions
+    for (uint32_t i = 0; i < mod.fn_count; ++i) {
+        if (mod.functions[i].is_intrinsic) {
+            out_ << "extern _" << mod.functions[i].name << "\n";
+        }
+    }
+    // Export non-intrinsic functions as global symbols
+    for (uint32_t i = 0; i < mod.fn_count; ++i) {
+        if (!mod.functions[i].is_intrinsic) {
+            out_ << "global _" << mod.functions[i].name << "\n";
+        }
+    }
+
     // .rodata first
     emitRodata(lir_mod.globals, lir_mod.global_count);
 
