@@ -20,7 +20,7 @@ if [ -z "$KERNC" ] || [ ! -x "$KERNC" ]; then
     exit 1
 fi
 
-for kern_file in "$TEST_DIR"/*.kern; do
+for kern_file in $(find "$TEST_DIR" -name '*.kern' | sort); do
     [ -f "$kern_file" ] || continue
     test_name=$(basename "$kern_file" .kern)
     expected_file="${kern_file%.kern}.expected"

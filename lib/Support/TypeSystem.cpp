@@ -36,8 +36,15 @@ const TypeInfo& TypeTable::get(TypeId id) const {
 }
 
 TypeId TypeTable::makePtr(TypeId pointee, bool is_mutable) {
+    // Deduplicate: return existing TypeId if same pointer type exists
+    TypeKind target_kind = is_mutable ? TypeKind::PtrMut : TypeKind::Ptr;
+    for (uint32_t i = 0; i < types_.size(); ++i) {
+        if (types_[i]->kind == target_kind && types_[i]->ptr.pointee == pointee) {
+            return static_cast<TypeId>(i);
+        }
+    }
     TypeInfo ti{};
-    ti.kind = is_mutable ? TypeKind::PtrMut : TypeKind::Ptr;
+    ti.kind = target_kind;
     ti.ptr.pointee = pointee;
     ti.ptr.is_mutable = is_mutable;
     return add(ti);
