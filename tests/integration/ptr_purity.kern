@@ -1,0 +1,7 @@
+fn read_only(p: Ptr<i64>) -> i64 { (*p) }
+fn write_ptr(p: Ptr<var i64>) -> i64 {
+    *p = 42
+    val r: i64 = (*p)
+    r
+}
+fn main() -> i64 { 0 }

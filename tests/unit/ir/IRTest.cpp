@@ -1105,3 +1105,63 @@ TEST(IRTest, UnionParamTypeStruct) {
     ASSERT_EQ(r.ir.functions.size(), 1u);
     EXPECT_EQ(r.ir.functions[0].param_types[0], IRType::Struct);
 }
+
+// ===== M5c: Pointer IR tests =====
+
+TEST(IRTest, AddrOfEmitsAddrOf) {
+    auto r = buildIR(
+        "fn f(x: i64) -> Ptr<i64> { &x }"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::AddrOf));
+}
+
+TEST(IRTest, AddrOfVarEmitsAddrOf) {
+    auto r = buildIR(
+        "fn f() -> Ptr<var i64> {\n"
+        "    var x: i64 = 10\n"
+        "    &var x\n"
+        "}"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::AddrOf));
+}
+
+TEST(IRTest, DerefEmitsPtrLoad) {
+    auto r = buildIR(
+        "fn f(p: Ptr<i64>) -> i64 { (*p) }"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::PtrLoad));
+}
+
+TEST(IRTest, DerefAssignEmitsPtrStore) {
+    auto r = buildIR(
+        "fn f(p: Ptr<var i64>) -> i64 {\n"
+        "    *p = 42\n"
+        "    val r: i64 = (*p)\n"
+        "    r\n"
+        "}"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::PtrStore));
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::PtrLoad));
+}
+
+TEST(IRTest, PtrParamTypeIsI64) {
+    auto r = buildIR(
+        "fn f(p: Ptr<i64>) -> i64 { (*p) }"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_EQ(r.ir.functions[0].param_types[0], IRType::I64);
+}
+
+TEST(IRTest, DerefStructFieldEmitsPtrLoadAndFieldLoad) {
+    auto r = buildIR(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn f(p: Ptr<Point>) -> i64 { (*p).x }"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::PtrLoad));
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::FieldLoad));
+}

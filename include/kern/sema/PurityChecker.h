@@ -32,6 +32,11 @@ private:
     bool exprUsesVar(Expr* expr) const;
     bool stmtUsesVar(Stmt* stmt) const;
 
+    // Check if a function body uses Ptr<var T> operations (DerefAssign or AddrOfVar)
+    bool bodyUsesPtrWrite(FnDecl* fn) const;
+    bool exprUsesPtrWrite(Expr* expr) const;
+    bool stmtUsesPtrWrite(Stmt* stmt) const;
+
     // Collect all callees from an expression
     void collectCallees(Expr* expr, std::unordered_set<std::string_view>& callees) const;
     void collectCalleesStmt(Stmt* stmt, std::unordered_set<std::string_view>& callees) const;

@@ -1152,6 +1152,158 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
             }
             break;
         }
+        case IROpcode::AddrOf: {
+            // AddrOf: take the address of a local variable
+            // The operand is the value whose address we want
+            ValueId src_id = instr.operands[0];
+            auto src_it = value_locs_.find(src_id);
+            assert(src_it != value_locs_.end());
+
+            std::string dst = allocReg(instr.result);
+
+            if (src_it->second.kind == Location::StructBase) {
+                // struct: lea from struct base
+                int32_t off = src_it->second.stack_offset;
+                out() << "    lea  " << dst << ", [rbp" << off << "]\n";
+            } else if (src_it->second.kind == Location::Stack) {
+                // scalar on stack: lea from stack slot
+                int32_t off = src_it->second.stack_offset;
+                out() << "    lea  " << dst << ", [rbp" << off << "]\n";
+            } else if (src_it->second.kind == Location::Reg) {
+                // Value is in a register — spill to stack, then take address
+                std::string src_reg = src_it->second.reg;
+                stack_offset_ -= 8;
+                if (-stack_offset_ > max_stack_) max_stack_ = -stack_offset_;
+                int32_t off = stack_offset_;
+                // Actually store the value to the stack slot
+                out() << "    mov  qword [rbp" << off << "], " << src_reg << "\n";
+                // Update location to stack
+                value_locs_[src_id] = {Location::Stack, "", off, getValueType(src_id), {}};
+                // Free the register
+                if (src_reg != "rbx" && src_reg != "r12" && src_reg != "r13" &&
+                    src_reg != "r14" && src_reg != "r15") {
+                    free_regs_.push_back(src_reg);
+                }
+                out() << "    lea  " << dst << ", [rbp" << off << "]\n";
+            } else if (src_it->second.kind == Location::XmmReg) {
+                // Float in XMM — spill to stack, then take address
+                std::string src_xmm = src_it->second.reg;
+                stack_offset_ -= 8;
+                if (-stack_offset_ > max_stack_) max_stack_ = -stack_offset_;
+                int32_t off = stack_offset_;
+                out() << "    movsd qword [rbp" << off << "], " << src_xmm << "\n";
+                value_locs_[src_id] = {Location::Stack, "", off, getValueType(src_id), {}};
+                free_xmm_regs_.push_back(src_xmm);
+                out() << "    lea  " << dst << ", [rbp" << off << "]\n";
+            }
+            setValueType(instr.result, IRType::I64);
+            break;
+        }
+
+        case IROpcode::PtrLoad: {
+            // PtrLoad: dereference a pointer to read the value at the pointed-to address
+            ValueId ptr_id = instr.operands[0];
+            IRType load_type = instr.type;
+
+            if (load_type == IRType::Struct) {
+                // Struct dereference: the pointer value IS the struct base address
+                // We just pass the pointer through — CodeGen treats it as a StructBase
+                // whose stack_offset is actually a pointer in a register
+                // For simplicity: load ptr into reg, store as StructBase at a new stack slot
+                // Then copy struct bytes from [ptr] to local stack
+
+                // Get the struct size from callee_name
+                std::string src = valReg(ptr_id);
+                // We don't know struct size here — need to handle at a higher level
+                // For now, just pass the pointer through as a register
+                std::string dst = allocReg(instr.result);
+                if (isMemOperand(src)) {
+                    out() << "    mov  " << dst << ", " << src << "\n";
+                } else if (dst != src) {
+                    out() << "    mov  " << dst << ", " << src << "\n";
+                }
+                setValueType(instr.result, IRType::I64);
+            } else if (irTypeIsFloat(load_type)) {
+                std::string ptr_reg = valReg(ptr_id);
+                if (isMemOperand(ptr_reg)) {
+                    out() << "    mov  rax, " << ptr_reg << "\n";
+                    ptr_reg = "rax";
+                }
+                std::string dst = allocXmmReg(instr.result);
+                const char* sfx = (load_type == IRType::F32) ? "ss" : "sd";
+                out() << "    movs" << sfx << " " << dst << ", [" << ptr_reg << "]\n";
+            } else {
+                std::string ptr_reg = valReg(ptr_id);
+                if (isMemOperand(ptr_reg)) {
+                    out() << "    mov  rax, " << ptr_reg << "\n";
+                    ptr_reg = "rax";
+                }
+                std::string dst = allocReg(instr.result);
+                int bits = irTypeBitWidth(load_type);
+                std::string size_word;
+                switch (bits) {
+                    case 8:  size_word = "byte"; break;
+                    case 16: size_word = "word"; break;
+                    case 32: size_word = "dword"; break;
+                    default: size_word = "qword"; break;
+                }
+                if (bits < 64) {
+                    out() << "    movzx " << dst << ", " << size_word
+                          << " [" << ptr_reg << "]\n";
+                } else {
+                    out() << "    mov  " << dst << ", " << size_word
+                          << " [" << ptr_reg << "]\n";
+                }
+                setValueType(instr.result, load_type);
+            }
+            break;
+        }
+
+        case IROpcode::PtrStore: {
+            // PtrStore: write a value through a pointer
+            ValueId ptr_id = instr.operands[0];
+            ValueId val_id = instr.operands[1];
+            IRType store_type = instr.type;
+
+            std::string ptr_reg = valReg(ptr_id);
+            if (isMemOperand(ptr_reg)) {
+                out() << "    mov  rax, " << ptr_reg << "\n";
+                ptr_reg = "rax";
+            }
+
+            int bits = irTypeBitWidth(store_type);
+            std::string size_word;
+            switch (bits) {
+                case 8:  size_word = "byte"; break;
+                case 16: size_word = "word"; break;
+                case 32: size_word = "dword"; break;
+                default: size_word = "qword"; break;
+            }
+
+            if (irTypeIsFloat(store_type)) {
+                std::string src = valXmmReg(val_id);
+                const char* sfx = (store_type == IRType::F32) ? "ss" : "sd";
+                if (isMemOperand(src)) {
+                    out() << "    movs" << sfx << " xmm0, " << src << "\n";
+                    out() << "    movs" << sfx << " [" << ptr_reg << "], xmm0\n";
+                } else {
+                    out() << "    movs" << sfx << " [" << ptr_reg << "], " << src << "\n";
+                }
+            } else {
+                std::string src = valReg(val_id);
+                if (isMemOperand(src)) {
+                    // Need a scratch register that's not ptr_reg
+                    std::string scratch = (ptr_reg == "rax") ? "rcx" : "rax";
+                    out() << "    mov  " << scratch << ", " << src << "\n";
+                    out() << "    mov  " << size_word << " [" << ptr_reg << "], "
+                          << regForWidth(scratch, bits) << "\n";
+                } else {
+                    out() << "    mov  " << size_word << " [" << ptr_reg << "], "
+                          << regForWidth(src, bits) << "\n";
+                }
+            }
+            break;
+        }
     }
 }
 

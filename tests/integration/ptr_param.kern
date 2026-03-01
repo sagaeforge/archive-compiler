@@ -1,0 +1,8 @@
+fn read_val(p: Ptr<i64>) -> i64 {
+    (*p)
+}
+
+fn main() -> i64 {
+    val x: i64 = 55
+    read_val(&x)
+}

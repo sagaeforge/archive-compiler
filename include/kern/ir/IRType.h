@@ -78,6 +78,8 @@ inline IRType irTypeFromSemaType(Type t) {
         case Type::Struct: return IRType::Struct;
         case Type::Enum:   return IRType::I64;   // enum tag is an integer
         case Type::Union:  return IRType::Struct; // union is stack-allocated like struct
+        case Type::Ptr:    return IRType::I64;    // pointers are 64-bit addresses
+        case Type::PtrVar: return IRType::I64;    // mutable pointers too
     }
     return IRType::Unknown;
 }

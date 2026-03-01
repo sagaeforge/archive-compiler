@@ -47,6 +47,9 @@ private:
     // Statements
     Stmt* parseValDecl();
 
+    // Helpers
+    static bool isDerefTarget(const Expr* expr);
+
     // Operator helpers
     static uint8_t prefixBP(TokenKind kind);
     struct InfixBP { uint8_t left; uint8_t right; };

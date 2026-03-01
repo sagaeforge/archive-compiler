@@ -1107,3 +1107,107 @@ TEST(ParserTest, EnumAndUnionDumpAST) {
     EXPECT_NE(dump.find("Some(i64)"), std::string::npos);
     EXPECT_NE(dump.find("None"), std::string::npos);
 }
+
+// ===== M5c: Pointer parsing =====
+
+TEST(ParserTest, PtrTypeParam) {
+    auto r = parse("fn read(p: Ptr<i64>) -> i64 { *p }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    ASSERT_EQ(r.mod->fn_count, 1u);
+    auto* fn = r.mod->functions[0];
+    ASSERT_EQ(fn->param_count, 1u);
+    EXPECT_EQ(fn->params[0].type.kind, TypeRef::Kind::Ptr);
+    EXPECT_FALSE(fn->params[0].type.is_ptr_var);
+    ASSERT_NE(fn->params[0].type.pointee, nullptr);
+    EXPECT_EQ(fn->params[0].type.pointee->name, "i64");
+}
+
+TEST(ParserTest, PtrVarTypeParam) {
+    auto r = parse("fn write(p: Ptr<var i64>) -> Unit { *p = 42 }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    ASSERT_EQ(r.mod->fn_count, 1u);
+    auto* fn = r.mod->functions[0];
+    ASSERT_EQ(fn->param_count, 1u);
+    EXPECT_EQ(fn->params[0].type.kind, TypeRef::Kind::Ptr);
+    EXPECT_TRUE(fn->params[0].type.is_ptr_var);
+    ASSERT_NE(fn->params[0].type.pointee, nullptr);
+    EXPECT_EQ(fn->params[0].type.pointee->name, "i64");
+}
+
+TEST(ParserTest, AddrOfExpr) {
+    auto r = parse(
+        "fn f() -> Ptr<i64> {\n"
+        "    val x: i64 = 42\n"
+        "    &x\n"
+        "}"
+    );
+    ASSERT_FALSE(r.diag.hasErrors());
+    std::ostringstream out;
+    dumpAST(r.mod, out);
+    EXPECT_NE(out.str().find("UnaryOp(&)"), std::string::npos);
+}
+
+TEST(ParserTest, AddrOfVarExpr) {
+    auto r = parse(
+        "fn f() -> Ptr<var i64> {\n"
+        "    var x: i64 = 42\n"
+        "    &var x\n"
+        "}"
+    );
+    ASSERT_FALSE(r.diag.hasErrors());
+    std::ostringstream out;
+    dumpAST(r.mod, out);
+    EXPECT_NE(out.str().find("UnaryOp(&var)"), std::string::npos);
+}
+
+TEST(ParserTest, DerefExpr) {
+    auto r = parse("fn f(p: Ptr<i64>) -> i64 { *p }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    std::ostringstream out;
+    dumpAST(r.mod, out);
+    EXPECT_NE(out.str().find("UnaryOp(*)"), std::string::npos);
+}
+
+TEST(ParserTest, DerefAssignStmt) {
+    auto r = parse(
+        "fn f(p: Ptr<var i64>) -> Unit {\n"
+        "    *p = 99\n"
+        "}"
+    );
+    ASSERT_FALSE(r.diag.hasErrors());
+    std::ostringstream out;
+    dumpAST(r.mod, out);
+    EXPECT_NE(out.str().find("DerefAssign"), std::string::npos);
+}
+
+TEST(ParserTest, DerefFieldAccess) {
+    auto r = parse(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn f(p: Ptr<Point>) -> i64 { (*p).x }"
+    );
+    ASSERT_FALSE(r.diag.hasErrors());
+    std::ostringstream out;
+    dumpAST(r.mod, out);
+    // Should contain FieldAccess with a Deref inside
+    EXPECT_NE(out.str().find("FieldAccess(.x)"), std::string::npos);
+    EXPECT_NE(out.str().find("UnaryOp(*)"), std::string::npos);
+}
+
+TEST(ParserTest, DerefFieldAssign) {
+    auto r = parse(
+        "struct Point { var x: i64, var y: i64 }\n"
+        "fn f(p: Ptr<var Point>) -> Unit {\n"
+        "    (*p).x = 42\n"
+        "}"
+    );
+    ASSERT_FALSE(r.diag.hasErrors());
+    std::ostringstream out;
+    dumpAST(r.mod, out);
+    EXPECT_NE(out.str().find("DerefAssign"), std::string::npos);
+}
+
+TEST(ParserTest, PtrReturnType) {
+    auto r = parse("fn f(x: i64) -> Ptr<i64> { &x }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    EXPECT_EQ(r.mod->functions[0]->return_type.kind, TypeRef::Kind::Ptr);
+}

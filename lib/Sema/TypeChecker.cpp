@@ -21,6 +21,8 @@ const char* typeName(Type t) {
         case Type::Struct: return "struct";
         case Type::Enum:   return "enum";
         case Type::Union:  return "union";
+        case Type::Ptr:    return "Ptr";
+        case Type::PtrVar: return "Ptr<var>";
     }
     return "<unknown>";
 }
@@ -71,6 +73,7 @@ int bitWidth(Type t) {
 bool isStruct(Type t) { return t == Type::Struct; }
 bool isEnum(Type t) { return t == Type::Enum; }
 bool isUnion(Type t) { return t == Type::Union; }
+bool isPtr(Type t) { return t == Type::Ptr || t == Type::PtrVar; }
 
 int sizeBytes(Type t) {
     switch (t) {
@@ -78,6 +81,7 @@ int sizeBytes(Type t) {
         case Type::I16: case Type::U16: return 2;
         case Type::I32: case Type::U32: case Type::F32: return 4;
         case Type::I64: case Type::U64: case Type::F64: return 8;
+        case Type::Ptr: case Type::PtrVar: return 8; // 64-bit pointers
         default: return 0;
     }
 }
@@ -99,6 +103,10 @@ bool intFitsInType(int64_t value, Type t) {
 TypeChecker::TypeChecker(DiagnosticEngine& diag, Arena* arena) : diag_(diag), arena_(arena) {}
 
 Type TypeChecker::resolveType(const TypeRef& ref) {
+    if (ref.kind == TypeRef::Kind::Ptr) {
+        // Ptr<T> or Ptr<var T>
+        return ref.is_ptr_var ? Type::PtrVar : Type::Ptr;
+    }
     if (ref.name == "i8")   return Type::I8;
     if (ref.name == "i16")  return Type::I16;
     if (ref.name == "i32")  return Type::I32;
@@ -167,6 +175,26 @@ std::string_view TypeChecker::localEnumName(std::string_view binding) const {
 std::string_view TypeChecker::localUnionName(std::string_view binding) const {
     auto it = local_union_names_.find(binding);
     return (it != local_union_names_.end()) ? it->second : std::string_view{};
+}
+
+Type TypeChecker::pointeeTypeOfExpr(const Expr* expr) const {
+    auto it = expr_ptr_info_.find(expr);
+    return (it != expr_ptr_info_.end()) ? it->second.pointee_type : Type::Error;
+}
+
+std::string_view TypeChecker::pointeeStructNameOfExpr(const Expr* expr) const {
+    auto it = expr_ptr_info_.find(expr);
+    return (it != expr_ptr_info_.end()) ? it->second.pointee_struct_name : std::string_view{};
+}
+
+Type TypeChecker::localPointeeType(std::string_view binding) const {
+    auto it = local_ptr_info_.find(binding);
+    return (it != local_ptr_info_.end()) ? it->second.pointee_type : Type::Error;
+}
+
+std::string_view TypeChecker::localPointeeStructName(std::string_view binding) const {
+    auto it = local_ptr_info_.find(binding);
+    return (it != local_ptr_info_.end()) ? it->second.pointee_struct_name : std::string_view{};
 }
 
 bool TypeChecker::check(Module* mod) {
@@ -344,6 +372,7 @@ Type TypeChecker::checkFn(FnDecl* fn) {
     local_struct_names_.clear();
     local_enum_names_.clear();
     local_union_names_.clear();
+    local_ptr_info_.clear();
     current_return_type_ = resolveType(fn->return_type);
 
     // Intrinsic functions: signature only, no body to check
@@ -361,6 +390,19 @@ Type TypeChecker::checkFn(FnDecl* fn) {
             local_enum_names_[fn->params[i].name] = fn->params[i].type.name;
         } else if (pt == Type::Union) {
             local_union_names_[fn->params[i].name] = fn->params[i].type.name;
+        } else if (isPtr(pt)) {
+            // Register pointer pointee info
+            auto& pref = fn->params[i].type;
+            if (pref.pointee) {
+                Type pointee_type = resolveType(*pref.pointee);
+                PtrInfo info{pointee_type, {}};
+                if (pointee_type == Type::Struct) {
+                    info.pointee_struct_name = pref.pointee->name;
+                } else if (pointee_type == Type::Union) {
+                    info.pointee_struct_name = pref.pointee->name;
+                }
+                local_ptr_info_[fn->params[i].name] = info;
+            }
         }
     }
 
@@ -533,9 +575,102 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
                         result = Type::Bool;
                     }
                     break;
-                default:
-                    result = Type::Error;
+                case UnaryOpKind_t::Deref: {
+                    if (!isPtr(operand)) {
+                        diag_.error(expr->loc,
+                            std::string("cannot dereference non-pointer type '") +
+                            typeName(operand) + "'");
+                        result = Type::Error;
+                    } else {
+                        // Get the pointee type
+                        Type pointee = pointeeTypeOfExpr(unary->operand);
+                        if (pointee == Type::Error) {
+                            // Try local binding
+                            if (unary->operand->kind == Expr::Kind::Ident) {
+                                auto* ident = static_cast<IdentExpr*>(unary->operand);
+                                pointee = localPointeeType(ident->name);
+                            }
+                        }
+                        result = pointee;
+                        if (result == Type::Struct) {
+                            // Propagate struct name
+                            auto sn = pointeeStructNameOfExpr(unary->operand);
+                            if (sn.empty() && unary->operand->kind == Expr::Kind::Ident) {
+                                sn = localPointeeStructName(
+                                    static_cast<IdentExpr*>(unary->operand)->name);
+                            }
+                            if (!sn.empty()) {
+                                expr_struct_names_[expr] = sn;
+                            }
+                        } else if (result == Type::Union) {
+                            auto sn = pointeeStructNameOfExpr(unary->operand);
+                            if (sn.empty() && unary->operand->kind == Expr::Kind::Ident) {
+                                sn = localPointeeStructName(
+                                    static_cast<IdentExpr*>(unary->operand)->name);
+                            }
+                            if (!sn.empty()) {
+                                expr_union_names_[expr] = sn;
+                            }
+                        } else if (result == Type::Enum) {
+                            auto sn = pointeeStructNameOfExpr(unary->operand);
+                            if (sn.empty() && unary->operand->kind == Expr::Kind::Ident) {
+                                sn = localPointeeStructName(
+                                    static_cast<IdentExpr*>(unary->operand)->name);
+                            }
+                            if (!sn.empty()) {
+                                expr_enum_names_[expr] = sn;
+                            }
+                        }
+                    }
                     break;
+                }
+                case UnaryOpKind_t::AddrOf: {
+                    // &x → Ptr<T>
+                    result = Type::Ptr;
+                    PtrInfo info{operand, {}};
+                    if (operand == Type::Struct) {
+                        info.pointee_struct_name = structNameOfExpr(unary->operand);
+                        if (info.pointee_struct_name.empty() &&
+                            unary->operand->kind == Expr::Kind::Ident) {
+                            info.pointee_struct_name = localStructName(
+                                static_cast<IdentExpr*>(unary->operand)->name);
+                        }
+                    } else if (operand == Type::Union) {
+                        info.pointee_struct_name = unionNameOfExpr(unary->operand);
+                        if (info.pointee_struct_name.empty() &&
+                            unary->operand->kind == Expr::Kind::Ident) {
+                            info.pointee_struct_name = localUnionName(
+                                static_cast<IdentExpr*>(unary->operand)->name);
+                        }
+                    }
+                    expr_ptr_info_[expr] = info;
+                    break;
+                }
+                case UnaryOpKind_t::AddrOfVar: {
+                    // &var x → Ptr<var T> — operand must be a mutable variable
+                    if (unary->operand->kind != Expr::Kind::Ident) {
+                        diag_.error(expr->loc, "'&var' requires a variable name");
+                        result = Type::Error;
+                        break;
+                    }
+                    auto* ident = static_cast<IdentExpr*>(unary->operand);
+                    if (mutable_vars_.find(ident->name) == mutable_vars_.end()) {
+                        diag_.error(expr->loc,
+                            std::string("'&var' requires a 'var' binding, but '") +
+                            std::string(ident->name) + "' is immutable");
+                        result = Type::Error;
+                        break;
+                    }
+                    result = Type::PtrVar;
+                    PtrInfo info{operand, {}};
+                    if (operand == Type::Struct) {
+                        info.pointee_struct_name = localStructName(ident->name);
+                    } else if (operand == Type::Union) {
+                        info.pointee_struct_name = localUnionName(ident->name);
+                    }
+                    expr_ptr_info_[expr] = info;
+                    break;
+                }
             }
             break;
         }
@@ -1077,6 +1212,12 @@ void TypeChecker::checkStmt(Stmt* stmt) {
                 local_enum_names_[decl->name] = decl->type.name;
             } else if (expected == Type::Union) {
                 local_union_names_[decl->name] = decl->type.name;
+            } else if (isPtr(expected) && decl->type.pointee) {
+                Type pointee_type = resolveType(*decl->type.pointee);
+                PtrInfo info{pointee_type, {}};
+                if (pointee_type == Type::Struct) info.pointee_struct_name = decl->type.pointee->name;
+                else if (pointee_type == Type::Union) info.pointee_struct_name = decl->type.pointee->name;
+                local_ptr_info_[decl->name] = info;
             }
             break;
         }
@@ -1105,6 +1246,12 @@ void TypeChecker::checkStmt(Stmt* stmt) {
                 local_enum_names_[decl->name] = decl->type.name;
             } else if (expected == Type::Union) {
                 local_union_names_[decl->name] = decl->type.name;
+            } else if (isPtr(expected) && decl->type.pointee) {
+                Type pointee_type = resolveType(*decl->type.pointee);
+                PtrInfo info{pointee_type, {}};
+                if (pointee_type == Type::Struct) info.pointee_struct_name = decl->type.pointee->name;
+                else if (pointee_type == Type::Union) info.pointee_struct_name = decl->type.pointee->name;
+                local_ptr_info_[decl->name] = info;
             }
             break;
         }
@@ -1188,6 +1335,68 @@ void TypeChecker::checkStmt(Stmt* stmt) {
             if (val_type != Type::Error && target_type != Type::Error && val_type != target_type) {
                 diag_.error(stmt->loc,
                     std::string("field assignment type mismatch: expected ") +
+                    typeName(target_type) + ", got " + typeName(val_type));
+            }
+            break;
+        }
+        case Stmt::Kind::DerefAssign: {
+            auto* da = static_cast<DerefAssignStmt*>(stmt);
+            Type target_type = checkExpr(da->target);
+
+            // For *ptr = val: target is UnaryOp(Deref)
+            // For (*ptr).field = val: target is FieldAccess chain rooted in Deref
+            // Walk to find the root deref and check it's Ptr<var T>
+            Expr* root = da->target;
+            while (root->kind == Expr::Kind::FieldAccess) {
+                root = static_cast<FieldAccessExpr*>(root)->object;
+            }
+
+            if (root->kind == Expr::Kind::UnaryOp) {
+                auto* deref = static_cast<UnaryOpExpr*>(root);
+                if (deref->op == UnaryOpKind_t::Deref) {
+                    Type ptr_type = typeOfExpr(deref->operand);
+                    if (ptr_type == Type::Ptr) {
+                        diag_.error(stmt->loc,
+                            "cannot write through 'Ptr<T>' (read-only); use 'Ptr<var T>' instead");
+                        break;
+                    }
+                    if (ptr_type != Type::PtrVar) {
+                        diag_.error(stmt->loc,
+                            std::string("cannot write through non-pointer type '") +
+                            typeName(ptr_type) + "'");
+                        break;
+                    }
+                    // If target is (*ptr).field, check field mutability
+                    if (da->target->kind == Expr::Kind::FieldAccess) {
+                        auto* fa = static_cast<FieldAccessExpr*>(da->target);
+                        // Find the struct type of the deref result
+                        Type deref_type = typeOfExpr(root);
+                        if (deref_type == Type::Struct) {
+                            auto sn = structNameOfExpr(root);
+                            if (!sn.empty()) {
+                                auto def_it = struct_defs_.find(sn);
+                                if (def_it != struct_defs_.end()) {
+                                    for (const auto& fd : def_it->second.fields) {
+                                        if (fd.name == fa->field_name && !fd.is_mutable) {
+                                            diag_.error(stmt->loc,
+                                                std::string("cannot assign to immutable field '") +
+                                                std::string(fd.name) + "' of struct '" +
+                                                std::string(sn) + "'");
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check value type matches target
+            Type val_type = checkExpr(da->value, target_type);
+            if (val_type != Type::Error && target_type != Type::Error && val_type != target_type) {
+                diag_.error(stmt->loc,
+                    std::string("deref assignment type mismatch: expected ") +
                     typeName(target_type) + ", got " + typeName(val_type));
             }
             break;

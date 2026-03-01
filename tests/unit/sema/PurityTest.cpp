@@ -377,3 +377,82 @@ TEST(PurityTest, UnionCreationIsPure) {
     ASSERT_NE(it, r.results.end());
     EXPECT_EQ(it->second.purity, Purity::Pure);
 }
+
+// ===== M5c: pointer purity tests =====
+
+TEST(PurityTest, PtrDerefReadIsPure) {
+    auto r = analyzePurity(
+        "fn read_ptr(p: Ptr<i64>) -> i64 { *p }"
+    );
+    auto it = r.results.find("read_ptr");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_EQ(it->second.purity, Purity::Pure);
+}
+
+TEST(PurityTest, AddrOfIsPure) {
+    auto r = analyzePurity(
+        "fn get_addr(x: i64) -> Ptr<i64> { &x }"
+    );
+    auto it = r.results.find("get_addr");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_EQ(it->second.purity, Purity::Pure);
+}
+
+TEST(PurityTest, AddrOfVarIsImpureMem) {
+    auto r = analyzePurity(
+        "fn get_mut_addr() -> Ptr<var i64> {\n"
+        "    var x: i64 = 10\n"
+        "    &var x\n"
+        "}"
+    );
+    auto it = r.results.find("get_mut_addr");
+    ASSERT_NE(it, r.results.end());
+    // has var (ImpureMut) and &var (ImpureMem) — ImpureMem wins
+    EXPECT_EQ(it->second.purity, Purity::ImpureMem);
+}
+
+TEST(PurityTest, DerefAssignIsImpureMem) {
+    auto r = analyzePurity(
+        "fn write_ptr(p: Ptr<var i64>) -> i64 {\n"
+        "    *p = 42\n"
+        "    val r: i64 = (*p)\n"
+        "    r\n"
+        "}"
+    );
+    auto it = r.results.find("write_ptr");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_EQ(it->second.purity, Purity::ImpureMem);
+}
+
+TEST(PurityTest, ImpureMemPropagates) {
+    auto r = analyzePurity(
+        "fn write_ptr(p: Ptr<var i64>) -> i64 {\n"
+        "    *p = 42\n"
+        "    val r: i64 = (*p)\n"
+        "    r\n"
+        "}\n"
+        "fn caller(p: Ptr<var i64>) -> i64 { write_ptr(p) }"
+    );
+    auto it = r.results.find("caller");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_EQ(it->second.purity, Purity::ImpureMem);
+}
+
+TEST(PurityTest, ImpureMemDoesNotOverrideImpureIo) {
+    auto r = analyzePurity(
+        "fn io_fn() -> i64 = intrinsic\n"
+        "fn write_ptr(p: Ptr<var i64>) -> i64 {\n"
+        "    *p = 42\n"
+        "    val r: i64 = (*p)\n"
+        "    r\n"
+        "}\n"
+        "fn caller(p: Ptr<var i64>) -> i64 {\n"
+        "    val x: i64 = io_fn()\n"
+        "    write_ptr(p)\n"
+        "}"
+    );
+    auto it = r.results.find("caller");
+    ASSERT_NE(it, r.results.end());
+    // io propagation takes priority over mem
+    EXPECT_EQ(it->second.purity, Purity::ImpureIo);
+}

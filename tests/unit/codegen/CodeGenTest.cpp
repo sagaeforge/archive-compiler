@@ -614,3 +614,32 @@ TEST(CodeGenTest, EnumMatchGenCmp) {
     );
     EXPECT_NE(asm_code.find("cmp"), std::string::npos);
 }
+
+// ===== M5c: Pointer CodeGen tests =====
+
+TEST(CodeGenTest, AddrOfEmitsLea) {
+    std::string asm_code = generateAsm(
+        "fn f(x: i64) -> Ptr<i64> { &x }"
+    );
+    EXPECT_NE(asm_code.find("lea"), std::string::npos);
+}
+
+TEST(CodeGenTest, DerefEmitsMovFromPtr) {
+    std::string asm_code = generateAsm(
+        "fn f(p: Ptr<i64>) -> i64 { (*p) }"
+    );
+    // Should have a mov that dereferences [reg]
+    EXPECT_NE(asm_code.find("mov"), std::string::npos);
+}
+
+TEST(CodeGenTest, DerefAssignEmitsMovToPtr) {
+    std::string asm_code = generateAsm(
+        "fn f(p: Ptr<var i64>) -> i64 {\n"
+        "    *p = 42\n"
+        "    val r: i64 = (*p)\n"
+        "    r\n"
+        "}"
+    );
+    // Should have mov [reg], ... for the store
+    EXPECT_NE(asm_code.find("42"), std::string::npos);
+}

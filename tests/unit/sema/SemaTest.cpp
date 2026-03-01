@@ -1047,3 +1047,120 @@ TEST(SemaTest, ErrorUnionUnexpectedPayload) {
         "fn main() -> Option { Option::None(42) }", &errors));
     EXPECT_NE(errors.find("takes no payload"), std::string::npos);
 }
+
+// ===== M5c: Pointer type checking =====
+
+TEST(SemaTest, PtrTypeResolves) {
+    EXPECT_TRUE(checkSource(
+        "fn f(p: Ptr<i64>) -> i64 { *p }"));
+}
+
+TEST(SemaTest, PtrVarTypeResolves) {
+    EXPECT_TRUE(checkSource(
+        "fn f(p: Ptr<var i64>) -> Unit { *p = 42 }"));
+}
+
+TEST(SemaTest, AddrOfFromVal) {
+    EXPECT_TRUE(checkSource(
+        "fn f() -> Ptr<i64> {\n"
+        "    val x: i64 = 42\n"
+        "    &x\n"
+        "}"));
+}
+
+TEST(SemaTest, AddrOfFromVar) {
+    EXPECT_TRUE(checkSource(
+        "fn f() -> Ptr<i64> {\n"
+        "    var x: i64 = 42\n"
+        "    &x\n"
+        "}"));
+}
+
+TEST(SemaTest, AddrOfVarFromVar) {
+    EXPECT_TRUE(checkSource(
+        "fn f() -> Ptr<var i64> {\n"
+        "    var x: i64 = 42\n"
+        "    &var x\n"
+        "}"));
+}
+
+TEST(SemaTest, ErrorAddrOfVarFromVal) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn f() -> Ptr<var i64> {\n"
+        "    val x: i64 = 42\n"
+        "    &var x\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("'&var' requires a 'var' binding"), std::string::npos);
+}
+
+TEST(SemaTest, DerefReadPtrOk) {
+    EXPECT_TRUE(checkSource(
+        "fn f(p: Ptr<i64>) -> i64 { *p }"));
+}
+
+TEST(SemaTest, ErrorDerefWritePtrReadonly) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn f(p: Ptr<i64>) -> Unit { *p = 42 }", &errors));
+    EXPECT_NE(errors.find("cannot write through 'Ptr<T>'"), std::string::npos);
+}
+
+TEST(SemaTest, DerefWritePtrVarOk) {
+    EXPECT_TRUE(checkSource(
+        "fn f(p: Ptr<var i64>) -> Unit { *p = 42 }"));
+}
+
+TEST(SemaTest, PtrStructFieldAccess) {
+    EXPECT_TRUE(checkSource(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn f(p: Ptr<Point>) -> i64 { (*p).x }"));
+}
+
+TEST(SemaTest, ErrorDerefFieldAssignReadonly) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "struct Point { var x: i64, var y: i64 }\n"
+        "fn f(p: Ptr<Point>) -> Unit { (*p).x = 42 }", &errors));
+    EXPECT_NE(errors.find("cannot write through 'Ptr<T>'"), std::string::npos);
+}
+
+TEST(SemaTest, DerefFieldAssignPtrVarOk) {
+    EXPECT_TRUE(checkSource(
+        "struct Point { var x: i64, var y: i64 }\n"
+        "fn f(p: Ptr<var Point>) -> Unit { (*p).x = 42 }"));
+}
+
+TEST(SemaTest, ErrorDerefFieldAssignImmutableField) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "struct Point { x: i64, y: i64 }\n"
+        "fn f(p: Ptr<var Point>) -> Unit { (*p).x = 42 }", &errors));
+    EXPECT_NE(errors.find("cannot assign to immutable field"), std::string::npos);
+}
+
+TEST(SemaTest, PtrParamPassing) {
+    EXPECT_TRUE(checkSource(
+        "fn read_val(p: Ptr<i64>) -> i64 { *p }\n"
+        "fn main() -> i64 {\n"
+        "    val x: i64 = 42\n"
+        "    read_val(&x)\n"
+        "}"));
+}
+
+TEST(SemaTest, PtrVarParamPassing) {
+    EXPECT_TRUE(checkSource(
+        "fn write_val(p: Ptr<var i64>) -> Unit { *p = 99 }\n"
+        "fn main() -> i64 {\n"
+        "    var x: i64 = 42\n"
+        "    write_val(&var x)\n"
+        "    x\n"
+        "}"));
+}
+
+TEST(SemaTest, ErrorDerefNonPointer) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn f(x: i64) -> i64 { *x }", &errors));
+    EXPECT_NE(errors.find("cannot dereference non-pointer type"), std::string::npos);
+}

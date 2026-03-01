@@ -16,6 +16,8 @@ struct TypeRef {
     Kind kind = Kind::Named;
     std::string_view name; // "i64", "bool", "Unit"
     SourceLocation loc;
+    TypeRef* pointee = nullptr;  // for Ptr<T>: the inner type
+    bool is_ptr_var = false;     // for Ptr<var T>: mutable pointer
 };
 
 // --- Parameter ---
@@ -149,7 +151,7 @@ struct BinOpExpr : Expr {
 };
 
 struct UnaryOpKind_t {
-    enum Value { Neg, Not, Deref, AddrOf };
+    enum Value { Neg, Not, Deref, AddrOf, AddrOfVar };
 };
 using UnaryOpKind = UnaryOpKind_t::Value;
 
@@ -223,7 +225,7 @@ struct UnionVariantExpr : Expr {
 
 // --- Statements ---
 struct Stmt {
-    enum class Kind { ValDecl, VarDecl, ExprStmt, Assign, FieldAssign };
+    enum class Kind { ValDecl, VarDecl, ExprStmt, Assign, FieldAssign, DerefAssign };
     Kind kind;
     SourceLocation loc;
 };
@@ -251,6 +253,11 @@ struct AssignStmt : Stmt {
 
 struct FieldAssignStmt : Stmt {
     Expr* target;   // FieldAccessExpr chain (e.g. s.pos.x)
+    Expr* value;
+};
+
+struct DerefAssignStmt : Stmt {
+    Expr* target;   // UnaryOpExpr(Deref) or FieldAccessExpr via (*ptr).field
     Expr* value;
 };
 

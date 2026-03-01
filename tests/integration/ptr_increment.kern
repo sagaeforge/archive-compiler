@@ -1,0 +1,10 @@
+fn increment(p: Ptr<var i64>) -> i64 {
+    val old: i64 = (*p)
+    *p = old + 1
+    (*p)
+}
+
+fn main() -> i64 {
+    var x: i64 = 41
+    increment(&var x)
+}

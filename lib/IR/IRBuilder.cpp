@@ -38,6 +38,9 @@ const char* irOpcodeName(IROpcode op) {
         case IROpcode::StructAlloc: return "struct_alloc";
         case IROpcode::FieldStore:  return "field_store";
         case IROpcode::FieldLoad:   return "field_load";
+        case IROpcode::AddrOf:      return "addr_of";
+        case IROpcode::PtrLoad:     return "ptr_load";
+        case IROpcode::PtrStore:    return "ptr_store";
     }
     return "?";
 }
@@ -125,6 +128,16 @@ void dumpIR(const IRModule& mod, std::ostream& out) {
                     case IROpcode::FieldLoad:
                         out << " %" << instr.operands[0]
                             << " (offset=" << instr.imm_value << ")";
+                        break;
+                    case IROpcode::AddrOf:
+                        out << " %" << instr.operands[0];
+                        break;
+                    case IROpcode::PtrLoad:
+                        out << " %" << instr.operands[0];
+                        break;
+                    case IROpcode::PtrStore:
+                        out << " %" << instr.operands[0]
+                            << ", %" << instr.operands[1];
                         break;
                     default:
                         for (size_t i = 0; i < instr.operands.size(); ++i) {
@@ -276,9 +289,11 @@ void IRBuilder::buildFunction(FnDecl* fn) {
         ValueId pv = newValue();
         current_fn_->param_values.push_back(pv);
         current_fn_->param_names.push_back(std::string(fn->params[i].name));
-        auto pname = fn->params[i].type.name;
+        auto& ptype = fn->params[i].type;
+        auto pname = ptype.name;
         IRType pt = IRType::Unknown;
-        if (pname == "i8")        pt = IRType::I8;
+        if (ptype.kind == TypeRef::Kind::Ptr) pt = IRType::I64; // pointers are 64-bit
+        else if (pname == "i8")        pt = IRType::I8;
         else if (pname == "i16")  pt = IRType::I16;
         else if (pname == "i32")  pt = IRType::I32;
         else if (pname == "i64")  pt = IRType::I64;
@@ -515,6 +530,25 @@ ValueId IRBuilder::buildExpr(Expr* expr, bool in_tail_position) {
                 notInstr.loc = expr->loc;
                 notInstr.type = IRType::Bool;
                 return emit(notInstr);
+            } else if (unary->op == UnaryOpKind_t::AddrOf ||
+                       unary->op == UnaryOpKind_t::AddrOfVar) {
+                IRInstr addr;
+                addr.op = IROpcode::AddrOf;
+                addr.result = newValue();
+                addr.operands = {operand};
+                addr.loc = expr->loc;
+                addr.type = IRType::I64; // pointers are 64-bit
+                return emit(addr);
+            } else if (unary->op == UnaryOpKind_t::Deref) {
+                // If the result type is a struct, we need FieldLoad-like base passing
+                // For primitive types, emit PtrLoad
+                IRInstr load;
+                load.op = IROpcode::PtrLoad;
+                load.result = newValue();
+                load.operands = {operand};
+                load.loc = expr->loc;
+                load.type = expr_type;
+                return emit(load);
             }
             return operand;
         }
@@ -1158,6 +1192,89 @@ void IRBuilder::buildStmt(Stmt* stmt) {
             store.loc = stmt->loc;
             store.type = store_type;
             emit(store);
+            break;
+        }
+        case Stmt::Kind::DerefAssign: {
+            auto* da = static_cast<DerefAssignStmt*>(stmt);
+            ValueId val = buildExpr(da->value);
+
+            // Case 1: *ptr = val (simple deref assign)
+            if (da->target->kind == Expr::Kind::UnaryOp) {
+                auto* deref = static_cast<UnaryOpExpr*>(da->target);
+                ValueId ptr = buildExpr(deref->operand);
+                IRInstr store;
+                store.op = IROpcode::PtrStore;
+                store.result = INVALID_VALUE;
+                store.operands = {ptr, val};
+                store.loc = stmt->loc;
+                // Determine the value type from the pointee
+                Type pointee = tc_->pointeeTypeOfExpr(deref->operand);
+                store.type = irTypeFromSemaType(pointee);
+                emit(store);
+            }
+            // Case 2: (*ptr).field = val (deref + field access chain)
+            else if (da->target->kind == Expr::Kind::FieldAccess) {
+                // Walk chain to find deref at root + accumulate field offsets
+                struct ChainEntry { std::string_view field_name; };
+                std::vector<ChainEntry> chain;
+                Expr* cur = da->target;
+                while (cur->kind == Expr::Kind::FieldAccess) {
+                    auto* fae = static_cast<FieldAccessExpr*>(cur);
+                    chain.push_back({fae->field_name});
+                    cur = fae->object;
+                }
+                // cur should be UnaryOp(Deref)
+                assert(cur->kind == Expr::Kind::UnaryOp);
+                auto* deref = static_cast<UnaryOpExpr*>(cur);
+                ValueId ptr = buildExpr(deref->operand);
+
+                // PtrLoad to get struct base pointer value
+                IRInstr pload;
+                pload.op = IROpcode::PtrLoad;
+                pload.result = newValue();
+                pload.operands = {ptr};
+                pload.loc = stmt->loc;
+                pload.type = IRType::Struct;
+                ValueId base = emit(pload);
+
+                // Resolve struct name from the pointer's pointee
+                std::string sname;
+                std::string_view sname_sv = tc_->pointeeStructNameOfExpr(deref->operand);
+                if (sname_sv.empty()) {
+                    // Try local lookup
+                    if (deref->operand->kind == Expr::Kind::Ident) {
+                        auto* ident = static_cast<IdentExpr*>(deref->operand);
+                        sname_sv = tc_->localPointeeStructName(ident->name);
+                    }
+                }
+                sname = std::string(sname_sv);
+
+                // Walk chain in reverse to accumulate offset
+                int32_t total_offset = 0;
+                IRType store_type = IRType::Unknown;
+                for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+                    auto* info = getStructInfo(sname);
+                    assert(info && "struct info not found for deref field assign");
+                    for (const auto& finfo : info->fields) {
+                        if (finfo.name == it->field_name) {
+                            total_offset += finfo.offset;
+                            store_type = finfo.type;
+                            if (!finfo.struct_name.empty()) {
+                                sname = std::string(finfo.struct_name);
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                IRInstr store;
+                store.op = IROpcode::FieldStore;
+                store.operands = {base, val};
+                store.imm_value = total_offset;
+                store.loc = stmt->loc;
+                store.type = store_type;
+                emit(store);
+            }
             break;
         }
     }

@@ -108,6 +108,12 @@ void PurityChecker::collectCalleesStmt(Stmt* stmt, std::unordered_set<std::strin
             collectCallees(fas->value, callees);
             break;
         }
+        case Stmt::Kind::DerefAssign: {
+            auto* da = static_cast<DerefAssignStmt*>(stmt);
+            collectCallees(da->target, callees);
+            collectCallees(da->value, callees);
+            break;
+        }
     }
 }
 
@@ -189,12 +195,103 @@ bool PurityChecker::stmtUsesVar(Stmt* stmt) const {
     if (stmt->kind == Stmt::Kind::VarDecl) return true;
     if (stmt->kind == Stmt::Kind::Assign) return true; // mutation
     if (stmt->kind == Stmt::Kind::FieldAssign) return true; // mutation
+    // DerefAssign is NOT var mutation — it's pointer write (impure(mem))
     if (stmt->kind == Stmt::Kind::ValDecl) {
         auto* decl = static_cast<ValDeclStmt*>(stmt);
         return exprUsesVar(decl->init);
     }
     if (stmt->kind == Stmt::Kind::ExprStmt) {
         return exprUsesVar(static_cast<ExprStmt*>(stmt)->expr);
+    }
+    return false;
+}
+
+bool PurityChecker::bodyUsesPtrWrite(FnDecl* fn) const {
+    if (!fn->body) return false;
+    return exprUsesPtrWrite(fn->body);
+}
+
+bool PurityChecker::exprUsesPtrWrite(Expr* expr) const {
+    if (!expr) return false;
+
+    switch (expr->kind) {
+        case Expr::Kind::Block: {
+            auto* block = static_cast<BlockExpr*>(expr);
+            for (uint32_t i = 0; i < block->stmt_count; ++i) {
+                if (stmtUsesPtrWrite(block->stmts[i])) return true;
+            }
+            if (block->result && exprUsesPtrWrite(block->result)) return true;
+            return false;
+        }
+        case Expr::Kind::If: {
+            auto* ifE = static_cast<IfExpr*>(expr);
+            if (exprUsesPtrWrite(ifE->condition)) return true;
+            if (exprUsesPtrWrite(ifE->then_branch)) return true;
+            if (ifE->else_branch && exprUsesPtrWrite(ifE->else_branch)) return true;
+            return false;
+        }
+        case Expr::Kind::BinOp: {
+            auto* bin = static_cast<BinOpExpr*>(expr);
+            return exprUsesPtrWrite(bin->lhs) || exprUsesPtrWrite(bin->rhs);
+        }
+        case Expr::Kind::UnaryOp: {
+            auto* unary = static_cast<UnaryOpExpr*>(expr);
+            if (unary->op == UnaryOpKind_t::AddrOfVar) return true;
+            return exprUsesPtrWrite(unary->operand);
+        }
+        case Expr::Kind::Call: {
+            auto* call = static_cast<CallExpr*>(expr);
+            for (uint32_t i = 0; i < call->arg_count; ++i) {
+                if (exprUsesPtrWrite(call->args[i])) return true;
+            }
+            return false;
+        }
+        case Expr::Kind::Return: {
+            auto* ret = static_cast<ReturnExpr*>(expr);
+            return ret->value && exprUsesPtrWrite(ret->value);
+        }
+        case Expr::Kind::Match: {
+            auto* m = static_cast<MatchExpr*>(expr);
+            if (exprUsesPtrWrite(m->scrutinee)) return true;
+            for (uint32_t i = 0; i < m->arm_count; ++i) {
+                if (m->arms[i].guard && exprUsesPtrWrite(m->arms[i].guard)) return true;
+                if (exprUsesPtrWrite(m->arms[i].body)) return true;
+            }
+            return false;
+        }
+        case Expr::Kind::StructLit: {
+            auto* sl = static_cast<StructLitExpr*>(expr);
+            for (uint32_t i = 0; i < sl->field_count; ++i) {
+                if (exprUsesPtrWrite(sl->fields[i].value)) return true;
+            }
+            return false;
+        }
+        case Expr::Kind::FieldAccess: {
+            auto* fa = static_cast<FieldAccessExpr*>(expr);
+            return exprUsesPtrWrite(fa->object);
+        }
+        default:
+            return false;
+    }
+}
+
+bool PurityChecker::stmtUsesPtrWrite(Stmt* stmt) const {
+    if (stmt->kind == Stmt::Kind::DerefAssign) return true;
+    if (stmt->kind == Stmt::Kind::ValDecl) {
+        return exprUsesPtrWrite(static_cast<ValDeclStmt*>(stmt)->init);
+    }
+    if (stmt->kind == Stmt::Kind::VarDecl) {
+        return exprUsesPtrWrite(static_cast<VarDeclStmt*>(stmt)->init);
+    }
+    if (stmt->kind == Stmt::Kind::ExprStmt) {
+        return exprUsesPtrWrite(static_cast<ExprStmt*>(stmt)->expr);
+    }
+    if (stmt->kind == Stmt::Kind::Assign) {
+        return exprUsesPtrWrite(static_cast<AssignStmt*>(stmt)->value);
+    }
+    if (stmt->kind == Stmt::Kind::FieldAssign) {
+        auto* fas = static_cast<FieldAssignStmt*>(stmt);
+        return exprUsesPtrWrite(fas->target) || exprUsesPtrWrite(fas->value);
     }
     return false;
 }
@@ -299,6 +396,10 @@ bool PurityChecker::exprHasNonTailCall(Expr* expr, std::string_view fn_name) con
                     auto* fas = static_cast<FieldAssignStmt*>(st);
                     if (exprHasNonTailCallInner(fas->target, fn_name)) return true;
                     if (exprHasNonTailCallInner(fas->value, fn_name)) return true;
+                } else if (st->kind == Stmt::Kind::DerefAssign) {
+                    auto* da = static_cast<DerefAssignStmt*>(st);
+                    if (exprHasNonTailCallInner(da->target, fn_name)) return true;
+                    if (exprHasNonTailCallInner(da->value, fn_name)) return true;
                 }
             }
             // Result is a tail position — recurse with tail-aware check
@@ -414,6 +515,10 @@ bool PurityChecker::exprHasNonTailCallInner(Expr* expr, std::string_view fn_name
                     auto* fas = static_cast<FieldAssignStmt*>(st);
                     if (exprHasNonTailCallInner(fas->target, fn_name)) return true;
                     if (exprHasNonTailCallInner(fas->value, fn_name)) return true;
+                } else if (st->kind == Stmt::Kind::DerefAssign) {
+                    auto* da = static_cast<DerefAssignStmt*>(st);
+                    if (exprHasNonTailCallInner(da->target, fn_name)) return true;
+                    if (exprHasNonTailCallInner(da->value, fn_name)) return true;
                 }
             }
             if (block->result) return exprHasNonTailCallInner(block->result, fn_name);
@@ -565,6 +670,11 @@ std::unordered_map<std::string_view, PurityResult> PurityChecker::analyze(Module
             diag_.warning(fn->loc,
                 std::string("function '") + std::string(fn_name) +
                 "' uses 'var' — classified as impure(mut); consider val + recursion");
+        }
+
+        // Check for pointer write usage (Ptr<var T> operations)
+        if (bodyUsesPtrWrite(fn)) {
+            pr.purity = Purity::ImpureMem;
         }
 
         // Check callees for impurity propagation (io and mem propagate, mut does not)

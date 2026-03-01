@@ -14,7 +14,8 @@ enum class Type {
     U8, U16, U32, U64,
     F32, F64,
     Bool, Unit, Error,
-    Struct, Enum, Union
+    Struct, Enum, Union,
+    Ptr, PtrVar
 };
 
 const char* typeName(Type t);
@@ -27,6 +28,7 @@ bool intFitsInType(int64_t value, Type t);
 bool isStruct(Type t);
 bool isEnum(Type t);
 bool isUnion(Type t);
+bool isPtr(Type t);
 int sizeBytes(Type t);
 
 struct FieldDef {
@@ -102,6 +104,12 @@ public:
     std::string_view localEnumName(std::string_view binding) const;
     std::string_view localUnionName(std::string_view binding) const;
 
+    // Pointer queries (after check() has run)
+    Type pointeeTypeOfExpr(const Expr* expr) const;
+    std::string_view pointeeStructNameOfExpr(const Expr* expr) const;
+    Type localPointeeType(std::string_view binding) const;
+    std::string_view localPointeeStructName(std::string_view binding) const;
+
 private:
     Type checkFn(FnDecl* fn);
     Type checkExpr(Expr* expr, std::optional<Type> ctx = std::nullopt);
@@ -134,6 +142,14 @@ private:
     std::unordered_map<std::string_view, UnionDef> union_defs_;
     std::unordered_map<const Expr*, std::string_view> expr_union_names_;
     std::unordered_map<std::string_view, std::string_view> local_union_names_;
+
+    // Pointer support (pointee type tracking)
+    struct PtrInfo {
+        Type pointee_type;
+        std::string_view pointee_struct_name; // when pointee is struct/union
+    };
+    std::unordered_map<const Expr*, PtrInfo> expr_ptr_info_;
+    std::unordered_map<std::string_view, PtrInfo> local_ptr_info_;
 };
 
 } // namespace kern

@@ -30,6 +30,9 @@ enum class IROpcode : uint8_t {
     StructAlloc,
     FieldStore,
     FieldLoad,
+    AddrOf,
+    PtrLoad,
+    PtrStore,
 };
 
 const char* irOpcodeName(IROpcode op);

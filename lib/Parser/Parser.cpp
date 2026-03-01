@@ -37,7 +37,7 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
         }
         case Expr::Kind::UnaryOp: {
             auto* u = static_cast<const UnaryOpExpr*>(expr);
-            const char* ops[] = {"-", "not", "*", "&"};
+            const char* ops[] = {"-", "not", "*", "&", "&var"};
             out << "UnaryOp(" << ops[static_cast<int>(u->op)] << ")\n";
             dumpExpr(u->operand, out, ind + 1);
             break;
@@ -100,6 +100,15 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
                         dumpExpr(fas->target, out, ind + 3);
                         indent(out, ind + 2); out << "value:\n";
                         dumpExpr(fas->value, out, ind + 3);
+                        break;
+                    }
+                    case Stmt::Kind::DerefAssign: {
+                        auto* da = static_cast<const DerefAssignStmt*>(st);
+                        out << "DerefAssign\n";
+                        indent(out, ind + 2); out << "target:\n";
+                        dumpExpr(da->target, out, ind + 3);
+                        indent(out, ind + 2); out << "value:\n";
+                        dumpExpr(da->value, out, ind + 3);
                         break;
                     }
                 }
@@ -653,6 +662,24 @@ Param Parser::parseParam() {
 
 TypeRef Parser::parseType() {
     Token tok = expect(TokenKind::Ident, "expected type name");
+    if (tok.text == "Ptr" && check(TokenKind::Lt)) {
+        advance(); // consume '<'
+        bool is_var = false;
+        if (check(TokenKind::KwVar)) {
+            advance(); // consume 'var'
+            is_var = true;
+        }
+        auto* pointee = arena_.make<TypeRef>();
+        *pointee = parseType();
+        expect(TokenKind::Gt, "expected '>' after Ptr type parameter");
+        TypeRef ref;
+        ref.kind = TypeRef::Kind::Ptr;
+        ref.name = is_var ? "Ptr<var>" : "Ptr";
+        ref.loc = tok.loc;
+        ref.pointee = pointee;
+        ref.is_ptr_var = is_var;
+        return ref;
+    }
     return {TypeRef::Kind::Named, tok.text, tok.loc};
 }
 
@@ -682,6 +709,8 @@ uint8_t Parser::prefixBP(TokenKind kind) {
     switch (kind) {
         case TokenKind::Minus:
         case TokenKind::KwNot:
+        case TokenKind::Star:      // *ptr (deref)
+        case TokenKind::Ampersand: // &x (addr-of)
             return 25;
         default:
             return 0;
@@ -708,8 +737,17 @@ BinOpKind Parser::tokenToBinOp(TokenKind kind) {
 
 Expr* Parser::parseExprInfix(Expr* lhs, uint8_t minBP) {
     while (true) {
+        // Check if the next meaningful token is on a different line than
+        // the current position. If so, and the token is an ambiguous
+        // prefix/infix operator (Star or Ampersand), treat as end of
+        // expression — the next line starts a new statement.
+        uint32_t lhs_line = lhs->loc.line;
         skipNewlines();
         TokenKind op = peek().kind;
+        bool on_new_line = peek().loc.line > lhs_line;
+        if (on_new_line && (op == TokenKind::Star || op == TokenKind::Ampersand)) {
+            break;
+        }
         auto [lBP, rBP] = infixBP(op);
         if (lBP == 0 || lBP < minBP) break;
 
@@ -796,6 +834,39 @@ Expr* Parser::parsePrimary() {
         unary->kind = Expr::Kind::UnaryOp;
         unary->loc = opTok.loc;
         unary->op = (opTok.kind == TokenKind::Minus) ? UnaryOpKind_t::Neg : UnaryOpKind_t::Not;
+        unary->operand = operand;
+        return unary;
+    }
+
+    // Dereference: *expr
+    if (tok.kind == TokenKind::Star) {
+        Token opTok = advance();
+        uint8_t rBP = prefixBP(opTok.kind);
+        Expr* operand = parseExpr(rBP);
+
+        auto* unary = arena_.make<UnaryOpExpr>();
+        unary->kind = Expr::Kind::UnaryOp;
+        unary->loc = opTok.loc;
+        unary->op = UnaryOpKind_t::Deref;
+        unary->operand = operand;
+        return unary;
+    }
+
+    // Address-of: &expr or &var expr
+    if (tok.kind == TokenKind::Ampersand) {
+        Token opTok = advance();
+        bool is_addr_var = false;
+        if (check(TokenKind::KwVar)) {
+            advance(); // consume 'var'
+            is_addr_var = true;
+        }
+        uint8_t rBP = prefixBP(opTok.kind);
+        Expr* operand = parseExpr(rBP);
+
+        auto* unary = arena_.make<UnaryOpExpr>();
+        unary->kind = Expr::Kind::UnaryOp;
+        unary->loc = opTok.loc;
+        unary->op = is_addr_var ? UnaryOpKind_t::AddrOfVar : UnaryOpKind_t::AddrOf;
         unary->operand = operand;
         return unary;
     }
@@ -966,6 +1037,21 @@ Expr* Parser::parseIfExpr() {
     return ifExpr;
 }
 
+bool Parser::isDerefTarget(const Expr* expr) {
+    if (!expr) return false;
+    // *ptr = val
+    if (expr->kind == Expr::Kind::UnaryOp) {
+        auto* u = static_cast<const UnaryOpExpr*>(expr);
+        return u->op == UnaryOpKind_t::Deref;
+    }
+    // (*ptr).field = val — FieldAccess chain rooted in a deref
+    if (expr->kind == Expr::Kind::FieldAccess) {
+        auto* fa = static_cast<const FieldAccessExpr*>(expr);
+        return isDerefTarget(fa->object);
+    }
+    return false;
+}
+
 Expr* Parser::parseBlockExpr() {
     SourceLocation loc = peek().loc;
     expect(TokenKind::LBrace, "expected '{'");
@@ -1078,8 +1164,19 @@ Expr* Parser::parseBlockExpr() {
             Expr* expr = parseExpr();
             skipNewlines();
 
-            // If the next token is '}', this is the result expression
-            if (check(TokenKind::RBrace)) {
+            // Check for deref assignment: *ptr = val or (*ptr).field = val
+            if (check(TokenKind::Eq) && isDerefTarget(expr)) {
+                advance(); // consume '='
+                skipNewlines();
+                Expr* value = parseExpr();
+                auto* da = arena_.make<DerefAssignStmt>();
+                da->kind = Stmt::Kind::DerefAssign;
+                da->loc = expr->loc;
+                da->target = expr;
+                da->value = value;
+                stmts.push_back(da);
+            } else if (check(TokenKind::RBrace)) {
+                // If the next token is '}', this is the result expression
                 result = expr;
             } else {
                 // It's a statement
