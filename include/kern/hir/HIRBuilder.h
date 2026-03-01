@@ -72,6 +72,10 @@ private:
     bool isSignedType(TypeId id) const;
     bool intFitsInType(int64_t value, TypeId type) const;
 
+    // Compile-time evaluation for const fn / static_assert
+    bool constEvalInt(HIRExpr* expr, int64_t* out,
+                      const std::unordered_map<std::string_view, int64_t>* env = nullptr);
+
     CompilationContext& ctx_;
 
     // Function signatures
@@ -119,6 +123,9 @@ private:
 
     // Resolve method on a type: returns mangled fn name or empty
     std::string_view resolveMethod(TypeId type, std::string_view method) const;
+
+    // Built HIR functions (for const fn evaluation)
+    std::unordered_map<std::string_view, HIRFnDecl*> hir_fns_;
 };
 
 } // namespace kern

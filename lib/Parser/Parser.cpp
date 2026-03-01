@@ -431,11 +431,18 @@ Module* Parser::parseModule() {
         bool is_packed = false;
         bool is_naked = false;
         bool is_interrupt = false;
+        bool is_const_fn = false;
         uint32_t explicit_align = 0;
         std::string_view section_name;
         while (check(TokenKind::At)) {
             advance(); // consume '@'
-            Token anno = expect(TokenKind::Ident, "expected annotation name after '@'");
+            // Accept Ident or KwConst (const is a keyword but valid as annotation)
+            Token anno;
+            if (check(TokenKind::KwConst)) {
+                anno = advance();
+            } else {
+                anno = expect(TokenKind::Ident, "expected annotation name after '@'");
+            }
             if (anno.text == "packed") {
                 is_packed = true;
             } else if (anno.text == "naked") {
@@ -443,7 +450,7 @@ Module* Parser::parseModule() {
             } else if (anno.text == "interrupt") {
                 is_interrupt = true;
             } else if (anno.text == "const") {
-                // @const fn — compile-time evaluable (handled elsewhere)
+                is_const_fn = true;
             } else if (anno.text == "align") {
                 expect(TokenKind::LParen, "expected '(' after @align");
                 Token val = expect(TokenKind::IntLit, "expected integer in @align(N)");
@@ -490,6 +497,7 @@ Module* Parser::parseModule() {
             if (fn) {
                 fn->is_naked = is_naked;
                 fn->is_interrupt = is_interrupt;
+                fn->is_const = is_const_fn;
                 fn->section_name = section_name;
                 fns.push_back(fn);
             }

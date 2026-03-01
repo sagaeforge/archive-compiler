@@ -40,9 +40,11 @@ static TypeId mergeTypes(TypeId a, TypeId b) {
     return a; // assumes they match
 }
 
-// Constant-fold an HIR expression to an integer value (for static_assert).
-// Returns true if successfully folded, storing result in *out.
-static bool constEvalInt(HIRExpr* expr, int64_t* out) {
+// Constant-fold an HIR expression to an integer value.
+// Supports const fn calls by evaluating the body with argument substitution.
+// Optional `env` provides variable name→value bindings (for const fn params).
+bool HIRBuilder::constEvalInt(HIRExpr* expr, int64_t* out,
+                              const std::unordered_map<std::string_view, int64_t>* env) {
     if (expr->kind == HIRExpr::Kind::IntLit) {
         *out = static_cast<HIRIntLitExpr*>(expr)->value;
         return true;
@@ -51,10 +53,18 @@ static bool constEvalInt(HIRExpr* expr, int64_t* out) {
         *out = static_cast<HIRBoolLitExpr*>(expr)->value ? 1 : 0;
         return true;
     }
+    if (expr->kind == HIRExpr::Kind::Ident) {
+        auto* id = static_cast<HIRIdentExpr*>(expr);
+        if (env) {
+            auto it = env->find(id->name);
+            if (it != env->end()) { *out = it->second; return true; }
+        }
+        return false;
+    }
     if (expr->kind == HIRExpr::Kind::BinOp) {
         auto* bin = static_cast<HIRBinOpExpr*>(expr);
         int64_t lv, rv;
-        if (!constEvalInt(bin->lhs, &lv) || !constEvalInt(bin->rhs, &rv))
+        if (!constEvalInt(bin->lhs, &lv, env) || !constEvalInt(bin->rhs, &rv, env))
             return false;
         switch (bin->op) {
             case HIRBinOp::Add:   *out = lv + rv; return true;
@@ -77,6 +87,46 @@ static bool constEvalInt(HIRExpr* expr, int64_t* out) {
             case HIRBinOp::Or:    *out = (lv || rv) ? 1 : 0; return true;
         }
         return false;
+    }
+    if (expr->kind == HIRExpr::Kind::UnaryOp) {
+        auto* un = static_cast<HIRUnaryOpExpr*>(expr);
+        int64_t v;
+        if (!constEvalInt(un->operand, &v, env)) return false;
+        switch (un->op) {
+            case HIRUnaryOp::Neg:    *out = -v; return true;
+            case HIRUnaryOp::Not:    *out = v ? 0 : 1; return true;
+            case HIRUnaryOp::BitNot: *out = ~v; return true;
+            default: return false;
+        }
+    }
+    if (expr->kind == HIRExpr::Kind::If) {
+        auto* ife = static_cast<HIRIfExpr*>(expr);
+        int64_t cond;
+        if (!constEvalInt(ife->condition, &cond, env)) return false;
+        if (cond != 0) return constEvalInt(ife->then_branch, out, env);
+        if (ife->else_branch) return constEvalInt(ife->else_branch, out, env);
+        return false;
+    }
+    if (expr->kind == HIRExpr::Kind::Block) {
+        auto* blk = static_cast<HIRBlockExpr*>(expr);
+        if (blk->stmt_count == 0 && blk->result)
+            return constEvalInt(blk->result, out, env);
+        return false;
+    }
+    if (expr->kind == HIRExpr::Kind::Call) {
+        auto* call = static_cast<HIRCallExpr*>(expr);
+        auto it = hir_fns_.find(call->callee);
+        if (it == hir_fns_.end()) return false;
+        HIRFnDecl* fn = it->second;
+        if (!fn->is_const || !fn->body) return false;
+        // Evaluate all arguments as compile-time constants
+        std::unordered_map<std::string_view, int64_t> call_env;
+        for (uint32_t i = 0; i < call->arg_count && i < fn->param_count; ++i) {
+            int64_t arg_val;
+            if (!constEvalInt(call->args[i], &arg_val, env)) return false;
+            call_env[fn->params[i].name] = arg_val;
+        }
+        return constEvalInt(fn->body, out, &call_env);
     }
     return false;
 }
@@ -515,21 +565,6 @@ HIRModule* HIRBuilder::build(const Module* ast) {
     registerImpls(ast);
     registerFnSigs(ast);
 
-    // Evaluate static_assert declarations
-    for (uint32_t i = 0; i < ast->static_assert_count; ++i) {
-        auto* sa = ast->static_asserts[i];
-        HIRExpr* cond = buildExpr(sa->condition);
-        int64_t val;
-        if (constEvalInt(cond, &val)) {
-            if (val == 0) {
-                ctx_.diag.error(sa->loc, std::string("static assertion failed: ") +
-                                std::string(sa->message));
-            }
-        } else {
-            ctx_.diag.error(sa->loc, "static_assert condition must be a compile-time constant");
-        }
-    }
-
     auto* mod = ctx_.arena.make<HIRModule>();
 
     // Struct declarations
@@ -573,6 +608,22 @@ HIRModule* HIRBuilder::build(const Module* ast) {
     auto* ast_fns = ctx_.arena.makeArray<HIRFnDecl*>(ast->fn_count);
     for (uint32_t i = 0; i < ast->fn_count; ++i) {
         ast_fns[i] = buildFn(ast->functions[i]);
+        hir_fns_[ast_fns[i]->name] = ast_fns[i];
+    }
+
+    // Evaluate static_assert declarations (after functions are built, so const fn calls work)
+    for (uint32_t i = 0; i < ast->static_assert_count; ++i) {
+        auto* sa = ast->static_asserts[i];
+        HIRExpr* cond = buildExpr(sa->condition);
+        int64_t val;
+        if (constEvalInt(cond, &val)) {
+            if (val == 0) {
+                ctx_.diag.error(sa->loc, std::string("static assertion failed: ") +
+                                std::string(sa->message));
+            }
+        } else {
+            ctx_.diag.error(sa->loc, "static_assert condition must be a compile-time constant");
+        }
     }
 
     // Build impl methods as mangled functions
@@ -666,6 +717,7 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
     hfn->is_recursive = false;
     hfn->is_tail_recursive = false;
     hfn->is_intrinsic = fn->is_intrinsic;
+    hfn->is_const = fn->is_const;
     hfn->is_naked = fn->is_naked;
     hfn->is_interrupt = fn->is_interrupt;
     hfn->section_name = fn->section_name;
@@ -2333,6 +2385,7 @@ HIRExpr* HIRBuilder::buildLambda(const Expr* expr, std::optional<TypeId> ctx_typ
     hfn->param_count = lam->param_count;
     hfn->params = ctx_.arena.makeArray<HIRParam>(lam->param_count);
     hfn->is_intrinsic = false;
+    hfn->is_const = false;
     hfn->is_naked = false;
     hfn->is_interrupt = false;
     hfn->is_recursive = false;
