@@ -122,6 +122,12 @@ private:
     // Track which local variables hold which lambda (for capture arg injection)
     std::unordered_map<std::string_view, std::string_view> local_lambda_map_;  // local_var_name → lambda_fn_name
 
+    // Closure struct types: TypeIds of synthetic structs created for capturing closures
+    std::unordered_set<TypeId> closure_struct_types_;
+
+    // Map closure struct TypeId → lifted lambda function name
+    std::unordered_map<TypeId, std::string_view> closure_fn_names_;
+
     // Trait/impl support (static dispatch)
     struct TraitInfo {
         std::string_view name;

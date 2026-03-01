@@ -1,0 +1,13 @@
+fn make_double(n: i64) -> fn(i64) -> i64 {
+    { x: i64 => x * n }
+}
+
+fn make_triple(n: i64) -> fn(i64) -> i64 {
+    { x: i64 => x * n }
+}
+
+fn main() -> i64 {
+    val double: fn(i64) -> i64 = make_double(2)
+    val triple: fn(i64) -> i64 = make_triple(3)
+    double(10) + triple(4)
+}

@@ -34,6 +34,23 @@ static bool typesMatch(TypeId a, TypeId b) {
     return false;
 }
 
+// Check if types match, allowing closure struct → Fn coercion
+static bool typesMatchClosure(TypeId a, TypeId b, const TypeTable& types,
+                               const std::unordered_set<TypeId>& closure_types) {
+    if (typesMatch(a, b)) return true;
+    // Closure struct → Fn type coercion: a closure struct type matches a Fn type
+    // if the closure's __fn field has the same Fn type
+    if (closure_types.count(a) && b < types.size() && types.get(b).kind == TypeKind::Fn) {
+        auto& si = types.get(a);
+        if (si.struct_.field_count > 0 && si.struct_.fields[0].type == b) return true;
+    }
+    if (closure_types.count(b) && a < types.size() && types.get(a).kind == TypeKind::Fn) {
+        auto& si = types.get(b);
+        if (si.struct_.field_count > 0 && si.struct_.fields[0].type == a) return true;
+    }
+    return false;
+}
+
 // Check if a type contains any TypeVar (for generic type matching)
 static bool containsTypeVar(const TypeTable& types, TypeId tid) {
     const auto& info = types.get(tid);
@@ -885,10 +902,24 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
 
     // Check return type match (skip for naked/interrupt — user controls return via asm)
     if (!hfn->is_naked && !hfn->is_interrupt && hfn->body && hfn->body->type != TypeTable::Error &&
-        !typesMatch(hfn->body->type, current_return_type_)) {
+        !typesMatchClosure(hfn->body->type, current_return_type_, ctx_.types, closure_struct_types_)) {
         ctx_.diag.error(fn->loc, std::string("function '") + std::string(fn->name) +
                     "' declared to return " + ctx_.types.name(current_return_type_) +
                     " but body has type " + ctx_.types.name(hfn->body->type));
+    }
+
+    // If the body returns a closure struct and the declared return is a Fn type,
+    // promote the function's return type to the closure struct type so callers
+    // can unpack the closure properly.
+    if (hfn->body && closure_struct_types_.count(hfn->body->type) &&
+        current_return_type_ < ctx_.types.size() &&
+        ctx_.types.get(current_return_type_).kind == TypeKind::Fn) {
+        hfn->return_type = hfn->body->type;
+        // Also update the fn_table_ entry so callers see the closure struct type
+        auto fn_it = fn_table_.find(ctx_.strings.intern(fn->name));
+        if (fn_it != fn_table_.end()) {
+            fn_it->second.return_type = hfn->body->type;
+        }
     }
 
     cleanup_type_params();
@@ -1342,6 +1373,87 @@ HIRExpr* HIRBuilder::buildCall(const Expr* expr) {
     auto local_it = local_vars_.find(call->callee);
     if (local_it != local_vars_.end()) {
         TypeId var_type = local_it->second;
+
+        // Check if this variable holds a closure struct (capturing closure)
+        if (closure_struct_types_.count(var_type)) {
+            auto& si = ctx_.types.get(var_type);
+            // Closure struct layout: { __fn: fn_ptr, cap1: T1, cap2: T2, ... }
+            // Extract the __fn field type (should be a Fn type)
+            TypeId fn_field_type = si.struct_.fields[0].type;
+            auto& fn_ti = ctx_.types.get(fn_field_type);
+
+            // Look up the lifted lambda function name for this closure type
+            auto fn_name_it = closure_fn_names_.find(var_type);
+            if (fn_name_it != closure_fn_names_.end()) {
+                auto lambda_name = fn_name_it->second;
+
+                uint32_t cap_count = si.struct_.field_count - 1;
+                uint32_t total_args = call->arg_count + cap_count;
+
+                auto* e = ctx_.arena.make<HIRCallExpr>();
+                e->kind = HIRExpr::Kind::Call;
+                e->loc = expr->loc;
+                e->callee = lambda_name;
+                e->is_tail_call = false;
+                e->type_args = nullptr;
+                e->type_arg_count = 0;
+                e->arg_count = total_args;
+                e->args = ctx_.arena.makeArray<HIRExpr*>(total_args);
+
+                // User-supplied args
+                for (uint32_t i = 0; i < call->arg_count; ++i) {
+                    TypeId expected = (i < fn_ti.fn.param_count) ? fn_ti.fn.params[i] : INVALID_TYPE;
+                    e->args[i] = buildExpr(call->args[i], expected);
+                }
+                // Capture args: extract from the closure struct fields
+                auto callee_name = ctx_.strings.intern(call->callee);
+                for (uint32_t i = 0; i < cap_count; ++i) {
+                    auto* obj = ctx_.arena.make<HIRIdentExpr>();
+                    obj->kind = HIRExpr::Kind::Ident;
+                    obj->loc = expr->loc;
+                    obj->name = callee_name;
+                    obj->type = var_type;
+                    auto* fa = ctx_.arena.make<HIRFieldAccessExpr>();
+                    fa->kind = HIRExpr::Kind::FieldAccess;
+                    fa->loc = expr->loc;
+                    fa->object = obj;
+                    fa->field_name = si.struct_.fields[1 + i].name;
+                    fa->type = si.struct_.fields[1 + i].type;
+                    e->args[call->arg_count + i] = fa;
+                }
+                e->type = fn_ti.fn.return_type;
+                return e;
+            }
+
+            // Fallback: indirect call via __fn field extraction
+            auto callee_name = ctx_.strings.intern(call->callee);
+            auto* obj = ctx_.arena.make<HIRIdentExpr>();
+            obj->kind = HIRExpr::Kind::Ident;
+            obj->loc = expr->loc;
+            obj->name = callee_name;
+            obj->type = var_type;
+            auto* fn_access = ctx_.arena.make<HIRFieldAccessExpr>();
+            fn_access->kind = HIRExpr::Kind::FieldAccess;
+            fn_access->loc = expr->loc;
+            fn_access->object = obj;
+            fn_access->field_name = ctx_.strings.intern("__fn");
+            fn_access->type = fn_field_type;
+
+            auto* e = ctx_.arena.make<HIRCallIndirectExpr>();
+            e->kind = HIRExpr::Kind::CallIndirect;
+            e->loc = expr->loc;
+            e->is_tail_call = false;
+            e->callee = fn_access;
+            e->arg_count = call->arg_count;
+            e->args = ctx_.arena.makeArray<HIRExpr*>(call->arg_count);
+            for (uint32_t i = 0; i < call->arg_count; ++i) {
+                TypeId expected = (i < fn_ti.fn.param_count) ? fn_ti.fn.params[i] : INVALID_TYPE;
+                e->args[i] = buildExpr(call->args[i], expected);
+            }
+            e->type = fn_ti.fn.return_type;
+            return e;
+        }
+
         if (var_type < ctx_.types.size() && ctx_.types.get(var_type).kind == TypeKind::Fn) {
             auto& ti = ctx_.types.get(var_type);
 
@@ -1573,7 +1685,8 @@ HIRExpr* HIRBuilder::buildReturn(const Expr* expr) {
 
     if (ret->value) {
         e->value = buildExpr(ret->value, current_return_type_);
-        if (e->value->type != TypeTable::Error && !typesMatch(e->value->type, current_return_type_)) {
+        if (e->value->type != TypeTable::Error &&
+            !typesMatchClosure(e->value->type, current_return_type_, ctx_.types, closure_struct_types_)) {
             ctx_.diag.error(expr->loc, std::string("return type mismatch: expected ") +
                         ctx_.types.name(current_return_type_) + ", got " +
                         ctx_.types.name(e->value->type));
@@ -2324,11 +2437,22 @@ HIRStmt* HIRBuilder::buildStmt(const Stmt* stmt) {
             s->type = expected;
             s->init = buildExpr(decl->init, expected);
             if (s->init->type != TypeTable::Error && s->init->type != expected) {
-                ctx_.diag.error(stmt->loc, std::string("val type mismatch: expected ") +
-                            ctx_.types.name(expected) + ", got " + ctx_.types.name(s->init->type));
+                // Allow closure struct to be assigned to Fn-typed variable
+                if (!(closure_struct_types_.count(s->init->type) &&
+                      expected < ctx_.types.size() &&
+                      ctx_.types.get(expected).kind == TypeKind::Fn)) {
+                    ctx_.diag.error(stmt->loc, std::string("val type mismatch: expected ") +
+                                ctx_.types.name(expected) + ", got " + ctx_.types.name(s->init->type));
+                }
             }
-            local_vars_[decl->name] = expected;
-            // Track if this val holds a closure (lambda with captures)
+            // If init is a closure struct, store the closure type so call sites can unpack
+            if (closure_struct_types_.count(s->init->type)) {
+                local_vars_[decl->name] = s->init->type;
+                s->type = s->init->type;
+            } else {
+                local_vars_[decl->name] = expected;
+            }
+            // Track if this val holds a closure (lambda with captures) — legacy local path
             if (s->init->kind == HIRExpr::Kind::FnRef) {
                 auto* fnref = static_cast<HIRFnRefExpr*>(s->init);
                 if (lambda_captures_.count(fnref->fn_name) &&
@@ -2695,7 +2819,74 @@ HIRExpr* HIRBuilder::buildLambda(const Expr* expr, std::optional<TypeId> ctx_typ
     TypeId fn_type = ctx_.types.makeFn(
         std::span<const TypeId>(tid_params, param_types.size()), return_type);
 
-    // Return an FnRef pointing to the lifted function
+    // If there are captures, create a closure struct: { __fn: fn_ptr, cap1: T1, ... }
+    // This allows the closure to be returned from functions and passed around.
+    if (!captures.empty()) {
+        // Build closure struct type
+        std::string clos_name = "__closure_" + std::to_string(lambda_counter_ - 1);
+        auto interned_clos = ctx_.strings.intern(clos_name);
+
+        uint32_t field_count = 1 + static_cast<uint32_t>(captures.size());
+        std::vector<FieldInfo> fields;
+        fields.reserve(field_count);
+
+        // Field 0: __fn (the function pointer)
+        auto fn_field_name = ctx_.strings.intern("__fn");
+        fields.push_back({fn_field_name, fn_type, false, -1});
+
+        // Fields 1..N: captured variables
+        for (auto& cap : captures) {
+            fields.push_back({cap.name, cap.type, cap.is_mutable, -1});
+        }
+
+        TypeId closure_type = ctx_.types.makeStruct(
+            interned_clos, std::span<const FieldInfo>(fields));
+
+        // Track this as a closure struct for call-site unpacking
+        closure_struct_types_.insert(closure_type);
+        closure_fn_names_[closure_type] = interned_name;
+
+        // Create a struct literal with fn_ptr + capture values
+        auto* slit = ctx_.arena.make<HIRStructLitExpr>();
+        slit->kind = HIRExpr::Kind::StructLit;
+        slit->loc = expr->loc;
+        slit->struct_name = interned_clos;
+        slit->field_count = field_count;
+        slit->fields = ctx_.arena.makeArray<HIRFieldInit>(field_count);
+
+        // __fn field: function pointer
+        auto* fn_ref = ctx_.arena.make<HIRFnRefExpr>();
+        fn_ref->kind = HIRExpr::Kind::FnRef;
+        fn_ref->loc = expr->loc;
+        fn_ref->fn_name = interned_name;
+        fn_ref->type = fn_type;
+        slit->fields[0].name = fn_field_name;
+        slit->fields[0].value = fn_ref;
+        slit->fields[0].loc = expr->loc;
+
+        // Capture fields: reference to outer-scope variables
+        for (uint32_t i = 0; i < captures.size(); ++i) {
+            auto* cap_ref = ctx_.arena.make<HIRIdentExpr>();
+            cap_ref->kind = HIRExpr::Kind::Ident;
+            cap_ref->loc = expr->loc;
+            cap_ref->name = captures[i].name;
+            cap_ref->type = captures[i].type;
+            slit->fields[1 + i].name = captures[i].name;
+            slit->fields[1 + i].value = cap_ref;
+            slit->fields[1 + i].loc = expr->loc;
+        }
+
+        // The struct type must match what the context expects. If context is Fn type,
+        // we store the closure struct type but allow assignment (coerce at type check).
+        slit->type = closure_type;
+
+        // Register in named_types_ so it's recognized
+        named_types_[interned_clos] = closure_type;
+
+        return slit;
+    }
+
+    // No captures: return a plain FnRef (bare function pointer)
     auto* ref = ctx_.arena.make<HIRFnRefExpr>();
     ref->kind = HIRExpr::Kind::FnRef;
     ref->loc = expr->loc;

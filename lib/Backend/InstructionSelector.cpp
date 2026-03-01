@@ -807,6 +807,31 @@ void InstructionSelector::selectRet(const LIRInstr& instr) {
             mi.inline_ops[0] = MachOperand::precolored(PhysReg::XMM0);
             mi.inline_ops[1] = MachOperand::virt(val);
             emit(mi);
+        } else if (struct_vregs_.count(val) && struct_vreg_sizes_.count(val)) {
+            // Struct return: pack fields into RAX (+ RDX for >8B) per SysV ABI.
+            // Use precolored R11 as base pointer to prevent register allocator
+            // from assigning it to RAX/RDX and causing clobber issues.
+            uint32_t sz = struct_vreg_sizes_[val];
+            emit(makeMov(MachOperand::precolored(PhysReg::R11),
+                         MachOperand::virt(val), 64));
+            {
+                MachInstr load(X86Op::MovLoad);
+                load.width = 64;
+                load.operand_count = 2;
+                load.inline_ops[0] = MachOperand::precolored(PhysReg::RAX);
+                load.inline_ops[1] = MachOperand::precolored(PhysReg::R11);
+                emit(load);
+            }
+            if (sz > 8) {
+                emit(makeAlu(X86Op::Add, MachOperand::precolored(PhysReg::R11),
+                             MachOperand::immediate(8), 64));
+                MachInstr load2(X86Op::MovLoad);
+                load2.width = 64;
+                load2.operand_count = 2;
+                load2.inline_ops[0] = MachOperand::precolored(PhysReg::RDX);
+                load2.inline_ops[1] = MachOperand::precolored(PhysReg::R11);
+                emit(load2);
+            }
         } else {
             emit(makeMov(MachOperand::precolored(PhysReg::RAX),
                          MachOperand::virt(val), 64));
@@ -914,6 +939,41 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
             mi.inline_ops[0] = MachOperand::virt(instr.result);
             mi.inline_ops[1] = MachOperand::precolored(PhysReg::XMM0);
             emit(mi);
+        } else if (struct_vregs_.count(instr.result)) {
+            // Struct return: callee returned struct in RAX (+RDX for >8B).
+            // Allocate local stack space and unpack the register values.
+            uint32_t sz = struct_vreg_sizes_[instr.result];
+            sz = (sz + 7u) & ~7u;
+            struct_alloc_bytes_ += sz;
+            static constexpr int32_t CS_AREA = NUM_CALLEE_SAVED * 8;
+            int32_t offset = -CS_AREA - static_cast<int32_t>(struct_alloc_bytes_);
+            // Point the result vreg to the stack slot
+            emit(makeLea(MachOperand::virt(instr.result),
+                         MachOperand::stack(offset)));
+            stack_ptr_vregs_.insert(instr.result);
+
+            // Store RAX → [struct_base + 0]
+            VReg base1 = freshVReg();
+            emit(makeMov(MachOperand::virt(base1), MachOperand::virt(instr.result), 64));
+            MachInstr store1(X86Op::MovStore);
+            store1.width = 64;
+            store1.operand_count = 2;
+            store1.inline_ops[0] = MachOperand::virt(base1);
+            store1.inline_ops[1] = MachOperand::precolored(PhysReg::RAX);
+            emit(store1);
+            if (sz > 8) {
+                // Store RDX → [struct_base + 8]
+                VReg base2 = freshVReg();
+                emit(makeMov(MachOperand::virt(base2), MachOperand::virt(instr.result), 64));
+                emit(makeAlu(X86Op::Add, MachOperand::virt(base2),
+                             MachOperand::immediate(8), 64));
+                MachInstr store2(X86Op::MovStore);
+                store2.width = 64;
+                store2.operand_count = 2;
+                store2.inline_ops[0] = MachOperand::virt(base2);
+                store2.inline_ops[1] = MachOperand::precolored(PhysReg::RDX);
+                emit(store2);
+            }
         } else {
             emit(makeMov(MachOperand::virt(instr.result),
                          MachOperand::precolored(PhysReg::RAX), 64));
@@ -996,6 +1056,36 @@ void InstructionSelector::selectCallIndirect(const LIRInstr& instr) {
             mi.inline_ops[0] = MachOperand::virt(instr.result);
             mi.inline_ops[1] = MachOperand::precolored(PhysReg::XMM0);
             emit(mi);
+        } else if (struct_vregs_.count(instr.result)) {
+            // Struct return from indirect call: unpack RAX+RDX
+            uint32_t sz = struct_vreg_sizes_[instr.result];
+            sz = (sz + 7u) & ~7u;
+            struct_alloc_bytes_ += sz;
+            static constexpr int32_t CS_AREA = NUM_CALLEE_SAVED * 8;
+            int32_t offset = -CS_AREA - static_cast<int32_t>(struct_alloc_bytes_);
+            emit(makeLea(MachOperand::virt(instr.result),
+                         MachOperand::stack(offset)));
+            stack_ptr_vregs_.insert(instr.result);
+            VReg base1 = freshVReg();
+            emit(makeMov(MachOperand::virt(base1), MachOperand::virt(instr.result), 64));
+            MachInstr store1(X86Op::MovStore);
+            store1.width = 64;
+            store1.operand_count = 2;
+            store1.inline_ops[0] = MachOperand::virt(base1);
+            store1.inline_ops[1] = MachOperand::precolored(PhysReg::RAX);
+            emit(store1);
+            if (sz > 8) {
+                VReg base2 = freshVReg();
+                emit(makeMov(MachOperand::virt(base2), MachOperand::virt(instr.result), 64));
+                emit(makeAlu(X86Op::Add, MachOperand::virt(base2),
+                             MachOperand::immediate(8), 64));
+                MachInstr store2(X86Op::MovStore);
+                store2.width = 64;
+                store2.operand_count = 2;
+                store2.inline_ops[0] = MachOperand::virt(base2);
+                store2.inline_ops[1] = MachOperand::precolored(PhysReg::RDX);
+                emit(store2);
+            }
         } else {
             emit(makeMov(MachOperand::virt(instr.result),
                          MachOperand::precolored(PhysReg::RAX), 64));
@@ -1052,6 +1142,11 @@ void InstructionSelector::selectBlockArg(const LIRInstr& instr) {
         return;
     }
     // Non-entry block args are handled by predecessor branch moves (no-op here).
+    // But if this is a struct type, mark it as a stack pointer (the value was
+    // propagated from a stack pointer in the predecessor block).
+    if (isStructType(instr.type)) {
+        stack_ptr_vregs_.insert(instr.result);
+    }
 }
 
 void InstructionSelector::selectCast(const LIRInstr& instr) {
