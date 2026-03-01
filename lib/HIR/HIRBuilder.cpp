@@ -1,4 +1,5 @@
 #include "kern/hir/HIRBuilder.h"
+#include <cstring>
 #include <string>
 
 namespace kern {
@@ -445,6 +446,8 @@ HIRModule* HIRBuilder::build(const Module* ast) {
     registerStructDecls(ast);
     registerEnumDecls(ast);
     registerUnionDecls(ast);
+    registerTraits(ast);
+    registerImpls(ast);
     registerFnSigs(ast);
 
     // Evaluate static_assert declarations
@@ -507,15 +510,46 @@ HIRModule* HIRBuilder::build(const Module* ast) {
         ast_fns[i] = buildFn(ast->functions[i]);
     }
 
-    // Merge original functions + lifted lambdas
-    uint32_t total_fns = ast->fn_count + static_cast<uint32_t>(lifted_lambdas_.size());
+    // Build impl methods as mangled functions
+    std::vector<HIRFnDecl*> impl_fns;
+    for (uint32_t i = 0; i < ast->impl_count; ++i) {
+        auto* id = ast->impls[i];
+        TypeId target_type = resolveType(id->target_type);
+        std::string_view type_name = ctx_.types.name(target_type);
+        for (uint32_t j = 0; j < id->method_count; ++j) {
+            auto* fn = id->methods[j];
+            auto method_name = ctx_.strings.intern(fn->name);
+            // Build mangled name
+            std::string mangled = std::string(type_name) + "_" + std::string(method_name);
+            char* buf = ctx_.arena.makeArray<char>(mangled.size());
+            std::memcpy(buf, mangled.data(), mangled.size());
+            auto interned_mangled = ctx_.strings.intern(std::string_view(buf, mangled.size()));
+
+            // Build the function with the mangled name
+            // Temporarily rename the FnDecl so buildFn uses the mangled name
+            auto original_name = fn->name;
+            fn->name = interned_mangled;
+            HIRFnDecl* hfn = buildFn(fn);
+            fn->name = original_name;  // restore
+            impl_fns.push_back(hfn);
+        }
+    }
+
+    // Merge original functions + impl methods + lifted lambdas
+    uint32_t total_fns = ast->fn_count +
+        static_cast<uint32_t>(impl_fns.size()) +
+        static_cast<uint32_t>(lifted_lambdas_.size());
     mod->fn_count = total_fns;
     mod->functions = ctx_.arena.makeArray<HIRFnDecl*>(total_fns);
+    uint32_t idx = 0;
     for (uint32_t i = 0; i < ast->fn_count; ++i) {
-        mod->functions[i] = ast_fns[i];
+        mod->functions[idx++] = ast_fns[i];
+    }
+    for (uint32_t i = 0; i < impl_fns.size(); ++i) {
+        mod->functions[idx++] = impl_fns[i];
     }
     for (uint32_t i = 0; i < lifted_lambdas_.size(); ++i) {
-        mod->functions[ast->fn_count + i] = lifted_lambdas_[i];
+        mod->functions[idx++] = lifted_lambdas_[i];
     }
 
     return mod;
@@ -663,6 +697,8 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
         }
         case Expr::Kind::Lambda:
             return buildLambda(expr, ctx_type);
+        case Expr::Kind::MethodCall:
+            return buildMethodCall(expr);
     }
     return errorExpr(expr->loc);
 }
@@ -2294,6 +2330,134 @@ HIRExpr* HIRBuilder::buildLambda(const Expr* expr, std::optional<TypeId> ctx_typ
     ref->fn_name = interned_name;
     ref->type = fn_type;
     return ref;
+}
+
+// ============================================================================
+// Trait/Impl registration (static dispatch)
+// ============================================================================
+
+void HIRBuilder::registerTraits(const Module* ast) {
+    for (uint32_t i = 0; i < ast->trait_count; ++i) {
+        auto* td = ast->traits[i];
+        TraitInfo info;
+        info.name = ctx_.strings.intern(td->name);
+        for (uint32_t j = 0; j < td->method_count; ++j) {
+            info.method_names.push_back(ctx_.strings.intern(td->methods[j].name));
+        }
+        trait_table_[info.name] = info;
+    }
+}
+
+void HIRBuilder::registerImpls(const Module* ast) {
+    for (uint32_t i = 0; i < ast->impl_count; ++i) {
+        auto* id = ast->impls[i];
+        TypeId target_type = resolveType(id->target_type);
+
+        // Get the type name for mangling
+        std::string_view type_name = ctx_.types.name(target_type);
+
+        // Register each impl method as a mangled free function
+        for (uint32_t j = 0; j < id->method_count; ++j) {
+            auto* fn = id->methods[j];
+            auto method_name = ctx_.strings.intern(fn->name);
+
+            // Mangled name: TypeName_methodName
+            std::string mangled = std::string(type_name) + "_" + std::string(method_name);
+            char* buf = ctx_.arena.makeArray<char>(mangled.size());
+            std::memcpy(buf, mangled.data(), mangled.size());
+            auto interned_mangled = ctx_.strings.intern(std::string_view(buf, mangled.size()));
+
+            // Register in fn_table_ with mangled name
+            FnSig sig;
+            sig.name = interned_mangled;
+            sig.return_type = resolveType(fn->return_type);
+            for (uint32_t k = 0; k < fn->param_count; ++k) {
+                sig.param_types.push_back(resolveType(fn->params[k].type));
+            }
+            fn_table_[interned_mangled] = sig;
+
+            // Store in impl_table_ for method resolution
+            impl_table_[type_name].methods[method_name] = interned_mangled;
+        }
+    }
+}
+
+std::string_view HIRBuilder::resolveMethod(TypeId type, std::string_view method) const {
+    std::string_view type_name = ctx_.types.name(type);
+    auto it = impl_table_.find(type_name);
+    if (it == impl_table_.end()) return {};
+    auto mit = it->second.methods.find(method);
+    if (mit == it->second.methods.end()) return {};
+    return mit->second;
+}
+
+HIRExpr* HIRBuilder::buildMethodCall(const Expr* expr) {
+    auto* mc = static_cast<const MethodCallExpr*>(expr);
+
+    // Build the object expression first to get its type
+    HIRExpr* obj = buildExpr(mc->object);
+    if (obj->type == TypeTable::Error) return errorExpr(expr->loc);
+
+    // Resolve the method
+    auto method_name = ctx_.strings.intern(mc->method_name);
+    auto mangled = resolveMethod(obj->type, method_name);
+    if (mangled.empty()) {
+        ctx_.diag.error(expr->loc, std::string("type '") +
+            std::string(ctx_.types.name(obj->type)) + "' has no method '" +
+            std::string(mc->method_name) + "'");
+        return errorExpr(expr->loc);
+    }
+
+    // Look up the mangled function signature
+    auto it = fn_table_.find(mangled);
+    if (it == fn_table_.end()) {
+        ctx_.diag.error(expr->loc, std::string("internal error: mangled method '") +
+            std::string(mangled) + "' not found in fn_table");
+        return errorExpr(expr->loc);
+    }
+
+    const FnSig& sig = it->second;
+
+    // Build call: TypeName_method(self, args...)
+    // First param is self (the object), rest are the explicit args
+    uint32_t total_args = 1 + mc->arg_count;
+    if (total_args != sig.param_types.size()) {
+        ctx_.diag.error(expr->loc, std::string("method '") +
+            std::string(mc->method_name) + "' expects " +
+            std::to_string(sig.param_types.size()) + " arguments (including self), got " +
+            std::to_string(total_args));
+        return errorExpr(expr->loc);
+    }
+
+    auto* call = ctx_.arena.make<HIRCallExpr>();
+    call->kind = HIRExpr::Kind::Call;
+    call->loc = expr->loc;
+    call->callee = mangled;
+    call->is_tail_call = false;
+    call->arg_count = total_args;
+    call->args = ctx_.arena.makeArray<HIRExpr*>(total_args);
+
+    // First arg is self (the object)
+    call->args[0] = obj;
+    if (obj->type != sig.param_types[0]) {
+        ctx_.diag.error(mc->object->loc, std::string("self parameter type mismatch: expected ") +
+            std::string(ctx_.types.name(sig.param_types[0])) + ", got " +
+            std::string(ctx_.types.name(obj->type)));
+    }
+
+    // Build remaining args
+    for (uint32_t i = 0; i < mc->arg_count; ++i) {
+        TypeId expected = sig.param_types[i + 1];
+        call->args[i + 1] = buildExpr(mc->args[i], expected);
+        if (call->args[i + 1]->type != TypeTable::Error && call->args[i + 1]->type != expected) {
+            ctx_.diag.error(mc->args[i]->loc, std::string("argument type mismatch: expected ") +
+                std::string(ctx_.types.name(expected)) + ", got " +
+                std::string(ctx_.types.name(call->args[i + 1]->type)));
+        }
+    }
+
+    call->type = sig.return_type;
+    return call;
 }
 
 } // namespace kern

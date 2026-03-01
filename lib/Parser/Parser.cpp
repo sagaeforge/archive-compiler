@@ -306,6 +306,15 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             dumpExpr(lam->body, out, ind + 1);
             break;
         }
+        case Expr::Kind::MethodCall: {
+            auto* mc = static_cast<const MethodCallExpr*>(expr);
+            out << "MethodCall(." << mc->method_name << ")\n";
+            dumpExpr(mc->object, out, ind + 1);
+            for (uint32_t i = 0; i < mc->arg_count; ++i) {
+                dumpExpr(mc->args[i], out, ind + 1);
+            }
+            break;
+        }
     }
 }
 
@@ -411,6 +420,8 @@ Module* Parser::parseModule() {
     std::vector<TypeAliasDecl*> type_aliases;
     std::vector<NewtypeDecl*> newtypes;
     std::vector<StaticAssertDecl*> static_asserts;
+    std::vector<TraitDecl*> traits;
+    std::vector<ImplDecl*> impls;
     skipNewlines();
     while (!check(TokenKind::Eof)) {
         // Parse annotations (@packed, @align(N), @section("name"))
@@ -483,6 +494,12 @@ Module* Parser::parseModule() {
                 newtypes.push_back(nt);
                 struct_names_.insert(nt->name);
             }
+        } else if (check(TokenKind::KwTrait)) {
+            auto* td = parseTraitDecl();
+            if (td) traits.push_back(td);
+        } else if (check(TokenKind::KwImpl)) {
+            auto* id = parseImplDecl();
+            if (id) impls.push_back(id);
         } else if (peek().kind == TokenKind::Ident && peek().text == "static_assert") {
             advance(); // consume 'static_assert'
             expect(TokenKind::LParen, "expected '(' after static_assert");
@@ -496,7 +513,7 @@ Module* Parser::parseModule() {
             sa->loc = cond->loc;
             static_asserts.push_back(sa);
         } else {
-            diag_.error(peek().loc, "expected function, struct, enum, union, type, or newtype declaration");
+            diag_.error(peek().loc, "expected function, struct, enum, union, type, newtype, trait, or impl declaration");
             advance();
         }
         skipNewlines();
@@ -639,6 +656,16 @@ Module* Parser::parseModule() {
     for (size_t j = 0; j < static_asserts.size(); ++j) {
         mod->static_asserts[j] = static_asserts[j];
     }
+    mod->trait_count = static_cast<uint32_t>(traits.size());
+    mod->traits = arena_.makeArray<TraitDecl*>(traits.size());
+    for (size_t j = 0; j < traits.size(); ++j) {
+        mod->traits[j] = traits[j];
+    }
+    mod->impl_count = static_cast<uint32_t>(impls.size());
+    mod->impls = arena_.makeArray<ImplDecl*>(impls.size());
+    for (size_t j = 0; j < impls.size(); ++j) {
+        mod->impls[j] = impls[j];
+    }
     return mod;
 }
 
@@ -669,6 +696,103 @@ NewtypeDecl* Parser::parseNewtype() {
     nt->inner = inner;
     nt->loc = loc;
     return nt;
+}
+
+// --- Trait Declaration ---
+// trait Printable {
+//     fn to_string(self: Self) -> String
+// }
+TraitDecl* Parser::parseTraitDecl() {
+    SourceLocation loc = peek().loc;
+    advance(); // consume 'trait'
+    Token nameTok = expect(TokenKind::Ident, "expected trait name");
+    skipNewlines();
+    expect(TokenKind::LBrace, "expected '{' after trait name");
+    skipNewlines();
+
+    std::vector<TraitMethodSig> methods;
+    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        expect(TokenKind::KwFn, "expected 'fn' in trait body");
+        Token methodName = expect(TokenKind::Ident, "expected method name");
+        expect(TokenKind::LParen, "expected '(' after method name");
+
+        std::vector<Param> params;
+        if (!check(TokenKind::RParen)) {
+            params.push_back(parseParam());
+            while (match(TokenKind::Comma)) {
+                params.push_back(parseParam());
+            }
+        }
+        expect(TokenKind::RParen, "expected ')' after parameters");
+        expect(TokenKind::Arrow, "expected '->' for return type");
+        TypeRef ret = parseType();
+
+        TraitMethodSig sig;
+        sig.name = methodName.text;
+        sig.param_count = static_cast<uint32_t>(params.size());
+        sig.params = arena_.makeArray<Param>(params.size());
+        for (size_t j = 0; j < params.size(); ++j) {
+            sig.params[j] = params[j];
+        }
+        sig.return_type = ret;
+        sig.loc = methodName.loc;
+        methods.push_back(sig);
+        skipNewlines();
+    }
+    expect(TokenKind::RBrace, "expected '}' to close trait");
+
+    auto* td = arena_.make<TraitDecl>();
+    td->name = nameTok.text;
+    td->method_count = static_cast<uint32_t>(methods.size());
+    td->methods = arena_.makeArray<TraitMethodSig>(methods.size());
+    for (size_t j = 0; j < methods.size(); ++j) {
+        td->methods[j] = methods[j];
+    }
+    td->loc = loc;
+    return td;
+}
+
+// --- Impl Declaration ---
+// impl Printable for Point {
+//     fn to_string(self: Point) -> String { ... }
+// }
+ImplDecl* Parser::parseImplDecl() {
+    SourceLocation loc = peek().loc;
+    advance(); // consume 'impl'
+    Token traitName = expect(TokenKind::Ident, "expected trait name after 'impl'");
+    // Expect 'for' keyword (used as contextual keyword, not a reserved word)
+    Token forTok = expect(TokenKind::Ident, "expected 'for' after trait name");
+    if (forTok.text != "for") {
+        diag_.error(forTok.loc, "expected 'for' after trait name in impl declaration");
+    }
+    TypeRef target = parseType();
+    skipNewlines();
+    expect(TokenKind::LBrace, "expected '{' in impl block");
+    skipNewlines();
+
+    std::vector<FnDecl*> methods;
+    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        if (check(TokenKind::KwFn)) {
+            FnDecl* fn = parseFnDecl();
+            if (fn) methods.push_back(fn);
+        } else {
+            diag_.error(peek().loc, "expected 'fn' in impl block");
+            advance();
+        }
+        skipNewlines();
+    }
+    expect(TokenKind::RBrace, "expected '}' to close impl block");
+
+    auto* id = arena_.make<ImplDecl>();
+    id->trait_name = traitName.text;
+    id->target_type = target;
+    id->method_count = static_cast<uint32_t>(methods.size());
+    id->methods = arena_.makeArray<FnDecl*>(methods.size());
+    for (size_t j = 0; j < methods.size(); ++j) {
+        id->methods[j] = methods[j];
+    }
+    id->loc = loc;
+    return id;
 }
 
 // --- Struct Declaration ---
@@ -1159,15 +1283,39 @@ Expr* Parser::parseExprInfix(Expr* lhs, uint8_t minBP) {
         Token opTok = advance();
         skipNewlines();
 
-        // Dot operator: field access
+        // Dot operator: field access or method call
         if (op == TokenKind::Dot) {
             Token field = expect(TokenKind::Ident, "expected field name after '.'");
-            auto* fa = arena_.make<FieldAccessExpr>();
-            fa->kind = Expr::Kind::FieldAccess;
-            fa->loc = opTok.loc;
-            fa->object = lhs;
-            fa->field_name = field.text;
-            lhs = fa;
+            // Check for method call: expr.method(args)
+            if (check(TokenKind::LParen)) {
+                advance(); // consume '('
+                std::vector<Expr*> args;
+                if (!check(TokenKind::RParen)) {
+                    args.push_back(parseExpr());
+                    while (match(TokenKind::Comma)) {
+                        args.push_back(parseExpr());
+                    }
+                }
+                expect(TokenKind::RParen, "expected ')' after method arguments");
+                auto* mc = arena_.make<MethodCallExpr>();
+                mc->kind = Expr::Kind::MethodCall;
+                mc->loc = opTok.loc;
+                mc->object = lhs;
+                mc->method_name = field.text;
+                mc->arg_count = static_cast<uint32_t>(args.size());
+                mc->args = arena_.makeArray<Expr*>(args.size());
+                for (size_t i = 0; i < args.size(); ++i) {
+                    mc->args[i] = args[i];
+                }
+                lhs = mc;
+            } else {
+                auto* fa = arena_.make<FieldAccessExpr>();
+                fa->kind = Expr::Kind::FieldAccess;
+                fa->loc = opTok.loc;
+                fa->object = lhs;
+                fa->field_name = field.text;
+                lhs = fa;
+            }
             continue;
         }
 
@@ -1824,12 +1972,35 @@ Expr* Parser::parseBlockExpr() {
                 if (check(TokenKind::Dot)) {
                     Token dotTok = advance();
                     Token field = expect(TokenKind::Ident, "expected field name after '.'");
-                    auto* fa = arena_.make<FieldAccessExpr>();
-                    fa->kind = Expr::Kind::FieldAccess;
-                    fa->loc = dotTok.loc;
-                    fa->object = lhs;
-                    fa->field_name = field.text;
-                    lhs = fa;
+                    if (check(TokenKind::LParen)) {
+                        advance(); // consume '('
+                        std::vector<Expr*> mc_args;
+                        if (!check(TokenKind::RParen)) {
+                            mc_args.push_back(parseExpr());
+                            while (match(TokenKind::Comma)) {
+                                mc_args.push_back(parseExpr());
+                            }
+                        }
+                        expect(TokenKind::RParen, "expected ')' after method arguments");
+                        auto* mc = arena_.make<MethodCallExpr>();
+                        mc->kind = Expr::Kind::MethodCall;
+                        mc->loc = dotTok.loc;
+                        mc->object = lhs;
+                        mc->method_name = field.text;
+                        mc->arg_count = static_cast<uint32_t>(mc_args.size());
+                        mc->args = arena_.makeArray<Expr*>(mc_args.size());
+                        for (size_t ai = 0; ai < mc_args.size(); ++ai) {
+                            mc->args[ai] = mc_args[ai];
+                        }
+                        lhs = mc;
+                    } else {
+                        auto* fa = arena_.make<FieldAccessExpr>();
+                        fa->kind = Expr::Kind::FieldAccess;
+                        fa->loc = dotTok.loc;
+                        fa->object = lhs;
+                        fa->field_name = field.text;
+                        lhs = fa;
+                    }
                 } else {
                     advance(); // consume '['
                     skipNewlines();
@@ -2148,12 +2319,35 @@ Expr* Parser::parseLoopExpr() {
             while (check(TokenKind::Dot)) {
                 Token dotTok = advance();
                 Token field = expect(TokenKind::Ident, "expected field name after '.'");
-                auto* fa = arena_.make<FieldAccessExpr>();
-                fa->kind = Expr::Kind::FieldAccess;
-                fa->loc = dotTok.loc;
-                fa->object = lhs;
-                fa->field_name = field.text;
-                lhs = fa;
+                if (check(TokenKind::LParen)) {
+                    advance(); // consume '('
+                    std::vector<Expr*> mc_args;
+                    if (!check(TokenKind::RParen)) {
+                        mc_args.push_back(parseExpr());
+                        while (match(TokenKind::Comma)) {
+                            mc_args.push_back(parseExpr());
+                        }
+                    }
+                    expect(TokenKind::RParen, "expected ')' after method arguments");
+                    auto* mc = arena_.make<MethodCallExpr>();
+                    mc->kind = Expr::Kind::MethodCall;
+                    mc->loc = dotTok.loc;
+                    mc->object = lhs;
+                    mc->method_name = field.text;
+                    mc->arg_count = static_cast<uint32_t>(mc_args.size());
+                    mc->args = arena_.makeArray<Expr*>(mc_args.size());
+                    for (size_t ai = 0; ai < mc_args.size(); ++ai) {
+                        mc->args[ai] = mc_args[ai];
+                    }
+                    lhs = mc;
+                } else {
+                    auto* fa = arena_.make<FieldAccessExpr>();
+                    fa->kind = Expr::Kind::FieldAccess;
+                    fa->loc = dotTok.loc;
+                    fa->object = lhs;
+                    fa->field_name = field.text;
+                    lhs = fa;
+                }
             }
             skipNewlines();
 

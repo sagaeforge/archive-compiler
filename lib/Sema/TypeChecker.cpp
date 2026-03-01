@@ -1265,6 +1265,10 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
             diag_.error(expr->loc, "lambda not yet implemented in v1 pipeline");
             result = Type::Error;
             break;
+        case Expr::Kind::MethodCall:
+            diag_.error(expr->loc, "method call not yet implemented in v1 pipeline");
+            result = Type::Error;
+            break;
     }
 
     expr_types_[expr] = result;

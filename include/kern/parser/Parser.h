@@ -30,6 +30,8 @@ private:
     UnionDecl* parseUnionDecl();
     TypeAliasDecl* parseTypeAlias();
     NewtypeDecl* parseNewtype();
+    TraitDecl* parseTraitDecl();
+    ImplDecl* parseImplDecl();
     Param parseParam();
 
     // Types

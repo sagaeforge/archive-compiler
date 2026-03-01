@@ -884,6 +884,7 @@ ValueId IRBuilder::buildExpr(Expr* expr, bool in_tail_position) {
         case Expr::Kind::Sizeof:
         case Expr::Kind::Alignof:
         case Expr::Kind::Lambda:
+        case Expr::Kind::MethodCall:
             break;  // not yet implemented in v1 IR
     }
 

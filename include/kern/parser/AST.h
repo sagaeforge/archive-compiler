@@ -9,6 +9,7 @@ namespace kern {
 // Forward declarations
 struct Expr;
 struct Stmt;
+struct FnDecl;
 
 // --- Type Reference ---
 struct TypeRef {
@@ -150,6 +151,31 @@ struct StaticAssertDecl {
     SourceLocation loc;
 };
 
+// --- Trait declaration ---
+struct TraitMethodSig {
+    std::string_view name;
+    Param* params;
+    uint32_t param_count;
+    TypeRef return_type;
+    SourceLocation loc;
+};
+
+struct TraitDecl {
+    std::string_view name;
+    TraitMethodSig* methods;
+    uint32_t method_count;
+    SourceLocation loc;
+};
+
+// --- Impl declaration ---
+struct ImplDecl {
+    std::string_view trait_name;
+    TypeRef target_type;       // the type implementing the trait
+    FnDecl** methods;
+    uint32_t method_count;
+    SourceLocation loc;
+};
+
 // --- Expressions ---
 struct Expr {
     enum class Kind {
@@ -161,7 +187,7 @@ struct Expr {
         Loop, InlineAsm,
         ArrayLit, IndexAccess,
         Sizeof, Alignof,
-        Lambda
+        Lambda, MethodCall
     };
     Kind kind;
     SourceLocation loc;
@@ -307,6 +333,13 @@ struct LambdaExpr : Expr {
     Expr* body;
 };
 
+struct MethodCallExpr : Expr {
+    Expr* object;
+    std::string_view method_name;
+    Expr** args;
+    uint32_t arg_count;
+};
+
 struct LoopBinding {
     std::string_view name;
     Expr* init;
@@ -412,6 +445,10 @@ struct Module {
     uint32_t newtype_count;
     StaticAssertDecl** static_asserts;
     uint32_t static_assert_count;
+    TraitDecl** traits;
+    uint32_t trait_count;
+    ImplDecl** impls;
+    uint32_t impl_count;
 };
 
 // AST dumper

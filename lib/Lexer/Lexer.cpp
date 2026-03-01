@@ -38,6 +38,8 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::KwImport:   return "import";
         case TokenKind::KwSizeof:   return "sizeof";
         case TokenKind::KwAlignof:  return "alignof";
+        case TokenKind::KwTrait:    return "trait";
+        case TokenKind::KwImpl:     return "impl";
         case TokenKind::Plus:       return "+";
         case TokenKind::Minus:      return "-";
         case TokenKind::Star:       return "*";
@@ -234,6 +236,8 @@ TokenKind Lexer::identifierKind(std::string_view text) {
     if (text == "import")   return TokenKind::KwImport;
     if (text == "sizeof")   return TokenKind::KwSizeof;
     if (text == "alignof")  return TokenKind::KwAlignof;
+    if (text == "trait")    return TokenKind::KwTrait;
+    if (text == "impl")     return TokenKind::KwImpl;
     return TokenKind::Ident;
 }
 

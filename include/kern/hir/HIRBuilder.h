@@ -55,6 +55,7 @@ private:
     HIRExpr* buildIndexAccess(const Expr* expr);
     HIRExpr* buildInlineAsm(const Expr* expr);
     HIRExpr* buildLambda(const Expr* expr, std::optional<TypeId> ctx_type);
+    HIRExpr* buildMethodCall(const Expr* expr);
 
     // Statement building
     HIRStmt* buildStmt(const Stmt* stmt);
@@ -96,6 +97,25 @@ private:
     // Lambda lifting: accumulated lifted functions to add to module
     std::vector<HIRFnDecl*> lifted_lambdas_;
     uint32_t lambda_counter_ = 0;
+
+    // Trait/impl support (static dispatch)
+    struct TraitInfo {
+        std::string_view name;
+        std::vector<std::string_view> method_names;
+    };
+    std::unordered_map<std::string_view, TraitInfo> trait_table_;
+
+    // Map: type_name → { method_name → mangled_fn_name }
+    struct ImplMethods {
+        std::unordered_map<std::string_view, std::string_view> methods;
+    };
+    std::unordered_map<std::string_view, ImplMethods> impl_table_;
+
+    void registerTraits(const Module* ast);
+    void registerImpls(const Module* ast);
+
+    // Resolve method on a type: returns mangled fn name or empty
+    std::string_view resolveMethod(TypeId type, std::string_view method) const;
 };
 
 } // namespace kern
