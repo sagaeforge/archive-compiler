@@ -80,6 +80,7 @@ inline IRType irTypeFromSemaType(Type t) {
         case Type::Union:  return IRType::Struct; // union is stack-allocated like struct
         case Type::Ptr:    return IRType::I64;    // pointers are 64-bit addresses
         case Type::PtrVar: return IRType::I64;    // mutable pointers too
+        case Type::String: return IRType::Struct;  // fat pointer: ptr(8) + len(8)
     }
     return IRType::Unknown;
 }

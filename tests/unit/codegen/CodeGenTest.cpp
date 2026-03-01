@@ -643,3 +643,34 @@ TEST(CodeGenTest, DerefAssignEmitsMovToPtr) {
     // Should have mov [reg], ... for the store
     EXPECT_NE(asm_code.find("42"), std::string::npos);
 }
+
+// ===== String CodeGen tests =====
+
+TEST(CodeGenTest, StringLitEmitsRodataAndLea) {
+    std::string asm_code = generateAsm(
+        "fn main() -> i64 {\n"
+        "    val s: String = \"hello\"\n"
+        "    42\n"
+        "}"
+    );
+    // Should have lea for string data address from .rodata
+    EXPECT_NE(asm_code.find("lea"), std::string::npos);
+    EXPECT_NE(asm_code.find("._str_"), std::string::npos);
+    // Should have .rodata section with string data
+    EXPECT_NE(asm_code.find(".rodata"), std::string::npos);
+    // String length (5) should be stored
+    EXPECT_NE(asm_code.find("5"), std::string::npos);
+}
+
+TEST(CodeGenTest, StringLenFieldAccess) {
+    std::string asm_code = generateAsm(
+        "fn main() -> u64 {\n"
+        "    val s: String = \"hi\"\n"
+        "    s.len\n"
+        "}"
+    );
+    // Should have mov for field load at offset 8 (len field)
+    EXPECT_NE(asm_code.find("rbp"), std::string::npos);
+    // String "hi" has length 2
+    EXPECT_NE(asm_code.find("2"), std::string::npos);
+}

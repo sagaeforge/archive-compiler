@@ -18,4 +18,4 @@ target_link_libraries(kern_tests
     GTest::gtest_main
 )
 include(GoogleTest)
-gtest_discover_tests(kern_tests)
+gtest_discover_tests(kern_tests DISCOVERY_TIMEOUT 120 DISCOVERY_MODE PRE_TEST)

@@ -203,6 +203,8 @@ void CodeGen::collectMergeBlocks(const IRFunction& fn) {
 void CodeGen::emitModule(const IRModule& mod) {
     float_consts_.clear();
     float_const_counter_ = 0;
+    string_consts_.clear();
+    string_const_counter_ = 0;
 
     out() << "section .text\n";
 
@@ -215,8 +217,8 @@ void CodeGen::emitModule(const IRModule& mod) {
         emitFunction(fn);
     }
 
-    // Emit float constants in .rodata
-    if (!float_consts_.empty()) {
+    // Emit constants in .rodata
+    if (!float_consts_.empty() || !string_consts_.empty()) {
         out() << "\nsection .rodata\n";
         out() << "align 8\n";
         for (const auto& fc : float_consts_) {
@@ -230,6 +232,17 @@ void CodeGen::emitModule(const IRModule& mod) {
                 std::memcpy(&bits, &fc.value, sizeof(bits));
                 out() << fc.label << ": dq 0x" << std::hex << bits << std::dec << "\n";
             }
+        }
+        for (const auto& sc : string_consts_) {
+            out() << sc.label << ": db ";
+            for (size_t i = 0; i < sc.data.size(); ++i) {
+                if (i > 0) out() << ", ";
+                out() << static_cast<int>(static_cast<unsigned char>(sc.data[i]));
+            }
+            if (sc.data.empty()) {
+                out() << "0";  // empty string placeholder
+            }
+            out() << "\n";
         }
     }
 }
@@ -772,6 +785,29 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
                             tc_xmm_args.push_back({static_cast<size_t>(tc_xmm_count), true, src});
                             tc_xmm_count++;
                         }
+                    } else if (arg_type == IRType::Struct) {
+                        // Struct/String arg: pack from StructBase into 2 GPRs
+                        auto base_it = value_locs_.find(instr.operands[i]);
+                        if (base_it != value_locs_.end() && base_it->second.kind == Location::StructBase) {
+                            int32_t base = base_it->second.stack_offset;
+                            int32_t ssize = base_it->second.struct_size;
+                            if (tc_gpr_count < MAX_ARG_REGS) {
+                                std::string src = "qword [rbp" + std::to_string(base) + "]";
+                                tc_gpr_args.push_back({static_cast<size_t>(tc_gpr_count), false, src});
+                                tc_gpr_count++;
+                            }
+                            if (ssize > 8 && tc_gpr_count < MAX_ARG_REGS) {
+                                std::string src = "qword [rbp" + std::to_string(base + 8) + "]";
+                                tc_gpr_args.push_back({static_cast<size_t>(tc_gpr_count), false, src});
+                                tc_gpr_count++;
+                            }
+                        } else {
+                            if (tc_gpr_count < MAX_ARG_REGS) {
+                                std::string src = valReg(instr.operands[i]);
+                                tc_gpr_args.push_back({static_cast<size_t>(tc_gpr_count), false, src});
+                                tc_gpr_count++;
+                            }
+                        }
                     } else {
                         if (tc_gpr_count < MAX_ARG_REGS) {
                             std::string src = valReg(instr.operands[i]);
@@ -1302,6 +1338,26 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
                           << regForWidth(src, bits) << "\n";
                 }
             }
+            break;
+        }
+
+        case IROpcode::ConstString: {
+            uint32_t str_id = string_const_counter_++;
+            std::string label = "._str_" + std::to_string(str_id);
+            string_consts_.push_back({label, instr.callee_name});
+
+            // Allocate 16 bytes on stack for fat pointer (ptr + len)
+            stack_offset_ -= 16;
+            int32_t base_off = stack_offset_;
+
+            value_locs_[instr.result] = {
+                Location::StructBase, "", base_off, IRType::Struct, "String", 16
+            };
+
+            out() << "    lea  rax, [rel " << label << "]\n";
+            out() << "    mov  qword [rbp" << base_off << "], rax\n";
+            out() << "    mov  qword [rbp" << (base_off + 8) << "], "
+                  << instr.imm_value << "\n";
             break;
         }
     }

@@ -1,0 +1,6 @@
+fn get_len(s: String) -> u64 { s.len }
+fn main() -> i64 {
+    val s: String = "a\nb"
+    val len: u64 = get_len(s)
+    if len == 3 { 42 } else { 0 }
+}

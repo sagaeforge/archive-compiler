@@ -24,6 +24,20 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
         case Expr::Kind::BoolLit:
             out << "BoolLit(" << (static_cast<const BoolLitExpr*>(expr)->value ? "true" : "false") << ")\n";
             break;
+        case Expr::Kind::StringLit: {
+            auto* sl = static_cast<const StringLitExpr*>(expr);
+            out << "StringLit(\"";
+            for (uint32_t i = 0; i < sl->length; ++i) {
+                char c = sl->data[i];
+                if (c == '\n') out << "\\n";
+                else if (c == '\t') out << "\\t";
+                else if (c == '\\') out << "\\\\";
+                else if (c == '"') out << "\\\"";
+                else out << c;
+            }
+            out << "\")\n";
+            break;
+        }
         case Expr::Kind::Ident:
             out << "Ident(" << static_cast<const IdentExpr*>(expr)->name << ")\n";
             break;
@@ -906,6 +920,33 @@ Expr* Parser::parsePrimary() {
         lit->kind = Expr::Kind::BoolLit;
         lit->loc = tok.loc;
         lit->value = (tok.kind == TokenKind::KwTrue);
+        return lit;
+    }
+
+    // String literal
+    if (tok.kind == TokenKind::StringLit) {
+        advance();
+        auto* lit = arena_.make<StringLitExpr>();
+        lit->kind = Expr::Kind::StringLit;
+        lit->loc = tok.loc;
+        std::string_view raw = tok.text;
+        // Allocate buffer for processed string (worst case same size as raw - 2 quotes)
+        auto* buf = static_cast<char*>(arena_.allocate(raw.size(), 1));
+        uint32_t len = 0;
+        for (size_t i = 1; i + 1 < raw.size(); ++i) {
+            if (raw[i] == '\\' && i + 2 < raw.size()) {
+                char esc = raw[i + 1];
+                if (esc == 'n')       { buf[len++] = '\n'; ++i; }
+                else if (esc == 't')  { buf[len++] = '\t'; ++i; }
+                else if (esc == '\\') { buf[len++] = '\\'; ++i; }
+                else if (esc == '"')  { buf[len++] = '"'; ++i; }
+                else                  { buf[len++] = raw[i]; }
+            } else {
+                buf[len++] = raw[i];
+            }
+        }
+        lit->data = buf;
+        lit->length = len;
         return lit;
     }
 

@@ -1,0 +1,7 @@
+fn check_len(s: String, expected: u64) -> i64 {
+    if s.len == expected { 42 } else { 0 }
+}
+fn main() -> i64 {
+    val s: String = "kern"
+    check_len(s, 4)
+}

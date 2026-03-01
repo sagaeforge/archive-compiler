@@ -1165,3 +1165,40 @@ TEST(IRTest, DerefStructFieldEmitsPtrLoadAndFieldLoad) {
     EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::PtrLoad));
     EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::FieldLoad));
 }
+
+// ===== String IR tests =====
+
+TEST(IRTest, StringLitEmitsConstString) {
+    auto r = buildIR(
+        "fn main() -> i64 {\n"
+        "    val s: String = \"hello\"\n"
+        "    42\n"
+        "}"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::ConstString));
+}
+
+TEST(IRTest, StringLenFieldEmitsFieldLoad) {
+    auto r = buildIR(
+        "fn main() -> u64 {\n"
+        "    val s: String = \"hello\"\n"
+        "    s.len\n"
+        "}"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::ConstString));
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::FieldLoad));
+}
+
+TEST(IRTest, StringDataFieldEmitsFieldLoad) {
+    auto r = buildIR(
+        "fn main() -> i64 {\n"
+        "    val s: String = \"hello\"\n"
+        "    val p: Ptr<u8> = s.data\n"
+        "    42\n"
+        "}"
+    );
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::FieldLoad));
+}

@@ -41,6 +41,7 @@ const char* irOpcodeName(IROpcode op) {
         case IROpcode::AddrOf:      return "addr_of";
         case IROpcode::PtrLoad:     return "ptr_load";
         case IROpcode::PtrStore:    return "ptr_store";
+        case IROpcode::ConstString: return "const_string";
     }
     return "?";
 }
@@ -138,6 +139,9 @@ void dumpIR(const IRModule& mod, std::ostream& out) {
                     case IROpcode::PtrStore:
                         out << " %" << instr.operands[0]
                             << ", %" << instr.operands[1];
+                        break;
+                    case IROpcode::ConstString:
+                        out << " (len=" << instr.imm_value << ")";
                         break;
                     default:
                         for (size_t i = 0; i < instr.operands.size(); ++i) {
@@ -304,6 +308,7 @@ void IRBuilder::buildFunction(FnDecl* fn) {
         else if (pname == "f32")  pt = IRType::F32;
         else if (pname == "f64")  pt = IRType::F64;
         else if (pname == "bool") pt = IRType::Bool;
+        else if (pname == "String") pt = IRType::Struct;
         else if (struct_info_.count(std::string(pname))) pt = IRType::Struct;
         else if (enum_info_.count(std::string(pname))) pt = IRType::I64;
         else if (union_info_.count(std::string(pname))) pt = IRType::Struct;
@@ -359,6 +364,18 @@ ValueId IRBuilder::buildExpr(Expr* expr, bool in_tail_position) {
             instr.imm_value = lit->value ? 1 : 0;
             instr.loc = expr->loc;
             instr.type = IRType::Bool;
+            return emit(instr);
+        }
+
+        case Expr::Kind::StringLit: {
+            auto* lit = static_cast<StringLitExpr*>(expr);
+            IRInstr instr;
+            instr.op = IROpcode::ConstString;
+            instr.result = newValue();
+            instr.callee_name = std::string(lit->data, lit->length);
+            instr.imm_value = static_cast<int64_t>(lit->length);
+            instr.loc = expr->loc;
+            instr.type = IRType::Struct;
             return emit(instr);
         }
 
@@ -711,6 +728,23 @@ ValueId IRBuilder::buildExpr(Expr* expr, bool in_tail_position) {
         case Expr::Kind::FieldAccess: {
             auto* fa = static_cast<FieldAccessExpr*>(expr);
             ValueId obj = buildExpr(fa->object);
+
+            // String field access: .data (offset 0) and .len (offset 8)
+            if (tc_->typeOfExpr(fa->object) == Type::String) {
+                IRInstr load;
+                load.op = IROpcode::FieldLoad;
+                load.result = newValue();
+                load.operands = {obj};
+                load.loc = expr->loc;
+                if (fa->field_name == "data") {
+                    load.imm_value = 0;
+                    load.type = IRType::I64;
+                } else { // "len"
+                    load.imm_value = 8;
+                    load.type = IRType::U64;
+                }
+                return emit(load);
+            }
 
             // Resolve struct name from object expression
             std::string_view sname_sv = tc_->structNameOfExpr(fa->object);

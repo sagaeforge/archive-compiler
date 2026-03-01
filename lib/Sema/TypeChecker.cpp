@@ -23,6 +23,7 @@ const char* typeName(Type t) {
         case Type::Union:  return "union";
         case Type::Ptr:    return "Ptr";
         case Type::PtrVar: return "Ptr<var>";
+        case Type::String: return "String";
     }
     return "<unknown>";
 }
@@ -82,6 +83,7 @@ int sizeBytes(Type t) {
         case Type::I32: case Type::U32: case Type::F32: return 4;
         case Type::I64: case Type::U64: case Type::F64: return 8;
         case Type::Ptr: case Type::PtrVar: return 8; // 64-bit pointers
+        case Type::String: return 16; // fat pointer: ptr(8) + len(8)
         default: return 0;
     }
 }
@@ -119,6 +121,7 @@ Type TypeChecker::resolveType(const TypeRef& ref) {
     if (ref.name == "f64")  return Type::F64;
     if (ref.name == "bool") return Type::Bool;
     if (ref.name == "Unit") return Type::Unit;
+    if (ref.name == "String") return Type::String;
     if (struct_defs_.count(ref.name)) return Type::Struct;
     if (enum_defs_.count(ref.name))  return Type::Enum;
     if (union_defs_.count(ref.name)) return Type::Union;
@@ -454,6 +457,10 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
 
         case Expr::Kind::BoolLit:
             result = Type::Bool;
+            break;
+
+        case Expr::Kind::StringLit:
+            result = Type::String;
             break;
 
         case Expr::Kind::Ident: {
@@ -809,6 +816,22 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
         case Expr::Kind::FieldAccess: {
             auto* fa = static_cast<FieldAccessExpr*>(expr);
             Type obj_type = checkExpr(fa->object);
+
+            // String field access: .data and .len
+            if (obj_type == Type::String) {
+                if (fa->field_name == "len") {
+                    result = Type::U64;
+                } else if (fa->field_name == "data") {
+                    result = Type::Ptr;
+                    expr_ptr_info_[expr] = {Type::U8, ""};
+                } else {
+                    diag_.error(expr->loc, std::string("String has no field named '") +
+                                std::string(fa->field_name) + "'");
+                    result = Type::Error;
+                }
+                break;
+            }
+
             if (obj_type != Type::Struct) {
                 if (obj_type != Type::Error) {
                     diag_.error(expr->loc, std::string("field access requires struct type, got ") +

@@ -60,6 +60,14 @@ private:
     uint32_t float_const_counter_ = 0;
     std::string addFloatConst(double value, bool is_f32);
 
+    // String constant pool
+    struct StringConst {
+        std::string label;
+        std::string data;
+    };
+    std::vector<StringConst> string_consts_;
+    uint32_t string_const_counter_ = 0;
+
     // XMM register allocation
     std::string allocXmmReg(ValueId v);
     std::string valXmmReg(ValueId v);

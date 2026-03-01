@@ -111,7 +111,7 @@ struct UnionDecl {
 // --- Expressions ---
 struct Expr {
     enum class Kind {
-        IntLit, FloatLit, BoolLit, Ident,
+        IntLit, FloatLit, BoolLit, StringLit, Ident,
         BinOp, UnaryOp, Call,
         If, Block, Return, Match,
         StructLit, FieldAccess,
@@ -132,6 +132,11 @@ struct FloatLitExpr : Expr {
 
 struct BoolLitExpr : Expr {
     bool value;
+};
+
+struct StringLitExpr : Expr {
+    const char* data;    // processed bytes (escape sequences resolved)
+    uint32_t length;     // byte length of processed data
 };
 
 struct IdentExpr : Expr {

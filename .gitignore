@@ -1,5 +1,8 @@
 build/
+build-cov/
 .cache/
 *.o
 *.asm
 a.out
+*.profraw
+*.profdata

@@ -332,7 +332,8 @@ TEST(LexerTest, SourceAccessor) {
 // --- tokenKindName covers all enum values ---
 TEST(LexerTest, TokenKindNameCoverage) {
     TokenKind kinds[] = {
-        TokenKind::IntLit, TokenKind::Ident,
+        TokenKind::IntLit, TokenKind::FloatLit, TokenKind::StringLit,
+        TokenKind::Ident,
         TokenKind::KwFn, TokenKind::KwVal, TokenKind::KwVar,
         TokenKind::KwMatch, TokenKind::KwReturn,
         TokenKind::KwIf, TokenKind::KwElse,
@@ -516,4 +517,56 @@ TEST(LexerTest, UnionIdentifierPrefix) {
     auto r = lex("unionize");
     EXPECT_EQ(r[0].kind, TokenKind::Ident);
     EXPECT_EQ(r[0].text, "unionize");
+}
+
+// ===== String literal tests =====
+
+TEST(LexerTest, StringLitBasic) {
+    auto r = lex("\"hello\"");
+    EXPECT_EQ(r[0].kind, TokenKind::StringLit);
+    EXPECT_EQ(r[0].text, "\"hello\"");
+}
+
+TEST(LexerTest, StringLitEmpty) {
+    auto r = lex("\"\"");
+    EXPECT_EQ(r[0].kind, TokenKind::StringLit);
+    EXPECT_EQ(r[0].text, "\"\"");
+}
+
+TEST(LexerTest, StringLitEscapeSequences) {
+    auto r = lex("\"a\\nb\\tc\\\\d\\\"e\"");
+    EXPECT_EQ(r[0].kind, TokenKind::StringLit);
+    EXPECT_EQ(r[0].text, "\"a\\nb\\tc\\\\d\\\"e\"");
+}
+
+TEST(LexerTest, StringLitWithSpaces) {
+    auto r = lex("\"hello world\"");
+    EXPECT_EQ(r[0].kind, TokenKind::StringLit);
+    EXPECT_EQ(r[0].text, "\"hello world\"");
+}
+
+TEST(LexerTest, StringLitInContext) {
+    auto r = lex("val s: String = \"hi\"");
+    EXPECT_EQ(r[0].kind, TokenKind::KwVal);
+    EXPECT_EQ(r[1].kind, TokenKind::Ident);
+    EXPECT_EQ(r[2].kind, TokenKind::Colon);
+    EXPECT_EQ(r[3].kind, TokenKind::Ident);
+    EXPECT_EQ(r[4].kind, TokenKind::Eq);
+    EXPECT_EQ(r[5].kind, TokenKind::StringLit);
+    EXPECT_EQ(r[5].text, "\"hi\"");
+}
+
+TEST(LexerTest, StringLitUnterminated) {
+    auto r = lex("\"hello");
+    EXPECT_EQ(r[0].kind, TokenKind::Error);
+}
+
+TEST(LexerTest, StringLitUnterminatedNewline) {
+    auto r = lex("\"hello\nworld\"", false);
+    EXPECT_EQ(r[0].kind, TokenKind::Error);
+}
+
+TEST(LexerTest, StringLitInvalidEscape) {
+    auto r = lex("\"hello\\xworld\"");
+    EXPECT_EQ(r[0].kind, TokenKind::Error);
 }

@@ -8,6 +8,7 @@ const char* tokenKindName(TokenKind kind) {
     switch (kind) {
         case TokenKind::IntLit:     return "IntLit";
         case TokenKind::FloatLit:   return "FloatLit";
+        case TokenKind::StringLit:  return "StringLit";
         case TokenKind::Ident:      return "Ident";
         case TokenKind::KwFn:       return "fn";
         case TokenKind::KwVal:      return "val";
@@ -202,6 +203,32 @@ TokenKind Lexer::identifierKind(std::string_view text) {
     return TokenKind::Ident;
 }
 
+Token Lexer::scanString() {
+    while (!isAtEnd()) {
+        char c = peek();
+        if (c == '"') {
+            advance();
+            return makeToken(TokenKind::StringLit);
+        }
+        if (c == '\\') {
+            advance();
+            if (isAtEnd()) break;
+            char esc = peek();
+            if (esc != 'n' && esc != 't' && esc != '\\' && esc != '"') {
+                advance();
+                return errorToken("invalid escape sequence in string");
+            }
+            advance();
+            continue;
+        }
+        if (c == '\n') {
+            return errorToken("unterminated string literal");
+        }
+        advance();
+    }
+    return errorToken("unterminated string literal");
+}
+
 Token Lexer::scanIdentifierOrKeyword() {
     while (!isAtEnd() && (std::isalnum(static_cast<unsigned char>(peek())) || peek() == '_')) {
         advance();
@@ -232,6 +259,11 @@ Token Lexer::nextToken() {
     // Numbers
     if (std::isdigit(static_cast<unsigned char>(c))) {
         return scanNumber();
+    }
+
+    // String literals
+    if (c == '"') {
+        return scanString();
     }
 
     // Identifiers and keywords

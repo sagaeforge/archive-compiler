@@ -1211,3 +1211,51 @@ TEST(ParserTest, PtrReturnType) {
     ASSERT_FALSE(r.diag.hasErrors());
     EXPECT_EQ(r.mod->functions[0]->return_type.kind, TypeRef::Kind::Ptr);
 }
+
+// ===== String literal tests =====
+
+TEST(ParserTest, StringLitExpr) {
+    auto r = parse(
+        "fn main() -> i64 {\n"
+        "    val s: String = \"hello\"\n"
+        "    42\n"
+        "}"
+    );
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    auto* decl = static_cast<ValDeclStmt*>(body->stmts[0]);
+    EXPECT_EQ(decl->init->kind, Expr::Kind::StringLit);
+    auto* sl = static_cast<StringLitExpr*>(decl->init);
+    EXPECT_EQ(sl->length, 5u);
+    EXPECT_EQ(sl->data[0], 'h');
+    EXPECT_EQ(sl->data[4], 'o');
+}
+
+TEST(ParserTest, StringLitEscapeProcessed) {
+    auto r = parse(
+        "fn main() -> i64 {\n"
+        "    val s: String = \"a\\nb\"\n"
+        "    42\n"
+        "}"
+    );
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    auto* decl = static_cast<ValDeclStmt*>(body->stmts[0]);
+    auto* sl = static_cast<StringLitExpr*>(decl->init);
+    EXPECT_EQ(sl->length, 3u);
+    EXPECT_EQ(sl->data[1], '\n');
+}
+
+TEST(ParserTest, StringLitEmpty) {
+    auto r = parse(
+        "fn main() -> i64 {\n"
+        "    val s: String = \"\"\n"
+        "    42\n"
+        "}"
+    );
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    auto* decl = static_cast<ValDeclStmt*>(body->stmts[0]);
+    auto* sl = static_cast<StringLitExpr*>(decl->init);
+    EXPECT_EQ(sl->length, 0u);
+}

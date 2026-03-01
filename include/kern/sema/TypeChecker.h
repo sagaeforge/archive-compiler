@@ -15,7 +15,8 @@ enum class Type {
     F32, F64,
     Bool, Unit, Error,
     Struct, Enum, Union,
-    Ptr, PtrVar
+    Ptr, PtrVar,
+    String
 };
 
 const char* typeName(Type t);

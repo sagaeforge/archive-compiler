@@ -33,6 +33,7 @@ enum class IROpcode : uint8_t {
     AddrOf,
     PtrLoad,
     PtrStore,
+    ConstString,
 };
 
 const char* irOpcodeName(IROpcode op);

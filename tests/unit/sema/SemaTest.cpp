@@ -1164,3 +1164,46 @@ TEST(SemaTest, ErrorDerefNonPointer) {
         "fn f(x: i64) -> i64 { *x }", &errors));
     EXPECT_NE(errors.find("cannot dereference non-pointer type"), std::string::npos);
 }
+
+// ===== String type tests =====
+
+TEST(SemaTest, StringLitType) {
+    EXPECT_TRUE(checkSource(
+        "fn main() -> i64 {\n"
+        "    val s: String = \"hello\"\n"
+        "    42\n"
+        "}"));
+}
+
+TEST(SemaTest, StringLenType) {
+    EXPECT_TRUE(checkSource(
+        "fn main() -> u64 {\n"
+        "    val s: String = \"hello\"\n"
+        "    s.len\n"
+        "}"));
+}
+
+TEST(SemaTest, StringDataType) {
+    EXPECT_TRUE(checkSource(
+        "fn main() -> i64 {\n"
+        "    val s: String = \"hello\"\n"
+        "    val p: Ptr<u8> = s.data\n"
+        "    42\n"
+        "}"));
+}
+
+TEST(SemaTest, StringInvalidField) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 {\n"
+        "    val s: String = \"hi\"\n"
+        "    s.foo\n"
+        "}", &errors));
+    EXPECT_NE(errors.find("String has no field named 'foo'"), std::string::npos);
+}
+
+TEST(SemaTest, StringParam) {
+    EXPECT_TRUE(checkSource(
+        "fn get_len(s: String) -> u64 { s.len }\n"
+        "fn main() -> u64 { get_len(\"hello\") }"));
+}

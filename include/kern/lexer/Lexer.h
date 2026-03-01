@@ -27,6 +27,7 @@ private:
     Token errorToken(const char* message);
 
     Token scanNumber();
+    Token scanString();
     Token scanIdentifierOrKeyword();
     static TokenKind identifierKind(std::string_view text);
 
