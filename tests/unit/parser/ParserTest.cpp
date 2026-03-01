@@ -295,3 +295,247 @@ TEST(ParserTest, LogicalOperators) {
     ASSERT_EQ(top->lhs->kind, Expr::Kind::BinOp);
     EXPECT_EQ(static_cast<BinOpExpr*>(top->lhs)->op, BinOpKind::And);
 }
+
+// ===== Coverage improvement tests =====
+
+// --- Error: unexpected top-level token ---
+TEST(ParserTest, ErrorUnexpectedTopLevel) {
+    auto r = parse("42");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected function declaration"), std::string::npos);
+}
+
+// --- Error: missing function name ---
+TEST(ParserTest, ErrorMissingFnName) {
+    auto r = parse("fn () -> i64 { 42 }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected function name"), std::string::npos);
+}
+
+// --- Error: missing '(' ---
+TEST(ParserTest, ErrorMissingLParen) {
+    auto r = parse("fn main -> i64 { 42 }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected '('"), std::string::npos);
+}
+
+// --- Error: missing colon in parameter ---
+TEST(ParserTest, ErrorMissingParamColon) {
+    auto r = parse("fn f(a i64) -> i64 { a }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected ':'"), std::string::npos);
+}
+
+// --- Error: missing arrow ---
+TEST(ParserTest, ErrorMissingArrow) {
+    auto r = parse("fn main() i64 { 42 }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected '->'"), std::string::npos);
+}
+
+// --- Error: unexpected token in expression position ---
+TEST(ParserTest, ErrorUnexpectedExprToken) {
+    auto r = parse("fn main() -> i64 { ] }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("unexpected token"), std::string::npos);
+}
+
+// --- Error: missing ')' in call ---
+TEST(ParserTest, ErrorMissingCallRParen) {
+    auto r = parse(
+        "fn f(x: i64) -> i64 { x }\n"
+        "fn main() -> i64 { f(1 }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("expected ')'"), std::string::npos);
+}
+
+// --- Empty block ---
+TEST(ParserTest, EmptyBlock) {
+    auto r = parse("fn main() -> i64 { }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    EXPECT_EQ(body->stmt_count, 0u);
+    EXPECT_EQ(body->result, nullptr);
+}
+
+// --- Block with statements only, no result ---
+TEST(ParserTest, BlockWithStatementsOnly) {
+    auto r = parse(
+        "fn main() -> i64 {\n"
+        "    val x: i64 = 10\n"
+        "}");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    EXPECT_EQ(body->stmt_count, 1u);
+    EXPECT_EQ(body->result, nullptr);
+}
+
+// --- Semicolon separated statements ---
+TEST(ParserTest, SemicolonSeparatedStatements) {
+    auto r = parse("fn main() -> i64 { val x: i64 = 1; val y: i64 = 2; x + y }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    EXPECT_EQ(body->stmt_count, 2u);
+    ASSERT_NE(body->result, nullptr);
+    EXPECT_EQ(body->result->kind, Expr::Kind::BinOp);
+}
+
+// --- Else-if chain ---
+TEST(ParserTest, ElseIfChain) {
+    auto r = parse("fn main() -> i64 { if false { 1 } else if false { 2 } else { 3 } }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_EQ(body->result->kind, Expr::Kind::If);
+    auto* top = static_cast<IfExpr*>(body->result);
+    ASSERT_NE(top->else_branch, nullptr);
+    // else branch is another if expression
+    EXPECT_EQ(top->else_branch->kind, Expr::Kind::If);
+}
+
+// --- Nested if-else ---
+TEST(ParserTest, NestedIfElse) {
+    auto r = parse(
+        "fn main() -> i64 {\n"
+        "    if true { if true { 1 } else { 2 } } else { 3 }\n"
+        "}");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    auto* outer = static_cast<IfExpr*>(body->result);
+    ASSERT_EQ(outer->then_branch->kind, Expr::Kind::Block);
+    auto* thenBlock = static_cast<BlockExpr*>(outer->then_branch);
+    ASSERT_NE(thenBlock->result, nullptr);
+    EXPECT_EQ(thenBlock->result->kind, Expr::Kind::If);
+}
+
+// --- Parenthesized expression ---
+TEST(ParserTest, ParenthesizedExpr) {
+    auto r = parse("fn main() -> i64 { (1 + 2) * 3 }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_EQ(body->result->kind, Expr::Kind::BinOp);
+    auto* top = static_cast<BinOpExpr*>(body->result);
+    EXPECT_EQ(top->op, BinOpKind::Mul);
+    ASSERT_EQ(top->lhs->kind, Expr::Kind::BinOp);
+    EXPECT_EQ(static_cast<BinOpExpr*>(top->lhs)->op, BinOpKind::Add);
+}
+
+// --- Nested parenthesized ---
+TEST(ParserTest, NestedParenthesized) {
+    auto r = parse("fn main() -> i64 { ((42)) }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_EQ(body->result->kind, Expr::Kind::IntLit);
+    EXPECT_EQ(static_cast<IntLitExpr*>(body->result)->value, 42);
+}
+
+// --- Division operator ---
+TEST(ParserTest, DivisionOp) {
+    auto r = parse("fn main() -> i64 { 10 / 2 }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_EQ(body->result->kind, Expr::Kind::BinOp);
+    EXPECT_EQ(static_cast<BinOpExpr*>(body->result)->op, BinOpKind::Div);
+}
+
+// --- All comparison operators ---
+TEST(ParserTest, AllComparisonOps) {
+    struct Case { const char* op_str; BinOpKind expected; };
+    Case cases[] = {
+        {"1 == 2", BinOpKind::Eq},
+        {"1 != 2", BinOpKind::NotEq},
+        {"1 < 2",  BinOpKind::Lt},
+        {"1 <= 2", BinOpKind::LtEq},
+        {"1 > 2",  BinOpKind::Gt},
+        {"1 >= 2", BinOpKind::GtEq},
+    };
+    for (auto& c : cases) {
+        std::string src = std::string("fn main() -> bool { ") + c.op_str + " }";
+        auto r = parse(src);
+        ASSERT_FALSE(r.diag.hasErrors()) << "Failed for: " << c.op_str;
+        auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+        ASSERT_EQ(body->result->kind, Expr::Kind::BinOp) << "Failed for: " << c.op_str;
+        EXPECT_EQ(static_cast<BinOpExpr*>(body->result)->op, c.expected) << "Failed for: " << c.op_str;
+    }
+}
+
+// --- Var declaration ---
+TEST(ParserTest, VarDeclaration) {
+    auto r = parse(
+        "fn main() -> i64 {\n"
+        "    var x: i64 = 10\n"
+        "    x\n"
+        "}");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_EQ(body->stmt_count, 1u);
+    EXPECT_EQ(body->stmts[0]->kind, Stmt::Kind::VarDecl);
+    auto* decl = static_cast<VarDeclStmt*>(body->stmts[0]);
+    EXPECT_EQ(decl->name, "x");
+}
+
+// --- Return without value ---
+TEST(ParserTest, ReturnWithoutValue) {
+    auto r = parse("fn main() -> i64 { return }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_EQ(body->result->kind, Expr::Kind::Return);
+    auto* ret = static_cast<ReturnExpr*>(body->result);
+    EXPECT_EQ(ret->value, nullptr);
+}
+
+// --- Expression statement in block ---
+TEST(ParserTest, ExprStatementInBlock) {
+    auto r = parse(
+        "fn f(x: i64) -> i64 { x }\n"
+        "fn main() -> i64 {\n"
+        "    f(1)\n"
+        "    42\n"
+        "}");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[1]->body);
+    EXPECT_EQ(body->stmt_count, 1u);
+    EXPECT_EQ(body->stmts[0]->kind, Stmt::Kind::ExprStmt);
+    ASSERT_NE(body->result, nullptr);
+    EXPECT_EQ(body->result->kind, Expr::Kind::IntLit);
+}
+
+// --- AST dump of var declaration ---
+TEST(ParserTest, ASTDumpVarDecl) {
+    auto r = parse(
+        "fn main() -> i64 {\n"
+        "    var x: i64 = 10\n"
+        "    x\n"
+        "}");
+    ASSERT_FALSE(r.diag.hasErrors());
+    std::ostringstream out;
+    dumpAST(r.mod, out);
+    EXPECT_NE(out.str().find("VarDecl(x: i64)"), std::string::npos);
+}
+
+// --- AST dump of expression statement ---
+TEST(ParserTest, ASTDumpExprStmt) {
+    auto r = parse(
+        "fn f(x: i64) -> i64 { x }\n"
+        "fn main() -> i64 {\n"
+        "    f(1)\n"
+        "    42\n"
+        "}");
+    ASSERT_FALSE(r.diag.hasErrors());
+    std::ostringstream out;
+    dumpAST(r.mod, out);
+    EXPECT_NE(out.str().find("ExprStmt"), std::string::npos);
+}

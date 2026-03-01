@@ -41,3 +41,20 @@ TEST(ArenaTest, LargeAllocation) {
     p->value = 99;
     EXPECT_EQ(p->value, 99);
 }
+
+// --- Move constructor ---
+TEST(ArenaTest, MoveConstructor) {
+    Arena original;
+    int* p1 = original.make<int>(42);
+    int* p2 = original.make<int>(99);
+    ASSERT_NE(p1, nullptr);
+    ASSERT_NE(p2, nullptr);
+
+    Arena moved(std::move(original));
+    // Data allocated in original is now accessible through moved
+    EXPECT_EQ(*p1, 42);
+    EXPECT_EQ(*p2, 99);
+    // Can still allocate from the moved-to arena
+    int* p3 = moved.make<int>(7);
+    EXPECT_EQ(*p3, 7);
+}

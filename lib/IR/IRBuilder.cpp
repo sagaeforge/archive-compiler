@@ -29,10 +29,17 @@ const char* irOpcodeName(IROpcode op) {
 
 void dumpIR(const IRModule& mod, std::ostream& out) {
     for (const auto& fn : mod.functions) {
-        out << "fn " << fn.name << "(";
+        out << "fn " << fn.name;
+        if (fn.meta.purity != Purity::Unknown) {
+            out << " [" << purityName(fn.meta.purity) << "]";
+        }
+        out << "(";
         for (size_t i = 0; i < fn.param_values.size(); ++i) {
             if (i > 0) out << ", ";
             out << "%" << fn.param_names[i] << " = %" << fn.param_values[i];
+            if (i < fn.param_types.size()) {
+                out << " : " << irTypeName(fn.param_types[i]);
+            }
         }
         out << ") -> " << fn.return_type_name << " {\n";
 
@@ -52,7 +59,11 @@ void dumpIR(const IRModule& mod, std::ostream& out) {
             for (const auto& instr : block.instrs) {
                 out << "    ";
                 if (instr.result != INVALID_VALUE) {
-                    out << "%" << instr.result << " = ";
+                    out << "%" << instr.result;
+                    if (instr.type != IRType::Unknown) {
+                        out << ":" << irTypeName(instr.type);
+                    }
+                    out << " = ";
                 }
                 out << irOpcodeName(instr.op);
 
@@ -116,7 +127,8 @@ ValueId IRBuilder::emit(IRInstr instr) {
     return result;
 }
 
-IRModule IRBuilder::build(Module* mod) {
+IRModule IRBuilder::build(Module* mod, const TypeChecker& tc) {
+    tc_ = &tc;
     module_.functions.clear();
     for (uint32_t i = 0; i < mod->fn_count; ++i) {
         buildFunction(mod->functions[i]);
@@ -133,20 +145,34 @@ void IRBuilder::buildFunction(FnDecl* fn) {
     label_counter_ = 0;
     locals_.clear();
 
+    // Set return type
+    current_fn_->return_type = irTypeFromSemaType(tc_->typeOfExpr(fn->body));
+
     uint32_t entry = newBlock("entry");
     switchToBlock(entry);
 
-    // Register parameters
+    // Register parameters with types
     for (uint32_t i = 0; i < fn->param_count; ++i) {
         ValueId pv = newValue();
         current_fn_->param_values.push_back(pv);
         current_fn_->param_names.push_back(std::string(fn->params[i].name));
+        auto name = fn->params[i].type.name;
+        IRType pt = IRType::Unknown;
+        if (name == "i8")        pt = IRType::I8;
+        else if (name == "i16")  pt = IRType::I16;
+        else if (name == "i32")  pt = IRType::I32;
+        else if (name == "i64")  pt = IRType::I64;
+        else if (name == "u8")   pt = IRType::U8;
+        else if (name == "u16")  pt = IRType::U16;
+        else if (name == "u32")  pt = IRType::U32;
+        else if (name == "u64")  pt = IRType::U64;
+        else if (name == "bool") pt = IRType::Bool;
+        current_fn_->param_types.push_back(pt);
         locals_[fn->params[i].name] = pv;
     }
 
     ValueId result = buildExpr(fn->body);
 
-    // If the last instruction is not already a ret, emit one
     auto& instrs = current_fn_->blocks[current_block_].instrs;
     if (instrs.empty() || instrs.back().op != IROpcode::Ret) {
         IRInstr ret;
@@ -157,6 +183,11 @@ void IRBuilder::buildFunction(FnDecl* fn) {
 }
 
 ValueId IRBuilder::buildExpr(Expr* expr) {
+    IRType expr_type = IRType::Unknown;
+    if (tc_) {
+        expr_type = irTypeFromSemaType(tc_->typeOfExpr(expr));
+    }
+
     switch (expr->kind) {
         case Expr::Kind::IntLit: {
             auto* lit = static_cast<IntLitExpr*>(expr);
@@ -165,6 +196,7 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             instr.result = newValue();
             instr.imm_value = lit->value;
             instr.loc = expr->loc;
+            instr.type = expr_type;
             return emit(instr);
         }
 
@@ -175,6 +207,7 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             instr.result = newValue();
             instr.imm_value = lit->value ? 1 : 0;
             instr.loc = expr->loc;
+            instr.type = IRType::Bool;
             return emit(instr);
         }
 
@@ -202,28 +235,26 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
                 case BinOpKind::LtEq:  op = IROpcode::ICmpLe; break;
                 case BinOpKind::Gt:    op = IROpcode::ICmpGt; break;
                 case BinOpKind::GtEq:  op = IROpcode::ICmpGe; break;
-                // For M1, and/or are just treated as bitwise since sema ensures bool
                 case BinOpKind::And:   op = IROpcode::ICmpEq; break;
                 case BinOpKind::Or:    op = IROpcode::ICmpEq; break;
             }
 
-            // Handle And/Or specially with multiplication/addition for boolean logic
             if (bin->op == BinOpKind::And) {
-                // a and b = a * b (both 0 or 1)
                 op = IROpcode::Mul;
             } else if (bin->op == BinOpKind::Or) {
-                // a or b => (a + b) != 0, but simpler: add + icmp_ne 0
                 IRInstr add;
                 add.op = IROpcode::Add;
                 add.result = newValue();
                 add.operands = {lhs, rhs};
                 add.loc = expr->loc;
+                add.type = IRType::Bool;
                 ValueId sum = emit(add);
 
                 IRInstr zero;
                 zero.op = IROpcode::ConstInt;
                 zero.result = newValue();
                 zero.imm_value = 0;
+                zero.type = IRType::Bool;
                 ValueId zeroVal = emit(zero);
 
                 IRInstr cmp;
@@ -231,6 +262,7 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
                 cmp.result = newValue();
                 cmp.operands = {sum, zeroVal};
                 cmp.loc = expr->loc;
+                cmp.type = IRType::Bool;
                 return emit(cmp);
             }
 
@@ -239,6 +271,7 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             instr.result = newValue();
             instr.operands = {lhs, rhs};
             instr.loc = expr->loc;
+            instr.type = expr_type;
             return emit(instr);
         }
 
@@ -247,12 +280,12 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             ValueId operand = buildExpr(unary->operand);
 
             if (unary->op == UnaryOpKind_t::Neg) {
-                // 0 - operand
                 IRInstr zero;
                 zero.op = IROpcode::ConstInt;
                 zero.result = newValue();
                 zero.imm_value = 0;
                 zero.loc = expr->loc;
+                zero.type = expr_type;
                 ValueId zeroVal = emit(zero);
 
                 IRInstr sub;
@@ -260,14 +293,15 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
                 sub.result = newValue();
                 sub.operands = {zeroVal, operand};
                 sub.loc = expr->loc;
+                sub.type = expr_type;
                 return emit(sub);
             } else if (unary->op == UnaryOpKind_t::Not) {
-                // 1 - operand (for bool)
                 IRInstr one;
                 one.op = IROpcode::ConstInt;
                 one.result = newValue();
                 one.imm_value = 1;
                 one.loc = expr->loc;
+                one.type = IRType::Bool;
                 ValueId oneVal = emit(one);
 
                 IRInstr sub;
@@ -275,6 +309,7 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
                 sub.result = newValue();
                 sub.operands = {oneVal, operand};
                 sub.loc = expr->loc;
+                sub.type = IRType::Bool;
                 return emit(sub);
             }
             return operand;
@@ -293,6 +328,7 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             instr.callee_name = std::string(call->callee);
             instr.operands = std::move(args);
             instr.loc = expr->loc;
+            instr.type = expr_type;
             return emit(instr);
         }
 
@@ -305,7 +341,6 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             uint32_t merge_block = newBlock("merge_" + std::to_string(label_counter_));
             label_counter_++;
 
-            // Conditional branch
             IRInstr br;
             br.op = IROpcode::CondBranch;
             br.operands = {cond};
@@ -313,10 +348,8 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             br.false_block = else_block;
             emit(br);
 
-            // Then block
             switchToBlock(then_block);
             ValueId then_val = buildExpr(ifE->then_branch);
-            // Remember which block we ended up in (might have changed during buildExpr)
             uint32_t then_end_block = current_block_;
 
             IRInstr br_then;
@@ -324,7 +357,6 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             br_then.target_block = merge_block;
             emit(br_then);
 
-            // Else block
             switchToBlock(else_block);
             ValueId else_val;
             if (ifE->else_branch) {
@@ -334,6 +366,7 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
                 unit.op = IROpcode::ConstInt;
                 unit.result = newValue();
                 unit.imm_value = 0;
+                unit.type = IRType::Unit;
                 else_val = emit(unit);
             }
             uint32_t else_end_block = current_block_;
@@ -343,30 +376,9 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             br_else.target_block = merge_block;
             emit(br_else);
 
-            // Merge block — use a simple approach: store then/else values
-            // For M1 simplicity, we track the values via a pseudo-phi
-            // We'll handle this in codegen by tracking which value comes from which block
             switchToBlock(merge_block);
 
-            // Store merge info as block params
-            current_fn_->blocks[merge_block].params = {then_val, else_val};
-            // Also store source blocks for codegen
-            // We encode: params[0] = then_val, params[1] = else_val
-            // And store source block indices in a hack via extra params
-            current_fn_->blocks[merge_block].params.push_back(then_end_block);
-            current_fn_->blocks[merge_block].params.push_back(else_end_block);
-
-            // The merge value is a new SSA value
             ValueId merge_val = newValue();
-            // We don't emit an instruction for the merge — codegen handles it
-            // Store merge_val as first param (overwrite)
-            // Actually let's use a cleaner approach: just return one of the values
-            // and let codegen figure out the phi
-            // For simplicity in M1, let's just use a pseudo instruction
-
-            // Clean approach: use the merge block's params to communicate phi info
-            // params = [merge_result_value, then_val, else_val, then_block, else_block]
-            current_fn_->blocks[merge_block].params.clear();
             current_fn_->blocks[merge_block].params = {
                 merge_val, then_val, else_val,
                 static_cast<ValueId>(then_end_block),
@@ -384,11 +396,11 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             if (block->result) {
                 return buildExpr(block->result);
             }
-            // Unit return
             IRInstr unit;
             unit.op = IROpcode::ConstInt;
             unit.result = newValue();
             unit.imm_value = 0;
+            unit.type = IRType::Unit;
             return emit(unit);
         }
 
@@ -402,6 +414,7 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
                 unit.op = IROpcode::ConstInt;
                 unit.result = newValue();
                 unit.imm_value = 0;
+                unit.type = IRType::Unit;
                 val = emit(unit);
             }
             IRInstr retInstr;
@@ -412,7 +425,6 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
         }
     }
 
-    // Unreachable
     IRInstr dummy;
     dummy.op = IROpcode::ConstInt;
     dummy.result = newValue();

@@ -318,3 +318,137 @@ TEST(LexerTest, TokensWithoutSpaces) {
     EXPECT_EQ(r[9].kind, TokenKind::Ident);
     EXPECT_EQ(r[10].kind, TokenKind::RBrace);
 }
+
+// ===== Coverage improvement tests =====
+
+// --- source() accessor ---
+TEST(LexerTest, SourceAccessor) {
+    std::string src = "fn main() -> i64 { 42 }";
+    DiagnosticEngine diag;
+    Lexer lexer(src, "test.kern", diag);
+    EXPECT_EQ(lexer.source(), src);
+}
+
+// --- tokenKindName covers all enum values ---
+TEST(LexerTest, TokenKindNameCoverage) {
+    TokenKind kinds[] = {
+        TokenKind::IntLit, TokenKind::Ident,
+        TokenKind::KwFn, TokenKind::KwVal, TokenKind::KwVar,
+        TokenKind::KwMatch, TokenKind::KwReturn,
+        TokenKind::KwIf, TokenKind::KwElse,
+        TokenKind::KwAnd, TokenKind::KwOr, TokenKind::KwNot,
+        TokenKind::KwTrue, TokenKind::KwFalse,
+        TokenKind::Plus, TokenKind::Minus, TokenKind::Star, TokenKind::Slash,
+        TokenKind::Eq, TokenKind::EqEq, TokenKind::NotEq,
+        TokenKind::Lt, TokenKind::Gt, TokenKind::LtEq, TokenKind::GtEq,
+        TokenKind::Arrow, TokenKind::FatArrow,
+        TokenKind::Colon, TokenKind::Dot, TokenKind::Pipe, TokenKind::Ampersand,
+        TokenKind::Comma, TokenKind::Semicolon,
+        TokenKind::LParen, TokenKind::RParen,
+        TokenKind::LBrace, TokenKind::RBrace,
+        TokenKind::LBracket, TokenKind::RBracket,
+        TokenKind::Newline, TokenKind::Eof, TokenKind::Error,
+    };
+    for (auto k : kinds) {
+        const char* name = tokenKindName(k);
+        ASSERT_NE(name, nullptr);
+        EXPECT_STRNE(name, "?");
+    }
+}
+
+// --- Tab column tracking ---
+TEST(LexerTest, TabColumnTracking) {
+    auto r = lex("\ta");
+    EXPECT_EQ(r[0].kind, TokenKind::Ident);
+    EXPECT_EQ(r[0].loc.col, 2u); // tab advances col
+}
+
+// --- Carriage return handling ---
+TEST(LexerTest, CarriageReturnHandling) {
+    auto r = lex("a\r\nb");
+    EXPECT_EQ(r[0].kind, TokenKind::Ident);
+    EXPECT_EQ(r[0].text, "a");
+    EXPECT_EQ(r[1].kind, TokenKind::Ident);
+    EXPECT_EQ(r[1].text, "b");
+    EXPECT_EQ(r[1].loc.line, 2u);
+}
+
+// --- Block comment with newlines tracks line ---
+TEST(LexerTest, BlockCommentWithNewlines) {
+    auto r = lex("42 /* line1\nline2 */ 55");
+    EXPECT_EQ(r[0].kind, TokenKind::IntLit);
+    EXPECT_EQ(r[0].text, "42");
+    EXPECT_EQ(r[1].kind, TokenKind::IntLit);
+    EXPECT_EQ(r[1].text, "55");
+    EXPECT_EQ(r[1].loc.line, 2u);
+}
+
+// --- Line comment at EOF without newline (with newline tokens) ---
+TEST(LexerTest, LineCommentAtEOFNoNewline) {
+    auto r = lex("42 // end", /*skip_newlines=*/false);
+    ASSERT_GE(r.size(), 2u);
+    EXPECT_EQ(r[0].kind, TokenKind::IntLit);
+    EXPECT_EQ(r[1].kind, TokenKind::Eof);
+}
+
+// --- Leading zero decimal ---
+TEST(LexerTest, LeadingZeroDecimal) {
+    auto r = lex("007");
+    EXPECT_EQ(r[0].kind, TokenKind::IntLit);
+    EXPECT_EQ(r[0].text, "007");
+}
+
+// --- Minus vs Arrow distinction ---
+TEST(LexerTest, MinusVsArrow) {
+    auto r = lex("a - b -> c");
+    EXPECT_EQ(r[0].kind, TokenKind::Ident);
+    EXPECT_EQ(r[1].kind, TokenKind::Minus);
+    EXPECT_EQ(r[2].kind, TokenKind::Ident);
+    EXPECT_EQ(r[3].kind, TokenKind::Arrow);
+    EXPECT_EQ(r[4].kind, TokenKind::Ident);
+}
+
+// --- Equal variants: =, ==, => ---
+TEST(LexerTest, EqualVariants) {
+    auto r = lex("= == =>");
+    EXPECT_EQ(r[0].kind, TokenKind::Eq);
+    EXPECT_EQ(r[1].kind, TokenKind::EqEq);
+    EXPECT_EQ(r[2].kind, TokenKind::FatArrow);
+}
+
+// --- Unknown character error ---
+TEST(LexerTest, UnknownCharacterError) {
+    DiagnosticEngine diag;
+    auto r = lexWithErrors("@", diag);
+    EXPECT_TRUE(diag.hasErrors());
+    bool found_error = false;
+    for (auto& t : r.tokens) {
+        if (t.kind == TokenKind::Error) found_error = true;
+    }
+    EXPECT_TRUE(found_error);
+}
+
+// --- Number followed by identifier ---
+TEST(LexerTest, NumberFollowedByIdent) {
+    auto r = lex("42abc");
+    EXPECT_EQ(r[0].kind, TokenKind::IntLit);
+    EXPECT_EQ(r[0].text, "42");
+    EXPECT_EQ(r[1].kind, TokenKind::Ident);
+    EXPECT_EQ(r[1].text, "abc");
+}
+
+// --- Block comment then newline then token ---
+TEST(LexerTest, BlockCommentNewlineThenToken) {
+    auto r = lex("/* comment */\n42", /*skip_newlines=*/false);
+    EXPECT_EQ(r[0].kind, TokenKind::Newline);
+    EXPECT_EQ(r[1].kind, TokenKind::IntLit);
+    EXPECT_EQ(r[1].text, "42");
+}
+
+// --- Long identifier ---
+TEST(LexerTest, LongIdentifier) {
+    std::string long_id(256, 'a');
+    auto r = lex(long_id);
+    EXPECT_EQ(r[0].kind, TokenKind::Ident);
+    EXPECT_EQ(r[0].text, long_id);
+}

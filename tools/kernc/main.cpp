@@ -1,6 +1,7 @@
 #include "kern/lexer/Lexer.h"
 #include "kern/parser/Parser.h"
 #include "kern/sema/TypeChecker.h"
+#include "kern/sema/PurityChecker.h"
 #include "kern/ir/IRBuilder.h"
 #include "kern/ir/KernIR.h"
 #include "kern/codegen/CodeGen.h"
@@ -22,6 +23,7 @@ static void printUsage(const char* prog) {
               << "  --dump-tokens   Dump token stream\n"
               << "  --dump-ast      Dump AST\n"
               << "  --dump-ir       Dump IR\n"
+              << "  --dump-purity   Dump purity analysis\n"
               << "  --help          Show this help\n";
 }
 
@@ -37,6 +39,7 @@ int main(int argc, char** argv) {
     bool dump_tokens = false;
     bool dump_ast = false;
     bool dump_ir = false;
+    bool dump_purity = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -53,6 +56,8 @@ int main(int argc, char** argv) {
             dump_ast = true;
         } else if (arg == "--dump-ir") {
             dump_ir = true;
+        } else if (arg == "--dump-purity") {
+            dump_purity = true;
         } else if (arg[0] != '-') {
             input_file = arg;
         } else {
@@ -116,14 +121,36 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Print warnings
+    // --- Purity Analysis ---
+    kern::PurityChecker purityChecker(diag);
+    auto purity_map = purityChecker.analyze(mod);
+
+    // Print warnings (type + purity)
     if (!diag.diagnostics().empty()) {
         diag.printAll(std::cerr);
     }
 
+    if (dump_purity) {
+        for (auto& [name, result] : purity_map) {
+            std::cout << "fn " << name << ": " << kern::purityName(result.purity);
+            if (result.is_recursive) std::cout << " [recursive]";
+            std::cout << "\n";
+        }
+        if (!dump_ir && !asm_only) return 0;
+    }
+
     // --- IR Generation ---
     kern::IRBuilder irBuilder;
-    kern::IRModule irMod = irBuilder.build(mod);
+    kern::IRModule irMod = irBuilder.build(mod, typeChecker);
+
+    // Apply purity metadata to IR functions
+    for (auto& irFn : irMod.functions) {
+        auto it = purity_map.find(std::string_view(irFn.name));
+        if (it != purity_map.end()) {
+            irFn.meta.purity = it->second.purity;
+            irFn.meta.is_recursive = it->second.is_recursive;
+        }
+    }
 
     if (dump_ir) {
         kern::dumpIR(irMod, std::cout);

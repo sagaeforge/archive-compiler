@@ -11,28 +11,57 @@ static constexpr int MAX_ARG_REGS = 6;
 
 CodeGen::CodeGen(std::ostream& out) : out_(out) {}
 
+// Map 64-bit register name to the appropriate width variant
+std::string CodeGen::regForWidth(const std::string& reg64, int bits) {
+    if (bits == 64) return reg64;
+
+    // rax/eax/ax/al family
+    if (reg64 == "rax") { return bits == 32 ? "eax" : bits == 16 ? "ax" : "al"; }
+    if (reg64 == "rbx") { return bits == 32 ? "ebx" : bits == 16 ? "bx" : "bl"; }
+    if (reg64 == "rcx") { return bits == 32 ? "ecx" : bits == 16 ? "cx" : "cl"; }
+    if (reg64 == "rdx") { return bits == 32 ? "edx" : bits == 16 ? "dx" : "dl"; }
+    if (reg64 == "rsi") { return bits == 32 ? "esi" : bits == 16 ? "si" : "sil"; }
+    if (reg64 == "rdi") { return bits == 32 ? "edi" : bits == 16 ? "di" : "dil"; }
+    if (reg64 == "r8")  { return bits == 32 ? "r8d"  : bits == 16 ? "r8w"  : "r8b"; }
+    if (reg64 == "r9")  { return bits == 32 ? "r9d"  : bits == 16 ? "r9w"  : "r9b"; }
+    if (reg64 == "r10") { return bits == 32 ? "r10d" : bits == 16 ? "r10w" : "r10b"; }
+    if (reg64 == "r11") { return bits == 32 ? "r11d" : bits == 16 ? "r11w" : "r11b"; }
+    if (reg64 == "r12") { return bits == 32 ? "r12d" : bits == 16 ? "r12w" : "r12b"; }
+    if (reg64 == "r13") { return bits == 32 ? "r13d" : bits == 16 ? "r13w" : "r13b"; }
+    if (reg64 == "r14") { return bits == 32 ? "r14d" : bits == 16 ? "r14w" : "r14b"; }
+    if (reg64 == "r15") { return bits == 32 ? "r15d" : bits == 16 ? "r15w" : "r15b"; }
+
+    return reg64; // fallback
+}
+
+void CodeGen::setValueType(ValueId v, IRType t) {
+    value_types_[v] = t;
+}
+
+IRType CodeGen::getValueType(ValueId v) const {
+    auto it = value_types_.find(v);
+    if (it != value_types_.end()) return it->second;
+    return IRType::I64; // default for backwards compat
+}
+
 void CodeGen::initRegs() {
     free_regs_.clear();
     used_callee_saved_.clear();
     value_locs_.clear();
+    value_types_.clear();
     stack_offset_ = 0;
     max_stack_ = 0;
 
-    // Caller-saved registers (prefer these for temporaries)
-    // Exclude rax (return value), rdi-r9 (args — may be reused after setup)
     free_regs_ = {"r10", "r11", "rcx", "rdx", "rsi", "rdi"};
-    // Callee-saved registers (use when caller-saved are exhausted)
-    // rbx, r12-r15 are callee-saved
 }
 
 std::string CodeGen::allocReg(ValueId v) {
     if (!free_regs_.empty()) {
         std::string reg = free_regs_.back();
         free_regs_.pop_back();
-        value_locs_[v] = {Location::Reg, reg, 0};
+        value_locs_[v] = {Location::Reg, reg, 0, getValueType(v)};
         return reg;
     }
-    // Need to spill — use callee-saved
     static const char* callee_saved[] = {"rbx", "r12", "r13", "r14", "r15"};
     for (auto& cs : callee_saved) {
         bool in_use = false;
@@ -47,33 +76,28 @@ std::string CodeGen::allocReg(ValueId v) {
                 == used_callee_saved_.end()) {
                 used_callee_saved_.push_back(cs);
             }
-            value_locs_[v] = {Location::Reg, cs, 0};
+            value_locs_[v] = {Location::Reg, cs, 0, getValueType(v)};
             return cs;
         }
     }
-    // All registers in use — spill to stack
-    return spillToStack(v);
+    return spillToStack(v, getValueType(v));
 }
 
-std::string CodeGen::spillToStack(ValueId v) {
-    stack_offset_ -= 8;
+std::string CodeGen::spillToStack(ValueId v, IRType type) {
+    stack_offset_ -= 8; // always 8-byte aligned slots
     if (-stack_offset_ > max_stack_) max_stack_ = -stack_offset_;
-    value_locs_[v] = {Location::Stack, "", stack_offset_};
-    // Return a memory operand string
+    value_locs_[v] = {Location::Stack, "", stack_offset_, type};
     return "qword [rbp" + std::to_string(stack_offset_) + "]";
 }
 
 std::string CodeGen::valReg(ValueId v) {
     auto it = value_locs_.find(v);
     if (it == value_locs_.end()) {
-        // Value not found — this can happen with merge values
-        // Allocate a register for it
         return allocReg(v);
     }
     if (it->second.kind == Location::Reg) {
         return it->second.reg;
     }
-    // On stack — load to rax temporarily
     return "qword [rbp" + std::to_string(it->second.stack_offset) + "]";
 }
 
@@ -81,7 +105,6 @@ void CodeGen::freeReg(ValueId v) {
     auto it = value_locs_.find(v);
     if (it != value_locs_.end() && it->second.kind == Location::Reg) {
         std::string reg = it->second.reg;
-        // Only free caller-saved regs back to the pool
         if (reg != "rbx" && reg != "r12" && reg != "r13" &&
             reg != "r14" && reg != "r15") {
             free_regs_.push_back(reg);
@@ -120,7 +143,6 @@ void CodeGen::collectMergeBlocks(const IRFunction& fn) {
 void CodeGen::emitModule(const IRModule& mod) {
     out_ << "section .text\n";
 
-    // Declare all functions as global
     for (const auto& fn : mod.functions) {
         out_ << "global _" << fn.name << "\n";
     }
@@ -147,27 +169,19 @@ void CodeGen::emitFunction(const IRFunction& fn) {
     initRegs();
     collectMergeBlocks(fn);
 
-    // We'll do a two-pass approach for the function:
-    // For M1 simplicity, we take a direct approach:
-    // - Each function parameter gets mapped from arg registers
-    // - We use a straightforward translation
-
     emitPrologue(fn.name);
-
-    // Save callee-saved registers we might use
-    // We'll do this after we know which ones we need — for now, always save rbx
     out_ << "    push rbx\n";
 
-    // Map parameters to their arg register locations
+    // Map parameters — ABI always uses 64-bit registers, store type info
     for (size_t i = 0; i < fn.param_values.size() && i < MAX_ARG_REGS; ++i) {
-        // Move arg from ABI register to an allocated register
+        IRType pt = (i < fn.param_types.size()) ? fn.param_types[i] : IRType::I64;
+        setValueType(fn.param_values[i], pt);
         std::string reg = allocReg(fn.param_values[i]);
         if (reg != ARG_REGS[i]) {
             out_ << "    mov  " << reg << ", " << ARG_REGS[i] << "\n";
         }
     }
 
-    // Emit all blocks
     for (uint32_t i = 0; i < fn.blocks.size(); ++i) {
         emitBlock(fn, i);
     }
@@ -179,21 +193,14 @@ void CodeGen::emitBlock(const IRFunction& fn, uint32_t block_idx) {
     const auto& block = fn.blocks[block_idx];
     current_block_idx_ = block_idx;
 
-    // Emit label (skip for entry block = block 0)
     if (block_idx > 0) {
         out_ << "._" << block.label << ":\n";
     }
 
-    // Handle merge block — set up the result register
     auto merge_it = merge_blocks_.find(block_idx);
     if (merge_it != merge_blocks_.end()) {
-        // The merge value is already set by the branch blocks
-        // Just allocate a location for it — it's in rax by convention
-        // Actually, we handle this by having the then/else blocks
-        // move their values into the merge register
         const auto& mi = merge_it->second;
-        // The result value needs to be accessible
-        value_locs_[mi.result_val] = {Location::Reg, "rax", 0};
+        value_locs_[mi.result_val] = {Location::Reg, "rax", 0, IRType::Unknown};
     }
 
     for (const auto& instr : block.instrs) {
@@ -202,6 +209,11 @@ void CodeGen::emitBlock(const IRFunction& fn, uint32_t block_idx) {
 }
 
 void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
+    // Record type for this value
+    if (instr.result != INVALID_VALUE && instr.type != IRType::Unknown) {
+        setValueType(instr.result, instr.type);
+    }
+
     switch (instr.op) {
         case IROpcode::ConstInt: {
             std::string reg = allocReg(instr.result);
@@ -246,16 +258,22 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
         }
 
         case IROpcode::Div: {
-            // idiv uses rax:rdx / src → rax
             std::string lhs_reg = valReg(instr.operands[0]);
             std::string rhs_reg = valReg(instr.operands[1]);
 
+            // Determine signedness from the operand type
+            IRType operand_type = getValueType(instr.operands[0]);
+            bool is_signed = irTypeIsSigned(operand_type) ||
+                             operand_type == IRType::Unknown ||
+                             operand_type == IRType::I64; // default
+
             out_ << "    mov  rax, " << lhs_reg << "\n";
-            out_ << "    cqo\n"; // sign-extend rax into rdx:rax
-            if (rhs_reg.find("[") != std::string::npos) {
+            if (is_signed) {
+                out_ << "    cqo\n";
                 out_ << "    idiv " << rhs_reg << "\n";
             } else {
-                out_ << "    idiv " << rhs_reg << "\n";
+                out_ << "    xor  edx, edx\n";
+                out_ << "    div  " << rhs_reg << "\n";
             }
             std::string dst = allocReg(instr.result);
             if (dst != "rax") {
@@ -275,19 +293,23 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
 
             out_ << "    cmp  " << lhs_reg << ", " << rhs_reg << "\n";
 
+            // Determine signedness of operands for ordered comparisons
+            IRType operand_type = getValueType(instr.operands[0]);
+            bool is_unsigned = (operand_type == IRType::U8 || operand_type == IRType::U16 ||
+                                operand_type == IRType::U32 || operand_type == IRType::U64);
+
             const char* setcc;
             switch (instr.op) {
                 case IROpcode::ICmpEq: setcc = "sete"; break;
                 case IROpcode::ICmpNe: setcc = "setne"; break;
-                case IROpcode::ICmpLt: setcc = "setl"; break;
-                case IROpcode::ICmpLe: setcc = "setle"; break;
-                case IROpcode::ICmpGt: setcc = "setg"; break;
-                case IROpcode::ICmpGe: setcc = "setge"; break;
+                case IROpcode::ICmpLt: setcc = is_unsigned ? "setb"  : "setl"; break;
+                case IROpcode::ICmpLe: setcc = is_unsigned ? "setbe" : "setle"; break;
+                case IROpcode::ICmpGt: setcc = is_unsigned ? "seta"  : "setg"; break;
+                case IROpcode::ICmpGe: setcc = is_unsigned ? "setae" : "setge"; break;
                 default: setcc = "sete"; break;
             }
 
             std::string dst = allocReg(instr.result);
-            // setcc only sets the low byte, so zero-extend
             out_ << "    " << setcc << " al\n";
             out_ << "    movzx " << dst << ", al\n";
             break;
@@ -295,15 +317,12 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
 
         case IROpcode::Neg:
         case IROpcode::Not:
-            // Handled in IR via Sub
             break;
 
         case IROpcode::Branch: {
-            // If branching to a merge block, move the correct value into rax
             auto merge_it = merge_blocks_.find(instr.target_block);
             if (merge_it != merge_blocks_.end()) {
                 const auto& mi = merge_it->second;
-                // Determine which value to put in rax based on current block
                 ValueId val_to_move;
                 if (current_block_idx_ == mi.then_block) {
                     val_to_move = mi.then_val;
@@ -334,7 +353,6 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
                     out_ << "    mov  rax, " << val << "\n";
                 }
             }
-            // Restore callee-saved and return
             out_ << "    pop  rbx\n";
             out_ << "    mov  rsp, rbp\n";
             out_ << "    pop  rbp\n";
@@ -343,12 +361,9 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
         }
 
         case IROpcode::Call: {
-            // Save any caller-saved registers we care about
-            // Push current live values that are in caller-saved regs
             std::vector<std::pair<ValueId, std::string>> to_save;
             for (auto& [vid, loc] : value_locs_) {
                 if (loc.kind == Location::Reg) {
-                    // Save if it's a caller-saved reg we might need later
                     std::string& r = loc.reg;
                     if (r == "r10" || r == "r11" || r == "rcx" || r == "rdx" ||
                         r == "rsi" || r == "rdi") {
@@ -361,8 +376,6 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
                 out_ << "    push " << reg << "\n";
             }
 
-            // Set up arguments in ABI registers
-            // First, collect arg values into a temporary list to avoid clobbering
             std::vector<std::string> arg_sources;
             for (size_t i = 0; i < instr.operands.size(); ++i) {
                 arg_sources.push_back(valReg(instr.operands[i]));
@@ -374,19 +387,12 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
                 }
             }
 
-            // Align stack to 16 bytes before call
-            // The push rbp + push rbx + N pushes need to result in 16-byte alignment
-            // We handle this by padding if needed
-            // For simplicity in M1, we rely on the pushes being balanced
-
             out_ << "    call _" << instr.callee_name << "\n";
 
-            // Restore saved registers (reverse order)
             for (auto it = to_save.rbegin(); it != to_save.rend(); ++it) {
                 out_ << "    pop  " << it->second << "\n";
             }
 
-            // Result is in rax
             std::string dst = allocReg(instr.result);
             if (dst != "rax") {
                 out_ << "    mov  " << dst << ", rax\n";

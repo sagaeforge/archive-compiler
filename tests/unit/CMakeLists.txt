@@ -4,6 +4,7 @@ add_executable(kern_tests
     lexer/LexerTest.cpp
     parser/ParserTest.cpp
     sema/SemaTest.cpp
+    sema/PurityTest.cpp
     ir/IRTest.cpp
     codegen/CodeGenTest.cpp
 )

@@ -2,6 +2,7 @@
 #include "kern/lexer/Lexer.h"
 #include "kern/ir/IRBuilder.h"
 #include "kern/codegen/CodeGen.h"
+#include "kern/sema/TypeChecker.h"
 #include "kern/support/Arena.h"
 #include "kern/support/Diagnostic.h"
 #include <gtest/gtest.h>
@@ -17,8 +18,11 @@ static std::string generateAsm(std::string src) {
     Module* mod = parser.parseModule();
     EXPECT_FALSE(diag.hasErrors());
 
+    TypeChecker tc(diag);
+    tc.check(mod);
+
     IRBuilder irBuilder;
-    IRModule irMod = irBuilder.build(mod);
+    IRModule irMod = irBuilder.build(mod, tc);
 
     std::ostringstream out;
     CodeGen codegen(out);
@@ -165,4 +169,190 @@ TEST(CodeGenTest, NestedCalls) {
         pos += 16;
     }
     EXPECT_EQ(call_count, 2); // quad calls double_val twice
+}
+
+// ===== Coverage improvement tests =====
+
+// --- Comparison != generates setne ---
+TEST(CodeGenTest, ComparisonNe) {
+    std::string asm_code = generateAsm("fn main() -> bool { 1 != 2 }");
+    EXPECT_NE(asm_code.find("setne"), std::string::npos);
+}
+
+// --- Comparison < generates setl ---
+TEST(CodeGenTest, ComparisonLt) {
+    std::string asm_code = generateAsm("fn main() -> bool { 1 < 2 }");
+    EXPECT_NE(asm_code.find("setl"), std::string::npos);
+}
+
+// --- Comparison > generates setg ---
+TEST(CodeGenTest, ComparisonGt) {
+    std::string asm_code = generateAsm("fn main() -> bool { 1 > 2 }");
+    EXPECT_NE(asm_code.find("setg"), std::string::npos);
+}
+
+// --- Comparison >= generates setge ---
+TEST(CodeGenTest, ComparisonGe) {
+    std::string asm_code = generateAsm("fn main() -> bool { 1 >= 2 }");
+    EXPECT_NE(asm_code.find("setge"), std::string::npos);
+}
+
+// --- Logical and generates imul ---
+TEST(CodeGenTest, LogicalAndImul) {
+    std::string asm_code = generateAsm("fn main() -> bool { true and false }");
+    EXPECT_NE(asm_code.find("imul"), std::string::npos);
+}
+
+// --- Logical or generates add + setne ---
+TEST(CodeGenTest, LogicalOrAddSetne) {
+    std::string asm_code = generateAsm("fn main() -> bool { true or false }");
+    EXPECT_NE(asm_code.find("add"), std::string::npos);
+    EXPECT_NE(asm_code.find("setne"), std::string::npos);
+}
+
+// --- Many locals force callee-saved register usage ---
+TEST(CodeGenTest, ManyLocalsCalleeSaved) {
+    std::string asm_code = generateAsm(
+        "fn main() -> i64 {\n"
+        "    val a: i64 = 1\n"
+        "    val b: i64 = 2\n"
+        "    val c: i64 = 3\n"
+        "    val d: i64 = 4\n"
+        "    val e: i64 = 5\n"
+        "    val f: i64 = 6\n"
+        "    val g: i64 = 7\n"
+        "    a + b + c + d + e + f + g\n"
+        "}"
+    );
+    // Should use at least one callee-saved register
+    bool has_callee_saved = (asm_code.find("r12") != std::string::npos) ||
+                            (asm_code.find("r13") != std::string::npos) ||
+                            (asm_code.find("r14") != std::string::npos) ||
+                            (asm_code.find("r15") != std::string::npos);
+    EXPECT_TRUE(has_callee_saved);
+}
+
+// --- Register spill to stack ---
+TEST(CodeGenTest, RegisterSpillToStack) {
+    std::string asm_code = generateAsm(
+        "fn main() -> i64 {\n"
+        "    val a: i64 = 1\n"
+        "    val b: i64 = 2\n"
+        "    val c: i64 = 3\n"
+        "    val d: i64 = 4\n"
+        "    val e: i64 = 5\n"
+        "    val f: i64 = 6\n"
+        "    val g: i64 = 7\n"
+        "    val h: i64 = 8\n"
+        "    val i: i64 = 9\n"
+        "    val j: i64 = 10\n"
+        "    val k: i64 = 11\n"
+        "    val l: i64 = 12\n"
+        "    val m: i64 = 13\n"
+        "    a + b + c + d + e + f + g + h + i + j + k + l + m\n"
+        "}"
+    );
+    // Should spill to stack via rbp
+    EXPECT_NE(asm_code.find("[rbp"), std::string::npos);
+}
+
+// --- If without else generates code ---
+TEST(CodeGenTest, IfWithoutElseCodeGen) {
+    std::string asm_code = generateAsm("fn main() -> i64 { if true { 42 } }");
+    EXPECT_NE(asm_code.find("test"), std::string::npos);
+    EXPECT_NE(asm_code.find("jnz"), std::string::npos);
+}
+
+// ===== M2.3: Type-aware CodeGen tests =====
+
+// --- Unsigned div uses div (not idiv) ---
+TEST(CodeGenTest, UnsignedDivUsesDiv) {
+    std::string asm_code = generateAsm(
+        "fn udiv(a: u64, b: u64) -> u64 { a / b }");
+    EXPECT_NE(asm_code.find("div"), std::string::npos);
+    EXPECT_NE(asm_code.find("xor  edx, edx"), std::string::npos);
+    // Should NOT contain cqo for unsigned
+    EXPECT_EQ(asm_code.find("cqo"), std::string::npos);
+}
+
+// --- Signed div uses idiv + cqo ---
+TEST(CodeGenTest, SignedDivUsesIdiv) {
+    std::string asm_code = generateAsm(
+        "fn sdiv(a: i64, b: i64) -> i64 { a / b }");
+    EXPECT_NE(asm_code.find("idiv"), std::string::npos);
+    EXPECT_NE(asm_code.find("cqo"), std::string::npos);
+}
+
+// --- Unsigned comparison < uses setb ---
+TEST(CodeGenTest, UnsignedCmpLtUsesSetb) {
+    std::string asm_code = generateAsm(
+        "fn ucmp(a: u64, b: u64) -> bool { a < b }");
+    EXPECT_NE(asm_code.find("setb"), std::string::npos);
+}
+
+// --- Unsigned comparison <= uses setbe ---
+TEST(CodeGenTest, UnsignedCmpLeUsesSetbe) {
+    std::string asm_code = generateAsm(
+        "fn ucmp(a: u64, b: u64) -> bool { a <= b }");
+    EXPECT_NE(asm_code.find("setbe"), std::string::npos);
+}
+
+// --- Unsigned comparison > uses seta ---
+TEST(CodeGenTest, UnsignedCmpGtUsesSeta) {
+    std::string asm_code = generateAsm(
+        "fn ucmp(a: u64, b: u64) -> bool { a > b }");
+    EXPECT_NE(asm_code.find("seta"), std::string::npos);
+}
+
+// --- Unsigned comparison >= uses setae ---
+TEST(CodeGenTest, UnsignedCmpGeUsesSetae) {
+    std::string asm_code = generateAsm(
+        "fn ucmp(a: u64, b: u64) -> bool { a >= b }");
+    EXPECT_NE(asm_code.find("setae"), std::string::npos);
+}
+
+// --- Signed comparison < still uses setl ---
+TEST(CodeGenTest, SignedCmpLtUsesSetl) {
+    std::string asm_code = generateAsm(
+        "fn scmp(a: i64, b: i64) -> bool { a < b }");
+    EXPECT_NE(asm_code.find("setl"), std::string::npos);
+}
+
+// --- Eq/Ne unchanged by signedness ---
+TEST(CodeGenTest, UnsignedEqStillSete) {
+    std::string asm_code = generateAsm(
+        "fn ucmp(a: u64, b: u64) -> bool { a == b }");
+    EXPECT_NE(asm_code.find("sete"), std::string::npos);
+}
+
+// --- i32 arithmetic uses same reg (all ops in 64-bit regs for M2) ---
+TEST(CodeGenTest, I32ArithCodeGen) {
+    std::string asm_code = generateAsm(
+        "fn add32(a: i32, b: i32) -> i32 { a + b }");
+    EXPECT_NE(asm_code.find("add"), std::string::npos);
+}
+
+// --- regForWidth static helper verification (via div which uses rax/edx) ---
+TEST(CodeGenTest, UnsignedDivXorEdx) {
+    std::string asm_code = generateAsm(
+        "fn f(a: u64, b: u64) -> u64 { a / b }");
+    // xor edx, edx zeroes rdx for unsigned div
+    EXPECT_NE(asm_code.find("xor  edx, edx"), std::string::npos);
+}
+
+// --- i32 div signed uses idiv ---
+TEST(CodeGenTest, I32SignedDiv) {
+    std::string asm_code = generateAsm(
+        "fn div32(a: i32, b: i32) -> i32 { a / b }");
+    EXPECT_NE(asm_code.find("idiv"), std::string::npos);
+    EXPECT_NE(asm_code.find("cqo"), std::string::npos);
+}
+
+// --- u32 div unsigned ---
+TEST(CodeGenTest, U32UnsignedDiv) {
+    std::string asm_code = generateAsm(
+        "fn udiv32(a: u32, b: u32) -> u32 { a / b }");
+    // Should NOT have cqo
+    EXPECT_EQ(asm_code.find("cqo"), std::string::npos);
+    EXPECT_NE(asm_code.find("xor  edx, edx"), std::string::npos);
 }

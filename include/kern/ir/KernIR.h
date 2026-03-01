@@ -1,5 +1,7 @@
 #pragma once
 #include "kern/support/SourceLocation.h"
+#include "kern/ir/IRType.h"
+#include "kern/ir/Metadata.h"
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -21,8 +23,6 @@ enum class IROpcode : uint8_t {
     CondBranch,
     Ret,
     Call,
-    // Logical (short-circuit handled via branches in IR gen)
-    // no separate And/Or opcodes needed
 };
 
 const char* irOpcodeName(IROpcode op);
@@ -32,6 +32,7 @@ struct IRInstr {
     ValueId                result = INVALID_VALUE;
     std::vector<ValueId>   operands;
     SourceLocation         loc;
+    IRType                 type = IRType::Unknown;
 
     // ConstInt
     int64_t imm_value = 0;
@@ -40,8 +41,8 @@ struct IRInstr {
     std::string callee_name;
 
     // Branch/CondBranch
-    uint32_t target_block = 0;     // Branch target, or true branch
-    uint32_t false_block = 0;      // CondBranch false branch
+    uint32_t target_block = 0;
+    uint32_t false_block = 0;
 };
 
 struct IRBlock {
@@ -57,6 +58,11 @@ struct IRFunction {
     std::vector<std::string> param_names;
     std::string              return_type_name;
     uint32_t                 next_value = 0;
+
+    // M2: type information
+    std::vector<IRType>      param_types;
+    IRType                   return_type = IRType::Unknown;
+    FunctionMeta             meta;
 };
 
 struct IRModule {

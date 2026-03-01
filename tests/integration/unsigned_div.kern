@@ -1,0 +1,4 @@
+fn udiv(a: u64, b: u64) -> u64 { a / b }
+fn main() -> i64 {
+    42
+}
