@@ -1,0 +1,20 @@
+add_executable(kern_tests
+    support/ArenaTest.cpp
+    support/DiagnosticTest.cpp
+    lexer/LexerTest.cpp
+    parser/ParserTest.cpp
+    sema/SemaTest.cpp
+    ir/IRTest.cpp
+    codegen/CodeGenTest.cpp
+)
+target_link_libraries(kern_tests
+    kern_codegen
+    kern_ir
+    kern_sema
+    kern_parser
+    kern_lexer
+    kern_support
+    GTest::gtest_main
+)
+include(GoogleTest)
+gtest_discover_tests(kern_tests)
