@@ -1,0 +1,26 @@
+union Option<T> { None, Some(T) }
+
+fn is_some<T>(opt: Option<T>) -> bool {
+    match opt {
+        None => false,
+        Some(_) => true
+    }
+}
+
+fn unwrap_or<T>(opt: Option<T>, fallback: T) -> T {
+    match opt {
+        None => fallback,
+        Some(v) => v
+    }
+}
+
+fn main() -> i64 {
+    val a: Option<i64> = Option<i64>::Some(40)
+    val b: Option<i64> = Option<i64>::None
+    val c: Option<bool> = Option<bool>::Some(true)
+
+    val r1: i64 = unwrap_or(a, 0)
+    val r2: i64 = unwrap_or(b, 2)
+    val r3: i64 = if is_some(c) { 0 } else { 100 }
+    r1 + r2 + r3
+}

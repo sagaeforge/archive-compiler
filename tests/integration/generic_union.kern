@@ -1,0 +1,24 @@
+union Either<A, B> { Left(A), Right(B) }
+
+fn get_left<A, B>(e: Either<A, B>, fallback: A) -> A {
+    match e {
+        Left(v) => v,
+        Right(_) => fallback
+    }
+}
+
+fn get_right<A, B>(e: Either<A, B>, fallback: B) -> B {
+    match e {
+        Left(_) => fallback,
+        Right(v) => v
+    }
+}
+
+fn main() -> i64 {
+    val x: Either<i64, bool> = Either<i64, bool>::Left(40)
+    val y: Either<i64, bool> = Either<i64, bool>::Right(true)
+
+    val r1: i64 = get_left(x, 0)
+    val r2: i64 = if get_right(y, false) { 2 } else { 0 }
+    r1 + r2
+}

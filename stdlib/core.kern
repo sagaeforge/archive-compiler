@@ -1,6 +1,59 @@
 // Kern Standard Library — Core Module
-// Requires: generics (Phase C1) for full implementation
-// Currently: type stubs and intrinsic declarations
+
+// --- Option<T> ---
+union Option<T> { None, Some(T) }
+
+fn is_some<T>(opt: Option<T>) -> bool {
+    match opt {
+        None => false,
+        Some(_) => true
+    }
+}
+
+fn is_none<T>(opt: Option<T>) -> bool {
+    match opt {
+        None => true,
+        Some(_) => false
+    }
+}
+
+fn unwrap_or<T>(opt: Option<T>, fallback: T) -> T {
+    match opt {
+        None => fallback,
+        Some(v) => v
+    }
+}
+
+// --- Result<T, E> ---
+union Result<T, E> { Ok(T), Err(E) }
+
+fn is_ok<T, E>(r: Result<T, E>) -> bool {
+    match r {
+        Ok(_) => true,
+        Err(_) => false
+    }
+}
+
+fn is_err<T, E>(r: Result<T, E>) -> bool {
+    match r {
+        Ok(_) => false,
+        Err(_) => true
+    }
+}
+
+fn unwrap_ok<T, E>(r: Result<T, E>, fallback: T) -> T {
+    match r {
+        Ok(v) => v,
+        Err(_) => fallback
+    }
+}
+
+fn unwrap_err<T, E>(r: Result<T, E>, fallback: E) -> E {
+    match r {
+        Ok(_) => fallback,
+        Err(e) => e
+    }
+}
 
 // --- Print intrinsic (macOS) ---
 fn print_i64(x: i64) -> Unit = intrinsic
@@ -10,8 +63,3 @@ fn print_str(s: String) -> Unit = intrinsic
 fn mem_copy(dst: Ptr<var u8>, src: Ptr<u8>, n: u64) -> Unit = intrinsic
 fn mem_set(dst: Ptr<var u8>, val: u8, n: u64) -> Unit = intrinsic
 fn mem_cmp(a: Ptr<u8>, b: Ptr<u8>, n: u64) -> i64 = intrinsic
-
-// --- Pointer arithmetic intrinsics ---
-// (Will be implemented as LIR PtrAdd in Phase A6)
-// fn ptr_add_bytes(ptr: Ptr<u8>, n: u64) -> Ptr<u8> = intrinsic
-// fn ptr_sub_bytes(ptr: Ptr<u8>, n: u64) -> Ptr<u8> = intrinsic

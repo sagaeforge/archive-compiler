@@ -264,6 +264,57 @@ void MonomorphizationPass::collectInstantiations(HIRExpr* expr) {
 // Type inference
 // ============================================================================
 
+// Recursively match a (possibly generic) expected type against a concrete actual type,
+// extracting TypeVar → concrete substitutions.
+static void deepInfer(const TypeTable& types, TypeId expected, TypeId actual,
+                      std::unordered_map<TypeId, TypeId>& inferred) {
+    if (expected == actual) return;
+
+    auto& ei = types.get(expected);
+    if (ei.kind == TypeKind::TypeVar) {
+        if (!inferred.count(expected)) {
+            inferred[expected] = actual;
+        }
+        return;
+    }
+
+    auto& ai = types.get(actual);
+    if (ei.kind != ai.kind) return;
+
+    switch (ei.kind) {
+        case TypeKind::Union:
+            // Match variant payload types
+            for (uint32_t i = 0; i < ei.union_.variant_count && i < ai.union_.variant_count; ++i) {
+                if (ei.union_.variants[i].payload_type != INVALID_TYPE &&
+                    ai.union_.variants[i].payload_type != INVALID_TYPE) {
+                    deepInfer(types, ei.union_.variants[i].payload_type,
+                              ai.union_.variants[i].payload_type, inferred);
+                }
+            }
+            break;
+        case TypeKind::Struct:
+            for (uint32_t i = 0; i < ei.struct_.field_count && i < ai.struct_.field_count; ++i) {
+                deepInfer(types, ei.struct_.fields[i].type, ai.struct_.fields[i].type, inferred);
+            }
+            break;
+        case TypeKind::Ptr:
+        case TypeKind::PtrMut:
+            deepInfer(types, ei.ptr.pointee, ai.ptr.pointee, inferred);
+            break;
+        case TypeKind::Array:
+            deepInfer(types, ei.array.element, ai.array.element, inferred);
+            break;
+        case TypeKind::Fn:
+            for (uint32_t i = 0; i < ei.fn.param_count && i < ai.fn.param_count; ++i) {
+                deepInfer(types, ei.fn.params[i], ai.fn.params[i], inferred);
+            }
+            deepInfer(types, ei.fn.return_type, ai.fn.return_type, inferred);
+            break;
+        default:
+            break;
+    }
+}
+
 std::vector<TypeId> MonomorphizationPass::inferTypeArgs(
     HIRFnDecl* generic, const std::vector<TypeId>& arg_types) {
 
@@ -271,17 +322,7 @@ std::vector<TypeId> MonomorphizationPass::inferTypeArgs(
     std::unordered_map<TypeId, TypeId> inferred;
 
     for (uint32_t i = 0; i < generic->param_count && i < arg_types.size(); ++i) {
-        TypeId param_type = generic->params[i].type;
-        TypeId arg_type = arg_types[i];
-
-        auto& ti = ctx_.types.get(param_type);
-        if (ti.kind == TypeKind::TypeVar) {
-            // Direct type var: T → concrete
-            if (!inferred.count(param_type)) {
-                inferred[param_type] = arg_type;
-            }
-        }
-        // TODO: deep matching for Ptr<T>, [T; N], etc.
+        deepInfer(ctx_.types, generic->params[i].type, arg_types[i], inferred);
     }
 
     // Build result in order of type params
@@ -347,6 +388,44 @@ TypeId MonomorphizationPass::substituteType(
             TypeId elem = substituteType(ti.array.element, subst);
             if (elem == ti.array.element) return type;
             return ctx_.types.makeArrayType(elem, ti.array.count);
+        }
+        case TypeKind::Union: {
+            bool changed = false;
+            std::vector<VariantInfo> variants;
+            for (uint32_t i = 0; i < ti.union_.variant_count; ++i) {
+                VariantInfo vi = ti.union_.variants[i];
+                if (vi.payload_type != INVALID_TYPE) {
+                    TypeId sub = substituteType(vi.payload_type, subst);
+                    if (sub != vi.payload_type) { vi.payload_type = sub; changed = true; }
+                }
+                variants.push_back(vi);
+            }
+            if (!changed) return type;
+            // Build substituted name: e.g. Result_i64_i64
+            std::string name(ti.union_.name);
+            for (auto& [tv, concrete] : subst) {
+                name += "_";
+                name += ctx_.types.name(concrete);
+            }
+            return ctx_.types.makeUnion(ctx_.strings.intern(name), variants);
+        }
+        case TypeKind::Struct: {
+            bool changed = false;
+            std::vector<FieldInfo> fields;
+            for (uint32_t i = 0; i < ti.struct_.field_count; ++i) {
+                FieldInfo fi = ti.struct_.fields[i];
+                TypeId sub = substituteType(fi.type, subst);
+                if (sub != fi.type) { fi.type = sub; changed = true; }
+                fields.push_back(fi);
+            }
+            if (!changed) return type;
+            std::string name(ti.struct_.name);
+            for (auto& [tv, concrete] : subst) {
+                name += "_";
+                name += ctx_.types.name(concrete);
+            }
+            return ctx_.types.makeStruct(ctx_.strings.intern(name), fields,
+                                         ti.struct_.is_packed);
         }
         default:
             return type;

@@ -33,6 +33,75 @@ static bool typesMatch(TypeId a, TypeId b) {
     return false;
 }
 
+// Check if a type contains any TypeVar (for generic type matching)
+static bool containsTypeVar(const TypeTable& types, TypeId tid) {
+    const auto& info = types.get(tid);
+    if (info.kind == TypeKind::TypeVar) return true;
+    if (info.kind == TypeKind::Union) {
+        for (uint32_t i = 0; i < info.union_.variant_count; ++i) {
+            if (info.union_.variants[i].payload_type != INVALID_TYPE &&
+                containsTypeVar(types, info.union_.variants[i].payload_type))
+                return true;
+        }
+    }
+    if (info.kind == TypeKind::Struct) {
+        for (uint32_t i = 0; i < info.struct_.field_count; ++i) {
+            if (containsTypeVar(types, info.struct_.fields[i].type))
+                return true;
+        }
+    }
+    if (info.kind == TypeKind::Ptr || info.kind == TypeKind::PtrMut) {
+        return containsTypeVar(types, info.ptr.pointee);
+    }
+    if (info.kind == TypeKind::Array) {
+        return containsTypeVar(types, info.array.element);
+    }
+    return false;
+}
+
+// Deep match: try to unify expected (may contain TypeVars) with actual (concrete)
+// and extract TypeVar→concrete substitutions
+static bool deepTypeMatch(const TypeTable& types, TypeId expected, TypeId actual,
+                          std::unordered_map<TypeId, TypeId>& subst) {
+    if (expected == actual) return true;
+    const auto& ei = types.get(expected);
+    if (ei.kind == TypeKind::TypeVar) {
+        auto it = subst.find(expected);
+        if (it != subst.end()) return it->second == actual;
+        subst[expected] = actual;
+        return true;
+    }
+    const auto& ai = types.get(actual);
+    if (ei.kind != ai.kind) return false;
+    if (ei.kind == TypeKind::Union) {
+        if (ei.union_.variant_count != ai.union_.variant_count) return false;
+        for (uint32_t i = 0; i < ei.union_.variant_count; ++i) {
+            auto ep = ei.union_.variants[i].payload_type;
+            auto ap = ai.union_.variants[i].payload_type;
+            if (ep == INVALID_TYPE && ap == INVALID_TYPE) continue;
+            if (ep == INVALID_TYPE || ap == INVALID_TYPE) return false;
+            if (!deepTypeMatch(types, ep, ap, subst)) return false;
+        }
+        return true;
+    }
+    if (ei.kind == TypeKind::Struct) {
+        if (ei.struct_.field_count != ai.struct_.field_count) return false;
+        for (uint32_t i = 0; i < ei.struct_.field_count; ++i) {
+            if (!deepTypeMatch(types, ei.struct_.fields[i].type, ai.struct_.fields[i].type, subst))
+                return false;
+        }
+        return true;
+    }
+    if (ei.kind == TypeKind::Ptr || ei.kind == TypeKind::PtrMut) {
+        return deepTypeMatch(types, ei.ptr.pointee, ai.ptr.pointee, subst);
+    }
+    if (ei.kind == TypeKind::Array) {
+        return ei.array.count == ai.array.count &&
+               deepTypeMatch(types, ei.array.element, ai.array.element, subst);
+    }
+    return false;
+}
+
 // When merging two branch types, pick the non-Never type.
 static TypeId mergeTypes(TypeId a, TypeId b) {
     if (a == TypeTable::Never) return b;
@@ -693,11 +762,62 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
                 hfn->type_params[i] = {interned, ct, true, ct};
                 // Don't register in named_types_; const params live in const_values_
             } else {
-                // Type generic: create a TypeVar
-                TypeInfo ti{};
-                ti.kind = TypeKind::TypeVar;
-                ti.type_var.name = interned;
-                TypeId tv_id = ctx_.types.add(ti);
+                // Type generic: reuse TypeVar from registerFnSigs if available
+                TypeId tv_id = INVALID_TYPE;
+                auto fn_it = fn_table_.find(fn->name);
+                if (fn_it != fn_table_.end()) {
+                    // Deep-find TypeVar by name in all sig types (params + return)
+                    std::function<TypeId(TypeId)> findTypeVar = [&](TypeId tid) -> TypeId {
+                        const auto& ti2 = ctx_.types.get(tid);
+                        if (ti2.kind == TypeKind::TypeVar && ti2.type_var.name == interned)
+                            return tid;
+                        switch (ti2.kind) {
+                            case TypeKind::Union:
+                                for (uint32_t v = 0; v < ti2.union_.variant_count; ++v) {
+                                    if (ti2.union_.variants[v].payload_type != INVALID_TYPE) {
+                                        auto r = findTypeVar(ti2.union_.variants[v].payload_type);
+                                        if (r != INVALID_TYPE) return r;
+                                    }
+                                }
+                                break;
+                            case TypeKind::Struct:
+                                for (uint32_t f = 0; f < ti2.struct_.field_count; ++f) {
+                                    auto r = findTypeVar(ti2.struct_.fields[f].type);
+                                    if (r != INVALID_TYPE) return r;
+                                }
+                                break;
+                            case TypeKind::Ptr:
+                            case TypeKind::PtrMut:
+                                return findTypeVar(ti2.ptr.pointee);
+                            case TypeKind::Array:
+                                return findTypeVar(ti2.array.element);
+                            case TypeKind::Fn:
+                                for (uint32_t p = 0; p < ti2.fn.param_count; ++p) {
+                                    auto r = findTypeVar(ti2.fn.params[p]);
+                                    if (r != INVALID_TYPE) return r;
+                                }
+                                return findTypeVar(ti2.fn.return_type);
+                            default:
+                                break;
+                        }
+                        return INVALID_TYPE;
+                    };
+
+                    for (auto pt : fn_it->second.param_types) {
+                        tv_id = findTypeVar(pt);
+                        if (tv_id != INVALID_TYPE) break;
+                    }
+                    if (tv_id == INVALID_TYPE) {
+                        tv_id = findTypeVar(fn_it->second.return_type);
+                    }
+                }
+                if (tv_id == INVALID_TYPE) {
+                    // Fallback: create new TypeVar
+                    TypeInfo ti{};
+                    ti.kind = TypeKind::TypeVar;
+                    ti.type_var.name = interned;
+                    tv_id = ctx_.types.add(ti);
+                }
                 hfn->type_params[i] = {interned, tv_id, false, INVALID_TYPE};
                 if (named_types_.count(interned)) {
                     saved_type_params.push_back({interned, named_types_[interned]});
@@ -1267,15 +1387,15 @@ HIRExpr* HIRBuilder::buildCall(const Expr* expr) {
     e->arg_count = call->arg_count;
     e->args = ctx_.arena.makeArray<HIRExpr*>(call->arg_count);
 
-    // Check if this is a generic function call (any param is TypeVar)
+    // Check if this is a generic function call (any param contains TypeVar)
     bool is_generic_call = false;
     for (size_t i = 0; i < sig.param_types.size(); ++i) {
-        if (ctx_.types.get(sig.param_types[i]).kind == TypeKind::TypeVar) {
+        if (containsTypeVar(ctx_.types, sig.param_types[i])) {
             is_generic_call = true;
             break;
         }
     }
-    if (!is_generic_call && ctx_.types.get(sig.return_type).kind == TypeKind::TypeVar) {
+    if (!is_generic_call && containsTypeVar(ctx_.types, sig.return_type)) {
         is_generic_call = true;
     }
 
@@ -1284,9 +1404,9 @@ HIRExpr* HIRBuilder::buildCall(const Expr* expr) {
 
     for (uint32_t i = 0; i < call->arg_count; ++i) {
         TypeId expected = sig.param_types[i];
-        // For generic calls, don't pass TypeVar as context type
+        // For generic calls, don't pass types containing TypeVars as context
         std::optional<TypeId> ctx_t;
-        if (!is_generic_call || ctx_.types.get(expected).kind != TypeKind::TypeVar) {
+        if (!is_generic_call || !containsTypeVar(ctx_.types, expected)) {
             ctx_t = expected;
         }
         e->args[i] = buildExpr(call->args[i], ctx_t);
@@ -1294,6 +1414,14 @@ HIRExpr* HIRBuilder::buildCall(const Expr* expr) {
         if (is_generic_call && ctx_.types.get(expected).kind == TypeKind::TypeVar) {
             // Infer: TypeVar → actual arg type
             type_subst[expected] = e->args[i]->type;
+        } else if (is_generic_call && containsTypeVar(ctx_.types, expected)) {
+            // Deep match: parametric type containing TypeVars (e.g. Option<T>)
+            if (!deepTypeMatch(ctx_.types, expected, e->args[i]->type, type_subst)) {
+                ctx_.diag.error(call->args[i]->loc,
+                    std::string("argument type mismatch: expected ") +
+                    ctx_.types.name(expected) + ", got " +
+                    ctx_.types.name(e->args[i]->type));
+            }
         } else if (e->args[i]->type != TypeTable::Error && e->args[i]->type != expected) {
             ctx_.diag.error(call->args[i]->loc,
                 std::string("argument type mismatch: expected ") +
