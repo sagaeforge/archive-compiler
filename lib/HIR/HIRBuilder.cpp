@@ -1,4 +1,5 @@
 #include "kern/hir/HIRBuilder.h"
+#include <algorithm>
 #include <cstring>
 #include <string>
 
@@ -1033,6 +1034,33 @@ HIRExpr* HIRBuilder::buildIdent(const Expr* expr) {
         return e;
     }
 
+    // Inside a lambda: check outer scope for capture
+    if (in_lambda_) {
+        auto outer_it = outer_locals_.find(ident->name);
+        if (outer_it != outer_locals_.end()) {
+            auto interned = ctx_.strings.intern(ident->name);
+            // Record this capture (avoid duplicates)
+            bool already_captured = false;
+            for (auto& cap : current_captures_) {
+                if (cap.name == interned) { already_captured = true; break; }
+            }
+            if (!already_captured) {
+                current_captures_.push_back({interned, outer_it->second,
+                    outer_mutables_.count(ident->name) > 0});
+            }
+            // Add to local scope so the variable is visible for the rest of the body
+            local_vars_[interned] = outer_it->second;
+            if (outer_mutables_.count(ident->name)) mutable_vars_.insert(interned);
+
+            auto* e = ctx_.arena.make<HIRIdentExpr>();
+            e->kind = HIRExpr::Kind::Ident;
+            e->loc = expr->loc;
+            e->name = interned;
+            e->type = outer_it->second;
+            return e;
+        }
+    }
+
     // Check if it's a function name → FnRef (function pointer)
     auto fn_it = fn_table_.find(ident->name);
     if (fn_it != fn_table_.end()) {
@@ -1316,6 +1344,47 @@ HIRExpr* HIRBuilder::buildCall(const Expr* expr) {
         TypeId var_type = local_it->second;
         if (var_type < ctx_.types.size() && ctx_.types.get(var_type).kind == TypeKind::Fn) {
             auto& ti = ctx_.types.get(var_type);
+
+            // Check if this local holds a lambda with captures → rewrite as direct call
+            auto lam_it = local_lambda_map_.find(ctx_.strings.intern(call->callee));
+            if (lam_it != local_lambda_map_.end()) {
+                auto& lambda_name = lam_it->second;
+                auto cap_it = lambda_captures_.find(lambda_name);
+                if (cap_it != lambda_captures_.end() && !cap_it->second.empty()) {
+                    auto& caps = cap_it->second;
+                    // Rewrite as direct call to lifted function with capture args appended
+                    auto* e = ctx_.arena.make<HIRCallExpr>();
+                    e->kind = HIRExpr::Kind::Call;
+                    e->loc = expr->loc;
+                    e->callee = lambda_name;
+                    e->is_tail_call = false;
+                    e->type_args = nullptr;
+                    e->type_arg_count = 0;
+
+                    uint32_t total_args = call->arg_count + static_cast<uint32_t>(caps.size());
+                    e->arg_count = total_args;
+                    e->args = ctx_.arena.makeArray<HIRExpr*>(total_args);
+
+                    // User-supplied args
+                    for (uint32_t i = 0; i < call->arg_count; ++i) {
+                        TypeId expected = (i < ti.fn.param_count) ? ti.fn.params[i] : INVALID_TYPE;
+                        e->args[i] = buildExpr(call->args[i], expected);
+                    }
+                    // Capture args — emit ident refs to the captured variables
+                    for (uint32_t i = 0; i < caps.size(); ++i) {
+                        auto* cap_ref = ctx_.arena.make<HIRIdentExpr>();
+                        cap_ref->kind = HIRExpr::Kind::Ident;
+                        cap_ref->loc = expr->loc;
+                        cap_ref->name = caps[i].name;
+                        cap_ref->type = caps[i].type;
+                        e->args[call->arg_count + i] = cap_ref;
+                    }
+                    e->type = ti.fn.return_type;
+                    return e;
+                }
+            }
+
+            // Normal indirect call (no captures)
             auto* e = ctx_.arena.make<HIRCallIndirectExpr>();
             e->kind = HIRExpr::Kind::CallIndirect;
             e->loc = expr->loc;
@@ -2259,6 +2328,14 @@ HIRStmt* HIRBuilder::buildStmt(const Stmt* stmt) {
                             ctx_.types.name(expected) + ", got " + ctx_.types.name(s->init->type));
             }
             local_vars_[decl->name] = expected;
+            // Track if this val holds a closure (lambda with captures)
+            if (s->init->kind == HIRExpr::Kind::FnRef) {
+                auto* fnref = static_cast<HIRFnRefExpr*>(s->init);
+                if (lambda_captures_.count(fnref->fn_name) &&
+                    !lambda_captures_[fnref->fn_name].empty()) {
+                    local_lambda_map_[s->name] = fnref->fn_name;
+                }
+            }
             return s;
         }
         case Stmt::Kind::VarDecl: {
@@ -2523,26 +2600,59 @@ HIRExpr* HIRBuilder::buildLambda(const Expr* expr, std::optional<TypeId> ctx_typ
     hfn->type_param_count = 0;
     hfn->type_params = nullptr;
 
-    // Save outer scope and set up lambda scope
+    // Save outer scope state
     auto saved_locals = local_vars_;
     auto saved_mutables = mutable_vars_;
     auto saved_return = current_return_type_;
+    auto saved_in_lambda = in_lambda_;
+    auto saved_outer_locals = outer_locals_;
+    auto saved_outer_mutables = outer_mutables_;
+    auto saved_captures = current_captures_;
+
+    // Set up capture tracking: remember outer scope, start with clean lambda scope
+    in_lambda_ = true;
+    outer_locals_ = saved_locals;
+    outer_mutables_ = saved_mutables;
+    current_captures_.clear();
     local_vars_.clear();
     mutable_vars_.clear();
 
+    // Lambda params are lambda-local
     for (uint32_t i = 0; i < lam->param_count; ++i) {
         auto param_name = ctx_.strings.intern(lam->params[i].name);
-        hfn->params[i].name = param_name;
-        hfn->params[i].type = param_types[i];
-        hfn->params[i].loc = lam->params[i].loc;
         local_vars_[param_name] = param_types[i];
     }
 
     // Set return type for type checking inside the body
     current_return_type_ = return_type;
 
-    // Build body
+    // Build body — buildIdent will detect captures from outer_locals_
     hfn->body = buildExpr(lam->body, return_type != INVALID_TYPE ? std::optional<TypeId>(return_type) : std::nullopt);
+
+    // Sort captures by name for deterministic ordering
+    std::sort(current_captures_.begin(), current_captures_.end(),
+              [](const CapturedVar& a, const CapturedVar& b) { return a.name < b.name; });
+
+    // Build the lifted function's actual params: lambda params + capture params
+    uint32_t total_params = lam->param_count + static_cast<uint32_t>(current_captures_.size());
+    hfn->param_count = total_params;
+    hfn->params = ctx_.arena.makeArray<HIRParam>(total_params);
+
+    for (uint32_t i = 0; i < lam->param_count; ++i) {
+        auto param_name = ctx_.strings.intern(lam->params[i].name);
+        hfn->params[i].name = param_name;
+        hfn->params[i].type = param_types[i];
+        hfn->params[i].loc = lam->params[i].loc;
+    }
+    for (uint32_t i = 0; i < current_captures_.size(); ++i) {
+        hfn->params[lam->param_count + i].name = current_captures_[i].name;
+        hfn->params[lam->param_count + i].type = current_captures_[i].type;
+        hfn->params[lam->param_count + i].loc = expr->loc;
+    }
+
+    // Store capture info for use at call sites
+    auto captures = current_captures_;
+    lambda_captures_[interned_name] = captures;
 
     // Infer return type from body if not provided
     if (return_type == INVALID_TYPE && hfn->body) {
@@ -2563,18 +2673,23 @@ HIRExpr* HIRBuilder::buildLambda(const Expr* expr, std::optional<TypeId> ctx_typ
     local_vars_ = saved_locals;
     mutable_vars_ = saved_mutables;
     current_return_type_ = saved_return;
+    in_lambda_ = saved_in_lambda;
+    outer_locals_ = saved_outer_locals;
+    outer_mutables_ = saved_outer_mutables;
+    current_captures_ = saved_captures;
 
-    // Register the lifted function in fn_table_ so it can be found
+    // Register the lifted function with ALL params (including captures) in fn_table_
     FnSig sig;
     sig.name = interned_name;
     sig.param_types = param_types;
+    for (auto& cap : captures) sig.param_types.push_back(cap.type);
     sig.return_type = return_type;
     fn_table_[interned_name] = sig;
 
     // Add to lifted lambdas list
     lifted_lambdas_.push_back(hfn);
 
-    // Build the Fn type
+    // Build the user-visible fn type (without captures)
     auto* tid_params = ctx_.arena.makeArray<TypeId>(param_types.size());
     for (size_t i = 0; i < param_types.size(); ++i) tid_params[i] = param_types[i];
     TypeId fn_type = ctx_.types.makeFn(

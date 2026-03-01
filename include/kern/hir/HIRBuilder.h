@@ -105,6 +105,23 @@ private:
     std::vector<HIRFnDecl*> lifted_lambdas_;
     uint32_t lambda_counter_ = 0;
 
+    // Closure capture: maps lifted lambda name → captured variable info
+    struct CapturedVar {
+        std::string_view name;  // interned
+        TypeId type;
+        bool is_mutable;
+    };
+    std::unordered_map<std::string_view, std::vector<CapturedVar>> lambda_captures_;
+
+    // Per-lambda capture tracking state
+    bool in_lambda_ = false;
+    std::unordered_map<std::string_view, TypeId> outer_locals_;   // outer scope vars
+    std::unordered_set<std::string_view> outer_mutables_;         // outer scope mutables
+    std::vector<CapturedVar> current_captures_;                    // captures found in current lambda
+
+    // Track which local variables hold which lambda (for capture arg injection)
+    std::unordered_map<std::string_view, std::string_view> local_lambda_map_;  // local_var_name → lambda_fn_name
+
     // Trait/impl support (static dispatch)
     struct TraitInfo {
         std::string_view name;

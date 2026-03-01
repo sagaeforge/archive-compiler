@@ -1,0 +1,8 @@
+// Test: lambda capturing multiple outer variables
+fn main() -> i64 {
+    val a: i64 = 10
+    val b: i64 = 20
+    val c: i64 = 12
+    val f: fn(i64) -> i64 = { x: i64 => x + a + b + c }
+    f(0)
+}
