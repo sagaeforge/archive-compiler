@@ -7,6 +7,12 @@ namespace kern {
 
 LIRBuilder::LIRBuilder(CompilationContext& ctx) : ctx_(ctx) {}
 
+static bool blockTerminated(const std::vector<LIRInstr>& instrs) {
+    if (instrs.empty()) return false;
+    auto op = instrs.back().op;
+    return op == LIROp::Ret || op == LIROp::Branch || op == LIROp::CondBranch;
+}
+
 VReg LIRBuilder::freshVReg() {
     return next_vreg_++;
 }
@@ -845,9 +851,8 @@ VReg LIRBuilder::lowerIf(const HIRIfExpr* expr) {
     switchToBlock(then_bb);
     VReg then_val = lowerExpr(expr->then_branch);
     uint32_t then_exit = current_block_;
-    bool then_returned = !blocks_[then_exit].instrs.empty() &&
-                         blocks_[then_exit].instrs.back().op == LIROp::Ret;
-    if (!then_returned) {
+    bool then_terminated = blockTerminated(blocks_[then_exit].instrs);
+    if (!then_terminated) {
         if (need_merge && then_val != INVALID_VREG) {
             LIRInstr st{};
             st.op = LIROp::Store;
@@ -867,9 +872,8 @@ VReg LIRBuilder::lowerIf(const HIRIfExpr* expr) {
         else_val = lowerExpr(expr->else_branch);
     }
     uint32_t else_exit = current_block_;
-    bool else_returned = !blocks_[else_exit].instrs.empty() &&
-                         blocks_[else_exit].instrs.back().op == LIROp::Ret;
-    if (!else_returned) {
+    bool else_terminated = blockTerminated(blocks_[else_exit].instrs);
+    if (!else_terminated) {
         if (need_merge && else_val != INVALID_VREG) {
             LIRInstr st{};
             st.op = LIROp::Store;
@@ -1081,9 +1085,8 @@ VReg LIRBuilder::lowerMatch(const HIRMatchExpr* expr) {
 
                     VReg arm_val = lowerExpr(arm.body);
                     uint32_t arm_exit = current_block_;
-                    bool arm_returned = !blocks_[arm_exit].instrs.empty() &&
-                                        blocks_[arm_exit].instrs.back().op == LIROp::Ret;
-                    if (!arm_returned) {
+                    bool arm_terminated = blockTerminated(blocks_[arm_exit].instrs);
+                    if (!arm_terminated) {
                         if (slot != INVALID_VREG && arm_val != INVALID_VREG) {
                             LIRInstr st{};
                             st.op = LIROp::Store;
@@ -1121,10 +1124,9 @@ VReg LIRBuilder::lowerMatch(const HIRMatchExpr* expr) {
 
         VReg arm_val = lowerExpr(arm.body);
         uint32_t arm_exit = current_block_;
-        bool arm_returned = !blocks_[arm_exit].instrs.empty() &&
-                            blocks_[arm_exit].instrs.back().op == LIROp::Ret;
+        bool arm_terminated = blockTerminated(blocks_[arm_exit].instrs);
 
-        if (!arm_returned) {
+        if (!arm_terminated) {
             if (slot != INVALID_VREG && arm_val != INVALID_VREG) {
                 LIRInstr st{};
                 st.op = LIROp::Store;
