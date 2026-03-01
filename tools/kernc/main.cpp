@@ -1,26 +1,10 @@
-#include "kern/lexer/Lexer.h"
-#include "kern/parser/Parser.h"
-#include "kern/sema/TypeChecker.h"
-#include "kern/sema/PurityChecker.h"
-#include "kern/hir/HIRBuilder.h"
-#include "kern/hir/HIRDump.h"
-#include "kern/hir/HIRPasses.h"
-#include "kern/lir/LIRBuilder.h"
-#include "kern/lir/LIRDump.h"
-#include "kern/backend/X86Backend.h"
-#include "kern/backend/MachIRDump.h"
-#include "kern/ir/IRBuilder.h"
-#include "kern/ir/KernIR.h"
-#include "kern/codegen/CodeGen.h"
-#include "kern/support/Arena.h"
-#include "kern/support/Diagnostic.h"
+#include "kern/pipeline/CompilerPipeline.h"
+#include "kern/support/CompilationContext.h"
 
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <cstdlib>
-#include <unistd.h>
 
 static void printUsage(const char* prog) {
     std::cerr << "Usage: " << prog << " <input.kern> [options]\n"
@@ -32,7 +16,6 @@ static void printUsage(const char* prog) {
               << "  --dump-hir      Dump HIR (typed, desugared)\n"
               << "  --dump-lir      Dump LIR (lowered SSA)\n"
               << "  --dump-machir   Dump MachIR (x86-64 instructions)\n"
-              << "  --dump-ir       Dump IR\n"
               << "  --dump-purity   Dump purity analysis\n"
               << "  --help          Show this help\n";
 }
@@ -43,16 +26,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::string input_file;
-    std::string output_file = "a.out";
-    bool asm_only = false;
-    bool dump_tokens = false;
-    bool dump_ast = false;
-    bool dump_hir = false;
-    bool dump_lir = false;
-    bool dump_machir = false;
-    bool dump_ir = false;
-    bool dump_purity = false;
+    kern::CompileOptions opts;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -60,292 +34,45 @@ int main(int argc, char** argv) {
             printUsage(argv[0]);
             return 0;
         } else if (arg == "-o" && i + 1 < argc) {
-            output_file = argv[++i];
+            opts.output_file = argv[++i];
         } else if (arg == "-S") {
-            asm_only = true;
+            opts.asm_only = true;
         } else if (arg == "--dump-tokens") {
-            dump_tokens = true;
+            opts.dump_tokens = true;
         } else if (arg == "--dump-ast") {
-            dump_ast = true;
+            opts.dump_ast = true;
         } else if (arg == "--dump-hir") {
-            dump_hir = true;
+            opts.dump_hir = true;
         } else if (arg == "--dump-lir") {
-            dump_lir = true;
+            opts.dump_lir = true;
         } else if (arg == "--dump-machir") {
-            dump_machir = true;
-        } else if (arg == "--dump-ir") {
-            dump_ir = true;
+            opts.dump_machir = true;
         } else if (arg == "--dump-purity") {
-            dump_purity = true;
+            opts.dump_purity = true;
         } else if (arg[0] != '-') {
-            input_file = arg;
+            opts.input_file = arg;
         } else {
             std::cerr << "Unknown option: " << arg << "\n";
             return 1;
         }
     }
 
-    if (input_file.empty()) {
+    if (opts.input_file.empty()) {
         std::cerr << "error: no input file\n";
         return 1;
     }
 
     // Read source file
-    std::ifstream ifs(input_file);
+    std::ifstream ifs(opts.input_file);
     if (!ifs) {
-        std::cerr << "error: cannot open file '" << input_file << "'\n";
+        std::cerr << "error: cannot open file '" << opts.input_file << "'\n";
         return 1;
     }
     std::stringstream ss;
     ss << ifs.rdbuf();
     std::string source = ss.str();
 
-    kern::DiagnosticEngine diag;
-    diag.setSource(source);
-    kern::Arena arena;
-
-    // --- Lexing ---
-    if (dump_tokens) {
-        kern::Lexer dump_lexer(source, input_file, diag);
-        while (true) {
-            kern::Token tok = dump_lexer.nextToken();
-            std::cout << kern::tokenKindName(tok.kind)
-                      << " '" << tok.text << "'"
-                      << " [" << tok.loc.line << ":" << tok.loc.col << "]\n";
-            if (tok.kind == kern::TokenKind::Eof) break;
-        }
-        if (!dump_ast && !dump_ir && !asm_only) return 0;
-    }
-
-    // --- Parsing ---
-    kern::Lexer lexer(source, input_file, diag);
-    kern::Parser parser(lexer, arena, diag);
-    kern::Module* mod = parser.parseModule();
-
-    if (diag.hasErrors()) {
-        diag.printAll(std::cerr);
-        return 1;
-    }
-
-    if (dump_ast) {
-        kern::dumpAST(mod, std::cout);
-        if (!dump_hir && !dump_ir && !asm_only) return 0;
-    }
-
-    // --- HIR Pipeline (parallel to v1 sema for now) ---
-    if (dump_hir) {
-        kern::CompilationContext hir_ctx;
-        hir_ctx.diag.setSource(source);
-        kern::HIRBuilder hir_builder(hir_ctx);
-        kern::HIRModule* hir_mod = hir_builder.build(mod);
-
-        if (!hir_ctx.diag.hasErrors()) {
-            kern::HIRPassManager pm;
-            pm.add<kern::PurityAnalysisPass>();
-            pm.add<kern::TailCallAnalysisPass>();
-            pm.run(*hir_mod, hir_ctx);
-            kern::dumpHIR(hir_mod, hir_ctx.types, std::cout);
-        } else {
-            hir_ctx.diag.printAll(std::cerr);
-        }
-        if (!dump_lir && !dump_ir && !asm_only) return 0;
-    }
-
-    // --- LIR Pipeline (HIR → LIR lowering) ---
-    if (dump_lir) {
-        kern::CompilationContext lir_ctx;
-        lir_ctx.diag.setSource(source);
-        kern::HIRBuilder hir_builder2(lir_ctx);
-        kern::HIRModule* hir_mod2 = hir_builder2.build(mod);
-
-        if (!lir_ctx.diag.hasErrors()) {
-            kern::HIRPassManager pm2;
-            pm2.add<kern::PurityAnalysisPass>();
-            pm2.add<kern::TailCallAnalysisPass>();
-            pm2.run(*hir_mod2, lir_ctx);
-
-            kern::LIRBuilder lir_builder(lir_ctx);
-            kern::LIRModule* lir_mod = lir_builder.build(hir_mod2);
-            kern::dumpLIR(lir_mod, lir_ctx.types, std::cout);
-        } else {
-            lir_ctx.diag.printAll(std::cerr);
-        }
-        if (!dump_machir && !dump_ir && !asm_only) return 0;
-    }
-
-    // --- MachIR Pipeline (LIR → x86-64 MachIR) ---
-    if (dump_machir) {
-        kern::CompilationContext machir_ctx;
-        machir_ctx.diag.setSource(source);
-        kern::HIRBuilder hir_builder3(machir_ctx);
-        kern::HIRModule* hir_mod3 = hir_builder3.build(mod);
-
-        if (!machir_ctx.diag.hasErrors()) {
-            kern::HIRPassManager pm3;
-            pm3.add<kern::PurityAnalysisPass>();
-            pm3.add<kern::TailCallAnalysisPass>();
-            pm3.run(*hir_mod3, machir_ctx);
-
-            kern::LIRBuilder lir_builder3(machir_ctx);
-            kern::LIRModule* lir_mod3 = lir_builder3.build(hir_mod3);
-
-            kern::X86Backend backend(machir_ctx);
-            kern::MachModule* mach_mod = backend.lower(*lir_mod3);
-            backend.allocateRegisters(*mach_mod);
-            kern::dumpMachIR(mach_mod, lir_mod3, machir_ctx.types, std::cout);
-        } else {
-            machir_ctx.diag.printAll(std::cerr);
-        }
-        if (!dump_ir && !asm_only) return 0;
-    }
-
-    // --- Semantic Analysis ---
-    kern::TypeChecker typeChecker(diag, &arena);
-    typeChecker.check(mod);
-
-    if (diag.hasErrors()) {
-        diag.printAll(std::cerr);
-        return 1;
-    }
-
-    // --- Purity Analysis ---
-    kern::PurityChecker purityChecker(diag);
-    auto purity_map = purityChecker.analyze(mod);
-
-    // Print warnings (type + purity)
-    if (!diag.diagnostics().empty()) {
-        diag.printAll(std::cerr);
-    }
-
-    if (dump_purity) {
-        for (auto& [name, result] : purity_map) {
-            std::cout << "fn " << name << ": " << kern::purityName(result.purity);
-            if (result.is_recursive) {
-                std::cout << (result.is_tailrec ? " [tail-recursive]" : " [recursive]");
-            }
-            std::cout << "\n";
-        }
-        if (!dump_ir && !asm_only) return 0;
-    }
-
-    // --- IR Generation ---
-    kern::IRBuilder irBuilder;
-    kern::IRModule irMod = irBuilder.build(mod, typeChecker);
-
-    // Apply purity metadata to IR functions
-    for (auto& irFn : irMod.functions) {
-        auto it = purity_map.find(std::string_view(irFn.name));
-        if (it != purity_map.end()) {
-            irFn.meta.purity = it->second.purity;
-            irFn.meta.is_recursive = it->second.is_recursive;
-            irFn.meta.is_tailrec = it->second.is_tailrec;
-        }
-    }
-
-    if (dump_ir) {
-        kern::dumpIR(irMod, std::cout);
-        if (!asm_only) return 0;
-    }
-
-    // --- Code Generation ---
-    std::string asm_file;
-    if (asm_only) {
-        asm_file = output_file;
-        if (asm_file == "a.out") {
-            // Replace .kern with .asm, or append .asm
-            asm_file = input_file;
-            auto dot = asm_file.rfind('.');
-            if (dot != std::string::npos) {
-                asm_file = asm_file.substr(0, dot);
-            }
-            asm_file += ".asm";
-        }
-    } else {
-        asm_file = "/tmp/kern_" + std::to_string(getpid()) + ".asm";
-    }
-
-    {
-        std::ofstream asm_out(asm_file);
-        if (!asm_out) {
-            std::cerr << "error: cannot create assembly file '" << asm_file << "'\n";
-            return 1;
-        }
-
-        // Add main wrapper that calls _main and exits via syscall
-        // First emit the user's code
-        kern::CodeGen codegen(asm_out);
-        codegen.emitModule(irMod);
-
-        // Add _start entry point that calls _main and does exit syscall
-        // Check if user defined a 'main' function
-        bool has_main = false;
-        for (const auto& fn : irMod.functions) {
-            if (fn.name == "main") { has_main = true; break; }
-        }
-
-        if (has_main) {
-            asm_out << "\nsection .text\n";
-            asm_out << "global _start\n\n";
-            asm_out << "_start:\n";
-            asm_out << "    call _main\n";
-            asm_out << "    mov  rdi, rax\n";  // exit code = return value of main
-            asm_out << "    mov  rax, 0x02000001\n";  // macOS exit syscall
-            asm_out << "    syscall\n";
-        }
-    }
-
-    if (asm_only) {
-        std::cout << "Assembly written to " << asm_file << "\n";
-        return 0;
-    }
-
-    // --- Assemble and Link ---
-    std::string obj_file = "/tmp/kern_" + std::to_string(getpid()) + ".o";
-
-    // nasm -f macho64
-    std::string nasm_cmd = "nasm -f macho64 " + asm_file + " -o " + obj_file + " 2>&1";
-    int nasm_ret = std::system(nasm_cmd.c_str());
-    if (nasm_ret != 0) {
-        std::cerr << "error: nasm failed\n";
-        std::cerr << "  command: " << nasm_cmd << "\n";
-        return 1;
-    }
-
-    // ld — link with _start entry point
-    // macOS requires -lSystem and SDK library path for x86_64 binaries
-    std::string sdk_lib_path;
-    {
-        // Try to find SDK lib path
-        FILE* pipe = popen("xcrun --show-sdk-path 2>/dev/null", "r");
-        if (pipe) {
-            char buf[512];
-            if (fgets(buf, sizeof(buf), pipe)) {
-                std::string sdk(buf);
-                while (!sdk.empty() && (sdk.back() == '\n' || sdk.back() == '\r'))
-                    sdk.pop_back();
-                sdk_lib_path = sdk + "/usr/lib";
-            }
-            pclose(pipe);
-        }
-    }
-
-    std::string ld_cmd = "ld " + obj_file + " -o " + output_file +
-                         " -e _start -platform_version macos 14.0.0 14.0.0 -arch x86_64";
-    if (!sdk_lib_path.empty()) {
-        ld_cmd += " -L" + sdk_lib_path;
-    }
-    ld_cmd += " -lSystem 2>&1";
-
-    int ld_ret = std::system(ld_cmd.c_str());
-    if (ld_ret != 0) {
-        std::cerr << "error: linker failed\n";
-        std::cerr << "  command: " << ld_cmd << "\n";
-        return 1;
-    }
-
-    // Clean up temp files
-    std::remove(asm_file.c_str());
-    std::remove(obj_file.c_str());
-
-    return 0;
+    kern::CompilationContext ctx;
+    kern::CompilerPipeline pipeline(ctx);
+    return pipeline.run(source, opts, std::cout, std::cerr);
 }

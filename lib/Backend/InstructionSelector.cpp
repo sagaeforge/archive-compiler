@@ -34,6 +34,42 @@ uint8_t InstructionSelector::widthOf(TypeId type) const {
     return 64;  // pointers, structs, etc.
 }
 
+uint32_t InstructionSelector::sizeOfType(TypeId type) const {
+    if (type >= ctx_.types.size()) return 8;
+    const auto& info = ctx_.types.get(type);
+    if (info.kind == TypeKind::Struct) return info.struct_.size;
+    if (info.kind == TypeKind::Union) {
+        // Union: tag (8B) + max payload. Estimate conservatively.
+        uint32_t max_payload = 0;
+        for (uint32_t i = 0; i < info.union_.variant_count; ++i) {
+            // Each variant with a payload adds up to 8 bytes
+            if (info.union_.variants[i].payload_type != INVALID_TYPE)
+                max_payload = 8;
+        }
+        return 8 + max_payload; // tag + max payload
+    }
+    if (info.kind == TypeKind::Primitive) {
+        switch (info.primitive.prim) {
+            case PrimitiveKind::Bool:
+            case PrimitiveKind::I8:
+            case PrimitiveKind::U8:  return 1;
+            case PrimitiveKind::I16:
+            case PrimitiveKind::U16: return 2;
+            case PrimitiveKind::I32:
+            case PrimitiveKind::U32:
+            case PrimitiveKind::F32: return 4;
+            default: return 8;
+        }
+    }
+    return 8;
+}
+
+bool InstructionSelector::isStructType(TypeId type) const {
+    if (type >= ctx_.types.size()) return false;
+    const auto& info = ctx_.types.get(type);
+    return info.kind == TypeKind::Struct || info.kind == TypeKind::Union;
+}
+
 bool InstructionSelector::isFloat(TypeId type) const {
     if (type >= ctx_.types.size()) return false;
     const auto& info = ctx_.types.get(type);
@@ -61,6 +97,10 @@ MachModule* InstructionSelector::select(const LIRModule& lir_mod) {
     mod->fn_count = lir_mod.fn_count;
     mod->functions = ctx_.arena.makeArray<MachFunction>(lir_mod.fn_count);
 
+    // Store globals for label lookup in selectGlobalRef
+    globals_ = lir_mod.globals;
+    global_count_ = lir_mod.global_count;
+
     for (uint32_t i = 0; i < lir_mod.fn_count; ++i) {
         auto* mf = selectFunction(lir_mod.functions[i]);
         mod->functions[i] = *mf;
@@ -75,6 +115,12 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     mf->is_intrinsic = fn.is_intrinsic;
     mf->next_vreg = fn.next_vreg;
     next_vreg_ = fn.next_vreg;
+    struct_alloc_bytes_ = 0;
+    float_vregs_.clear();
+    struct_vregs_.clear();
+    struct_vreg_sizes_.clear();
+    stack_ptr_vregs_.clear();
+    gpr_arg_slot_ = 0;
 
     if (fn.is_intrinsic || fn.block_count == 0) {
         mf->block_count = 0;
@@ -112,6 +158,7 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     }
 
     mf->stack_size = 0;  // computed by RegisterAllocator later
+    mf->struct_alloc_bytes = struct_alloc_bytes_;
     mf->next_vreg = next_vreg_;
     return mf;
 }
@@ -122,6 +169,16 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
 
 void InstructionSelector::selectInstr(const LIRInstr& instr,
                                        const LIRFunction& fn) {
+    // Track float vregs for call arg classification
+    if (instr.result != INVALID_VREG && isFloat(instr.type)) {
+        float_vregs_.insert(instr.result);
+    }
+    // Track struct vregs for multi-register ABI passing
+    if (instr.result != INVALID_VREG && isStructType(instr.type)) {
+        struct_vregs_.insert(instr.result);
+        struct_vreg_sizes_[instr.result] = sizeOfType(instr.type);
+    }
+
     switch (instr.op) {
         case LIROp::ConstInt:    selectConstInt(instr); break;
         case LIROp::ConstFloat:  selectConstFloat(instr); break;
@@ -185,9 +242,9 @@ void InstructionSelector::selectConstInt(const LIRInstr& instr) {
 }
 
 void InstructionSelector::selectConstBool(const LIRInstr& instr) {
-    // mov vreg, 0/1
+    // mov vreg, 0/1 (use 64-bit width for consistency with comparisons)
     emit(makeMov(MachOperand::virt(instr.result),
-                 MachOperand::immediate(instr.const_bool.value ? 1 : 0), 8));
+                 MachOperand::immediate(instr.const_bool.value ? 1 : 0), 64));
 }
 
 void InstructionSelector::selectConstFloat(const LIRInstr& instr) {
@@ -199,22 +256,54 @@ void InstructionSelector::selectConstFloat(const LIRInstr& instr) {
 }
 
 void InstructionSelector::selectConstString(const LIRInstr& instr) {
-    // String literal → reference to global
-    // lea vreg, [rel _str_N]
-    // This will be expanded later with the actual label
-    emit(makeMov(MachOperand::virt(instr.result),
-                 MachOperand::immediate(instr.const_string.global_index), 64));
+    // String = fat pointer: [Ptr<u8> data (8B), u64 len (8B)] = 16 bytes on stack
+    VReg dst = instr.result;
+    uint32_t idx = instr.const_string.global_index;
+
+    // Allocate 16 bytes on stack for the fat pointer
+    struct_alloc_bytes_ += 16;
+    static constexpr int32_t CALLEE_SAVED_AREA = NUM_CALLEE_SAVED * 8;
+    int32_t base_offset = -CALLEE_SAVED_AREA - static_cast<int32_t>(struct_alloc_bytes_);
+
+    // Get label for the string data
+    std::string_view label;
+    uint32_t length = 0;
+    if (idx < global_count_) {
+        label = globals_[idx].label;
+        if (globals_[idx].kind == GlobalData::StringLit) {
+            length = globals_[idx].string_lit.length;
+        }
+    }
+
+    // lea tmp, [rel _str_N]  — data pointer
+    VReg data_ptr = freshVReg();
+    emit(makeLea(MachOperand::virt(data_ptr), MachOperand::lbl(label)));
+
+    // Store data pointer at [base + 0]
+    emit(makeMov(MachOperand::stack(base_offset), MachOperand::virt(data_ptr), 64));
+
+    // Store length at [base + 8]
+    VReg len_vreg = freshVReg();
+    emit(makeMov(MachOperand::virt(len_vreg), MachOperand::immediate(length), 64));
+    emit(makeMov(MachOperand::stack(base_offset + 8), MachOperand::virt(len_vreg), 64));
+
+    // dst = pointer to the base of the fat pointer
+    emit(makeLea(MachOperand::virt(dst), MachOperand::stack(base_offset)));
 }
 
 void InstructionSelector::selectGlobalRef(const LIRInstr& instr) {
-    // Load float from .rodata
-    // movsd/movss vreg, [rel label]
+    // Load float from .rodata via [rel label]
     uint8_t w = widthOf(instr.type);
+    uint32_t idx = instr.global_ref.global_index;
+    std::string_view label;
+    if (idx < global_count_) {
+        label = globals_[idx].label;
+    }
     MachInstr mi(w == 32 ? X86Op::Movss : X86Op::Movsd);
     mi.width = w;
     mi.operand_count = 2;
     mi.inline_ops[0] = MachOperand::virt(instr.result);
-    mi.inline_ops[1] = MachOperand::immediate(instr.global_ref.global_index);
+    mi.inline_ops[1] = MachOperand::lbl(label);
     emit(mi);
 }
 
@@ -471,14 +560,25 @@ void InstructionSelector::selectUnaryNot(const LIRInstr& instr) {
 // ============================================================================
 
 void InstructionSelector::selectAddrOf(const LIRInstr& instr) {
-    // lea dst, [src] — take address of a stack location
+    // addr_of needs the source on the stack.
+    // If the source is a struct_alloc result, its vreg already holds a stack ptr — use it.
+    // Otherwise, allocate a stack slot, store the value, and lea from that slot.
     VReg dst = instr.result;
     VReg src = instr.addr_of.source;
-    emit(makeLea(MachOperand::virt(dst), MachOperand::virt(src)));
+
+    // Allocate an 8-byte stack slot for the source value
+    struct_alloc_bytes_ += 8;
+    static constexpr int32_t CALLEE_SAVED_AREA = NUM_CALLEE_SAVED * 8;
+    int32_t slot = -CALLEE_SAVED_AREA - static_cast<int32_t>(struct_alloc_bytes_);
+
+    // Store value to stack slot
+    emit(makeMov(MachOperand::stack(slot), MachOperand::virt(src), 64));
+    // LEA dst, [rbp + slot]
+    emit(makeLea(MachOperand::virt(dst), MachOperand::stack(slot)));
 }
 
 void InstructionSelector::selectLoad(const LIRInstr& instr) {
-    // mov dst, [ptr]
+    // mov dst, [ptr]  — load from memory at ptr
     uint8_t w = widthOf(instr.type);
     VReg dst = instr.result;
     VReg ptr = instr.load.ptr;
@@ -492,12 +592,17 @@ void InstructionSelector::selectLoad(const LIRInstr& instr) {
         mi.inline_ops[1] = MachOperand::virt(ptr);
         emit(mi);
     } else {
-        emit(makeMov(MachOperand::virt(dst), MachOperand::virt(ptr), w));
+        MachInstr mi(X86Op::MovLoad);
+        mi.width = w;
+        mi.operand_count = 2;
+        mi.inline_ops[0] = MachOperand::virt(dst);
+        mi.inline_ops[1] = MachOperand::virt(ptr);
+        emit(mi);
     }
 }
 
 void InstructionSelector::selectStore(const LIRInstr& instr) {
-    // mov [ptr], value
+    // mov [ptr], value  — store to memory at ptr
     uint8_t w = widthOf(instr.type);
     VReg ptr = instr.store.ptr;
     VReg val = instr.store.value;
@@ -511,7 +616,12 @@ void InstructionSelector::selectStore(const LIRInstr& instr) {
         mi.inline_ops[1] = MachOperand::virt(val);
         emit(mi);
     } else {
-        emit(makeMov(MachOperand::virt(ptr), MachOperand::virt(val), w));
+        MachInstr mi(X86Op::MovStore);
+        mi.width = w;
+        mi.operand_count = 2;
+        mi.inline_ops[0] = MachOperand::virt(ptr);
+        mi.inline_ops[1] = MachOperand::virt(val);
+        emit(mi);
     }
 }
 
@@ -533,20 +643,23 @@ void InstructionSelector::selectFieldPtr(const LIRInstr& instr) {
 }
 
 void InstructionSelector::selectStructAlloc(const LIRInstr& instr) {
-    // sub rsp, size → lea dst, [rsp]
-    // The actual stack allocation will be handled by RegisterAllocator
-    // For now, represent as a pseudo stack alloc
+    // Allocate space in the function's stack frame (tracked via struct_alloc_bytes_).
+    // The RegisterAllocator adds struct_alloc_bytes_ to fn.stack_size so the
+    // prologue/epilogue sub/add rsp accounts for this space.
     VReg dst = instr.result;
     uint32_t size = instr.struct_alloc.size;
 
-    // Allocate stack space: sub rsp, size
-    emit(makeAlu(X86Op::Sub,
-                 MachOperand::precolored(PhysReg::RSP),
-                 MachOperand::immediate(size), 64));
+    // Align size to 8 bytes
+    size = (size + 7u) & ~7u;
+    struct_alloc_bytes_ += size;
 
-    // lea dst, [rsp]  — dst points to allocated space
+    // lea dst, [rbp - callee_saved_area - offset]
+    // Reserve 40 bytes for callee-saved pushes (5 regs × 8 bytes)
+    static constexpr int32_t CALLEE_SAVED_AREA = NUM_CALLEE_SAVED * 8;  // 40
+    int32_t offset = -CALLEE_SAVED_AREA - static_cast<int32_t>(struct_alloc_bytes_);
     emit(makeLea(MachOperand::virt(dst),
-                 MachOperand::precolored(PhysReg::RSP)));
+                 MachOperand::stack(offset)));
+    stack_ptr_vregs_.insert(dst);
 }
 
 // ============================================================================
@@ -581,14 +694,20 @@ void InstructionSelector::selectRet(const LIRInstr& instr) {
     VReg val = instr.ret.value;
 
     if (val != INVALID_VREG) {
-        // mov rax, val (or movsd xmm0, val for float)
-        // Note: the actual type check for float return would need
-        // function return type info, but for simplicity we use GPR
-        emit(makeMov(MachOperand::precolored(PhysReg::RAX),
-                     MachOperand::virt(val), 64));
+        if (float_vregs_.count(val)) {
+            // movsd xmm0, val
+            MachInstr mi(X86Op::Movsd);
+            mi.width = 64;
+            mi.operand_count = 2;
+            mi.inline_ops[0] = MachOperand::precolored(PhysReg::XMM0);
+            mi.inline_ops[1] = MachOperand::virt(val);
+            emit(mi);
+        } else {
+            emit(makeMov(MachOperand::precolored(PhysReg::RAX),
+                         MachOperand::virt(val), 64));
+        }
     }
 
-    // Epilogue will be inserted by RegisterAllocator/Backend
     emit(makeRet());
 }
 
@@ -596,21 +715,56 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
     const auto& call = instr.call;
 
     // Set up arguments via parallel move
-    // For now, generate individual moves (parallel move optimization later)
     uint32_t gpr_idx = 0;
     uint32_t xmm_idx = 0;
 
     for (uint32_t i = 0; i < call.arg_count; ++i) {
-        // TODO: type-aware arg classification (float→xmm, struct→multi-reg)
-        // For now: all args go to GPRs
-        if (gpr_idx < MAX_GPR_ARGS) {
-            emit(makeMov(MachOperand::precolored(GPR_ARG_REGS[gpr_idx]),
-                         MachOperand::virt(call.args[i]), 64));
-            gpr_idx++;
+        VReg arg = call.args[i];
+        if (float_vregs_.count(arg)) {
+            // Float arg → XMM register
+            if (xmm_idx < MAX_XMM_ARGS) {
+                X86Op mov_op = X86Op::Movsd;
+                MachInstr mi(mov_op);
+                mi.width = 64;
+                mi.operand_count = 2;
+                mi.inline_ops[0] = MachOperand::precolored(XMM_ARG_REGS[xmm_idx]);
+                mi.inline_ops[1] = MachOperand::virt(arg);
+                emit(mi);
+                xmm_idx++;
+            }
+        } else if (struct_vregs_.count(arg)) {
+            // Struct arg: vreg holds a pointer to the struct data on stack.
+            // Load fields into consecutive GPR args.
+            uint32_t size = struct_vreg_sizes_[arg];
+            uint32_t num_regs = (size <= 8) ? 1 : 2;
+            for (uint32_t r = 0; r < num_regs && gpr_idx < MAX_GPR_ARGS; ++r) {
+                // Load 8 bytes from [struct_base + r*8]
+                VReg field_ptr = freshVReg();
+                if (r == 0) {
+                    emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
+                } else {
+                    emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
+                    emit(makeAlu(X86Op::Add, MachOperand::virt(field_ptr),
+                                 MachOperand::immediate(r * 8), 64));
+                }
+                // MovLoad: mov gpr, [field_ptr]
+                MachInstr load(X86Op::MovLoad);
+                load.width = 64;
+                load.operand_count = 2;
+                load.inline_ops[0] = MachOperand::precolored(GPR_ARG_REGS[gpr_idx]);
+                load.inline_ops[1] = MachOperand::virt(field_ptr);
+                emit(load);
+                gpr_idx++;
+            }
+        } else {
+            // Integer/pointer arg → GPR
+            if (gpr_idx < MAX_GPR_ARGS) {
+                emit(makeMov(MachOperand::precolored(GPR_ARG_REGS[gpr_idx]),
+                             MachOperand::virt(arg), 64));
+                gpr_idx++;
+            }
         }
-        // else: stack args (not yet handled)
     }
-    (void)xmm_idx;
 
     // Build callee label: _name
     std::string_view callee_label;
@@ -622,8 +776,22 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
         callee_label = ctx_.strings.intern(std::string_view(buf, len));
     }
 
-    if (call.is_tail) {
-        // Tail call: jmp instead of call
+    // Can't tail-call if any arg is a stack pointer (struct_alloc/addr_of)
+    // because the callee would access the caller's (destroyed) stack frame.
+    bool can_tail = call.is_tail;
+    if (can_tail) {
+        for (uint32_t i = 0; i < call.arg_count; ++i) {
+            if (stack_ptr_vregs_.count(call.args[i]) ||
+                struct_vregs_.count(call.args[i])) {
+                can_tail = false;
+                break;
+            }
+        }
+    }
+
+    if (can_tail) {
+        MachInstr frame_destroy(X86Op::Pseudo_FrameDestroy);
+        emit(frame_destroy);
         emit(makeJmp(MachOperand::lbl(callee_label)));
     } else {
         emit(makeCall(MachOperand::lbl(callee_label)));
@@ -631,16 +799,69 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
 
     // Move return value
     if (instr.result != INVALID_VREG) {
-        emit(makeMov(MachOperand::virt(instr.result),
-                     MachOperand::precolored(PhysReg::RAX), 64));
+        if (float_vregs_.count(instr.result)) {
+            MachInstr mi(X86Op::Movsd);
+            mi.width = 64;
+            mi.operand_count = 2;
+            mi.inline_ops[0] = MachOperand::virt(instr.result);
+            mi.inline_ops[1] = MachOperand::precolored(PhysReg::XMM0);
+            emit(mi);
+        } else {
+            emit(makeMov(MachOperand::virt(instr.result),
+                         MachOperand::precolored(PhysReg::RAX), 64));
+        }
     }
 }
 
 void InstructionSelector::selectBlockArg(const LIRInstr& instr) {
-    // Block arguments are like phi nodes — they should have been
-    // handled by the LIR→MachIR lowering via explicit moves.
-    // For now, BlockArg is a no-op placeholder.
-    (void)instr;
+    // In the entry block (block 0), block args are function parameters
+    // arriving via ABI registers. Use gpr_arg_slot_ to track cumulative
+    // GPR slot usage (multi-register params like 16B structs consume 2 slots).
+    if (current_block_ == 0) {
+        bool is_float_param = isFloat(instr.type);
+        bool is_struct = isStructType(instr.type);
+
+        if (is_struct) {
+            uint32_t size = sizeOfType(instr.type);
+            uint32_t num_regs = (size <= 8) ? 1 : 2;
+
+            struct_alloc_bytes_ += (size + 7u) & ~7u;
+            static constexpr int32_t CS_AREA = NUM_CALLEE_SAVED * 8;
+            int32_t base_offset = -CS_AREA - static_cast<int32_t>(struct_alloc_bytes_);
+
+            for (uint32_t r = 0; r < num_regs && gpr_arg_slot_ < MAX_GPR_ARGS; ++r) {
+                emit(makeMov(MachOperand::stack(base_offset + r * 8),
+                             MachOperand::precolored(GPR_ARG_REGS[gpr_arg_slot_]), 64));
+                gpr_arg_slot_++;
+            }
+
+            emit(makeLea(MachOperand::virt(instr.result),
+                         MachOperand::stack(base_offset)));
+        } else if (is_float_param) {
+            // Float params use separate XMM counter (not tracked in gpr_arg_slot_)
+            // For now, use block_arg.index for XMM since we don't have mixed tracking
+            uint32_t xmm_idx = instr.block_arg.index;  // TODO: separate XMM counter
+            if (xmm_idx < MAX_XMM_ARGS) {
+                uint8_t w = widthOf(instr.type);
+                X86Op mov_op = (w == 32) ? X86Op::Movss : X86Op::Movsd;
+                MachInstr mi(mov_op);
+                mi.width = w;
+                mi.operand_count = 2;
+                mi.inline_ops[0] = MachOperand::virt(instr.result);
+                mi.inline_ops[1] = MachOperand::precolored(XMM_ARG_REGS[xmm_idx]);
+                emit(mi);
+            }
+        } else {
+            if (gpr_arg_slot_ < MAX_GPR_ARGS) {
+                uint8_t w = widthOf(instr.type);
+                emit(makeMov(MachOperand::virt(instr.result),
+                             MachOperand::precolored(GPR_ARG_REGS[gpr_arg_slot_]), w));
+                gpr_arg_slot_++;
+            }
+        }
+        return;
+    }
+    // Non-entry block args are handled by predecessor branch moves (no-op here).
 }
 
 } // namespace kern

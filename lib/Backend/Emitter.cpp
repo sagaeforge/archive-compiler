@@ -74,6 +74,35 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             break;
         }
 
+        case X86Op::MovLoad:
+            // mov dst, [src]  — load from memory
+            out_ << "mov ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            if (instr.src1().isStack()) {
+                emitOperand(instr.src1(), instr.width);
+            } else {
+                out_ << sizePrefix(instr.width) << " [";
+                emitOperand(instr.src1(), 64);
+                out_ << "]";
+            }
+            break;
+
+        case X86Op::MovStore:
+            // mov [dst], src  — store to memory
+            out_ << "mov ";
+            if (instr.dst().isStack()) {
+                out_ << sizePrefix(instr.width) << " ";
+                emitOperand(instr.dst(), instr.width);
+            } else {
+                out_ << sizePrefix(instr.width) << " [";
+                emitOperand(instr.dst(), 64);
+                out_ << "]";
+            }
+            out_ << ", ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
         case X86Op::MovZX:
             out_ << "movzx ";
             emitOperand(instr.dst(), 64);
@@ -94,10 +123,15 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             out_ << "lea ";
             emitOperand(instr.dst(), 64);
             out_ << ", ";
-            if (instr.src1().isPhysical()) {
+            if (instr.src1().isLabel()) {
+                out_ << "[rel " << instr.src1().label << "]";
+            } else if (instr.src1().isPhysical()) {
                 out_ << "[";
                 emitOperand(instr.src1(), 64);
                 out_ << "]";
+            } else if (instr.src1().isStack()) {
+                // Stack operand already formatted as [rbp+N]
+                emitOperand(instr.src1(), 64);
             } else {
                 emitOperand(instr.src1(), 64);
             }
@@ -181,6 +215,22 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
         // SSE
         case X86Op::Movss:
         case X86Op::Movsd:
+            out_ << x86OpName(instr.op) << " ";
+            if (instr.dst().isStack()) {
+                out_ << sizePrefix(instr.width) << " ";
+            }
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            if (instr.src1().isLabel()) {
+                // Global data reference: movsd xmm0, [rel _float_0]
+                out_ << "[rel " << instr.src1().label << "]";
+            } else if (instr.src1().isStack()) {
+                emitOperand(instr.src1(), instr.width);
+            } else {
+                emitOperand(instr.src1(), instr.width);
+            }
+            break;
+
         case X86Op::Addss:
         case X86Op::Addsd:
         case X86Op::Subss:
@@ -223,8 +273,11 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             return;  // don't add newline
 
         case X86Op::Pseudo_FrameSetup:
+            return;  // handled by prologue
+
         case X86Op::Pseudo_FrameDestroy:
-            return;  // handled by prologue/epilogue
+            // Emit epilogue without ret (used for tail calls)
+            return;  // handled in emitFunction loop
 
         case X86Op::Nop:
             out_ << "nop";
@@ -295,6 +348,20 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
             // Replace ret with epilogue
             if (instr.op == X86Op::Ret) {
                 emitEpilogue(fn);
+                continue;
+            }
+
+            // Emit frame teardown for tail calls (epilogue without ret)
+            if (instr.op == X86Op::Pseudo_FrameDestroy) {
+                if (fn.stack_size > 0) {
+                    out_ << "    add rsp, " << fn.stack_size << "\n";
+                }
+                for (int j = NUM_CALLEE_SAVED - 1; j >= 0; --j) {
+                    if (fn.callee_saved_used[j]) {
+                        out_ << "    pop " << physRegName(CALLEE_SAVED_GPRS[j]) << "\n";
+                    }
+                }
+                out_ << "    pop rbp\n";
                 continue;
             }
 

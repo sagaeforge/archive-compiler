@@ -44,7 +44,8 @@ public:
     std::vector<LiveInterval> computeIntervals(const MachFunction& fn);
 
     // Phase 2: linear scan allocation
-    RegAllocation allocate(std::vector<LiveInterval>& intervals);
+    RegAllocation allocate(std::vector<LiveInterval>& intervals,
+                          uint32_t struct_alloc_bytes = 0);
 
     // Phase 3: rewrite function to use physical registers + insert prologue/epilogue
     void rewrite(MachFunction& fn, const RegAllocation& alloc);

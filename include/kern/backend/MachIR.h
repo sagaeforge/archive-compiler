@@ -47,6 +47,14 @@ static constexpr PhysReg CALLEE_SAVED_GPRS[] = {
 };
 static constexpr uint32_t NUM_CALLEE_SAVED = 5;
 
+// Caller-saved GPRs (clobbered by calls)
+static constexpr PhysReg CALLER_SAVED_GPRS[] = {
+    PhysReg::RAX, PhysReg::RCX, PhysReg::RDX,
+    PhysReg::RSI, PhysReg::RDI,
+    PhysReg::R8, PhysReg::R9, PhysReg::R10, PhysReg::R11,
+};
+static constexpr uint32_t NUM_CALLER_SAVED = 9;
+
 // Allocatable GPRs (caller-saved, excluding RAX which is scratch/return)
 static constexpr PhysReg ALLOCATABLE_GPRS[] = {
     PhysReg::RAX, PhysReg::RCX, PhysReg::RDX, PhysReg::RSI, PhysReg::RDI,
@@ -145,6 +153,8 @@ struct MachOperand {
 enum class X86Op : uint8_t {
     // Data movement
     Mov, MovZX, MovSX,
+    MovLoad,  // mov dst, [src]  — load from memory at register address
+    MovStore, // mov [dst], src  — store to memory at register address
     Lea,
     Push, Pop,
 
@@ -257,6 +267,7 @@ struct MachFunction {
     MachBlock* blocks;
     uint32_t block_count;
     uint32_t stack_size = 0;
+    uint32_t struct_alloc_bytes = 0; // extra stack for struct_alloc
     uint32_t next_vreg = 0;         // for vreg tracking
     bool callee_saved_used[NUM_CALLEE_SAVED] = {};
     bool is_intrinsic = false;

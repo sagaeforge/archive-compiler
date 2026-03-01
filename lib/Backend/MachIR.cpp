@@ -71,9 +71,11 @@ bool isXMM(PhysReg reg) {
 
 const char* x86OpName(X86Op op) {
     switch (op) {
-        case X86Op::Mov:    return "mov";
-        case X86Op::MovZX:  return "movzx";
-        case X86Op::MovSX:  return "movsx";
+        case X86Op::Mov:      return "mov";
+        case X86Op::MovLoad:  return "mov_load";
+        case X86Op::MovStore: return "mov_store";
+        case X86Op::MovZX:    return "movzx";
+        case X86Op::MovSX:    return "movsx";
         case X86Op::Lea:    return "lea";
         case X86Op::Push:   return "push";
         case X86Op::Pop:    return "pop";

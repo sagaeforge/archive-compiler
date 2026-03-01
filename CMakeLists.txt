@@ -24,6 +24,7 @@ add_subdirectory(lib/LIR)
 add_subdirectory(lib/Backend)
 add_subdirectory(lib/Debug)
 add_subdirectory(lib/IDE)
+add_subdirectory(lib/Pipeline)
 
 # Compiler driver
 add_subdirectory(tools/kernc)

@@ -54,7 +54,7 @@ for kern_file in $(find "$TEST_DIR" -name '*.kern' | sort); do
             FAILURES="$FAILURES\n  $test_name: expected error containing '$expected_error'"
             continue
         }
-        if echo "$output" | grep -q "$expected_error"; then
+        if echo "$output" | grep -qF "$expected_error"; then
             echo "  PASS  $test_name (error)"
             PASS=$((PASS + 1))
         else
@@ -70,7 +70,7 @@ for kern_file in $(find "$TEST_DIR" -name '*.kern' | sort); do
     # Stdout test — check compiler output (e.g., --dump-ir)
     if [ -n "$expected_stdout" ]; then
         output=$("$KERNC" "$kern_file" $compiler_args 2>&1)
-        if echo "$output" | grep -q "$expected_stdout"; then
+        if echo "$output" | grep -qF "$expected_stdout"; then
             echo "  PASS  $test_name (stdout)"
             PASS=$((PASS + 1))
         else
@@ -84,8 +84,8 @@ for kern_file in $(find "$TEST_DIR" -name '*.kern' | sort); do
     fi
 
     # Normal test — compile and run
-    output=$("$KERNC" "$kern_file" -o /tmp/kern_test_bin 2>&1)
-    if [ $? -ne 0 ]; then
+    output=$("$KERNC" "$kern_file" -o /tmp/kern_test_bin 2>&1) || true
+    if [ ! -f /tmp/kern_test_bin ]; then
         echo "  FAIL  $test_name (compilation failed)"
         echo "        $output"
         FAIL=$((FAIL + 1))

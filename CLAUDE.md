@@ -13,8 +13,14 @@ bash tests/integration/run_tests.sh build/tools/kernc/kernc tests/integration
 
 ## Pipeline
 
+v1 (legacy, still used for final binary emission):
 ```
 Lexer → Parser → TypeChecker → PurityChecker → IRBuilder → CodeGen → NASM → ld
+```
+
+v2 (4-level IR, dump flags operational):
+```
+Source → Lexer → Parser → AST → HIRBuilder → HIR → LIRBuilder → LIR → Backend → MachIR → NASM → ld
 ```
 
 Each stage: `include/kern/<stage>/` headers, `lib/<Stage>/` implementation.
@@ -22,11 +28,13 @@ Each stage: `include/kern/<stage>/` headers, `lib/<Stage>/` implementation.
 ## Directory Structure
 
 ```
-include/kern/{lexer,parser,sema,ir,codegen,support}/  — headers
-lib/{Lexer,Parser,Sema,IR,CodeGen,Support}/           — implementations
-tools/kernc/main.cpp                                   — compiler driver
-tests/unit/                                            — GoogleTest unit tests
-tests/integration/                                     — .kern + .expected E2E tests
+include/kern/{lexer,parser,sema,ir,codegen,support}/  — v1 headers
+include/kern/{hir,lir,backend}/                        — v2 headers
+lib/{Lexer,Parser,Sema,IR,CodeGen,Support}/            — v1 implementations
+lib/{HIR,LIR,Backend}/                                 — v2 implementations
+tools/kernc/main.cpp                                    — compiler driver
+tests/unit/                                             — GoogleTest unit tests
+tests/integration/                                      — .kern + .expected E2E tests
 ```
 
 ## Agent Scope
@@ -44,4 +52,5 @@ feat|fix|test|refactor: <description>
 ## Rules
 
 Coding conventions: @.claude/rules/cpp-style.md
-Architecture invariants: @.claude/rules/architecture.md
+Architecture invariants: @.claude/rules/architecture-v2.md
+Layer boundaries: @.claude/rules/layer-boundaries.md

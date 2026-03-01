@@ -17,7 +17,13 @@ void LIRBuilder::emit(LIRInstr instr) {
 
 uint32_t LIRBuilder::newBlock(std::string_view label) {
     uint32_t idx = static_cast<uint32_t>(blocks_.size());
-    blocks_.push_back(BlockBuild{label, {}, {}});
+    // Make labels unique and NASM-local (dot prefix) by appending counter
+    char buf[128];
+    int len = snprintf(buf, sizeof(buf), ".%.*s_%u",
+                       static_cast<int>(label.size()), label.data(),
+                       label_counter_++);
+    auto interned = ctx_.strings.intern(std::string_view(buf, len));
+    blocks_.push_back(BlockBuild{interned, {}, {}});
     return idx;
 }
 
@@ -983,6 +989,18 @@ VReg LIRBuilder::lowerUnionVariant(const HIRUnionVariantExpr* expr) {
 }
 
 VReg LIRBuilder::lowerAddrOf(const HIRAddrOfExpr* expr) {
+    // For &x / &var x where x is a var binding, return the var's stack address
+    // directly instead of loading the value and taking address of the copy.
+    if (expr->operand->kind == HIRExpr::Kind::Ident) {
+        auto* ident = static_cast<const HIRIdentExpr*>(expr->operand);
+        auto var_it = var_addrs_.find(ident->name);
+        if (var_it != var_addrs_.end()) {
+            // The var_addr IS the pointer to the stack slot — just return it
+            return var_it->second;
+        }
+    }
+
+    // For non-variable expressions, lower normally and wrap in addr_of
     VReg operand = lowerExpr(expr->operand);
     VReg r = freshVReg();
     LIRInstr i{};
@@ -1097,7 +1115,14 @@ void LIRBuilder::lowerStmt(const HIRStmt* stmt) {
         }
         case HIRStmt::Kind::DerefAssign: {
             auto* s = static_cast<const HIRDerefAssignStmt*>(stmt);
-            VReg ptr = lowerExpr(s->target);
+            // Unwrap deref to get the pointer address (not the loaded value)
+            VReg ptr;
+            if (s->target->kind == HIRExpr::Kind::Deref) {
+                auto* deref = static_cast<const HIRDerefExpr*>(s->target);
+                ptr = lowerExpr(deref->operand);
+            } else {
+                ptr = lowerExpr(s->target);
+            }
             VReg val = lowerExpr(s->value);
             LIRInstr store{};
             store.op = LIROp::Store;

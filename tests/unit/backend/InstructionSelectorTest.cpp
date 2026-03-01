@@ -214,8 +214,7 @@ TEST_F(InstructionSelectorTest, VarBinding) {
         "}");
     ASSERT_NE(mod, nullptr);
     auto& fn = mod->functions[0];
-    // Should have struct_alloc → sub rsp
-    EXPECT_TRUE(hasOp(fn, X86Op::Sub));
+    // Should have struct_alloc → lea (stack slot)
     EXPECT_TRUE(hasOp(fn, X86Op::Lea));
 }
 
@@ -285,15 +284,16 @@ TEST_F(InstructionSelectorTest, DivUsesRAX) {
     EXPECT_TRUE(found_rax);
 }
 
-TEST_F(InstructionSelectorTest, StructAllocEmitsSub) {
+TEST_F(InstructionSelectorTest, StructAllocEmitsLea) {
     auto* mod = selectAll(
         "fn f() -> i64 {\n"
         "  var x: i64 = 10\n"
         "  x\n"
         "}");
     auto& fn = mod->functions[0];
-    // StructAlloc → sub rsp, N
-    EXPECT_TRUE(hasOp(fn, X86Op::Sub));
+    // StructAlloc → lea (stack slot, no inline sub rsp)
+    EXPECT_TRUE(hasOp(fn, X86Op::Lea));
+    EXPECT_GT(fn.struct_alloc_bytes, 0u);
 }
 
 TEST_F(InstructionSelectorTest, MatchExpr) {

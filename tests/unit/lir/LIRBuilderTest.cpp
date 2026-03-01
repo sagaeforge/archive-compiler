@@ -449,7 +449,7 @@ TEST_F(LIRBuilderTest, FullDump) {
     ASSERT_NE(mod, nullptr);
     auto s = dumpModule(mod);
     EXPECT_TRUE(s.find("fn @main") != std::string::npos) << s;
-    EXPECT_TRUE(s.find("entry:") != std::string::npos) << s;
+    EXPECT_TRUE(s.find(".entry_0") != std::string::npos) << s;
 }
 
 } // namespace kern

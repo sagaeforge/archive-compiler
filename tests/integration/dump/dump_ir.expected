@@ -1,2 +1,2 @@
-args:--dump-ir
-stdout:fn main
+args:--dump-lir
+stdout:fn @main

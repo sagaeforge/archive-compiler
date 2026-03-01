@@ -2,6 +2,8 @@
 #include "kern/backend/MachIR.h"
 #include "kern/lir/LIR.h"
 #include "kern/support/CompilationContext.h"
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace kern {
@@ -12,6 +14,14 @@ class InstructionSelector {
     // Per-function state
     std::vector<std::vector<MachInstr>> block_instrs_;  // instrs per block
     uint32_t next_vreg_ = 0;
+    uint32_t struct_alloc_bytes_ = 0;  // total stack bytes for struct_alloc
+    std::unordered_set<VReg> float_vregs_;  // vregs that hold float values
+    std::unordered_set<VReg> struct_vregs_; // vregs that hold struct base pointers
+    std::unordered_map<VReg, uint32_t> struct_vreg_sizes_; // struct vreg → byte size
+    std::unordered_set<VReg> stack_ptr_vregs_; // vregs that are stack pointers (from struct_alloc/addr_of)
+    const GlobalData* globals_ = nullptr;   // module globals for label lookup
+    uint32_t global_count_ = 0;
+    uint32_t gpr_arg_slot_ = 0;  // current GPR arg slot (for multi-reg params)
 
     // VReg mapping: LIR VReg → MachIR VReg (1:1 for most, but some ops create new vregs)
     // We keep the same VReg numbering from LIR
@@ -33,6 +43,12 @@ private:
 
     // Width in bits from TypeId
     uint8_t widthOf(TypeId type) const;
+
+    // Size in bytes for struct/union types
+    uint32_t sizeOfType(TypeId type) const;
+
+    // Is this type a struct (or union) that requires multi-register passing?
+    bool isStructType(TypeId type) const;
 
     // Is this type a float?
     bool isFloat(TypeId type) const;
