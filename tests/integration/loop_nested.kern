@@ -1,0 +1,19 @@
+fn matrix_sum(rows: i64, cols: i64) -> i64 {
+    loop(r = 0, total = 0) {
+        if r >= rows {
+            break total
+        }
+        val row_sum: i64 = loop(c = 0, rsum = 0) {
+            if c >= cols {
+                break rsum
+            }
+            continue(c + 1, rsum + r * cols + c)
+        }
+        continue(r + 1, total + row_sum)
+    }
+}
+
+fn main() -> i64 {
+    val s: i64 = matrix_sum(3, 3)
+    if s == 36 { 42 } else { s }
+}
