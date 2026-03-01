@@ -458,6 +458,65 @@ TEST_F(HIRBuilderTest, ErrorPtrWriteReadOnly) {
 }
 
 // ============================================================================
+// Lambda and closure tests
+// ============================================================================
+
+TEST_F(HIRBuilderTest, LambdaBasic) {
+    auto* hir = buildHIR(
+        "fn apply(f: fn(i64) -> i64, x: i64) -> i64 { f(x) }\n"
+        "fn main() -> i64 {\n"
+        "    val double: fn(i64) -> i64 = { x: i64 => x * 2 }\n"
+        "    apply(double, 21)\n"
+        "}");
+    ASSERT_NE(hir, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+    // Lambda should be lifted to a top-level function
+    auto s = dumpToString(hir);
+    EXPECT_NE(s.find("__lambda_"), std::string::npos);
+}
+
+TEST_F(HIRBuilderTest, ClosureCaptureBasic) {
+    auto* hir = buildHIR(
+        "fn apply(f: fn(i64) -> i64, x: i64) -> i64 { f(x) }\n"
+        "fn main() -> i64 {\n"
+        "    val a: i64 = 10\n"
+        "    val f: fn(i64) -> i64 = { x: i64 => x + a }\n"
+        "    f(32)\n"
+        "}");
+    ASSERT_NE(hir, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+    auto s = dumpToString(hir);
+    // Lifted lambda should exist
+    EXPECT_NE(s.find("__lambda_"), std::string::npos);
+}
+
+TEST_F(HIRBuilderTest, ClosureCaptureMultiple) {
+    auto* hir = buildHIR(
+        "fn main() -> i64 {\n"
+        "    val a: i64 = 10\n"
+        "    val b: i64 = 20\n"
+        "    val c: i64 = 12\n"
+        "    val f: fn(i64) -> i64 = { x: i64 => x + a + b + c }\n"
+        "    f(0)\n"
+        "}");
+    ASSERT_NE(hir, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+}
+
+TEST_F(HIRBuilderTest, LambdaNoCapture) {
+    auto* hir = buildHIR(
+        "fn main() -> i64 {\n"
+        "    val f: fn(i64) -> i64 = { x: i64 => x * 2 }\n"
+        "    f(21)\n"
+        "}");
+    ASSERT_NE(hir, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+    // The lifted function should have exactly 1 param (no captures)
+    auto s = dumpToString(hir);
+    EXPECT_NE(s.find("__lambda_"), std::string::npos);
+}
+
+// ============================================================================
 // Dump integration test
 // ============================================================================
 

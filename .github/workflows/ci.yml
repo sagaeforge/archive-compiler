@@ -28,6 +28,12 @@ jobs:
     - name: Run Integration Tests
       run: bash tests/integration/run_tests.sh build/tools/kernc/kernc tests/integration
 
+    - name: Run Tool Tests (kern-fmt)
+      run: bash tests/tool/fmt/run_tests.sh build/tools/kern-fmt/kern-fmt
+
+    - name: Run Tool Tests (kern-lsp)
+      run: bash tests/tool/lsp/run_tests.sh build/tools/kern-lsp/kern-lsp
+
   coverage:
     runs-on: macos-13
     needs: build-and-test
