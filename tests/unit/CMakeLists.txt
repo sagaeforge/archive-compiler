@@ -16,8 +16,10 @@ add_executable(kern_tests
     backend/InstructionSelectorTest.cpp
     backend/RegisterAllocatorTest.cpp
     backend/EmitterTest.cpp
+    debug/DebugInfoTest.cpp
 )
 target_link_libraries(kern_tests
+    kern_debug
     kern_backend
     kern_lir
     kern_hir
