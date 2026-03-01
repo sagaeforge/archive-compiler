@@ -548,4 +548,114 @@ TEST_F(HIRBuilderTest, DumpModuleWithStruct) {
     EXPECT_TRUE(s.find("field_access .x") != std::string::npos);
 }
 
+// ============================================================================
+// Closure HOF return tests
+// ============================================================================
+
+TEST_F(HIRBuilderTest, ClosureHOFReturn) {
+    auto* hir = buildHIR(
+        "fn make_adder(n: i64) -> fn(i64) -> i64 {\n"
+        "    { x: i64 => x + n }\n"
+        "}\n"
+        "fn main() -> i64 {\n"
+        "    val add_10: fn(i64) -> i64 = make_adder(10)\n"
+        "    add_10(32)\n"
+        "}");
+    ASSERT_NE(hir, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+    auto s = dumpToString(hir);
+    // Should have a lifted lambda
+    EXPECT_NE(s.find("__lambda_"), std::string::npos);
+    // make_adder should return something (closure struct)
+    EXPECT_NE(s.find("make_adder"), std::string::npos);
+}
+
+TEST_F(HIRBuilderTest, ClosureHOFMultiCapture) {
+    auto* hir = buildHIR(
+        "fn make_fn(a: i64, b: i64) -> fn(i64) -> i64 {\n"
+        "    { x: i64 => x + a + b }\n"
+        "}\n"
+        "fn main() -> i64 {\n"
+        "    val f: fn(i64) -> i64 = make_fn(10, 20)\n"
+        "    f(12)\n"
+        "}");
+    ASSERT_NE(hir, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+}
+
+// ============================================================================
+// Try operator tests
+// ============================================================================
+
+TEST_F(HIRBuilderTest, TryOperatorBasic) {
+    auto* hir = buildHIR(
+        "union Result<T, E> { Ok(T), Err(E) }\n"
+        "fn safe_div(a: i64, b: i64) -> Result<i64, i64> {\n"
+        "    if b == 0 { Result<i64, i64>::Err(0) }\n"
+        "    else { Result<i64, i64>::Ok(a / b) }\n"
+        "}\n"
+        "fn compute(x: i64) -> Result<i64, i64> {\n"
+        "    val a: i64 = safe_div(x, 2)?\n"
+        "    Result<i64, i64>::Ok(a)\n"
+        "}\n"
+        "fn main() -> i64 {\n"
+        "    match compute(84) { Ok(v) => v, Err(_) => 0 }\n"
+        "}");
+    ASSERT_NE(hir, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+    auto s = dumpToString(hir);
+    // The ? operator desugars to a match expression with Ok/Err arms
+    EXPECT_NE(s.find("match"), std::string::npos);
+}
+
+TEST_F(HIRBuilderTest, TryOperatorChained) {
+    auto* hir = buildHIR(
+        "union Result<T, E> { Ok(T), Err(E) }\n"
+        "fn step1(x: i64) -> Result<i64, i64> { Result<i64, i64>::Ok(x + 1) }\n"
+        "fn step2(x: i64) -> Result<i64, i64> { Result<i64, i64>::Ok(x * 2) }\n"
+        "fn pipeline(x: i64) -> Result<i64, i64> {\n"
+        "    val a: i64 = step1(x)?\n"
+        "    val b: i64 = step2(a)?\n"
+        "    Result<i64, i64>::Ok(b)\n"
+        "}\n"
+        "fn main() -> i64 {\n"
+        "    match pipeline(5) { Ok(v) => v, Err(_) => 0 }\n"
+        "}");
+    ASSERT_NE(hir, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+}
+
+TEST_F(HIRBuilderTest, TryOperatorNonUnionError) {
+    (void)buildHIR(
+        "fn bad() -> i64 {\n"
+        "    val x: i64 = 42\n"
+        "    x?\n"
+        "}\n"
+        "fn main() -> i64 { bad() }");
+    EXPECT_TRUE(ctx.diag.hasErrors());
+}
+
+TEST_F(HIRBuilderTest, TryOperatorNonResultUnionError) {
+    (void)buildHIR(
+        "union Shape { Circle(i64), Square(i64) }\n"
+        "fn bad() -> i64 {\n"
+        "    val s: Shape = Shape::Circle(5)\n"
+        "    s?\n"
+        "}\n"
+        "fn main() -> i64 { bad() }");
+    EXPECT_TRUE(ctx.diag.hasErrors());
+}
+
+TEST_F(HIRBuilderTest, TryOperatorReturnTypeMismatch) {
+    (void)buildHIR(
+        "union Result<T, E> { Ok(T), Err(E) }\n"
+        "fn step() -> Result<i64, i64> { Result<i64, i64>::Ok(42) }\n"
+        "fn bad() -> i64 {\n"
+        "    step()?\n"
+        "}\n"
+        "fn main() -> i64 { bad() }");
+    // Function returns i64 (not a Result union), so ? should error
+    EXPECT_TRUE(ctx.diag.hasErrors());
+}
+
 } // namespace kern
