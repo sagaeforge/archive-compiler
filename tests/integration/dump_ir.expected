@@ -1,0 +1,2 @@
+args:--dump-ir
+stdout:fn main

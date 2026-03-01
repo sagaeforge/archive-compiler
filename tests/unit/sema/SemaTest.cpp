@@ -81,7 +81,7 @@ TEST(SemaTest, WrongArgCount) {
 TEST(SemaTest, ArithmeticOnBool) {
     std::string errors;
     EXPECT_FALSE(checkSource("fn main() -> i64 { true + false }", &errors));
-    EXPECT_NE(errors.find("integer"), std::string::npos);
+    EXPECT_NE(errors.find("numeric"), std::string::npos);
 }
 
 // ===== New TDD tests =====
@@ -385,16 +385,14 @@ TEST(SemaTest, UnsignedNegationError) {
     EXPECT_NE(errors.find("signed"), std::string::npos);
 }
 
-// --- Error: i64 literal assigned to i32 val ---
-TEST(SemaTest, LiteralToI32ValError) {
-    std::string errors;
-    EXPECT_FALSE(checkSource(
+// --- Valid: integer literal coerces to i32 ---
+TEST(SemaTest, LiteralToI32ValOk) {
+    EXPECT_TRUE(checkSource(
         "fn main() -> i64 {\n"
         "    val x: i32 = 42\n"
         "    0\n"
-        "}", &errors
+        "}"
     ));
-    EXPECT_NE(errors.find("mismatch"), std::string::npos);
 }
 
 // --- Error: unknown type name ---
@@ -407,7 +405,7 @@ TEST(SemaTest, UnknownTypeName) {
     EXPECT_NE(errors.find("unknown type"), std::string::npos);
 }
 
-// --- Error: float type unknown ---
+// --- Error: 'float' is not a valid type (use f32/f64) ---
 TEST(SemaTest, FloatTypeUnknown) {
     std::string errors;
     EXPECT_FALSE(checkSource(
@@ -415,6 +413,74 @@ TEST(SemaTest, FloatTypeUnknown) {
         &errors
     ));
     EXPECT_NE(errors.find("unknown type"), std::string::npos);
+}
+
+// ===== M3.2: Float type system =====
+
+// --- f64 return ---
+TEST(SemaTest, F64Return) {
+    EXPECT_TRUE(checkSource("fn main() -> f64 { 3.14 }"));
+}
+
+// --- f32 return ---
+TEST(SemaTest, F32Return) {
+    EXPECT_TRUE(checkSource("fn main() -> f32 { 3.14f }"));
+}
+
+// --- f64 arithmetic ---
+TEST(SemaTest, F64Arith) {
+    EXPECT_TRUE(checkSource(
+        "fn add_f64(a: f64, b: f64) -> f64 { a + b }"
+    ));
+}
+
+// --- float negation ---
+TEST(SemaTest, FloatNeg) {
+    EXPECT_TRUE(checkSource("fn main() -> f64 { -3.14 }"));
+}
+
+// --- float comparison returns bool ---
+TEST(SemaTest, FloatCmp) {
+    EXPECT_TRUE(checkSource(
+        "fn cmp(a: f64, b: f64) -> bool { a < b }"
+    ));
+}
+
+// --- float + int mix error ---
+TEST(SemaTest, FloatIntMixError) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn f(a: f64, b: i64) -> f64 { a + b }",
+        &errors
+    ));
+    EXPECT_NE(errors.find("arithmetic"), std::string::npos);
+}
+
+// --- f32 + f64 mix error ---
+TEST(SemaTest, F32F64MixError) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn f(a: f32, b: f64) -> f64 { a + b }",
+        &errors
+    ));
+    EXPECT_NE(errors.find("arithmetic"), std::string::npos);
+}
+
+// --- f64 val binding ---
+TEST(SemaTest, F64ValBinding) {
+    EXPECT_TRUE(checkSource(
+        "fn main() -> f64 {\n"
+        "    val x: f64 = 3.14\n"
+        "    x\n"
+        "}"
+    ));
+}
+
+// --- f64 literal context: 3.14 adopts f32 with ctx ---
+TEST(SemaTest, FloatLiteralContextF32) {
+    EXPECT_TRUE(checkSource(
+        "fn main() -> f32 { 3.14 }"
+    ));
 }
 
 // --- Signed negation on i32 ---
@@ -441,20 +507,168 @@ TEST(SemaTest, I32ComparisonReturnsBool) {
     ));
 }
 
-// --- Cross-type function call error ---
-TEST(SemaTest, CrossTypeCallError) {
-    std::string errors;
-    EXPECT_FALSE(checkSource(
+// --- Cross-type function call: literal coerces to param type ---
+TEST(SemaTest, CrossTypeCallLiteralCoerce) {
+    EXPECT_TRUE(checkSource(
         "fn take_i32(x: i32) -> i32 { x }\n"
-        "fn main() -> i64 { take_i32(42) }",
-        &errors
+        "fn main() -> i32 { take_i32(42) }"
     ));
-    EXPECT_NE(errors.find("mismatch"), std::string::npos);
 }
 
 // --- Chained i32 arithmetic ---
 TEST(SemaTest, ChainedI32Arithmetic) {
     EXPECT_TRUE(checkSource(
         "fn calc(a: i32, b: i32, c: i32) -> i32 { a + b * c - a }"
+    ));
+}
+
+// --- >6 parameters error ---
+TEST(SemaTest, TooManyParams) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn many(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64) -> i64 { a }",
+        &errors
+    ));
+    EXPECT_NE(errors.find("maximum is 6"), std::string::npos);
+}
+
+// --- 6 parameters OK ---
+TEST(SemaTest, SixParamsOk) {
+    EXPECT_TRUE(checkSource(
+        "fn six(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64) -> i64 { a + b + c + d + e + f }"
+    ));
+}
+
+// --- var reassignment valid ---
+TEST(SemaTest, VarReassignValid) {
+    EXPECT_TRUE(checkSource(
+        "fn main() -> i64 {\n"
+        "    var x: i64 = 10\n"
+        "    x = 20\n"
+        "    x\n"
+        "}"
+    ));
+}
+
+// --- val reassignment error ---
+TEST(SemaTest, ValReassignError) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 {\n"
+        "    val x: i64 = 10\n"
+        "    x = 20\n"
+        "    x\n"
+        "}", &errors
+    ));
+    EXPECT_NE(errors.find("immutable"), std::string::npos);
+}
+
+// --- var reassignment type mismatch ---
+TEST(SemaTest, VarReassignTypeMismatch) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 {\n"
+        "    var x: i64 = 10\n"
+        "    x = true\n"
+        "    x\n"
+        "}", &errors
+    ));
+    EXPECT_NE(errors.find("assignment type mismatch"), std::string::npos);
+}
+
+// --- reassignment to undeclared variable ---
+TEST(SemaTest, ReassignUndeclaredError) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 {\n"
+        "    x = 20\n"
+        "    0\n"
+        "}", &errors
+    ));
+    EXPECT_NE(errors.find("undeclared"), std::string::npos);
+}
+
+// ===== M3.1: Context-based integer literal inference =====
+
+// --- i8 literal out of range ---
+TEST(SemaTest, IntLiteralOutOfRangeI8) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 {\n"
+        "    val x: i8 = 300\n"
+        "    0\n"
+        "}", &errors
+    ));
+    EXPECT_NE(errors.find("out of range"), std::string::npos);
+}
+
+// --- u8 literal out of range ---
+TEST(SemaTest, IntLiteralU8OutOfRange) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 {\n"
+        "    val x: u8 = 256\n"
+        "    0\n"
+        "}", &errors
+    ));
+    EXPECT_NE(errors.find("out of range"), std::string::npos);
+}
+
+// --- fn returning i32 literal ---
+TEST(SemaTest, FnReturnI32Literal) {
+    EXPECT_TRUE(checkSource(
+        "fn get() -> i32 { 42 }"
+    ));
+}
+
+// --- call arg: i32 literal ---
+TEST(SemaTest, IntLiteralToI32Param) {
+    EXPECT_TRUE(checkSource(
+        "fn f(x: i32) -> i32 { x }\n"
+        "fn main() -> i32 { f(10) }"
+    ));
+}
+
+// --- BinOp propagates context: val x: i32 = 3 + 4 ---
+TEST(SemaTest, BinOpContextPropagation) {
+    EXPECT_TRUE(checkSource(
+        "fn main() -> i64 {\n"
+        "    val x: i32 = 3 + 4\n"
+        "    0\n"
+        "}"
+    ));
+}
+
+// --- Negative literal coerces to i8 ---
+TEST(SemaTest, NegativeLiteralI8) {
+    EXPECT_TRUE(checkSource(
+        "fn main() -> i8 { -1 }"
+    ));
+}
+
+// --- Negative literal out of range for i8 ---
+TEST(SemaTest, NegativeLiteralOutOfRangeI8) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i8 { -129 }", &errors
+    ));
+    EXPECT_NE(errors.find("out of range"), std::string::npos);
+}
+
+// --- var assignment context: literal coerces ---
+TEST(SemaTest, VarAssignLiteralCoerce) {
+    EXPECT_TRUE(checkSource(
+        "fn main() -> i64 {\n"
+        "    var x: i32 = 0\n"
+        "    x = 42\n"
+        "    0\n"
+        "}"
+    ));
+}
+
+// --- return statement context ---
+TEST(SemaTest, ReturnLiteralCoerce) {
+    EXPECT_TRUE(checkSource(
+        "fn f() -> i32 { return 42 }"
     ));
 }

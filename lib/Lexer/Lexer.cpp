@@ -7,6 +7,7 @@ namespace kern {
 const char* tokenKindName(TokenKind kind) {
     switch (kind) {
         case TokenKind::IntLit:     return "IntLit";
+        case TokenKind::FloatLit:   return "FloatLit";
         case TokenKind::Ident:      return "Ident";
         case TokenKind::KwFn:       return "fn";
         case TokenKind::KwVal:      return "val";
@@ -148,14 +149,33 @@ Token Lexer::scanNumber() {
     // Note: the first digit was already consumed by nextToken()
     if (*start_ == '0' && (peek() == 'x' || peek() == 'X')) {
         advance(); // consume 'x'/'X'
+        if (isAtEnd() || !std::isxdigit(static_cast<unsigned char>(peek()))) {
+            return errorToken("hex literal requires at least one digit after '0x'");
+        }
         while (!isAtEnd() && std::isxdigit(static_cast<unsigned char>(peek()))) {
             advance();
         }
-    } else {
+        return makeToken(TokenKind::IntLit);
+    }
+
+    while (!isAtEnd() && std::isdigit(static_cast<unsigned char>(peek()))) {
+        advance();
+    }
+
+    // Check for float: decimal point followed by digit
+    if (!isAtEnd() && peek() == '.' && (current_ + 1 < end_) &&
+        std::isdigit(static_cast<unsigned char>(peekNext()))) {
+        advance(); // consume '.'
         while (!isAtEnd() && std::isdigit(static_cast<unsigned char>(peek()))) {
             advance();
         }
+        // Optional 'f' suffix for f32
+        if (!isAtEnd() && peek() == 'f') {
+            advance();
+        }
+        return makeToken(TokenKind::FloatLit);
     }
+
     return makeToken(TokenKind::IntLit);
 }
 

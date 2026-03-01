@@ -1,1 +1,1 @@
-error:mismatch
+error:declared to return i64 but body has type i32

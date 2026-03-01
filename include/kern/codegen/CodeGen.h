@@ -25,12 +25,13 @@ private:
 
     // Stack management
     void emitPrologue(const std::string& name);
-    void emitEpilogue();
 
     std::ostream& out_;
+    std::ostream* out_ref_ = nullptr; // redirect for 2-pass emit
+    std::ostream& out() { return out_ref_ ? *out_ref_ : out_; }
 
     struct Location {
-        enum Kind { Reg, Stack };
+        enum Kind { Reg, Stack, XmmReg };
         Kind kind;
         std::string reg;
         int32_t stack_offset = 0;
@@ -43,6 +44,24 @@ private:
 
     std::vector<std::string> free_regs_;
     std::vector<std::string> used_callee_saved_;
+
+    // XMM register pool (xmm8..xmm15 for scratch, xmm0-7 for ABI)
+    std::vector<std::string> free_xmm_regs_;
+
+    // Float constant pool
+    struct FloatConst {
+        std::string label;
+        double value;
+        bool is_f32;
+    };
+    std::vector<FloatConst> float_consts_;
+    uint32_t float_const_counter_ = 0;
+    std::string addFloatConst(double value, bool is_f32);
+
+    // XMM register allocation
+    std::string allocXmmReg(ValueId v);
+    std::string valXmmReg(ValueId v);
+    void freeXmmReg(ValueId v);
 
     void initRegs();
     std::string spillToStack(ValueId v, IRType type);

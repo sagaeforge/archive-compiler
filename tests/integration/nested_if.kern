@@ -1,0 +1,10 @@
+fn classify(x: i64) -> i64 {
+    if x > 10 {
+        if x > 20 { 3 } else { 2 }
+    } else {
+        1
+    }
+}
+fn main() -> i64 {
+    classify(15)
+}

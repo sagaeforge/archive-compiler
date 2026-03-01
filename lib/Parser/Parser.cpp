@@ -16,6 +16,11 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
         case Expr::Kind::IntLit:
             out << "IntLit(" << static_cast<const IntLitExpr*>(expr)->value << ")\n";
             break;
+        case Expr::Kind::FloatLit: {
+            auto* fl = static_cast<const FloatLitExpr*>(expr);
+            out << "FloatLit(" << fl->value << (fl->is_f32 ? "f" : "") << ")\n";
+            break;
+        }
         case Expr::Kind::BoolLit:
             out << "BoolLit(" << (static_cast<const BoolLitExpr*>(expr)->value ? "true" : "false") << ")\n";
             break;
@@ -82,6 +87,12 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
                         dumpExpr(static_cast<const ExprStmt*>(st)->expr, out, ind + 2);
                         break;
                     }
+                    case Stmt::Kind::Assign: {
+                        auto* as = static_cast<const AssignStmt*>(st);
+                        out << "Assign(" << as->name << ")\n";
+                        dumpExpr(as->value, out, ind + 2);
+                        break;
+                    }
                 }
             }
             if (bl->result) {
@@ -138,6 +149,7 @@ Token Parser::expect(TokenKind kind, const char* message) {
     Token tok = peek();
     if (tok.kind != kind) {
         diag_.error(tok.loc, message);
+        advance(); // skip past the unexpected token to avoid cascade errors
         return tok;
     }
     return advance();
@@ -231,7 +243,7 @@ Param Parser::parseParam() {
 
 TypeRef Parser::parseType() {
     Token tok = expect(TokenKind::Ident, "expected type name");
-    return {TypeRef::Kind::Named, tok.text};
+    return {TypeRef::Kind::Named, tok.text, tok.loc};
 }
 
 // --- Expressions ---
@@ -282,9 +294,7 @@ BinOpKind Parser::tokenToBinOp(TokenKind kind) {
     }
 }
 
-Expr* Parser::parseExpr(uint8_t minBP) {
-    Expr* lhs = parsePrimary();
-
+Expr* Parser::parseExprInfix(Expr* lhs, uint8_t minBP) {
     while (true) {
         skipNewlines();
         TokenKind op = peek().kind;
@@ -305,6 +315,11 @@ Expr* Parser::parseExpr(uint8_t minBP) {
     }
 
     return lhs;
+}
+
+Expr* Parser::parseExpr(uint8_t minBP) {
+    Expr* lhs = parsePrimary();
+    return parseExprInfix(lhs, minBP);
 }
 
 Expr* Parser::parsePrimary() {
@@ -337,6 +352,19 @@ Expr* Parser::parsePrimary() {
         } else {
             lit->value = static_cast<int64_t>(std::stoull(std::string(tok.text)));
         }
+        return lit;
+    }
+
+    // Float literal
+    if (tok.kind == TokenKind::FloatLit) {
+        advance();
+        auto* lit = arena_.make<FloatLitExpr>();
+        lit->kind = Expr::Kind::FloatLit;
+        lit->loc = tok.loc;
+        std::string text(tok.text);
+        lit->is_f32 = (!text.empty() && text.back() == 'f');
+        if (lit->is_f32) text.pop_back();
+        lit->value = std::stod(text);
         return lit;
     }
 
@@ -449,6 +477,49 @@ Expr* Parser::parseBlockExpr() {
         // Try to parse val/var declaration
         if (check(TokenKind::KwVal) || check(TokenKind::KwVar)) {
             stmts.push_back(parseValDecl());
+        } else if (check(TokenKind::Ident)) {
+            // Could be assignment (ident = expr) or an expression
+            Token identTok = peek();
+            advance();
+            skipNewlines();
+            if (check(TokenKind::Eq)) {
+                // Assignment: ident = expr
+                advance(); // consume '='
+                skipNewlines();
+                Expr* value = parseExpr();
+                auto* assign = arena_.make<AssignStmt>();
+                assign->kind = Stmt::Kind::Assign;
+                assign->loc = identTok.loc;
+                assign->name = identTok.text;
+                assign->value = value;
+                stmts.push_back(assign);
+            } else {
+                // Not assignment — was an expression starting with ident
+                // Build the ident expression, then continue Pratt parsing
+                Expr* lhs;
+                if (check(TokenKind::LParen)) {
+                    lhs = parseCallExpr(identTok.text, identTok.loc);
+                } else {
+                    auto* ident = arena_.make<IdentExpr>();
+                    ident->kind = Expr::Kind::Ident;
+                    ident->loc = identTok.loc;
+                    ident->name = identTok.text;
+                    lhs = ident;
+                }
+                // Continue with infix parsing (reuse Pratt parser)
+                lhs = parseExprInfix(lhs, 0);
+                skipNewlines();
+
+                if (check(TokenKind::RBrace)) {
+                    result = lhs;
+                } else {
+                    auto* exprStmt = arena_.make<ExprStmt>();
+                    exprStmt->kind = Stmt::Kind::ExprStmt;
+                    exprStmt->loc = lhs->loc;
+                    exprStmt->expr = lhs;
+                    stmts.push_back(exprStmt);
+                }
+            }
         } else {
             // Parse expression
             Expr* expr = parseExpr();

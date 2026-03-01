@@ -1,0 +1,4 @@
+fn div(a: f64, b: f64) -> f64 { a / b }
+fn main() -> i64 {
+    if div(6.0, 2.0) == 3.0 { 3 } else { 0 }
+}

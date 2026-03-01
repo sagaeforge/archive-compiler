@@ -66,6 +66,11 @@ void PurityChecker::collectCalleesStmt(Stmt* stmt, std::unordered_set<std::strin
             collectCallees(decl->init, callees);
             break;
         }
+        case Stmt::Kind::Assign: {
+            auto* assign = static_cast<AssignStmt*>(stmt);
+            collectCallees(assign->value, callees);
+            break;
+        }
         case Stmt::Kind::ExprStmt:
             collectCallees(static_cast<ExprStmt*>(stmt)->expr, callees);
             break;
@@ -73,17 +78,62 @@ void PurityChecker::collectCalleesStmt(Stmt* stmt, std::unordered_set<std::strin
 }
 
 bool PurityChecker::bodyUsesVar(FnDecl* fn) const {
-    // Walk the body looking for VarDecl statements
     if (!fn->body) return false;
+    return exprUsesVar(fn->body);
+}
 
-    // The body should be a BlockExpr
-    if (fn->body->kind != Expr::Kind::Block) return false;
+bool PurityChecker::exprUsesVar(Expr* expr) const {
+    if (!expr) return false;
 
-    auto* block = static_cast<BlockExpr*>(fn->body);
-    for (uint32_t i = 0; i < block->stmt_count; ++i) {
-        if (block->stmts[i]->kind == Stmt::Kind::VarDecl) {
-            return true;
+    switch (expr->kind) {
+        case Expr::Kind::Block: {
+            auto* block = static_cast<BlockExpr*>(expr);
+            for (uint32_t i = 0; i < block->stmt_count; ++i) {
+                if (stmtUsesVar(block->stmts[i])) return true;
+            }
+            if (block->result && exprUsesVar(block->result)) return true;
+            return false;
         }
+        case Expr::Kind::If: {
+            auto* ifE = static_cast<IfExpr*>(expr);
+            if (exprUsesVar(ifE->condition)) return true;
+            if (exprUsesVar(ifE->then_branch)) return true;
+            if (ifE->else_branch && exprUsesVar(ifE->else_branch)) return true;
+            return false;
+        }
+        case Expr::Kind::BinOp: {
+            auto* bin = static_cast<BinOpExpr*>(expr);
+            return exprUsesVar(bin->lhs) || exprUsesVar(bin->rhs);
+        }
+        case Expr::Kind::UnaryOp: {
+            auto* unary = static_cast<UnaryOpExpr*>(expr);
+            return exprUsesVar(unary->operand);
+        }
+        case Expr::Kind::Call: {
+            auto* call = static_cast<CallExpr*>(expr);
+            for (uint32_t i = 0; i < call->arg_count; ++i) {
+                if (exprUsesVar(call->args[i])) return true;
+            }
+            return false;
+        }
+        case Expr::Kind::Return: {
+            auto* ret = static_cast<ReturnExpr*>(expr);
+            return ret->value && exprUsesVar(ret->value);
+        }
+        default:
+            return false;
+    }
+}
+
+bool PurityChecker::stmtUsesVar(Stmt* stmt) const {
+    if (stmt->kind == Stmt::Kind::VarDecl) return true;
+    if (stmt->kind == Stmt::Kind::Assign) return true; // mutation
+    if (stmt->kind == Stmt::Kind::ValDecl) {
+        auto* decl = static_cast<ValDeclStmt*>(stmt);
+        return exprUsesVar(decl->init);
+    }
+    if (stmt->kind == Stmt::Kind::ExprStmt) {
+        return exprUsesVar(static_cast<ExprStmt*>(stmt)->expr);
     }
     return false;
 }
@@ -99,6 +149,177 @@ void PurityChecker::buildCallGraph(Module* mod) {
         std::unordered_set<std::string_view> callees;
         collectCallees(fn->body, callees);
         call_graph_[fn->name] = std::move(callees);
+    }
+}
+
+bool PurityChecker::isTailRecursive(std::string_view fn_name, FnDecl* fn) const {
+    if (!fn->body) return false;
+    // A function is tail-recursive if:
+    // 1. It has at least one recursive call in tail position
+    // 2. It has NO recursive calls in non-tail positions
+    return exprHasTailCall(fn->body, fn_name) &&
+           !exprHasNonTailCall(fn->body, fn_name);
+}
+
+bool PurityChecker::exprHasTailCall(Expr* expr, std::string_view fn_name) const {
+    if (!expr) return false;
+
+    switch (expr->kind) {
+        case Expr::Kind::Call: {
+            auto* call = static_cast<CallExpr*>(expr);
+            return call->callee == fn_name;
+        }
+        case Expr::Kind::Block: {
+            auto* block = static_cast<BlockExpr*>(expr);
+            if (block->result) {
+                return exprHasTailCall(block->result, fn_name);
+            }
+            if (block->stmt_count > 0) {
+                auto* last = block->stmts[block->stmt_count - 1];
+                if (last->kind == Stmt::Kind::ExprStmt) {
+                    return exprHasTailCall(static_cast<ExprStmt*>(last)->expr, fn_name);
+                }
+            }
+            return false;
+        }
+        case Expr::Kind::If: {
+            auto* ifE = static_cast<IfExpr*>(expr);
+            bool then_tail = exprHasTailCall(ifE->then_branch, fn_name);
+            bool else_tail = ifE->else_branch && exprHasTailCall(ifE->else_branch, fn_name);
+            return then_tail || else_tail;
+        }
+        case Expr::Kind::Return: {
+            auto* ret = static_cast<ReturnExpr*>(expr);
+            return ret->value && exprHasTailCall(ret->value, fn_name);
+        }
+        default:
+            return false;
+    }
+}
+
+// Check if expr in NON-tail position contains any recursive calls
+bool PurityChecker::exprHasNonTailCall(Expr* expr, std::string_view fn_name) const {
+    if (!expr) return false;
+
+    switch (expr->kind) {
+        case Expr::Kind::Call: {
+            // A call in tail position is fine — but check its arguments (non-tail)
+            auto* call = static_cast<CallExpr*>(expr);
+            for (uint32_t i = 0; i < call->arg_count; ++i) {
+                if (exprHasNonTailCallInner(call->args[i], fn_name)) return true;
+            }
+            return false;
+        }
+        case Expr::Kind::Block: {
+            auto* block = static_cast<BlockExpr*>(expr);
+            // Statements are non-tail positions
+            for (uint32_t i = 0; i < block->stmt_count; ++i) {
+                auto* st = block->stmts[i];
+                if (st->kind == Stmt::Kind::ExprStmt) {
+                    if (exprHasNonTailCallInner(static_cast<ExprStmt*>(st)->expr, fn_name))
+                        return true;
+                } else if (st->kind == Stmt::Kind::ValDecl) {
+                    if (exprHasNonTailCallInner(static_cast<ValDeclStmt*>(st)->init, fn_name))
+                        return true;
+                } else if (st->kind == Stmt::Kind::VarDecl) {
+                    if (exprHasNonTailCallInner(static_cast<VarDeclStmt*>(st)->init, fn_name))
+                        return true;
+                } else if (st->kind == Stmt::Kind::Assign) {
+                    if (exprHasNonTailCallInner(static_cast<AssignStmt*>(st)->value, fn_name))
+                        return true;
+                }
+            }
+            // Result is a tail position — recurse with tail-aware check
+            if (block->result) {
+                return exprHasNonTailCall(block->result, fn_name);
+            }
+            return false;
+        }
+        case Expr::Kind::If: {
+            auto* ifE = static_cast<IfExpr*>(expr);
+            // Condition is non-tail
+            if (exprHasNonTailCallInner(ifE->condition, fn_name)) return true;
+            // Branches are tail positions
+            if (exprHasNonTailCall(ifE->then_branch, fn_name)) return true;
+            if (ifE->else_branch && exprHasNonTailCall(ifE->else_branch, fn_name)) return true;
+            return false;
+        }
+        case Expr::Kind::Return: {
+            auto* ret = static_cast<ReturnExpr*>(expr);
+            if (ret->value) return exprHasNonTailCall(ret->value, fn_name);
+            return false;
+        }
+        case Expr::Kind::BinOp: {
+            // Both sides of binop are non-tail
+            auto* bin = static_cast<BinOpExpr*>(expr);
+            return exprHasNonTailCallInner(bin->lhs, fn_name) ||
+                   exprHasNonTailCallInner(bin->rhs, fn_name);
+        }
+        case Expr::Kind::UnaryOp: {
+            auto* unary = static_cast<UnaryOpExpr*>(expr);
+            return exprHasNonTailCallInner(unary->operand, fn_name);
+        }
+        default:
+            return false;
+    }
+}
+
+// Check if ANY recursive call exists (regardless of position) — for non-tail contexts
+bool PurityChecker::exprHasNonTailCallInner(Expr* expr, std::string_view fn_name) const {
+    if (!expr) return false;
+
+    switch (expr->kind) {
+        case Expr::Kind::Call: {
+            auto* call = static_cast<CallExpr*>(expr);
+            if (call->callee == fn_name) return true;
+            for (uint32_t i = 0; i < call->arg_count; ++i) {
+                if (exprHasNonTailCallInner(call->args[i], fn_name)) return true;
+            }
+            return false;
+        }
+        case Expr::Kind::BinOp: {
+            auto* bin = static_cast<BinOpExpr*>(expr);
+            return exprHasNonTailCallInner(bin->lhs, fn_name) ||
+                   exprHasNonTailCallInner(bin->rhs, fn_name);
+        }
+        case Expr::Kind::UnaryOp: {
+            auto* unary = static_cast<UnaryOpExpr*>(expr);
+            return exprHasNonTailCallInner(unary->operand, fn_name);
+        }
+        case Expr::Kind::If: {
+            auto* ifE = static_cast<IfExpr*>(expr);
+            if (exprHasNonTailCallInner(ifE->condition, fn_name)) return true;
+            if (exprHasNonTailCallInner(ifE->then_branch, fn_name)) return true;
+            if (ifE->else_branch && exprHasNonTailCallInner(ifE->else_branch, fn_name)) return true;
+            return false;
+        }
+        case Expr::Kind::Block: {
+            auto* block = static_cast<BlockExpr*>(expr);
+            for (uint32_t i = 0; i < block->stmt_count; ++i) {
+                auto* st = block->stmts[i];
+                if (st->kind == Stmt::Kind::ExprStmt) {
+                    if (exprHasNonTailCallInner(static_cast<ExprStmt*>(st)->expr, fn_name))
+                        return true;
+                } else if (st->kind == Stmt::Kind::ValDecl) {
+                    if (exprHasNonTailCallInner(static_cast<ValDeclStmt*>(st)->init, fn_name))
+                        return true;
+                } else if (st->kind == Stmt::Kind::VarDecl) {
+                    if (exprHasNonTailCallInner(static_cast<VarDeclStmt*>(st)->init, fn_name))
+                        return true;
+                } else if (st->kind == Stmt::Kind::Assign) {
+                    if (exprHasNonTailCallInner(static_cast<AssignStmt*>(st)->value, fn_name))
+                        return true;
+                }
+            }
+            if (block->result) return exprHasNonTailCallInner(block->result, fn_name);
+            return false;
+        }
+        case Expr::Kind::Return: {
+            auto* ret = static_cast<ReturnExpr*>(expr);
+            return ret->value && exprHasNonTailCallInner(ret->value, fn_name);
+        }
+        default:
+            return false;
     }
 }
 
@@ -222,13 +443,11 @@ std::unordered_map<std::string_view, PurityResult> PurityChecker::analyze(Module
             }
         }
 
-        // If no impurity found, it's pure
-        if (!pr.uses_var && pr.purity == Purity::Pure) {
-            pr.purity = Purity::Pure;
-        }
-
-        // Check recursion
+        // Check recursion and tail recursion
         pr.is_recursive = isRecursive(fn_name);
+        if (pr.is_recursive) {
+            pr.is_tailrec = isTailRecursive(fn_name, fn);
+        }
 
         results[fn_name] = pr;
     }

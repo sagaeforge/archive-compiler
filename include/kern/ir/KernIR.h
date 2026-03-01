@@ -15,9 +15,13 @@ constexpr ValueId INVALID_VALUE = UINT32_MAX;
 
 enum class IROpcode : uint8_t {
     ConstInt,
+    ConstFloat,
     Add, Sub, Mul, Div,
+    FAdd, FSub, FMul, FDiv,
     ICmpEq, ICmpNe, ICmpLt, ICmpLe, ICmpGt, ICmpGe,
+    FCmpEq, FCmpNe, FCmpLt, FCmpLe, FCmpGt, FCmpGe,
     Neg,
+    FNeg,
     Not,
     Branch,
     CondBranch,
@@ -37,6 +41,9 @@ struct IRInstr {
     // ConstInt
     int64_t imm_value = 0;
 
+    // ConstFloat
+    double imm_float = 0.0;
+
     // Call
     std::string callee_name;
 
@@ -49,6 +56,7 @@ struct IRBlock {
     std::string              label;
     std::vector<ValueId>     params;
     std::vector<IRInstr>     instrs;
+    bool                     is_merge = false;
 };
 
 struct IRFunction {
@@ -56,7 +64,6 @@ struct IRFunction {
     std::vector<IRBlock>     blocks;
     std::vector<ValueId>     param_values;
     std::vector<std::string> param_names;
-    std::string              return_type_name;
     uint32_t                 next_value = 0;
 
     // M2: type information

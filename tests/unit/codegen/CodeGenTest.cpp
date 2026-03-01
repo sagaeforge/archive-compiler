@@ -93,20 +93,18 @@ TEST(CodeGenTest, ComparisonEq) {
     EXPECT_NE(asm_code.find("sete"), std::string::npos);
 }
 
-// --- Negation: lowered to sub(0, x) ---
+// --- Negation: uses neg instruction ---
 TEST(CodeGenTest, UnaryNeg) {
     std::string asm_code = generateAsm(
         "fn main() -> i64 { -42 }");
-    // -x is 0 - x, so we should see sub
-    EXPECT_NE(asm_code.find("sub"), std::string::npos);
+    EXPECT_NE(asm_code.find("neg"), std::string::npos);
 }
 
-// --- Not: lowered to sub(1, x) ---
+// --- Not: uses xor 1 instruction ---
 TEST(CodeGenTest, UnaryNot) {
     std::string asm_code = generateAsm(
         "fn main() -> bool { not true }");
-    // not x is 1 - x, so we should see sub
-    EXPECT_NE(asm_code.find("sub"), std::string::npos);
+    EXPECT_NE(asm_code.find("xor"), std::string::npos);
 }
 
 // --- Function with parameters uses System V ABI ---
@@ -197,17 +195,20 @@ TEST(CodeGenTest, ComparisonGe) {
     EXPECT_NE(asm_code.find("setge"), std::string::npos);
 }
 
-// --- Logical and generates imul ---
-TEST(CodeGenTest, LogicalAndImul) {
+// --- Logical and uses short-circuit (conditional branch) ---
+TEST(CodeGenTest, LogicalAndShortCircuit) {
     std::string asm_code = generateAsm("fn main() -> bool { true and false }");
-    EXPECT_NE(asm_code.find("imul"), std::string::npos);
+    // Short-circuit: if lhs then rhs else false
+    EXPECT_NE(asm_code.find("test"), std::string::npos);
+    EXPECT_NE(asm_code.find("jnz"), std::string::npos);
 }
 
-// --- Logical or generates add + setne ---
-TEST(CodeGenTest, LogicalOrAddSetne) {
+// --- Logical or uses short-circuit (conditional branch) ---
+TEST(CodeGenTest, LogicalOrShortCircuit) {
     std::string asm_code = generateAsm("fn main() -> bool { true or false }");
-    EXPECT_NE(asm_code.find("add"), std::string::npos);
-    EXPECT_NE(asm_code.find("setne"), std::string::npos);
+    // Short-circuit: if lhs then true else rhs
+    EXPECT_NE(asm_code.find("test"), std::string::npos);
+    EXPECT_NE(asm_code.find("jnz"), std::string::npos);
 }
 
 // --- Many locals force callee-saved register usage ---
@@ -340,12 +341,12 @@ TEST(CodeGenTest, UnsignedDivXorEdx) {
     EXPECT_NE(asm_code.find("xor  edx, edx"), std::string::npos);
 }
 
-// --- i32 div signed uses idiv ---
+// --- i32 div signed uses idiv + cdq ---
 TEST(CodeGenTest, I32SignedDiv) {
     std::string asm_code = generateAsm(
         "fn div32(a: i32, b: i32) -> i32 { a / b }");
     EXPECT_NE(asm_code.find("idiv"), std::string::npos);
-    EXPECT_NE(asm_code.find("cqo"), std::string::npos);
+    EXPECT_NE(asm_code.find("cdq"), std::string::npos);
 }
 
 // --- u32 div unsigned ---
@@ -355,4 +356,97 @@ TEST(CodeGenTest, U32UnsignedDiv) {
     // Should NOT have cqo
     EXPECT_EQ(asm_code.find("cqo"), std::string::npos);
     EXPECT_NE(asm_code.find("xor  edx, edx"), std::string::npos);
+}
+
+// ===== M3.4: Float CodeGen tests =====
+
+// --- ConstFloat: movsd from .rodata ---
+TEST(CodeGenTest, FloatConst) {
+    std::string asm_code = generateAsm(
+        "fn main() -> f64 { 3.14 }");
+    EXPECT_NE(asm_code.find("movsd"), std::string::npos);
+    EXPECT_NE(asm_code.find("[rel "), std::string::npos);
+}
+
+// --- FAdd: addsd ---
+TEST(CodeGenTest, FloatAdd) {
+    std::string asm_code = generateAsm(
+        "fn add(a: f64, b: f64) -> f64 { a + b }");
+    EXPECT_NE(asm_code.find("addsd"), std::string::npos);
+}
+
+// --- FSub: subsd ---
+TEST(CodeGenTest, FloatSub) {
+    std::string asm_code = generateAsm(
+        "fn sub(a: f64, b: f64) -> f64 { a - b }");
+    EXPECT_NE(asm_code.find("subsd"), std::string::npos);
+}
+
+// --- FMul: mulsd ---
+TEST(CodeGenTest, FloatMul) {
+    std::string asm_code = generateAsm(
+        "fn mul(a: f64, b: f64) -> f64 { a * b }");
+    EXPECT_NE(asm_code.find("mulsd"), std::string::npos);
+}
+
+// --- FDiv: divsd ---
+TEST(CodeGenTest, FloatDiv) {
+    std::string asm_code = generateAsm(
+        "fn div(a: f64, b: f64) -> f64 { a / b }");
+    EXPECT_NE(asm_code.find("divsd"), std::string::npos);
+}
+
+// --- FCmpLt: ucomisd + setb ---
+TEST(CodeGenTest, FloatCmpLt) {
+    std::string asm_code = generateAsm(
+        "fn lt(a: f64, b: f64) -> bool { a < b }");
+    EXPECT_NE(asm_code.find("ucomisd"), std::string::npos);
+    EXPECT_NE(asm_code.find("setb"), std::string::npos);
+}
+
+// --- FNeg: mulsd by -1.0 ---
+TEST(CodeGenTest, FloatNeg) {
+    std::string asm_code = generateAsm(
+        "fn neg(a: f64) -> f64 { -a }");
+    EXPECT_NE(asm_code.find("mulsd"), std::string::npos);
+}
+
+// --- F32: addss ---
+TEST(CodeGenTest, F32Add) {
+    std::string asm_code = generateAsm(
+        "fn add32(a: f32, b: f32) -> f32 { a + b }");
+    EXPECT_NE(asm_code.find("addss"), std::string::npos);
+}
+
+// --- Float return uses xmm0 ---
+TEST(CodeGenTest, FloatReturnXmm0) {
+    std::string asm_code = generateAsm(
+        "fn main() -> f64 { 1.5 }");
+    // Return should move to xmm0 (movsd xmm0)
+    EXPECT_NE(asm_code.find("xmm0"), std::string::npos);
+}
+
+// --- .rodata section emitted for float constants ---
+TEST(CodeGenTest, SectionRodata) {
+    std::string asm_code = generateAsm(
+        "fn main() -> f64 { 3.14 }");
+    EXPECT_NE(asm_code.find("section .rodata"), std::string::npos);
+    EXPECT_NE(asm_code.find("dq 0x"), std::string::npos);
+}
+
+// --- Float params use XMM registers ---
+TEST(CodeGenTest, FloatParamsXmm) {
+    std::string asm_code = generateAsm(
+        "fn add(a: f64, b: f64) -> f64 { a + b }");
+    EXPECT_NE(asm_code.find("xmm0"), std::string::npos);
+    EXPECT_NE(asm_code.find("xmm1"), std::string::npos);
+}
+
+// --- Float call passes args in XMM ---
+TEST(CodeGenTest, FloatCallArgs) {
+    std::string asm_code = generateAsm(
+        "fn add(a: f64, b: f64) -> f64 { a + b }\n"
+        "fn main() -> f64 { add(1.0, 2.0) }");
+    EXPECT_NE(asm_code.find("call _add"), std::string::npos);
+    EXPECT_NE(asm_code.find("xmm0"), std::string::npos);
 }

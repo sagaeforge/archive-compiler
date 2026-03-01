@@ -31,13 +31,13 @@ private:
 
     // Expressions (Pratt parsing)
     Expr* parseExpr(uint8_t minBP = 0);
+    Expr* parseExprInfix(Expr* lhs, uint8_t minBP = 0);
     Expr* parsePrimary();
     Expr* parseIfExpr();
     Expr* parseBlockExpr();
     Expr* parseCallExpr(std::string_view name, SourceLocation loc);
 
     // Statements
-    Stmt* parseStmt();
     Stmt* parseValDecl();
 
     // Operator helpers

@@ -12,6 +12,7 @@ namespace kern {
 struct PurityResult {
     Purity purity = Purity::Pure;
     bool is_recursive = false;
+    bool is_tailrec = false;
     bool uses_var = false;
 };
 
@@ -26,8 +27,10 @@ private:
     // Build call graph: caller -> set of callees
     void buildCallGraph(Module* mod);
 
-    // Check if a function body uses var
+    // Check if a function body uses var (recursive traversal)
     bool bodyUsesVar(FnDecl* fn) const;
+    bool exprUsesVar(Expr* expr) const;
+    bool stmtUsesVar(Stmt* stmt) const;
 
     // Collect all callees from an expression
     void collectCallees(Expr* expr, std::unordered_set<std::string_view>& callees) const;
@@ -38,6 +41,12 @@ private:
 
     // Detect recursive functions
     bool isRecursive(std::string_view fn_name) const;
+
+    // Detect tail recursion: all recursive calls must be in tail position
+    bool isTailRecursive(std::string_view fn_name, FnDecl* fn) const;
+    bool exprHasTailCall(Expr* expr, std::string_view fn_name) const;
+    bool exprHasNonTailCall(Expr* expr, std::string_view fn_name) const;
+    bool exprHasNonTailCallInner(Expr* expr, std::string_view fn_name) const;
 
     DiagnosticEngine& diag_;
 

@@ -539,3 +539,79 @@ TEST(ParserTest, ASTDumpExprStmt) {
     dumpAST(r.mod, out);
     EXPECT_NE(out.str().find("ExprStmt"), std::string::npos);
 }
+
+// ===== Parser error recovery tests =====
+
+// --- Error has correct location ---
+TEST(ParserTest, ErrorHasLocation) {
+    auto r = parse("fn main( -> i64 { 42 }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    auto& diags = r.diag.diagnostics();
+    ASSERT_GE(diags.size(), 1u);
+    EXPECT_GT(diags[0].loc.line, 0u);
+    EXPECT_GT(diags[0].loc.col, 0u);
+}
+
+// --- Parser continues after error to report more ---
+TEST(ParserTest, MultipleFnsAfterError) {
+    // First function is malformed, second is fine
+    auto r = parse(
+        "fn bad( -> i64 { 0 }\n"
+        "fn good() -> i64 { 42 }");
+    // Should parse at least one function even with errors
+    EXPECT_NE(r.mod, nullptr);
+}
+
+// --- Missing return type arrow ---
+TEST(ParserTest, MissingReturnTypeArrow) {
+    auto r = parse("fn main() i64 { 42 }");
+    EXPECT_TRUE(r.diag.hasErrors());
+    std::ostringstream out;
+    r.diag.printAll(out);
+    EXPECT_NE(out.str().find("->"), std::string::npos);
+}
+
+// --- Float literal f64 ---
+TEST(ParserTest, FloatLiteralF64) {
+    auto r = parse("fn main() -> f64 { 3.14 }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_EQ(body->result->kind, Expr::Kind::FloatLit);
+    auto* fl = static_cast<FloatLitExpr*>(body->result);
+    EXPECT_DOUBLE_EQ(fl->value, 3.14);
+    EXPECT_FALSE(fl->is_f32);
+}
+
+// --- Float literal f32 ---
+TEST(ParserTest, FloatLiteralF32) {
+    auto r = parse("fn main() -> f32 { 3.14f }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    ASSERT_EQ(body->result->kind, Expr::Kind::FloatLit);
+    auto* fl = static_cast<FloatLitExpr*>(body->result);
+    EXPECT_DOUBLE_EQ(fl->value, 3.14);
+    EXPECT_TRUE(fl->is_f32);
+}
+
+// --- Float literal AST dump ---
+TEST(ParserTest, ASTDumpFloat) {
+    auto r = parse("fn main() -> f64 { 3.14 }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    std::ostringstream out;
+    dumpAST(r.mod, out);
+    EXPECT_NE(out.str().find("FloatLit("), std::string::npos);
+}
+
+// --- Assignment in AST dump ---
+TEST(ParserTest, ASTDumpAssign) {
+    auto r = parse(
+        "fn main() -> i64 {\n"
+        "    var x: i64 = 10\n"
+        "    x = 20\n"
+        "    x\n"
+        "}");
+    ASSERT_FALSE(r.diag.hasErrors());
+    std::ostringstream out;
+    dumpAST(r.mod, out);
+    EXPECT_NE(out.str().find("Assign(x)"), std::string::npos);
+}

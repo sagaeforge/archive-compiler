@@ -210,6 +210,64 @@ TEST(PurityTest, NoVarWarningForVal) {
     EXPECT_EQ(r.warnings.find("impure"), std::string::npos);
 }
 
+// --- Nested var inside if is detected ---
+TEST(PurityTest, NestedVarInIf) {
+    auto r = analyzePurity(
+        "fn f(x: i64) -> i64 {\n"
+        "    if x > 0 {\n"
+        "        var y: i64 = x\n"
+        "        y\n"
+        "    } else { 0 }\n"
+        "}"
+    );
+    auto it = r.results.find("f");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_EQ(it->second.purity, Purity::ImpureMut);
+    EXPECT_TRUE(it->second.uses_var);
+}
+
+// --- Nested var inside nested block is detected ---
+TEST(PurityTest, NestedVarInBlock) {
+    auto r = analyzePurity(
+        "fn f() -> i64 {\n"
+        "    val x: i64 = {\n"
+        "        var y: i64 = 10\n"
+        "        y\n"
+        "    }\n"
+        "    x\n"
+        "}"
+    );
+    auto it = r.results.find("f");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_EQ(it->second.purity, Purity::ImpureMut);
+}
+
+// --- Tail recursion detected for simple countdown ---
+TEST(PurityTest, TailRecursiveCountdown) {
+    auto r = analyzePurity(
+        "fn countdown(n: i64) -> i64 {\n"
+        "    if n <= 0 { 0 } else { countdown(n - 1) }\n"
+        "}"
+    );
+    auto it = r.results.find("countdown");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_TRUE(it->second.is_recursive);
+    EXPECT_TRUE(it->second.is_tailrec);
+}
+
+// --- Non-tail recursion (fib adds after recursive call) ---
+TEST(PurityTest, NonTailRecursiveFib) {
+    auto r = analyzePurity(
+        "fn fib(n: i64) -> i64 {\n"
+        "    if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }\n"
+        "}"
+    );
+    auto it = r.results.find("fib");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_TRUE(it->second.is_recursive);
+    EXPECT_FALSE(it->second.is_tailrec);
+}
+
 // --- Purity result count matches function count ---
 TEST(PurityTest, ResultCountMatchesFnCount) {
     auto r = analyzePurity(

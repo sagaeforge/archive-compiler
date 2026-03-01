@@ -15,6 +15,7 @@ struct TypeRef {
     enum class Kind { Named, Ptr, Fn };
     Kind kind = Kind::Named;
     std::string_view name; // "i64", "bool", "Unit"
+    SourceLocation loc;
 };
 
 // --- Parameter ---
@@ -27,7 +28,7 @@ struct Param {
 // --- Expressions ---
 struct Expr {
     enum class Kind {
-        IntLit, BoolLit, Ident,
+        IntLit, FloatLit, BoolLit, Ident,
         BinOp, UnaryOp, Call,
         If, Block, Return
     };
@@ -37,6 +38,11 @@ struct Expr {
 
 struct IntLitExpr : Expr {
     int64_t value;
+};
+
+struct FloatLitExpr : Expr {
+    double value;
+    bool is_f32;
 };
 
 struct BoolLitExpr : Expr {
@@ -93,7 +99,7 @@ struct ReturnExpr : Expr {
 
 // --- Statements ---
 struct Stmt {
-    enum class Kind { ValDecl, VarDecl, ExprStmt };
+    enum class Kind { ValDecl, VarDecl, ExprStmt, Assign };
     Kind kind;
     SourceLocation loc;
 };
@@ -112,6 +118,11 @@ struct VarDeclStmt : Stmt {
 
 struct ExprStmt : Stmt {
     Expr* expr;
+};
+
+struct AssignStmt : Stmt {
+    std::string_view name;
+    Expr* value;
 };
 
 // --- Declarations ---

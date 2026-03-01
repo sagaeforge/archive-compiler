@@ -34,10 +34,14 @@ for kern_file in "$TEST_DIR"/*.kern; do
     # Read expected values
     expected_exit=""
     expected_error=""
+    expected_stdout=""
+    compiler_args=""
     while IFS= read -r line; do
         case "$line" in
             exit:*) expected_exit="${line#exit:}" ;;
             error:*) expected_error="${line#error:}" ;;
+            stdout:*) expected_stdout="${line#stdout:}" ;;
+            args:*) compiler_args="${line#args:}" ;;
         esac
     done < "$expected_file"
 
@@ -59,6 +63,22 @@ for kern_file in "$TEST_DIR"/*.kern; do
             echo "        got: $output"
             FAIL=$((FAIL + 1))
             FAILURES="$FAILURES\n  $test_name: error mismatch"
+        fi
+        continue
+    fi
+
+    # Stdout test — check compiler output (e.g., --dump-ir)
+    if [ -n "$expected_stdout" ]; then
+        output=$("$KERNC" "$kern_file" $compiler_args 2>&1)
+        if echo "$output" | grep -q "$expected_stdout"; then
+            echo "  PASS  $test_name (stdout)"
+            PASS=$((PASS + 1))
+        else
+            echo "  FAIL  $test_name (stdout mismatch)"
+            echo "        expected: $expected_stdout"
+            echo "        got: $output"
+            FAIL=$((FAIL + 1))
+            FAILURES="$FAILURES\n  $test_name: stdout mismatch"
         fi
         continue
     fi

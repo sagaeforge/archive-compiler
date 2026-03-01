@@ -7,6 +7,7 @@ namespace kern {
 enum class IRType : uint8_t {
     I8, I16, I32, I64,
     U8, U16, U32, U64,
+    F32, F64,
     Bool, Unit, Unknown
 };
 
@@ -14,16 +15,21 @@ inline int irTypeBitWidth(IRType t) {
     switch (t) {
         case IRType::I8:  case IRType::U8:  return 8;
         case IRType::I16: case IRType::U16: return 16;
-        case IRType::I32: case IRType::U32: return 32;
-        case IRType::I64: case IRType::U64: return 64;
+        case IRType::I32: case IRType::U32: case IRType::F32: return 32;
+        case IRType::I64: case IRType::U64: case IRType::F64: return 64;
         case IRType::Bool: return 8;  // stored as byte in registers
         default: return 64;
     }
 }
 
+inline bool irTypeIsFloat(IRType t) {
+    return t == IRType::F32 || t == IRType::F64;
+}
+
 inline bool irTypeIsSigned(IRType t) {
     switch (t) {
         case IRType::I8: case IRType::I16: case IRType::I32: case IRType::I64:
+        case IRType::F32: case IRType::F64:
             return true;
         default:
             return false;
@@ -40,6 +46,8 @@ inline const char* irTypeName(IRType t) {
         case IRType::U16:     return "u16";
         case IRType::U32:     return "u32";
         case IRType::U64:     return "u64";
+        case IRType::F32:     return "f32";
+        case IRType::F64:     return "f64";
         case IRType::Bool:    return "bool";
         case IRType::Unit:    return "Unit";
         case IRType::Unknown: return "?";
@@ -57,6 +65,8 @@ inline IRType irTypeFromSemaType(Type t) {
         case Type::U16:   return IRType::U16;
         case Type::U32:   return IRType::U32;
         case Type::U64:   return IRType::U64;
+        case Type::F32:   return IRType::F32;
+        case Type::F64:   return IRType::F64;
         case Type::Bool:  return IRType::Bool;
         case Type::Unit:  return IRType::Unit;
         case Type::Error: return IRType::Unknown;

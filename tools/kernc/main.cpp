@@ -82,6 +82,7 @@ int main(int argc, char** argv) {
     std::string source = ss.str();
 
     kern::DiagnosticEngine diag;
+    diag.setSource(source);
     kern::Arena arena;
 
     // --- Lexing ---
@@ -133,7 +134,9 @@ int main(int argc, char** argv) {
     if (dump_purity) {
         for (auto& [name, result] : purity_map) {
             std::cout << "fn " << name << ": " << kern::purityName(result.purity);
-            if (result.is_recursive) std::cout << " [recursive]";
+            if (result.is_recursive) {
+                std::cout << (result.is_tailrec ? " [tail-recursive]" : " [recursive]");
+            }
             std::cout << "\n";
         }
         if (!dump_ir && !asm_only) return 0;
@@ -149,6 +152,7 @@ int main(int argc, char** argv) {
         if (it != purity_map.end()) {
             irFn.meta.purity = it->second.purity;
             irFn.meta.is_recursive = it->second.is_recursive;
+            irFn.meta.is_tailrec = it->second.is_tailrec;
         }
     }
 
@@ -194,6 +198,7 @@ int main(int argc, char** argv) {
         }
 
         if (has_main) {
+            asm_out << "\nsection .text\n";
             asm_out << "global _start\n\n";
             asm_out << "_start:\n";
             asm_out << "    call _main\n";

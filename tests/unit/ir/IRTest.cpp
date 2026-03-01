@@ -143,20 +143,18 @@ TEST(IRTest, Comparison) {
     EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::ICmpLe));
 }
 
-// --- Negation is lowered to Sub(0, x) ---
+// --- Negation emits Neg opcode ---
 TEST(IRTest, UnaryNeg) {
     auto r = buildIR("fn main() -> i64 { -42 }");
     ASSERT_EQ(r.ir.functions.size(), 1u);
-    // -x is lowered to 0 - x
-    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::Sub));
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::Neg));
 }
 
-// --- Not is lowered to Sub(1, x) ---
+// --- Not emits Not opcode ---
 TEST(IRTest, UnaryNot) {
     auto r = buildIR("fn main() -> bool { not true }");
     ASSERT_EQ(r.ir.functions.size(), 1u);
-    // not x is lowered to 1 - x
-    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::Sub));
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::Not));
 }
 
 // --- If/else generates CondBranch ---
@@ -230,19 +228,18 @@ TEST(IRTest, FibDumpComprehensive) {
 
 // ===== Coverage improvement tests =====
 
-// --- Logical And generates Mul ---
+// --- Logical And uses short-circuit (CondBranch) ---
 TEST(IRTest, LogicalAnd) {
     auto r = buildIR("fn main() -> bool { true and true }");
     ASSERT_EQ(r.ir.functions.size(), 1u);
-    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::Mul));
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::CondBranch));
 }
 
-// --- Logical Or generates Add + ICmpNe ---
+// --- Logical Or uses short-circuit (CondBranch) ---
 TEST(IRTest, LogicalOr) {
     auto r = buildIR("fn main() -> bool { false or true }");
     ASSERT_EQ(r.ir.functions.size(), 1u);
-    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::Add));
-    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::ICmpNe));
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::CondBranch));
 }
 
 // --- ICmpEq ---
@@ -570,6 +567,67 @@ TEST(IRTest, CallerOfImpureMutStillPure) {
             EXPECT_EQ(fn.meta.purity, Purity::Pure);
         }
     }
+}
+
+// ===== M3.3: Float IR tests =====
+
+// --- ConstFloat ---
+TEST(IRTest, FloatConst) {
+    auto r = buildIR("fn main() -> f64 { 3.14 }");
+    auto& fn = r.ir.functions[0];
+    bool found = false;
+    for (auto& block : fn.blocks) {
+        for (auto& instr : block.instrs) {
+            if (instr.op == IROpcode::ConstFloat) {
+                EXPECT_DOUBLE_EQ(instr.imm_float, 3.14);
+                EXPECT_EQ(instr.type, IRType::F64);
+                found = true;
+            }
+        }
+    }
+    EXPECT_TRUE(found);
+}
+
+// --- FAdd ---
+TEST(IRTest, FloatAdd) {
+    auto r = buildIR("fn add(a: f64, b: f64) -> f64 { a + b }");
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::FAdd));
+}
+
+// --- f32 add ---
+TEST(IRTest, F32Add) {
+    auto r = buildIR("fn add32(a: f32, b: f32) -> f32 { a + b }");
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::FAdd));
+}
+
+// --- FCmpLt ---
+TEST(IRTest, FloatCmp) {
+    auto r = buildIR("fn cmp(a: f64, b: f64) -> bool { a < b }");
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::FCmpLt));
+}
+
+// --- FNeg ---
+TEST(IRTest, FloatNeg) {
+    auto r = buildIR("fn main() -> f64 { -3.14 }");
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::FNeg));
+}
+
+// --- dumpIR shows const_float ---
+TEST(IRTest, FloatDump) {
+    auto r = buildIR("fn main() -> f64 { 3.14 }");
+    std::ostringstream out;
+    dumpIR(r.ir, out);
+    std::string dump = out.str();
+    EXPECT_NE(dump.find("const_float"), std::string::npos);
+    EXPECT_NE(dump.find("3.14"), std::string::npos);
+}
+
+// --- f64 param type ---
+TEST(IRTest, F64ParamType) {
+    auto r = buildIR("fn f(x: f64) -> f64 { x }");
+    auto& fn = r.ir.functions[0];
+    ASSERT_EQ(fn.param_types.size(), 1u);
+    EXPECT_EQ(fn.param_types[0], IRType::F64);
 }
 
 // --- dumpIR no purity annotation when Unknown ---

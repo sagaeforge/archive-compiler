@@ -7,17 +7,29 @@ namespace kern {
 const char* irOpcodeName(IROpcode op) {
     switch (op) {
         case IROpcode::ConstInt:   return "const_int";
+        case IROpcode::ConstFloat: return "const_float";
         case IROpcode::Add:        return "add";
         case IROpcode::Sub:        return "sub";
         case IROpcode::Mul:        return "mul";
         case IROpcode::Div:        return "div";
+        case IROpcode::FAdd:       return "fadd";
+        case IROpcode::FSub:       return "fsub";
+        case IROpcode::FMul:       return "fmul";
+        case IROpcode::FDiv:       return "fdiv";
         case IROpcode::ICmpEq:     return "icmp_eq";
         case IROpcode::ICmpNe:     return "icmp_ne";
         case IROpcode::ICmpLt:     return "icmp_lt";
         case IROpcode::ICmpLe:     return "icmp_le";
         case IROpcode::ICmpGt:     return "icmp_gt";
         case IROpcode::ICmpGe:     return "icmp_ge";
+        case IROpcode::FCmpEq:     return "fcmp_eq";
+        case IROpcode::FCmpNe:     return "fcmp_ne";
+        case IROpcode::FCmpLt:     return "fcmp_lt";
+        case IROpcode::FCmpLe:     return "fcmp_le";
+        case IROpcode::FCmpGt:     return "fcmp_gt";
+        case IROpcode::FCmpGe:     return "fcmp_ge";
         case IROpcode::Neg:        return "neg";
+        case IROpcode::FNeg:       return "fneg";
         case IROpcode::Not:        return "not";
         case IROpcode::Branch:     return "br";
         case IROpcode::CondBranch: return "condbr";
@@ -41,7 +53,7 @@ void dumpIR(const IRModule& mod, std::ostream& out) {
                 out << " : " << irTypeName(fn.param_types[i]);
             }
         }
-        out << ") -> " << fn.return_type_name << " {\n";
+        out << ") -> " << irTypeName(fn.return_type) << " {\n";
 
         for (size_t bi = 0; bi < fn.blocks.size(); ++bi) {
             const auto& block = fn.blocks[bi];
@@ -70,6 +82,9 @@ void dumpIR(const IRModule& mod, std::ostream& out) {
                 switch (instr.op) {
                     case IROpcode::ConstInt:
                         out << " " << instr.imm_value;
+                        break;
+                    case IROpcode::ConstFloat:
+                        out << " " << instr.imm_float;
                         break;
                     case IROpcode::Call:
                         out << " @" << instr.callee_name << "(";
@@ -140,7 +155,6 @@ void IRBuilder::buildFunction(FnDecl* fn) {
     module_.functions.push_back({});
     current_fn_ = &module_.functions.back();
     current_fn_->name = std::string(fn->name);
-    current_fn_->return_type_name = std::string(fn->return_type.name);
     current_fn_->next_value = 0;
     label_counter_ = 0;
     locals_.clear();
@@ -166,6 +180,8 @@ void IRBuilder::buildFunction(FnDecl* fn) {
         else if (name == "u16")  pt = IRType::U16;
         else if (name == "u32")  pt = IRType::U32;
         else if (name == "u64")  pt = IRType::U64;
+        else if (name == "f32")   pt = IRType::F32;
+        else if (name == "f64")   pt = IRType::F64;
         else if (name == "bool") pt = IRType::Bool;
         current_fn_->param_types.push_back(pt);
         locals_[fn->params[i].name] = pv;
@@ -200,6 +216,17 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             return emit(instr);
         }
 
+        case Expr::Kind::FloatLit: {
+            auto* fl = static_cast<FloatLitExpr*>(expr);
+            IRInstr instr;
+            instr.op = IROpcode::ConstFloat;
+            instr.result = newValue();
+            instr.imm_float = fl->value;
+            instr.loc = expr->loc;
+            instr.type = expr_type;
+            return emit(instr);
+        }
+
         case Expr::Kind::BoolLit: {
             auto* lit = static_cast<BoolLitExpr*>(expr);
             IRInstr instr;
@@ -220,50 +247,134 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
 
         case Expr::Kind::BinOp: {
             auto* bin = static_cast<BinOpExpr*>(expr);
+
+            // Short-circuit: `a and b` → if a then b else false
+            if (bin->op == BinOpKind::And) {
+                ValueId lhs = buildExpr(bin->lhs);
+                uint32_t rhs_block = newBlock("and_rhs_" + std::to_string(label_counter_));
+                uint32_t false_block = newBlock("and_false_" + std::to_string(label_counter_));
+                uint32_t merge_block = newBlock("and_merge_" + std::to_string(label_counter_));
+                label_counter_++;
+
+                IRInstr br;
+                br.op = IROpcode::CondBranch;
+                br.operands = {lhs};
+                br.target_block = rhs_block;
+                br.false_block = false_block;
+                emit(br);
+
+                switchToBlock(rhs_block);
+                ValueId rhs = buildExpr(bin->rhs);
+                uint32_t rhs_end = current_block_;
+                IRInstr br_rhs;
+                br_rhs.op = IROpcode::Branch;
+                br_rhs.target_block = merge_block;
+                emit(br_rhs);
+
+                switchToBlock(false_block);
+                IRInstr false_const;
+                false_const.op = IROpcode::ConstInt;
+                false_const.result = newValue();
+                false_const.imm_value = 0;
+                false_const.type = IRType::Bool;
+                ValueId false_val = emit(false_const);
+                IRInstr br_false;
+                br_false.op = IROpcode::Branch;
+                br_false.target_block = merge_block;
+                emit(br_false);
+
+                switchToBlock(merge_block);
+                ValueId merge_val = newValue();
+                current_fn_->blocks[merge_block].params = {
+                    merge_val, rhs, false_val,
+                    static_cast<ValueId>(rhs_end),
+                    static_cast<ValueId>(false_block)
+                };
+                current_fn_->blocks[merge_block].is_merge = true;
+                return merge_val;
+            }
+
+            // Short-circuit: `a or b` → if a then true else b
+            if (bin->op == BinOpKind::Or) {
+                ValueId lhs = buildExpr(bin->lhs);
+                uint32_t true_block = newBlock("or_true_" + std::to_string(label_counter_));
+                uint32_t rhs_block = newBlock("or_rhs_" + std::to_string(label_counter_));
+                uint32_t merge_block = newBlock("or_merge_" + std::to_string(label_counter_));
+                label_counter_++;
+
+                IRInstr br;
+                br.op = IROpcode::CondBranch;
+                br.operands = {lhs};
+                br.target_block = true_block;
+                br.false_block = rhs_block;
+                emit(br);
+
+                switchToBlock(true_block);
+                IRInstr true_const;
+                true_const.op = IROpcode::ConstInt;
+                true_const.result = newValue();
+                true_const.imm_value = 1;
+                true_const.type = IRType::Bool;
+                ValueId true_val = emit(true_const);
+                IRInstr br_true;
+                br_true.op = IROpcode::Branch;
+                br_true.target_block = merge_block;
+                emit(br_true);
+
+                switchToBlock(rhs_block);
+                ValueId rhs = buildExpr(bin->rhs);
+                uint32_t rhs_end = current_block_;
+                IRInstr br_rhs;
+                br_rhs.op = IROpcode::Branch;
+                br_rhs.target_block = merge_block;
+                emit(br_rhs);
+
+                switchToBlock(merge_block);
+                ValueId merge_val = newValue();
+                current_fn_->blocks[merge_block].params = {
+                    merge_val, true_val, rhs,
+                    static_cast<ValueId>(true_block),
+                    static_cast<ValueId>(rhs_end)
+                };
+                current_fn_->blocks[merge_block].is_merge = true;
+                return merge_val;
+            }
+
             ValueId lhs = buildExpr(bin->lhs);
             ValueId rhs = buildExpr(bin->rhs);
 
+            bool is_float = irTypeIsFloat(expr_type) ||
+                            (tc_ && irTypeIsFloat(irTypeFromSemaType(tc_->typeOfExpr(bin->lhs))));
+
             IROpcode op;
-            switch (bin->op) {
-                case BinOpKind::Add:   op = IROpcode::Add; break;
-                case BinOpKind::Sub:   op = IROpcode::Sub; break;
-                case BinOpKind::Mul:   op = IROpcode::Mul; break;
-                case BinOpKind::Div:   op = IROpcode::Div; break;
-                case BinOpKind::Eq:    op = IROpcode::ICmpEq; break;
-                case BinOpKind::NotEq: op = IROpcode::ICmpNe; break;
-                case BinOpKind::Lt:    op = IROpcode::ICmpLt; break;
-                case BinOpKind::LtEq:  op = IROpcode::ICmpLe; break;
-                case BinOpKind::Gt:    op = IROpcode::ICmpGt; break;
-                case BinOpKind::GtEq:  op = IROpcode::ICmpGe; break;
-                case BinOpKind::And:   op = IROpcode::ICmpEq; break;
-                case BinOpKind::Or:    op = IROpcode::ICmpEq; break;
-            }
-
-            if (bin->op == BinOpKind::And) {
-                op = IROpcode::Mul;
-            } else if (bin->op == BinOpKind::Or) {
-                IRInstr add;
-                add.op = IROpcode::Add;
-                add.result = newValue();
-                add.operands = {lhs, rhs};
-                add.loc = expr->loc;
-                add.type = IRType::Bool;
-                ValueId sum = emit(add);
-
-                IRInstr zero;
-                zero.op = IROpcode::ConstInt;
-                zero.result = newValue();
-                zero.imm_value = 0;
-                zero.type = IRType::Bool;
-                ValueId zeroVal = emit(zero);
-
-                IRInstr cmp;
-                cmp.op = IROpcode::ICmpNe;
-                cmp.result = newValue();
-                cmp.operands = {sum, zeroVal};
-                cmp.loc = expr->loc;
-                cmp.type = IRType::Bool;
-                return emit(cmp);
+            if (is_float) {
+                switch (bin->op) {
+                    case BinOpKind::Add:   op = IROpcode::FAdd; break;
+                    case BinOpKind::Sub:   op = IROpcode::FSub; break;
+                    case BinOpKind::Mul:   op = IROpcode::FMul; break;
+                    case BinOpKind::Div:   op = IROpcode::FDiv; break;
+                    case BinOpKind::Eq:    op = IROpcode::FCmpEq; break;
+                    case BinOpKind::NotEq: op = IROpcode::FCmpNe; break;
+                    case BinOpKind::Lt:    op = IROpcode::FCmpLt; break;
+                    case BinOpKind::LtEq:  op = IROpcode::FCmpLe; break;
+                    case BinOpKind::Gt:    op = IROpcode::FCmpGt; break;
+                    case BinOpKind::GtEq:  op = IROpcode::FCmpGe; break;
+                    default: op = IROpcode::FAdd; break;
+                }
+            } else {
+                switch (bin->op) {
+                    case BinOpKind::Add:   op = IROpcode::Add; break;
+                    case BinOpKind::Sub:   op = IROpcode::Sub; break;
+                    case BinOpKind::Mul:   op = IROpcode::Mul; break;
+                    case BinOpKind::Div:   op = IROpcode::Div; break;
+                    case BinOpKind::Eq:    op = IROpcode::ICmpEq; break;
+                    case BinOpKind::NotEq: op = IROpcode::ICmpNe; break;
+                    case BinOpKind::Lt:    op = IROpcode::ICmpLt; break;
+                    case BinOpKind::LtEq:  op = IROpcode::ICmpLe; break;
+                    case BinOpKind::Gt:    op = IROpcode::ICmpGt; break;
+                    case BinOpKind::GtEq:  op = IROpcode::ICmpGe; break;
+                    default: op = IROpcode::Add; break;
+                }
             }
 
             IRInstr instr;
@@ -280,37 +391,21 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
             ValueId operand = buildExpr(unary->operand);
 
             if (unary->op == UnaryOpKind_t::Neg) {
-                IRInstr zero;
-                zero.op = IROpcode::ConstInt;
-                zero.result = newValue();
-                zero.imm_value = 0;
-                zero.loc = expr->loc;
-                zero.type = expr_type;
-                ValueId zeroVal = emit(zero);
-
-                IRInstr sub;
-                sub.op = IROpcode::Sub;
-                sub.result = newValue();
-                sub.operands = {zeroVal, operand};
-                sub.loc = expr->loc;
-                sub.type = expr_type;
-                return emit(sub);
+                IRInstr neg;
+                neg.op = irTypeIsFloat(expr_type) ? IROpcode::FNeg : IROpcode::Neg;
+                neg.result = newValue();
+                neg.operands = {operand};
+                neg.loc = expr->loc;
+                neg.type = expr_type;
+                return emit(neg);
             } else if (unary->op == UnaryOpKind_t::Not) {
-                IRInstr one;
-                one.op = IROpcode::ConstInt;
-                one.result = newValue();
-                one.imm_value = 1;
-                one.loc = expr->loc;
-                one.type = IRType::Bool;
-                ValueId oneVal = emit(one);
-
-                IRInstr sub;
-                sub.op = IROpcode::Sub;
-                sub.result = newValue();
-                sub.operands = {oneVal, operand};
-                sub.loc = expr->loc;
-                sub.type = IRType::Bool;
-                return emit(sub);
+                IRInstr notInstr;
+                notInstr.op = IROpcode::Not;
+                notInstr.result = newValue();
+                notInstr.operands = {operand};
+                notInstr.loc = expr->loc;
+                notInstr.type = IRType::Bool;
+                return emit(notInstr);
             }
             return operand;
         }
@@ -384,6 +479,7 @@ ValueId IRBuilder::buildExpr(Expr* expr) {
                 static_cast<ValueId>(then_end_block),
                 static_cast<ValueId>(else_end_block)
             };
+            current_fn_->blocks[merge_block].is_merge = true;
 
             return merge_val;
         }
@@ -444,6 +540,12 @@ void IRBuilder::buildStmt(Stmt* stmt) {
             auto* decl = static_cast<VarDeclStmt*>(stmt);
             ValueId val = buildExpr(decl->init);
             locals_[decl->name] = val;
+            break;
+        }
+        case Stmt::Kind::Assign: {
+            auto* assign = static_cast<AssignStmt*>(stmt);
+            ValueId val = buildExpr(assign->value);
+            locals_[assign->name] = val; // SSA rename: update binding
             break;
         }
         case Stmt::Kind::ExprStmt:
