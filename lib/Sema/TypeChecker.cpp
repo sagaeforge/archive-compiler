@@ -386,6 +386,94 @@ Type TypeChecker::checkExpr(Expr* expr, std::optional<Type> ctx) {
             }
             break;
         }
+
+        case Expr::Kind::Match: {
+            auto* matchE = static_cast<MatchExpr*>(expr);
+            Type scrut_type = checkExpr(matchE->scrutinee);
+            if (scrut_type == Type::Error) {
+                result = Type::Error;
+                break;
+            }
+
+            // Save/restore local vars for arm scoping
+            auto saved_locals = local_vars_;
+
+            Type arm_type = Type::Error;
+            bool has_catch_all = false;
+            bool has_true = false, has_false = false;
+
+            for (uint32_t i = 0; i < matchE->arm_count; ++i) {
+                auto& arm = matchE->arms[i];
+                local_vars_ = saved_locals;
+
+                // Check pattern compatibility with scrutinee
+                switch (arm.pattern->kind) {
+                    case Pattern::Kind::IntLit:
+                        if (!isInteger(scrut_type)) {
+                            diag_.error(arm.pattern->loc,
+                                std::string("integer pattern incompatible with scrutinee type ") +
+                                typeName(scrut_type));
+                        }
+                        break;
+                    case Pattern::Kind::BoolLit:
+                        if (scrut_type != Type::Bool) {
+                            diag_.error(arm.pattern->loc,
+                                "bool pattern incompatible with non-bool scrutinee");
+                        } else {
+                            auto* bp = static_cast<BoolLitPattern*>(arm.pattern);
+                            if (bp->value) has_true = true; else has_false = true;
+                        }
+                        break;
+                    case Pattern::Kind::Variable: {
+                        auto* vp = static_cast<VariablePattern*>(arm.pattern);
+                        local_vars_[vp->name] = scrut_type;
+                        if (!arm.guard) has_catch_all = true;
+                        break;
+                    }
+                    case Pattern::Kind::Wildcard:
+                        if (!arm.guard) has_catch_all = true;
+                        break;
+                }
+
+                // Check guard
+                if (arm.guard) {
+                    Type guard_type = checkExpr(arm.guard);
+                    if (guard_type != Type::Error && guard_type != Type::Bool) {
+                        diag_.error(arm.guard->loc, "match guard must be bool");
+                    }
+                }
+
+                // Check body
+                Type body_type = checkExpr(arm.body, ctx);
+                if (body_type == Type::Error) continue;
+
+                if (arm_type == Type::Error) {
+                    arm_type = body_type;
+                } else if (body_type != arm_type) {
+                    diag_.error(arm.body->loc,
+                        std::string("match arm type mismatch: expected ") +
+                        typeName(arm_type) + ", got " + typeName(body_type));
+                }
+            }
+
+            // Restore locals
+            local_vars_ = saved_locals;
+
+            // Exhaustiveness check
+            if (scrut_type == Type::Bool) {
+                if (!has_catch_all && !(has_true && has_false)) {
+                    diag_.error(matchE->loc, "non-exhaustive match on bool: missing patterns");
+                }
+            } else if (isInteger(scrut_type)) {
+                if (!has_catch_all) {
+                    diag_.error(matchE->loc,
+                        "non-exhaustive match on integer: add a wildcard '_' or variable pattern");
+                }
+            }
+
+            result = arm_type;
+            break;
+        }
     }
 
     expr_types_[expr] = result;

@@ -94,6 +94,10 @@ private:
     };
     std::vector<TailCallSite> tail_call_sites_;
     uint32_t tail_call_counter_ = 0;
+
+    // Deferred ret epilogue labels
+    std::vector<std::string> ret_epilogue_labels_;
+    uint32_t ret_epilogue_counter_ = 0;
 };
 
 } // namespace kern

@@ -524,6 +524,12 @@ ValueId IRBuilder::buildExpr(Expr* expr, bool in_tail_position) {
             emit(retInstr);
             return val;
         }
+
+        case Expr::Kind::Match: {
+            auto* matchE = static_cast<MatchExpr*>(expr);
+            ValueId scrutinee = buildExpr(matchE->scrutinee);
+            return buildMatchChain(matchE, scrutinee, 0, in_tail_position);
+        }
     }
 
     IRInstr dummy;
@@ -531,6 +537,133 @@ ValueId IRBuilder::buildExpr(Expr* expr, bool in_tail_position) {
     dummy.result = newValue();
     dummy.imm_value = 0;
     return emit(dummy);
+}
+
+ValueId IRBuilder::buildMatchChain(MatchExpr* matchE, ValueId scrutinee,
+                                    uint32_t arm_idx, bool in_tail_position) {
+    auto& arm = matchE->arms[arm_idx];
+    bool is_last = (arm_idx + 1 >= matchE->arm_count);
+
+    // Check if this arm is unconditional (wildcard/variable with no guard)
+    bool unconditional = false;
+    if (arm.pattern->kind == Pattern::Kind::Wildcard && !arm.guard) {
+        unconditional = true;
+    }
+    if (arm.pattern->kind == Pattern::Kind::Variable && !arm.guard) {
+        unconditional = true;
+    }
+
+    if (unconditional || is_last) {
+        // Variable binding: map variable name to scrutinee value
+        if (arm.pattern->kind == Pattern::Kind::Variable) {
+            auto* vp = static_cast<VariablePattern*>(arm.pattern);
+            locals_[vp->name] = scrutinee;
+        }
+        return buildExpr(arm.body, in_tail_position);
+    }
+
+    // Build condition: compare scrutinee to pattern
+    ValueId cond = INVALID_VALUE;
+
+    IRType scrut_type = IRType::Unknown;
+    if (tc_) {
+        scrut_type = irTypeFromSemaType(tc_->typeOfExpr(matchE->scrutinee));
+    }
+
+    switch (arm.pattern->kind) {
+        case Pattern::Kind::IntLit: {
+            auto* ip = static_cast<IntLitPattern*>(arm.pattern);
+            IRInstr pat_const;
+            pat_const.op = IROpcode::ConstInt;
+            pat_const.result = newValue();
+            pat_const.imm_value = ip->value;
+            pat_const.type = scrut_type;
+            ValueId pat_val = emit(pat_const);
+
+            IRInstr cmp;
+            cmp.op = IROpcode::ICmpEq;
+            cmp.result = newValue();
+            cmp.operands = {scrutinee, pat_val};
+            cmp.type = IRType::Bool;
+            cond = emit(cmp);
+            break;
+        }
+        case Pattern::Kind::BoolLit: {
+            auto* bp = static_cast<BoolLitPattern*>(arm.pattern);
+            IRInstr pat_const;
+            pat_const.op = IROpcode::ConstInt;
+            pat_const.result = newValue();
+            pat_const.imm_value = bp->value ? 1 : 0;
+            pat_const.type = IRType::Bool;
+            ValueId pat_val = emit(pat_const);
+
+            IRInstr cmp;
+            cmp.op = IROpcode::ICmpEq;
+            cmp.result = newValue();
+            cmp.operands = {scrutinee, pat_val};
+            cmp.type = IRType::Bool;
+            cond = emit(cmp);
+            break;
+        }
+        case Pattern::Kind::Variable: {
+            // Variable with guard — bind and evaluate guard
+            auto* vp = static_cast<VariablePattern*>(arm.pattern);
+            locals_[vp->name] = scrutinee;
+            cond = buildExpr(arm.guard);
+            break;
+        }
+        case Pattern::Kind::Wildcard: {
+            // Wildcard with guard — evaluate guard
+            cond = buildExpr(arm.guard);
+            break;
+        }
+    }
+
+    // CondBranch: if cond, arm body, else next arm chain
+    uint32_t then_block = newBlock("match_arm_" + std::to_string(label_counter_));
+    uint32_t else_block = newBlock("match_next_" + std::to_string(label_counter_));
+    uint32_t merge_block = newBlock("match_merge_" + std::to_string(label_counter_));
+    label_counter_++;
+
+    IRInstr br;
+    br.op = IROpcode::CondBranch;
+    br.operands = {cond};
+    br.target_block = then_block;
+    br.false_block = else_block;
+    emit(br);
+
+    // Then: build arm body
+    switchToBlock(then_block);
+    if (arm.pattern->kind == Pattern::Kind::Variable) {
+        auto* vp = static_cast<VariablePattern*>(arm.pattern);
+        locals_[vp->name] = scrutinee;
+    }
+    ValueId then_val = buildExpr(arm.body, in_tail_position);
+    uint32_t then_end = current_block_;
+    IRInstr br_then;
+    br_then.op = IROpcode::Branch;
+    br_then.target_block = merge_block;
+    emit(br_then);
+
+    // Else: next arm chain
+    switchToBlock(else_block);
+    ValueId else_val = buildMatchChain(matchE, scrutinee, arm_idx + 1, in_tail_position);
+    uint32_t else_end = current_block_;
+    IRInstr br_else;
+    br_else.op = IROpcode::Branch;
+    br_else.target_block = merge_block;
+    emit(br_else);
+
+    // Merge
+    switchToBlock(merge_block);
+    ValueId merge_val = newValue();
+    current_fn_->blocks[merge_block].params = {
+        merge_val, then_val, else_val,
+        static_cast<ValueId>(then_end),
+        static_cast<ValueId>(else_end)
+    };
+    current_fn_->blocks[merge_block].is_merge = true;
+    return merge_val;
 }
 
 void IRBuilder::buildStmt(Stmt* stmt) {

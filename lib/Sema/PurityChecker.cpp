@@ -49,6 +49,15 @@ void PurityChecker::collectCallees(Expr* expr, std::unordered_set<std::string_vi
             if (ret->value) collectCallees(ret->value, callees);
             break;
         }
+        case Expr::Kind::Match: {
+            auto* m = static_cast<MatchExpr*>(expr);
+            collectCallees(m->scrutinee, callees);
+            for (uint32_t i = 0; i < m->arm_count; ++i) {
+                if (m->arms[i].guard) collectCallees(m->arms[i].guard, callees);
+                collectCallees(m->arms[i].body, callees);
+            }
+            break;
+        }
         default:
             break;
     }
@@ -119,6 +128,15 @@ bool PurityChecker::exprUsesVar(Expr* expr) const {
         case Expr::Kind::Return: {
             auto* ret = static_cast<ReturnExpr*>(expr);
             return ret->value && exprUsesVar(ret->value);
+        }
+        case Expr::Kind::Match: {
+            auto* m = static_cast<MatchExpr*>(expr);
+            if (exprUsesVar(m->scrutinee)) return true;
+            for (uint32_t i = 0; i < m->arm_count; ++i) {
+                if (m->arms[i].guard && exprUsesVar(m->arms[i].guard)) return true;
+                if (exprUsesVar(m->arms[i].body)) return true;
+            }
+            return false;
         }
         default:
             return false;
@@ -192,6 +210,13 @@ bool PurityChecker::exprHasTailCall(Expr* expr, std::string_view fn_name) const 
             auto* ret = static_cast<ReturnExpr*>(expr);
             return ret->value && exprHasTailCall(ret->value, fn_name);
         }
+        case Expr::Kind::Match: {
+            auto* m = static_cast<MatchExpr*>(expr);
+            for (uint32_t i = 0; i < m->arm_count; ++i) {
+                if (exprHasTailCall(m->arms[i].body, fn_name)) return true;
+            }
+            return false;
+        }
         default:
             return false;
     }
@@ -259,6 +284,18 @@ bool PurityChecker::exprHasNonTailCall(Expr* expr, std::string_view fn_name) con
             auto* unary = static_cast<UnaryOpExpr*>(expr);
             return exprHasNonTailCallInner(unary->operand, fn_name);
         }
+        case Expr::Kind::Match: {
+            auto* m = static_cast<MatchExpr*>(expr);
+            // Scrutinee is non-tail
+            if (exprHasNonTailCallInner(m->scrutinee, fn_name)) return true;
+            // Each arm body is a tail position; guards are non-tail
+            for (uint32_t i = 0; i < m->arm_count; ++i) {
+                if (m->arms[i].guard && exprHasNonTailCallInner(m->arms[i].guard, fn_name))
+                    return true;
+                if (exprHasNonTailCall(m->arms[i].body, fn_name)) return true;
+            }
+            return false;
+        }
         default:
             return false;
     }
@@ -317,6 +354,16 @@ bool PurityChecker::exprHasNonTailCallInner(Expr* expr, std::string_view fn_name
         case Expr::Kind::Return: {
             auto* ret = static_cast<ReturnExpr*>(expr);
             return ret->value && exprHasNonTailCallInner(ret->value, fn_name);
+        }
+        case Expr::Kind::Match: {
+            auto* m = static_cast<MatchExpr*>(expr);
+            if (exprHasNonTailCallInner(m->scrutinee, fn_name)) return true;
+            for (uint32_t i = 0; i < m->arm_count; ++i) {
+                if (m->arms[i].guard && exprHasNonTailCallInner(m->arms[i].guard, fn_name))
+                    return true;
+                if (exprHasNonTailCallInner(m->arms[i].body, fn_name)) return true;
+            }
+            return false;
         }
         default:
             return false;

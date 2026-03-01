@@ -718,3 +718,100 @@ TEST(SemaTest, IntrinsicWrongArgs) {
     ));
     EXPECT_NE(errors.find("expects"), std::string::npos);
 }
+
+// ===== M4b: Match expression type checking =====
+
+TEST(SemaTest, ValidIntMatch) {
+    EXPECT_TRUE(checkSource(
+        "fn main() -> i64 { match 1 { 0 => 10, _ => 20 } }"
+    ));
+}
+
+TEST(SemaTest, AllArmsSameType) {
+    EXPECT_TRUE(checkSource(
+        "fn main() -> i64 { match 1 { 0 => 10, 1 => 20, _ => 30 } }"
+    ));
+}
+
+TEST(SemaTest, ArmTypeMismatch) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 { match 1 { 0 => 10, _ => true } }",
+        &errors
+    ));
+    EXPECT_NE(errors.find("match arm type mismatch"), std::string::npos);
+}
+
+TEST(SemaTest, NonExhaustiveInt) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 { match 1 { 0 => 10, 1 => 20 } }",
+        &errors
+    ));
+    EXPECT_NE(errors.find("non-exhaustive"), std::string::npos);
+}
+
+TEST(SemaTest, ExhaustiveBool) {
+    EXPECT_TRUE(checkSource(
+        "fn main() -> i64 { match true { true => 1, false => 0 } }"
+    ));
+}
+
+TEST(SemaTest, NonExhaustiveBool) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 { match true { true => 1 } }",
+        &errors
+    ));
+    EXPECT_NE(errors.find("non-exhaustive"), std::string::npos);
+}
+
+TEST(SemaTest, GuardMustBeBool) {
+    std::string errors;
+    EXPECT_FALSE(checkSource(
+        "fn main() -> i64 { match 1 { x if 42 => x, _ => 0 } }",
+        &errors
+    ));
+    EXPECT_NE(errors.find("bool"), std::string::npos);
+}
+
+TEST(SemaTest, VariableBindingScope) {
+    EXPECT_TRUE(checkSource(
+        "fn main() -> i64 { match 42 { x => x } }"
+    ));
+}
+
+TEST(SemaTest, MatchContextPropagation) {
+    // Context type should propagate to match arm bodies
+    EXPECT_TRUE(checkSource(
+        "fn id(x: i64) -> i64 { x }\n"
+        "fn main() -> i64 { match 1 { 0 => id(10), _ => id(20) } }"
+    ));
+}
+
+TEST(SemaTest, MatchNested) {
+    EXPECT_TRUE(checkSource(
+        "fn main() -> i64 {\n"
+        "    match 1 {\n"
+        "        0 => match 2 { 0 => 10, _ => 20 },\n"
+        "        _ => 30\n"
+        "    }\n"
+        "}"
+    ));
+}
+
+TEST(SemaTest, FnLevelPatternTypeCheck) {
+    EXPECT_TRUE(checkSource(
+        "fn fib(0) -> i64 { 0 }\n"
+        "fn fib(1) -> i64 { 1 }\n"
+        "fn fib(n: i64) -> i64 { fib(n - 1) + fib(n - 2) }\n"
+        "fn main() -> i64 { fib(10) }"
+    ));
+}
+
+TEST(SemaTest, MatchVariableScopedToArm) {
+    // Variable bound in one arm should not leak to others
+    EXPECT_TRUE(checkSource(
+        "fn main() -> i64 { match 1 { x => x, _ => 0 } }"
+    ));
+}

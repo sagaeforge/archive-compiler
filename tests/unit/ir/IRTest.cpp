@@ -805,3 +805,56 @@ TEST(IRTest, IntrinsicCallIR) {
     }
     EXPECT_TRUE(found);
 }
+
+// ===== M4b: Match IR lowering =====
+
+TEST(IRTest, MatchLowersToCondBranch) {
+    auto r = buildIR("fn main() -> i64 { match 1 { 0 => 10, _ => 20 } }");
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::ICmpEq));
+    EXPECT_TRUE(hasOpcode(r.ir.functions[0], IROpcode::CondBranch));
+}
+
+TEST(IRTest, MatchWildcardNoCondBranch) {
+    // A single wildcard arm needs no condition
+    auto r = buildIR("fn main() -> i64 { match 1 { _ => 42 } }");
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    EXPECT_FALSE(hasOpcode(r.ir.functions[0], IROpcode::CondBranch));
+}
+
+TEST(IRTest, MatchThreeArmsChained) {
+    auto r = buildIR("fn main() -> i64 { match 1 { 0 => 10, 1 => 20, _ => 30 } }");
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    // Should have 2 ICmpEq (for arms 0 and 1)
+    int cmp_count = 0;
+    for (auto& block : r.ir.functions[0].blocks) {
+        for (auto& instr : block.instrs) {
+            if (instr.op == IROpcode::ICmpEq) cmp_count++;
+        }
+    }
+    EXPECT_EQ(cmp_count, 2);
+}
+
+TEST(IRTest, MatchTailPositionPropagated) {
+    auto r = buildIR(
+        "fn f(n: i64) -> i64 { match n { 0 => 0, x => f(x - 1) } }");
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    // The recursive call in the catch-all arm should be marked as tail
+    bool found_tail = false;
+    for (auto& block : r.ir.functions[0].blocks) {
+        for (auto& instr : block.instrs) {
+            if (instr.op == IROpcode::Call && instr.callee_name == "f" && instr.is_tail_call) {
+                found_tail = true;
+            }
+        }
+    }
+    EXPECT_TRUE(found_tail);
+}
+
+TEST(IRTest, MatchVariableBindingInIR) {
+    // Variable pattern should bind the scrutinee value and use it
+    auto r = buildIR("fn main() -> i64 { match 42 { x => x } }");
+    ASSERT_EQ(r.ir.functions.size(), 1u);
+    // Should just produce the constant 42 and return it (no branches)
+    EXPECT_FALSE(hasOpcode(r.ir.functions[0], IROpcode::CondBranch));
+}

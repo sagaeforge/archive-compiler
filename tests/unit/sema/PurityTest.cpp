@@ -298,3 +298,34 @@ TEST(PurityTest, IntrinsicPropagation) {
     ASSERT_NE(it, r.results.end());
     EXPECT_EQ(it->second.purity, Purity::ImpureIo);
 }
+
+// ===== M4b: Match purity analysis =====
+
+TEST(PurityTest, MatchPure) {
+    auto r = analyzePurity(
+        "fn f(n: i64) -> i64 { match n { 0 => 10, _ => 20 } }"
+    );
+    auto it = r.results.find("f");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_EQ(it->second.purity, Purity::Pure);
+}
+
+TEST(PurityTest, MatchVarInArm) {
+    auto r = analyzePurity(
+        "fn f(n: i64) -> i64 { match n { x => x } }"
+    );
+    auto it = r.results.find("f");
+    ASSERT_NE(it, r.results.end());
+    EXPECT_EQ(it->second.purity, Purity::Pure);
+}
+
+TEST(PurityTest, MatchCalleeInArm) {
+    auto r = analyzePurity(
+        "fn io_fn() -> i64 = intrinsic\n"
+        "fn f(n: i64) -> i64 { match n { 0 => io_fn(), _ => 0 } }"
+    );
+    auto it = r.results.find("f");
+    ASSERT_NE(it, r.results.end());
+    // io_fn is intrinsic (ImpureIo), propagated to f through match arm
+    EXPECT_EQ(it->second.purity, Purity::ImpureIo);
+}

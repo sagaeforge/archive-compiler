@@ -768,3 +768,102 @@ TEST(ParserTest, IntrinsicError) {
     r.diag.printAll(out);
     EXPECT_NE(out.str().find("expected 'intrinsic'"), std::string::npos);
 }
+
+// ===== M4b: Match expression parsing =====
+
+TEST(ParserTest, MatchBasic) {
+    auto r = parse("fn main() -> i64 { match 1 { 0 => 10, _ => 20 } }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* body = r.mod->functions[0]->body;
+    ASSERT_EQ(body->kind, Expr::Kind::Block);
+    auto* block = static_cast<BlockExpr*>(body);
+    ASSERT_EQ(block->result->kind, Expr::Kind::Match);
+    auto* match_expr = static_cast<MatchExpr*>(block->result);
+    EXPECT_EQ(match_expr->arm_count, 2u);
+}
+
+TEST(ParserTest, MatchWithGuard) {
+    auto r = parse("fn main() -> i64 { match 1 { x if x > 0 => 1, _ => 0 } }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* block = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    auto* match_expr = static_cast<MatchExpr*>(block->result);
+    EXPECT_EQ(match_expr->arm_count, 2u);
+    EXPECT_NE(match_expr->arms[0].guard, nullptr);
+    EXPECT_EQ(match_expr->arms[0].pattern->kind, Pattern::Kind::Variable);
+    EXPECT_EQ(match_expr->arms[1].guard, nullptr);
+}
+
+TEST(ParserTest, MultipleLiteralArms) {
+    auto r = parse("fn main() -> i64 { match 1 { 0 => 10, 1 => 20, 2 => 30, _ => 40 } }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* block = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    auto* match_expr = static_cast<MatchExpr*>(block->result);
+    EXPECT_EQ(match_expr->arm_count, 4u);
+    EXPECT_EQ(match_expr->arms[0].pattern->kind, Pattern::Kind::IntLit);
+    EXPECT_EQ(match_expr->arms[3].pattern->kind, Pattern::Kind::Wildcard);
+}
+
+TEST(ParserTest, BoolMatch) {
+    auto r = parse("fn main() -> i64 { match true { true => 1, false => 0 } }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* block = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    auto* match_expr = static_cast<MatchExpr*>(block->result);
+    EXPECT_EQ(match_expr->arm_count, 2u);
+    EXPECT_EQ(match_expr->arms[0].pattern->kind, Pattern::Kind::BoolLit);
+    EXPECT_EQ(match_expr->arms[1].pattern->kind, Pattern::Kind::BoolLit);
+}
+
+TEST(ParserTest, MatchBlockBody) {
+    auto r = parse(
+        "fn main() -> i64 {\n"
+        "    match 1 {\n"
+        "        0 => { val x: i64 = 10\n x },\n"
+        "        _ => 20\n"
+        "    }\n"
+        "}");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* block = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    auto* match_expr = static_cast<MatchExpr*>(block->result);
+    EXPECT_EQ(match_expr->arm_count, 2u);
+    EXPECT_EQ(match_expr->arms[0].body->kind, Expr::Kind::Block);
+}
+
+TEST(ParserTest, MatchVariableBinding) {
+    auto r = parse("fn main() -> i64 { match 42 { x => x } }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    auto* block = static_cast<BlockExpr*>(r.mod->functions[0]->body);
+    auto* match_expr = static_cast<MatchExpr*>(block->result);
+    EXPECT_EQ(match_expr->arm_count, 1u);
+    EXPECT_EQ(match_expr->arms[0].pattern->kind, Pattern::Kind::Variable);
+    auto* vp = static_cast<VariablePattern*>(match_expr->arms[0].pattern);
+    EXPECT_EQ(vp->name, "x");
+}
+
+TEST(ParserTest, FnLevelPatternBasic) {
+    auto r = parse(
+        "fn fib(0) -> i64 { 0 }\n"
+        "fn fib(1) -> i64 { 1 }\n"
+        "fn fib(n: i64) -> i64 { n }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    // After desugaring: one merged fib + no separate overloads
+    ASSERT_EQ(r.mod->fn_count, 1u);
+    EXPECT_EQ(r.mod->functions[0]->name, "fib");
+    EXPECT_EQ(r.mod->functions[0]->param_count, 1u);
+}
+
+TEST(ParserTest, FnLevelPatternThreeOverloads) {
+    auto r = parse(
+        "fn f(0) -> i64 { 100 }\n"
+        "fn f(1) -> i64 { 200 }\n"
+        "fn f(2) -> i64 { 300 }\n"
+        "fn f(n: i64) -> i64 { n }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    ASSERT_EQ(r.mod->fn_count, 1u);
+    // The merged body should contain a match with 4 arms
+    auto* body = r.mod->functions[0]->body;
+    ASSERT_EQ(body->kind, Expr::Kind::Block);
+    auto* block = static_cast<BlockExpr*>(body);
+    ASSERT_EQ(block->result->kind, Expr::Kind::Match);
+    auto* match_expr = static_cast<MatchExpr*>(block->result);
+    EXPECT_EQ(match_expr->arm_count, 4u);
+}

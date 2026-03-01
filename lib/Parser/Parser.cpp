@@ -107,6 +107,35 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             if (r->value) dumpExpr(r->value, out, ind + 1);
             break;
         }
+        case Expr::Kind::Match: {
+            auto* m = static_cast<const MatchExpr*>(expr);
+            out << "Match\n";
+            indent(out, ind + 1); out << "scrutinee:\n";
+            dumpExpr(m->scrutinee, out, ind + 2);
+            for (uint32_t i = 0; i < m->arm_count; ++i) {
+                const auto& arm = m->arms[i];
+                indent(out, ind + 1);
+                out << "arm: ";
+                switch (arm.pattern->kind) {
+                    case Pattern::Kind::IntLit:
+                        out << static_cast<const IntLitPattern*>(arm.pattern)->value;
+                        break;
+                    case Pattern::Kind::BoolLit:
+                        out << (static_cast<const BoolLitPattern*>(arm.pattern)->value ? "true" : "false");
+                        break;
+                    case Pattern::Kind::Wildcard:
+                        out << "_";
+                        break;
+                    case Pattern::Kind::Variable:
+                        out << static_cast<const VariablePattern*>(arm.pattern)->name;
+                        break;
+                }
+                if (arm.guard) out << " if ...";
+                out << "\n";
+                dumpExpr(arm.body, out, ind + 2);
+            }
+            break;
+        }
     }
 }
 
@@ -192,11 +221,112 @@ Module* Parser::parseModule() {
         skipNewlines();
     }
 
+    // Function-level pattern matching: group same-name FnDecls
+    // fn fib(0) -> i64 { 0 }
+    // fn fib(1) -> i64 { 1 }
+    // fn fib(n: i64) -> i64 { ... }
+    // → single fn fib(_arg0: i64) -> i64 { match _arg0 { 0 => 0, 1 => 1, n => ... } }
+    std::vector<FnDecl*> merged;
+    size_t i = 0;
+    while (i < fns.size()) {
+        // Check if this starts a group of pattern-matched overloads
+        size_t group_end = i + 1;
+        bool is_pattern_group = fns[i]->has_pattern_params;
+        while (group_end < fns.size() && fns[group_end]->name == fns[i]->name) {
+            group_end++;
+        }
+
+        if (is_pattern_group && group_end - i > 1) {
+            // Desugar: merge into single fn with match expr
+            auto* first = fns[i];
+            std::string_view param_name = "_arg0";
+
+            // Determine parameter type from the variable-pattern overload
+            TypeRef param_type = {};
+            for (size_t j = i; j < group_end; ++j) {
+                if (!fns[j]->has_pattern_params && fns[j]->param_count > 0) {
+                    param_type = fns[j]->params[0].type;
+                    // Also grab the variable name for the last (catch-all) arm
+                    break;
+                }
+            }
+
+            // Build match arms
+            std::vector<MatchArm> arms;
+            for (size_t j = i; j < group_end; ++j) {
+                MatchArm arm;
+                arm.loc = fns[j]->loc;
+                arm.guard = nullptr;
+
+                if (fns[j]->has_pattern_params) {
+                    // This overload has a literal pattern param
+                    arm.pattern = fns[j]->pattern_param;
+                } else {
+                    // Variable param → VariablePattern
+                    if (fns[j]->param_count > 0) {
+                        auto* vp = arena_.make<VariablePattern>();
+                        vp->kind = Pattern::Kind::Variable;
+                        vp->loc = fns[j]->params[0].loc;
+                        vp->name = fns[j]->params[0].name;
+                        arm.pattern = vp;
+                    } else {
+                        auto* wp = arena_.make<WildcardPattern>();
+                        wp->kind = Pattern::Kind::Wildcard;
+                        wp->loc = fns[j]->loc;
+                        arm.pattern = wp;
+                    }
+                }
+                arm.body = fns[j]->body;
+                arms.push_back(arm);
+            }
+
+            // Build MatchExpr
+            auto* scrutinee_ident = arena_.make<IdentExpr>();
+            scrutinee_ident->kind = Expr::Kind::Ident;
+            scrutinee_ident->loc = first->loc;
+            scrutinee_ident->name = param_name;
+
+            auto* match_expr = arena_.make<MatchExpr>();
+            match_expr->kind = Expr::Kind::Match;
+            match_expr->loc = first->loc;
+            match_expr->scrutinee = scrutinee_ident;
+            match_expr->arm_count = static_cast<uint32_t>(arms.size());
+            match_expr->arms = arena_.makeArray<MatchArm>(arms.size());
+            for (size_t j = 0; j < arms.size(); ++j) {
+                match_expr->arms[j] = arms[j];
+            }
+
+            // Wrap in block
+            auto* block = arena_.make<BlockExpr>();
+            block->kind = Expr::Kind::Block;
+            block->loc = first->loc;
+            block->stmt_count = 0;
+            block->stmts = nullptr;
+            block->result = match_expr;
+
+            // Build merged FnDecl
+            auto* merged_fn = arena_.make<FnDecl>();
+            merged_fn->name = first->name;
+            merged_fn->param_count = 1;
+            merged_fn->params = arena_.makeArray<Param>(1);
+            merged_fn->params[0] = {param_name, param_type, first->loc};
+            merged_fn->return_type = first->return_type;
+            merged_fn->body = block;
+            merged_fn->loc = first->loc;
+            merged_fn->is_intrinsic = false;
+            merged.push_back(merged_fn);
+            i = group_end;
+        } else {
+            merged.push_back(fns[i]);
+            i++;
+        }
+    }
+
     auto* mod = arena_.make<Module>();
-    mod->fn_count = static_cast<uint32_t>(fns.size());
-    mod->functions = arena_.makeArray<FnDecl*>(fns.size());
-    for (size_t i = 0; i < fns.size(); ++i) {
-        mod->functions[i] = fns[i];
+    mod->fn_count = static_cast<uint32_t>(merged.size());
+    mod->functions = arena_.makeArray<FnDecl*>(merged.size());
+    for (size_t j = 0; j < merged.size(); ++j) {
+        mod->functions[j] = merged[j];
     }
     return mod;
 }
@@ -211,10 +341,44 @@ FnDecl* Parser::parseFnDecl() {
     expect(TokenKind::LParen, "expected '(' after function name");
 
     std::vector<Param> params;
+    bool has_pattern_params = false;
+    Pattern* pattern_param = nullptr;
+
     if (!check(TokenKind::RParen)) {
-        params.push_back(parseParam());
-        while (match(TokenKind::Comma)) {
+        // Check for literal pattern parameter (function-level pattern matching)
+        Token first = peek();
+        if (first.kind == TokenKind::IntLit) {
+            // fn fib(0) -> i64 { ... }
+            advance();
+            has_pattern_params = true;
+            auto* pat = arena_.make<IntLitPattern>();
+            pat->kind = Pattern::Kind::IntLit;
+            pat->loc = first.loc;
+            pat->value = static_cast<int64_t>(std::stoull(std::string(first.text)));
+            pattern_param = pat;
+        } else if (first.kind == TokenKind::Minus) {
+            // fn f(-1) -> i64 { ... }
+            advance();
+            Token num = expect(TokenKind::IntLit, "expected integer after '-' in pattern parameter");
+            has_pattern_params = true;
+            auto* pat = arena_.make<IntLitPattern>();
+            pat->kind = Pattern::Kind::IntLit;
+            pat->loc = first.loc;
+            pat->value = -static_cast<int64_t>(std::stoull(std::string(num.text)));
+            pattern_param = pat;
+        } else if (first.kind == TokenKind::KwTrue || first.kind == TokenKind::KwFalse) {
+            advance();
+            has_pattern_params = true;
+            auto* pat = arena_.make<BoolLitPattern>();
+            pat->kind = Pattern::Kind::BoolLit;
+            pat->loc = first.loc;
+            pat->value = (first.kind == TokenKind::KwTrue);
+            pattern_param = pat;
+        } else {
             params.push_back(parseParam());
+            while (match(TokenKind::Comma)) {
+                params.push_back(parseParam());
+            }
         }
     }
     expect(TokenKind::RParen, "expected ')' after parameters");
@@ -251,6 +415,8 @@ FnDecl* Parser::parseFnDecl() {
     fn->body = body;
     fn->loc = loc;
     fn->is_intrinsic = is_intrinsic;
+    fn->has_pattern_params = has_pattern_params;
+    fn->pattern_param = pattern_param;
     return fn;
 }
 
@@ -448,6 +614,11 @@ Expr* Parser::parsePrimary() {
         return ident;
     }
 
+    // Match expression
+    if (tok.kind == TokenKind::KwMatch) {
+        return parseMatchExpr();
+    }
+
     // If expression
     if (tok.kind == TokenKind::KwIf) {
         return parseIfExpr();
@@ -637,6 +808,109 @@ Expr* Parser::parseCallExpr(std::string_view name, SourceLocation loc) {
         call->args[i] = args[i];
     }
     return call;
+}
+
+// --- Match Expression ---
+Expr* Parser::parseMatchExpr() {
+    SourceLocation loc = peek().loc;
+    expect(TokenKind::KwMatch, "expected 'match'");
+
+    Expr* scrutinee = parseExpr();
+    skipNewlines();
+    expect(TokenKind::LBrace, "expected '{' after match scrutinee");
+    skipNewlines();
+
+    std::vector<MatchArm> arms;
+    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        MatchArm arm;
+        arm.loc = peek().loc;
+        arm.pattern = parsePattern();
+        arm.guard = nullptr;
+
+        // Optional guard: `if <expr>`
+        if (check(TokenKind::KwIf)) {
+            advance();
+            arm.guard = parseExpr();
+        }
+
+        expect(TokenKind::FatArrow, "expected '=>' after pattern");
+        skipNewlines();
+        arm.body = parseExpr();
+        arms.push_back(arm);
+
+        // Skip comma, semicolons, newlines between arms
+        while (match(TokenKind::Comma) || match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+    }
+    expect(TokenKind::RBrace, "expected '}' after match arms");
+
+    auto* matchExpr = arena_.make<MatchExpr>();
+    matchExpr->kind = Expr::Kind::Match;
+    matchExpr->loc = loc;
+    matchExpr->scrutinee = scrutinee;
+    matchExpr->arm_count = static_cast<uint32_t>(arms.size());
+    matchExpr->arms = arena_.makeArray<MatchArm>(arms.size());
+    for (size_t i = 0; i < arms.size(); ++i) {
+        matchExpr->arms[i] = arms[i];
+    }
+    return matchExpr;
+}
+
+Pattern* Parser::parsePattern() {
+    Token tok = peek();
+
+    // Integer literal pattern (including negative)
+    if (tok.kind == TokenKind::IntLit) {
+        advance();
+        auto* pat = arena_.make<IntLitPattern>();
+        pat->kind = Pattern::Kind::IntLit;
+        pat->loc = tok.loc;
+        pat->value = static_cast<int64_t>(std::stoull(std::string(tok.text)));
+        return pat;
+    }
+
+    // Negative integer literal pattern
+    if (tok.kind == TokenKind::Minus) {
+        advance();
+        Token num = expect(TokenKind::IntLit, "expected integer after '-' in pattern");
+        auto* pat = arena_.make<IntLitPattern>();
+        pat->kind = Pattern::Kind::IntLit;
+        pat->loc = tok.loc;
+        pat->value = -static_cast<int64_t>(std::stoull(std::string(num.text)));
+        return pat;
+    }
+
+    // Bool literal pattern
+    if (tok.kind == TokenKind::KwTrue || tok.kind == TokenKind::KwFalse) {
+        advance();
+        auto* pat = arena_.make<BoolLitPattern>();
+        pat->kind = Pattern::Kind::BoolLit;
+        pat->loc = tok.loc;
+        pat->value = (tok.kind == TokenKind::KwTrue);
+        return pat;
+    }
+
+    // Wildcard or variable pattern
+    if (tok.kind == TokenKind::Ident) {
+        advance();
+        if (tok.text == "_") {
+            auto* pat = arena_.make<WildcardPattern>();
+            pat->kind = Pattern::Kind::Wildcard;
+            pat->loc = tok.loc;
+            return pat;
+        }
+        auto* pat = arena_.make<VariablePattern>();
+        pat->kind = Pattern::Kind::Variable;
+        pat->loc = tok.loc;
+        pat->name = tok.text;
+        return pat;
+    }
+
+    diag_.error(tok.loc, "expected pattern (integer, bool, identifier, or '_')");
+    advance();
+    auto* pat = arena_.make<WildcardPattern>();
+    pat->kind = Pattern::Kind::Wildcard;
+    pat->loc = tok.loc;
+    return pat;
 }
 
 // --- Statements ---

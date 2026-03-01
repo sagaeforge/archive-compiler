@@ -482,11 +482,12 @@ TEST(CodeGenTest, TailCallRestoresFrame) {
     std::string asm_code = generateAsm(
         "fn g(x: i64) -> i64 { x }\n"
         "fn f(x: i64) -> i64 { g(x) }");
-    // Deferred epilogue should have "pop rbp" followed by "jmp _g"
-    auto pop_pos = asm_code.rfind("pop  rbp");
+    // Deferred tail epilogue: "pop rbp" immediately before "jmp _g"
     auto jmp_pos = asm_code.find("jmp  _g");
-    ASSERT_NE(pop_pos, std::string::npos);
     ASSERT_NE(jmp_pos, std::string::npos);
+    // Find the "pop  rbp" that comes right before this jmp
+    auto pop_pos = asm_code.rfind("pop  rbp", jmp_pos);
+    ASSERT_NE(pop_pos, std::string::npos);
     EXPECT_LT(pop_pos, jmp_pos);
 }
 

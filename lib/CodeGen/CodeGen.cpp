@@ -13,6 +13,10 @@ static constexpr int MAX_ARG_REGS = 6;
 static const char* XMM_ARG_REGS[] = {"xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7"};
 static constexpr int MAX_XMM_ARG_REGS = 8;
 
+static bool isMemOperand(const std::string& s) {
+    return s.find('[') != std::string::npos;
+}
+
 CodeGen::CodeGen(std::ostream& out) : out_(out) {}
 
 // Map 64-bit register name to the appropriate width variant
@@ -54,13 +58,19 @@ void CodeGen::initRegs() {
     free_xmm_regs_.clear();
     value_locs_.clear();
     value_types_.clear();
-    stack_offset_ = 0;
-    max_stack_ = 0;
+    // Reserve space for callee-saved registers (rbx, r12-r15 = 5 regs × 8 bytes)
+    // that may be push'd after `mov rbp, rsp` in the prologue.
+    // Spill slots must not overlap with these.
+    static constexpr int CALLEE_SAVED_RESERVE = 5 * 8; // 40 bytes
+    stack_offset_ = -CALLEE_SAVED_RESERVE;
+    max_stack_ = CALLEE_SAVED_RESERVE;
 
     free_regs_ = {"r10", "r11", "rcx", "rdx", "rsi", "rdi"};
     free_xmm_regs_ = {"xmm15", "xmm14", "xmm13", "xmm12", "xmm11", "xmm10", "xmm9", "xmm8"};
     tail_call_sites_.clear();
     tail_call_counter_ = 0;
+    ret_epilogue_labels_.clear();
+    ret_epilogue_counter_ = 0;
 }
 
 std::string CodeGen::addFloatConst(double value, bool is_f32) {
@@ -286,6 +296,23 @@ void CodeGen::emitFunction(const IRFunction& fn) {
         out() << "    jmp  _" << site.callee << "\n";
     }
 
+    // Deferred ret epilogues (used_callee_saved_ is now finalized)
+    for (auto& label : ret_epilogue_labels_) {
+        out() << label << ":\n";
+        int n_callee = static_cast<int>(used_callee_saved_.size());
+        if (n_callee > 0) {
+            out() << "    lea  rsp, [rbp-" << (n_callee * 8) << "]\n";
+        } else {
+            out() << "    mov  rsp, rbp\n";
+        }
+        for (auto it = used_callee_saved_.rbegin();
+             it != used_callee_saved_.rend(); ++it) {
+            out() << "    pop  " << *it << "\n";
+        }
+        out() << "    pop  rbp\n";
+        out() << "    ret\n";
+    }
+
     // Now write prologue with correct stack reservation to the real output
     out_ref_ = &saved_out;
     emitPrologue(fn.name);
@@ -354,10 +381,20 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
             std::string rhs_reg = valReg(instr.operands[1]);
             std::string dst = allocReg(instr.result);
 
-            if (dst != lhs_reg) {
-                out() << "    mov  " << dst << ", " << lhs_reg << "\n";
+            if (isMemOperand(dst)) {
+                out() << "    mov  rax, " << lhs_reg << "\n";
+                if (isMemOperand(rhs_reg)) {
+                    out() << "    add  rax, " << rhs_reg << "\n";
+                } else {
+                    out() << "    add  rax, " << rhs_reg << "\n";
+                }
+                out() << "    mov  " << dst << ", rax\n";
+            } else {
+                if (dst != lhs_reg) {
+                    out() << "    mov  " << dst << ", " << lhs_reg << "\n";
+                }
+                out() << "    add  " << dst << ", " << rhs_reg << "\n";
             }
-            out() << "    add  " << dst << ", " << rhs_reg << "\n";
             break;
         }
 
@@ -366,10 +403,20 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
             std::string rhs_reg = valReg(instr.operands[1]);
             std::string dst = allocReg(instr.result);
 
-            if (dst != lhs_reg) {
-                out() << "    mov  " << dst << ", " << lhs_reg << "\n";
+            if (isMemOperand(dst)) {
+                out() << "    mov  rax, " << lhs_reg << "\n";
+                if (isMemOperand(rhs_reg)) {
+                    out() << "    sub  rax, " << rhs_reg << "\n";
+                } else {
+                    out() << "    sub  rax, " << rhs_reg << "\n";
+                }
+                out() << "    mov  " << dst << ", rax\n";
+            } else {
+                if (dst != lhs_reg) {
+                    out() << "    mov  " << dst << ", " << lhs_reg << "\n";
+                }
+                out() << "    sub  " << dst << ", " << rhs_reg << "\n";
             }
-            out() << "    sub  " << dst << ", " << rhs_reg << "\n";
             break;
         }
 
@@ -378,10 +425,16 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
             std::string rhs_reg = valReg(instr.operands[1]);
             std::string dst = allocReg(instr.result);
 
-            if (dst != lhs_reg) {
-                out() << "    mov  " << dst << ", " << lhs_reg << "\n";
+            if (isMemOperand(dst)) {
+                out() << "    mov  rax, " << lhs_reg << "\n";
+                out() << "    imul rax, " << rhs_reg << "\n";
+                out() << "    mov  " << dst << ", rax\n";
+            } else {
+                if (dst != lhs_reg) {
+                    out() << "    mov  " << dst << ", " << lhs_reg << "\n";
+                }
+                out() << "    imul " << dst << ", " << rhs_reg << "\n";
             }
-            out() << "    imul " << dst << ", " << rhs_reg << "\n";
             break;
         }
 
@@ -445,31 +498,60 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
 
             // Allocate dst first, xor to clear it BEFORE cmp (xor clobbers flags)
             std::string dst = allocReg(instr.result);
-            std::string dst32 = regForWidth(dst, 32);
-            std::string dst8 = regForWidth(dst, 8);
-            out() << "    xor  " << dst32 << ", " << dst32 << "\n";
-            out() << "    cmp  " << lhs_reg << ", " << rhs_reg << "\n";
-            out() << "    " << setcc << " " << dst8 << "\n";
+
+            // If rhs is memory and lhs is also memory, load rhs into rax first
+            std::string cmp_rhs = rhs_reg;
+            if (isMemOperand(lhs_reg) && isMemOperand(rhs_reg)) {
+                out() << "    mov  rax, " << rhs_reg << "\n";
+                cmp_rhs = "rax";
+            }
+
+            if (isMemOperand(dst)) {
+                // dst is memory — can't use xor/setcc on it directly
+                // Use: cmp lhs, rhs; setcc al; movzx eax, al; mov dst, rax
+                out() << "    cmp  " << lhs_reg << ", " << cmp_rhs << "\n";
+                out() << "    " << setcc << " al\n";
+                out() << "    movzx rax, al\n";
+                out() << "    mov  " << dst << ", rax\n";
+            } else {
+                std::string dst32 = regForWidth(dst, 32);
+                std::string dst8 = regForWidth(dst, 8);
+                out() << "    xor  " << dst32 << ", " << dst32 << "\n";
+                out() << "    cmp  " << lhs_reg << ", " << cmp_rhs << "\n";
+                out() << "    " << setcc << " " << dst8 << "\n";
+            }
             break;
         }
 
         case IROpcode::Neg: {
             std::string src = valReg(instr.operands[0]);
             std::string dst = allocReg(instr.result);
-            if (dst != src) {
-                out() << "    mov  " << dst << ", " << src << "\n";
+            if (isMemOperand(dst)) {
+                out() << "    mov  rax, " << src << "\n";
+                out() << "    neg  rax\n";
+                out() << "    mov  " << dst << ", rax\n";
+            } else {
+                if (dst != src) {
+                    out() << "    mov  " << dst << ", " << src << "\n";
+                }
+                out() << "    neg  " << dst << "\n";
             }
-            out() << "    neg  " << dst << "\n";
             break;
         }
 
         case IROpcode::Not: {
             std::string src = valReg(instr.operands[0]);
             std::string dst = allocReg(instr.result);
-            if (dst != src) {
-                out() << "    mov  " << dst << ", " << src << "\n";
+            if (isMemOperand(dst)) {
+                out() << "    mov  rax, " << src << "\n";
+                out() << "    xor  rax, 1\n";
+                out() << "    mov  " << dst << ", rax\n";
+            } else {
+                if (dst != src) {
+                    out() << "    mov  " << dst << ", " << src << "\n";
+                }
+                out() << "    xor  " << dst << ", 1\n";
             }
-            out() << "    xor  " << dst << ", 1\n";
             break;
         }
 
@@ -503,7 +585,12 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
 
         case IROpcode::CondBranch: {
             std::string cond_reg = valReg(instr.operands[0]);
-            out() << "    test " << cond_reg << ", " << cond_reg << "\n";
+            if (isMemOperand(cond_reg)) {
+                out() << "    mov  rax, " << cond_reg << "\n";
+                out() << "    test rax, rax\n";
+            } else {
+                out() << "    test " << cond_reg << ", " << cond_reg << "\n";
+            }
             out() << "    jnz  ._" << fn.blocks[instr.target_block].label << "\n";
             out() << "    jmp  ._" << fn.blocks[instr.false_block].label << "\n";
             break;
@@ -525,19 +612,10 @@ void CodeGen::emitInstr(const IRFunction& fn, const IRInstr& instr) {
                     }
                 }
             }
-            // Restore stack: lea rsp to just after callee-saved pushes,
-            // then pop them in reverse, then pop rbp.
-            int n_callee = static_cast<int>(used_callee_saved_.size());
-            if (n_callee > 0) {
-                out() << "    lea  rsp, [rbp-" << (n_callee * 8) << "]\n";
-            } else {
-                out() << "    mov  rsp, rbp\n";
-            }
-            for (auto it = used_callee_saved_.rbegin(); it != used_callee_saved_.rend(); ++it) {
-                out() << "    pop  " << *it << "\n";
-            }
-            out() << "    pop  rbp\n";
-            out() << "    ret\n";
+            // Defer epilogue to after all blocks (used_callee_saved_ not yet finalized)
+            std::string label = "._ret_" + std::to_string(ret_epilogue_counter_++);
+            ret_epilogue_labels_.push_back(label);
+            out() << "    jmp  " << label << "\n";
             break;
         }
 

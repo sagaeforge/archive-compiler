@@ -36,6 +36,8 @@ private:
     Expr* parseIfExpr();
     Expr* parseBlockExpr();
     Expr* parseCallExpr(std::string_view name, SourceLocation loc);
+    Expr* parseMatchExpr();
+    Pattern* parsePattern();
 
     // Statements
     Stmt* parseValDecl();

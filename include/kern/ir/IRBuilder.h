@@ -14,6 +14,8 @@ public:
 private:
     void buildFunction(FnDecl* fn);
     ValueId buildExpr(Expr* expr, bool in_tail_position = false);
+    ValueId buildMatchChain(MatchExpr* matchE, ValueId scrutinee,
+                            uint32_t arm_idx, bool in_tail_position);
     void buildStmt(Stmt* stmt);
 
     ValueId emit(IRInstr instr);

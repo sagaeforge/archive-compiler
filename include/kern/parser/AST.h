@@ -25,12 +25,33 @@ struct Param {
     SourceLocation loc;
 };
 
+// --- Patterns (for match expressions) ---
+struct Pattern {
+    enum class Kind { IntLit, BoolLit, Wildcard, Variable };
+    Kind kind;
+    SourceLocation loc;
+};
+
+struct IntLitPattern : Pattern {
+    int64_t value;
+};
+
+struct BoolLitPattern : Pattern {
+    bool value;
+};
+
+struct WildcardPattern : Pattern {};
+
+struct VariablePattern : Pattern {
+    std::string_view name;
+};
+
 // --- Expressions ---
 struct Expr {
     enum class Kind {
         IntLit, FloatLit, BoolLit, Ident,
         BinOp, UnaryOp, Call,
-        If, Block, Return
+        If, Block, Return, Match
     };
     Kind kind;
     SourceLocation loc;
@@ -97,6 +118,19 @@ struct ReturnExpr : Expr {
     Expr* value; // may be nullptr
 };
 
+struct MatchArm {
+    Pattern* pattern;
+    Expr* guard;  // may be nullptr
+    Expr* body;
+    SourceLocation loc;
+};
+
+struct MatchExpr : Expr {
+    Expr* scrutinee;
+    MatchArm* arms;
+    uint32_t arm_count;
+};
+
 // --- Statements ---
 struct Stmt {
     enum class Kind { ValDecl, VarDecl, ExprStmt, Assign };
@@ -134,6 +168,8 @@ struct FnDecl {
     Expr* body; // BlockExpr (nullptr for intrinsics)
     SourceLocation loc;
     bool is_intrinsic = false;
+    bool has_pattern_params = false; // function-level pattern matching
+    Pattern* pattern_param = nullptr; // pattern for first param (when has_pattern_params)
 };
 
 // --- Module ---
