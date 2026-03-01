@@ -1,0 +1,9 @@
+fn get_len(s: Slice<i64>) -> i64 {
+    s.len as i64
+}
+
+fn main() -> i64 {
+    val arr: [i64; 3] = [42, 10, 20]
+    val s: Slice<i64> = Slice<i64> { data: &arr[0], len: 3 }
+    get_len(s) + s.data as i64 - s.data as i64 + 39
+}

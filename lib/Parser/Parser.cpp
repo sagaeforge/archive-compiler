@@ -422,6 +422,9 @@ Module* Parser::parseModule() {
     std::vector<StaticAssertDecl*> static_asserts;
     std::vector<TraitDecl*> traits;
     std::vector<ImplDecl*> impls;
+
+    // Register builtin struct-like types so struct literal syntax works
+    struct_names_.insert("Slice");
     skipNewlines();
     while (!check(TokenKind::Eof)) {
         // Parse annotations (@packed, @align(N), @section("name"))
