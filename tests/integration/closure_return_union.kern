@@ -1,0 +1,17 @@
+union Maybe { Some(i64), None }
+
+fn make_maybe(flag: i64) -> fn(i64) -> Maybe {
+    match flag {
+        0 => { x: i64 => Maybe::None }
+        _ => { x: i64 => Maybe::Some(x) }
+    }
+}
+
+fn main() -> i64 {
+    val maker: fn(i64) -> Maybe = make_maybe(1)
+    val r: Maybe = maker(42)
+    match r {
+        Some(v) => v
+        None => 0
+    }
+}

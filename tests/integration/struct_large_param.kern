@@ -1,0 +1,10 @@
+struct Triple { a: i64, b: i64, c: i64 }
+
+fn sum_triple(t: Triple) -> i64 {
+    t.a + t.b + t.c
+}
+
+fn main() -> i64 {
+    val t: Triple = Triple { a: 10, b: 20, c: 12 }
+    sum_triple(t)
+}

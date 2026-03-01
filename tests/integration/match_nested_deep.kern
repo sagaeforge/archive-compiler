@@ -1,0 +1,21 @@
+union Maybe { Some(i64), None }
+
+fn classify(x: i64) -> Maybe {
+    match x {
+        0 => Maybe::None
+        _ => Maybe::Some(x)
+    }
+}
+
+fn main() -> i64 {
+    val a: Maybe = classify(21)
+    val b: Maybe = classify(0)
+    val r1: i64 = match a {
+        Some(v) => match b {
+            Some(w) => v + w
+            None => v * 2
+        }
+        None => 0
+    }
+    r1
+}

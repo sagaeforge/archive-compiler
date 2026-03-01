@@ -1,0 +1,11 @@
+struct Point { x: i64, y: i64 }
+
+fn make_getter(p: Point) -> fn() -> i64 {
+    { => p.x + p.y }
+}
+
+fn main() -> i64 {
+    val p: Point = Point { x: 15, y: 27 }
+    val f: fn() -> i64 = make_getter(p)
+    f()
+}

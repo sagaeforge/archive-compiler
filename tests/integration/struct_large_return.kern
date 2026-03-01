@@ -1,0 +1,10 @@
+struct Triple { a: i64, b: i64, c: i64 }
+
+fn make_triple(x: i64, y: i64, z: i64) -> Triple {
+    Triple { a: x, b: y, c: z }
+}
+
+fn main() -> i64 {
+    val t: Triple = make_triple(10, 20, 12)
+    t.a + t.b + t.c
+}

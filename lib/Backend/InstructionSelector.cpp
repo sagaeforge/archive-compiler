@@ -930,27 +930,34 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
             }
         } else if (struct_vregs_.count(arg)) {
             // Struct arg: vreg holds a pointer to the struct data on stack.
-            // Load fields into consecutive GPR args.
             uint32_t size = struct_vreg_sizes_[arg];
-            uint32_t num_regs = (size <= 8) ? 1 : 2;
-            for (uint32_t r = 0; r < num_regs && gpr_idx < MAX_GPR_ARGS; ++r) {
-                // Load 8 bytes from [struct_base + r*8]
-                VReg field_ptr = freshVReg();
-                if (r == 0) {
-                    emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
-                } else {
-                    emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
-                    emit(makeAlu(X86Op::Add, MachOperand::virt(field_ptr),
-                                 MachOperand::immediate(r * 8), 64));
+            if (size > 16) {
+                // >16B: pass pointer to struct data directly via GPR
+                if (gpr_idx < MAX_GPR_ARGS) {
+                    emit(makeMov(MachOperand::precolored(GPR_ARG_REGS[gpr_idx]),
+                                 MachOperand::virt(arg), 64));
+                    gpr_idx++;
                 }
-                // MovLoad: mov gpr, [field_ptr]
-                MachInstr load(X86Op::MovLoad);
-                load.width = 64;
-                load.operand_count = 2;
-                load.inline_ops[0] = MachOperand::precolored(GPR_ARG_REGS[gpr_idx]);
-                load.inline_ops[1] = MachOperand::virt(field_ptr);
-                emit(load);
-                gpr_idx++;
+            } else {
+                // ≤16B: load fields into consecutive GPR args
+                uint32_t num_regs = (size <= 8) ? 1 : 2;
+                for (uint32_t r = 0; r < num_regs && gpr_idx < MAX_GPR_ARGS; ++r) {
+                    VReg field_ptr = freshVReg();
+                    if (r == 0) {
+                        emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
+                    } else {
+                        emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
+                        emit(makeAlu(X86Op::Add, MachOperand::virt(field_ptr),
+                                     MachOperand::immediate(r * 8), 64));
+                    }
+                    MachInstr load(X86Op::MovLoad);
+                    load.width = 64;
+                    load.operand_count = 2;
+                    load.inline_ops[0] = MachOperand::precolored(GPR_ARG_REGS[gpr_idx]);
+                    load.inline_ops[1] = MachOperand::virt(field_ptr);
+                    emit(load);
+                    gpr_idx++;
+                }
             }
         } else {
             // Integer/pointer arg → GPR
@@ -1110,23 +1117,32 @@ void InstructionSelector::selectCallIndirect(const LIRInstr& instr) {
             }
         } else if (struct_vregs_.count(arg)) {
             uint32_t size = struct_vreg_sizes_[arg];
-            uint32_t num_regs = (size <= 8) ? 1 : 2;
-            for (uint32_t r = 0; r < num_regs && gpr_idx < MAX_GPR_ARGS; ++r) {
-                VReg field_ptr = freshVReg();
-                if (r == 0) {
-                    emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
-                } else {
-                    emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
-                    emit(makeAlu(X86Op::Add, MachOperand::virt(field_ptr),
-                                 MachOperand::immediate(r * 8), 64));
+            if (size > 16) {
+                // >16B: pass pointer to struct data directly via GPR
+                if (gpr_idx < MAX_GPR_ARGS) {
+                    emit(makeMov(MachOperand::precolored(GPR_ARG_REGS[gpr_idx]),
+                                 MachOperand::virt(arg), 64));
+                    gpr_idx++;
                 }
-                MachInstr load(X86Op::MovLoad);
-                load.width = 64;
-                load.operand_count = 2;
-                load.inline_ops[0] = MachOperand::precolored(GPR_ARG_REGS[gpr_idx]);
-                load.inline_ops[1] = MachOperand::virt(field_ptr);
-                emit(load);
-                gpr_idx++;
+            } else {
+                uint32_t num_regs = (size <= 8) ? 1 : 2;
+                for (uint32_t r = 0; r < num_regs && gpr_idx < MAX_GPR_ARGS; ++r) {
+                    VReg field_ptr = freshVReg();
+                    if (r == 0) {
+                        emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
+                    } else {
+                        emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
+                        emit(makeAlu(X86Op::Add, MachOperand::virt(field_ptr),
+                                     MachOperand::immediate(r * 8), 64));
+                    }
+                    MachInstr load(X86Op::MovLoad);
+                    load.width = 64;
+                    load.operand_count = 2;
+                    load.inline_ops[0] = MachOperand::precolored(GPR_ARG_REGS[gpr_idx]);
+                    load.inline_ops[1] = MachOperand::virt(field_ptr);
+                    emit(load);
+                    gpr_idx++;
+                }
             }
         } else {
             if (gpr_idx < MAX_GPR_ARGS) {
@@ -1210,20 +1226,58 @@ void InstructionSelector::selectBlockArg(const LIRInstr& instr) {
 
         if (is_struct) {
             uint32_t size = sizeOfType(instr.type);
-            uint32_t num_regs = (size <= 8) ? 1 : 2;
+            if (size > 16) {
+                // >16B struct: caller passes a pointer in one GPR.
+                // Copy to local stack for callee-owned storage.
+                struct_alloc_bytes_ += (size + 7u) & ~7u;
+                static constexpr int32_t CS_AREA = NUM_CALLEE_SAVED * 8;
+                int32_t base_offset = -CS_AREA - static_cast<int32_t>(struct_alloc_bytes_);
 
-            struct_alloc_bytes_ += (size + 7u) & ~7u;
-            static constexpr int32_t CS_AREA = NUM_CALLEE_SAVED * 8;
-            int32_t base_offset = -CS_AREA - static_cast<int32_t>(struct_alloc_bytes_);
+                // src = pointer from GPR arg
+                VReg src_ptr = freshVReg();
+                if (gpr_arg_slot_ < MAX_GPR_ARGS) {
+                    emit(makeMov(MachOperand::virt(src_ptr),
+                                 MachOperand::precolored(GPR_ARG_REGS[gpr_arg_slot_]), 64));
+                    gpr_arg_slot_++;
+                }
 
-            for (uint32_t r = 0; r < num_regs && gpr_arg_slot_ < MAX_GPR_ARGS; ++r) {
-                emit(makeMov(MachOperand::stack(base_offset + r * 8),
-                             MachOperand::precolored(GPR_ARG_REGS[gpr_arg_slot_]), 64));
-                gpr_arg_slot_++;
+                // Copy data from caller's pointer to local stack
+                VReg dst_ptr = freshVReg();
+                emit(makeLea(MachOperand::virt(dst_ptr), MachOperand::stack(base_offset)));
+                for (uint32_t off = 0; off < size; off += 8) {
+                    VReg tmp = freshVReg();
+                    MachInstr ld(X86Op::MovLoad);
+                    ld.width = 64;
+                    ld.operand_count = 2;
+                    ld.inline_ops[0] = MachOperand::virt(tmp);
+                    ld.inline_ops[1] = MachOperand::virt(src_ptr);
+                    emit(ld);
+                    emit(makeMov(MachOperand::stack(base_offset + static_cast<int32_t>(off)),
+                                 MachOperand::virt(tmp), 64));
+                    if (off + 8 < size) {
+                        emit(makeAlu(X86Op::Add, MachOperand::virt(src_ptr),
+                                     MachOperand::immediate(8), 64));
+                    }
+                }
+
+                emit(makeLea(MachOperand::virt(instr.result), MachOperand::stack(base_offset)));
+            } else {
+                // ≤16B struct: unpack from 1-2 GPR args to local stack
+                uint32_t num_regs = (size <= 8) ? 1 : 2;
+
+                struct_alloc_bytes_ += (size + 7u) & ~7u;
+                static constexpr int32_t CS_AREA = NUM_CALLEE_SAVED * 8;
+                int32_t base_offset = -CS_AREA - static_cast<int32_t>(struct_alloc_bytes_);
+
+                for (uint32_t r = 0; r < num_regs && gpr_arg_slot_ < MAX_GPR_ARGS; ++r) {
+                    emit(makeMov(MachOperand::stack(base_offset + r * 8),
+                                 MachOperand::precolored(GPR_ARG_REGS[gpr_arg_slot_]), 64));
+                    gpr_arg_slot_++;
+                }
+
+                emit(makeLea(MachOperand::virt(instr.result),
+                             MachOperand::stack(base_offset)));
             }
-
-            emit(makeLea(MachOperand::virt(instr.result),
-                         MachOperand::stack(base_offset)));
         } else if (is_float_param) {
             // Float params use separate XMM counter (not tracked in gpr_arg_slot_)
             // For now, use block_arg.index for XMM since we don't have mixed tracking

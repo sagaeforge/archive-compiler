@@ -924,7 +924,8 @@ VReg LIRBuilder::lowerMatch(const HIRMatchExpr* expr) {
         bool is_last = (a + 1 == expr->arm_count);
 
         uint32_t body_bb = newBlock("match_arm");
-        uint32_t next_bb = is_last ? merge_bb : newBlock("match_next");
+        // Need a next_bb even for last arm if it has a guard (guard can fail)
+        uint32_t next_bb = (is_last && !arm.guard) ? merge_bb : newBlock("match_next");
 
         switch (arm.pattern->kind) {
             case HIRPattern::Kind::IntLit: {
@@ -1070,6 +1071,14 @@ VReg LIRBuilder::lowerMatch(const HIRMatchExpr* expr) {
 
                     locals_[var_pat->name] = payload_val;
 
+                    // Evaluate guard if present
+                    if (arm.guard) {
+                        VReg guard_val = lowerExpr(arm.guard);
+                        uint32_t real_body_bb = newBlock("match_guard_pass");
+                        emitCondBranch(guard_val, real_body_bb, next_bb);
+                        switchToBlock(real_body_bb);
+                    }
+
                     VReg arm_val = lowerExpr(arm.body);
                     uint32_t arm_exit = current_block_;
                     bool arm_returned = !blocks_[arm_exit].instrs.empty() &&
@@ -1087,7 +1096,12 @@ VReg LIRBuilder::lowerMatch(const HIRMatchExpr* expr) {
                         emitBranch(merge_bb);
                     }
 
-                    if (!is_last) switchToBlock(next_bb);
+                    if (!is_last || arm.guard) {
+                        switchToBlock(next_bb);
+                        if (is_last && arm.guard) {
+                            emitBranch(merge_bb);
+                        }
+                    }
                     continue;
                 }
                 break;
@@ -1096,6 +1110,15 @@ VReg LIRBuilder::lowerMatch(const HIRMatchExpr* expr) {
 
         // Default: lower arm body
         switchToBlock(body_bb);
+
+        // Evaluate guard if present
+        if (arm.guard) {
+            VReg guard_val = lowerExpr(arm.guard);
+            uint32_t real_body_bb = newBlock("match_guard_pass");
+            emitCondBranch(guard_val, real_body_bb, next_bb);
+            switchToBlock(real_body_bb);
+        }
+
         VReg arm_val = lowerExpr(arm.body);
         uint32_t arm_exit = current_block_;
         bool arm_returned = !blocks_[arm_exit].instrs.empty() &&
@@ -1114,7 +1137,14 @@ VReg LIRBuilder::lowerMatch(const HIRMatchExpr* expr) {
             emitBranch(merge_bb);
         }
 
-        if (!is_last) switchToBlock(next_bb);
+        if (!is_last || arm.guard) {
+            switchToBlock(next_bb);
+            // If this is the last arm with a guard, the guard-fail path
+            // needs to reach merge_bb (no more arms to try)
+            if (is_last && arm.guard) {
+                emitBranch(merge_bb);
+            }
+        }
     }
 
     switchToBlock(merge_bb);
