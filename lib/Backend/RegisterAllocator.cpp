@@ -151,6 +151,9 @@ static void scanOperandUses(const MachInstr& instr, uint32_t idx,
         recordPhysUse(intervals, PhysReg::RAX, idx);
         recordPhysUse(intervals, PhysReg::RDX, idx);
     }
+    if (instr.op == X86Op::LockCmpxchg) {
+        recordPhysUse(intervals, PhysReg::RAX, idx);
+    }
     // Call clobbers all caller-saved registers (GPR and XMM)
     if (instr.op == X86Op::Call) {
         for (uint32_t i = 0; i < NUM_CALLER_SAVED; ++i) {

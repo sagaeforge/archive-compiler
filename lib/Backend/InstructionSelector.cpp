@@ -1421,31 +1421,39 @@ void InstructionSelector::selectAtomicStore(const LIRInstr& instr) {
 
 void InstructionSelector::selectAtomicCas(const LIRInstr& instr) {
     // lock cmpxchg [ptr], desired
-    // Move expected → result vreg (will become rax)
-    MachInstr mov_exp(X86Op::Mov);
-    mov_exp.width = 64;
-    mov_exp.operand_count = 2;
-    mov_exp.inline_ops[0] = MachOperand::virt(instr.result);
-    mov_exp.inline_ops[1] = MachOperand::virt(instr.atomic_cas.expected);
-    emit(mov_exp);
+    // x86 cmpxchg: compares rax with [ptr], if equal [ptr]=desired, else rax=[ptr]
+    // Result (old value) is always in rax after the instruction.
+
+    // Move expected → rax (cmpxchg uses rax implicitly)
+    emit(makeMov(MachOperand::precolored(PhysReg::RAX),
+                 MachOperand::virt(instr.atomic_cas.expected), 64));
 
     MachInstr mi(X86Op::LockCmpxchg);
     mi.width = 64;
     mi.operand_count = 3;
-    mi.inline_ops[0] = MachOperand::virt(instr.result);
+    mi.inline_ops[0] = MachOperand::precolored(PhysReg::RAX);
     mi.inline_ops[1] = MachOperand::virt(instr.atomic_cas.ptr);
     mi.inline_ops[2] = MachOperand::virt(instr.atomic_cas.desired);
     emit(mi);
+
+    // Move result from rax → result vreg
+    emit(makeMov(MachOperand::virt(instr.result),
+                 MachOperand::precolored(PhysReg::RAX), 64));
 }
 
 void InstructionSelector::selectAtomicFetchAdd(const LIRInstr& instr) {
-    // lock xadd [ptr], value → returns old value
+    // lock xadd [ptr], reg — atomically: old=[ptr], [ptr]+=reg, reg=old
+    // The value register is modified in-place to hold the old value.
+    // Move value → result vreg, then use result as the xadd operand.
+    emit(makeMov(MachOperand::virt(instr.result),
+                 MachOperand::virt(instr.atomic_fetch_add.value), 64));
+
     MachInstr mi(X86Op::LockXadd);
     mi.width = 64;
     mi.operand_count = 3;
     mi.inline_ops[0] = MachOperand::virt(instr.result);
     mi.inline_ops[1] = MachOperand::virt(instr.atomic_fetch_add.ptr);
-    mi.inline_ops[2] = MachOperand::virt(instr.atomic_fetch_add.value);
+    mi.inline_ops[2] = MachOperand::virt(instr.result);  // result vreg used as xadd operand
     emit(mi);
 }
 
