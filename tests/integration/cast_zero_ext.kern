@@ -1,0 +1,8 @@
+fn widen_u(x: u8) -> u64 {
+    x as u64
+}
+
+fn main() -> i64 {
+    val x: u64 = widen_u(42)
+    x as i64
+}

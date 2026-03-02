@@ -1,0 +1,6 @@
+fn main() -> i64 {
+    val a: i8 = 42
+    val b: i32 = a as i32
+    val c: i64 = b as i64
+    c
+}
