@@ -3250,10 +3250,16 @@ VReg LIRBuilder::lowerArrayLit(const HIRArrayLitExpr* expr) {
     // Get element type and size from the array type
     TypeId arr_type = expr->type;
     uint32_t elem_size = 8; // default
+    TypeId elem_type = TypeTable::I64;
+    bool elem_is_aggregate = false;
     if (arr_type < ctx_.types.size()) {
         const auto& ti = ctx_.types.get(arr_type);
         if (ti.kind == TypeKind::Array) {
-            elem_size = ctx_.types.sizeOf(ti.array.element);
+            elem_type = ti.array.element;
+            elem_size = ctx_.types.sizeOf(elem_type);
+            const auto& eti = ctx_.types.get(elem_type);
+            elem_is_aggregate = (eti.kind == TypeKind::Struct ||
+                                 eti.kind == TypeKind::Array);
         }
     }
 
@@ -3271,29 +3277,77 @@ VReg LIRBuilder::lowerArrayLit(const HIRArrayLitExpr* expr) {
     alloc.loc = expr->loc;
     emit(alloc);
 
-    // FieldStore for each element: base + elem_size * index
+    // Store each element: base + elem_size * index
     for (uint32_t i = 0; i < expr->element_count; ++i) {
         VReg val = lowerExpr(expr->elements[i]);
-        uint32_t offset = elem_size * i;
+        uint32_t slot_offset = elem_size * i;
 
-        VReg fp = freshVReg();
-        LIRInstr fp_instr{};
-        fp_instr.op = LIROp::FieldPtr;
-        fp_instr.result = fp;
-        fp_instr.type = TypeTable::I64;
-        fp_instr.field_ptr.base = base;
-        fp_instr.field_ptr.offset = offset;
-        fp_instr.loc = expr->loc;
-        emit(fp_instr);
+        if (elem_is_aggregate) {
+            // Aggregate element (struct/array): val is a pointer to the data.
+            // Copy elem_size bytes from val to the array slot inline.
+            uint32_t aligned_size = (elem_size + 7u) & ~7u;
+            for (uint32_t off = 0; off < aligned_size; off += 8) {
+                // Load 8 bytes from source struct
+                VReg src_ptr = freshVReg();
+                LIRInstr src_fp{};
+                src_fp.op = LIROp::FieldPtr;
+                src_fp.result = src_ptr;
+                src_fp.type = TypeTable::I64;
+                src_fp.field_ptr.base = val;
+                src_fp.field_ptr.offset = off;
+                src_fp.loc = expr->loc;
+                emit(src_fp);
 
-        LIRInstr store{};
-        store.op = LIROp::Store;
-        store.result = INVALID_VREG;
-        store.type = TypeTable::Unit;
-        store.store.ptr = fp;
-        store.store.value = val;
-        store.loc = expr->loc;
-        emit(store);
+                VReg tmp = freshVReg();
+                LIRInstr load{};
+                load.op = LIROp::Load;
+                load.result = tmp;
+                load.type = TypeTable::I64;
+                load.load.ptr = src_ptr;
+                load.loc = expr->loc;
+                emit(load);
+
+                // Store 8 bytes to destination array slot
+                VReg dst_ptr = freshVReg();
+                LIRInstr dst_fp{};
+                dst_fp.op = LIROp::FieldPtr;
+                dst_fp.result = dst_ptr;
+                dst_fp.type = TypeTable::I64;
+                dst_fp.field_ptr.base = base;
+                dst_fp.field_ptr.offset = slot_offset + off;
+                dst_fp.loc = expr->loc;
+                emit(dst_fp);
+
+                LIRInstr store{};
+                store.op = LIROp::Store;
+                store.result = INVALID_VREG;
+                store.type = TypeTable::Unit;
+                store.store.ptr = dst_ptr;
+                store.store.value = tmp;
+                store.loc = expr->loc;
+                emit(store);
+            }
+        } else {
+            // Scalar element: store value directly
+            VReg fp = freshVReg();
+            LIRInstr fp_instr{};
+            fp_instr.op = LIROp::FieldPtr;
+            fp_instr.result = fp;
+            fp_instr.type = TypeTable::I64;
+            fp_instr.field_ptr.base = base;
+            fp_instr.field_ptr.offset = slot_offset;
+            fp_instr.loc = expr->loc;
+            emit(fp_instr);
+
+            LIRInstr store{};
+            store.op = LIROp::Store;
+            store.result = INVALID_VREG;
+            store.type = TypeTable::Unit;
+            store.store.ptr = fp;
+            store.store.value = val;
+            store.loc = expr->loc;
+            emit(store);
+        }
     }
 
     return base;
