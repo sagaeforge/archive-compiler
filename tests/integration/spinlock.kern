@@ -1,0 +1,23 @@
+fn atomic_cas(ptr: Ptr<var i64>, expected: i64, desired: i64) -> i64 = intrinsic
+fn atomic_store(ptr: Ptr<var i64>, value: i64) -> Unit = intrinsic
+
+fn spin_lock(lock: Ptr<var i64>) with io, mut, atomic {
+    while atomic_cas(lock, 0, 1) != 0 {
+    }
+}
+
+fn spin_unlock(lock: Ptr<var i64>) with io, atomic {
+    atomic_store(lock, 0)
+}
+
+fn main() -> i64 with io, mut, mem, atomic {
+    var lock: i64 = 0
+    var counter: i64 = 0
+    spin_lock(&var lock)
+    counter = counter + 21
+    spin_unlock(&var lock)
+    spin_lock(&var lock)
+    counter = counter + 21
+    spin_unlock(&var lock)
+    counter
+}

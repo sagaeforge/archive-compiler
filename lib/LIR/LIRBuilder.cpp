@@ -2749,7 +2749,7 @@ VReg LIRBuilder::lowerStructLit(const HIRStructLitExpr* expr) {
                 LIRInstr store{};
                 store.op = LIROp::Store;
                 store.result = INVALID_VREG;
-                store.type = TypeTable::Unit;
+                store.type = field_type;
                 store.store.ptr = fp;
                 store.store.value = val;
                 emit(store);
@@ -3387,7 +3387,7 @@ void LIRBuilder::lowerStmt(const HIRStmt* stmt) {
                         LIRInstr store{};
                         store.op = LIROp::Store;
                         store.result = INVALID_VREG;
-                        store.type = TypeTable::Unit;
+                        store.type = field_type;
                         store.store.ptr = fp;
                         store.store.value = val;
                         store.loc = s->loc;
@@ -3419,7 +3419,7 @@ void LIRBuilder::lowerStmt(const HIRStmt* stmt) {
                 LIRInstr store{};
                 store.op = LIROp::Store;
                 store.result = INVALID_VREG;
-                store.type = TypeTable::Unit;
+                store.type = val_type;
                 store.store.ptr = ptr;
                 store.store.value = val;
                 store.loc = s->loc;
@@ -3482,7 +3482,7 @@ void LIRBuilder::lowerStmt(const HIRStmt* stmt) {
                 LIRInstr store{};
                 store.op = LIROp::Store;
                 store.result = INVALID_VREG;
-                store.type = TypeTable::Unit;
+                store.type = val_type;
                 store.store.ptr = elem_ptr;
                 store.store.value = val;
                 store.loc = s->loc;
@@ -3584,7 +3584,7 @@ VReg LIRBuilder::lowerArrayLit(const HIRArrayLitExpr* expr) {
             LIRInstr fp_instr{};
             fp_instr.op = LIROp::FieldPtr;
             fp_instr.result = fp;
-            fp_instr.type = TypeTable::I64;
+            fp_instr.type = ctx_.types.makePtr(elem_type, false);
             fp_instr.field_ptr.base = base;
             fp_instr.field_ptr.offset = slot_offset;
             fp_instr.loc = expr->loc;
@@ -3593,7 +3593,7 @@ VReg LIRBuilder::lowerArrayLit(const HIRArrayLitExpr* expr) {
             LIRInstr store{};
             store.op = LIROp::Store;
             store.result = INVALID_VREG;
-            store.type = TypeTable::Unit;
+            store.type = elem_type;
             store.store.ptr = fp;
             store.store.value = val;
             store.loc = expr->loc;

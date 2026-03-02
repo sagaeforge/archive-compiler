@@ -346,7 +346,7 @@ bool HIRBuilder::intFitsInType(int64_t value, TypeId type) const {
         case 8:  return is_signed ? (value >= -128 && value <= 127) : (value >= 0 && value <= 255);
         case 16: return is_signed ? (value >= -32768 && value <= 32767) : (value >= 0 && value <= 65535);
         case 32: return is_signed ? (value >= -2147483648LL && value <= 2147483647LL) : (value >= 0 && value <= 4294967295LL);
-        case 64: return is_signed ? true : (value >= 0);
+        case 64: return true;  // all 64-bit patterns valid for both i64 and u64
         default: return false;
     }
 }

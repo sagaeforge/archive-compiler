@@ -345,11 +345,19 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
 // ============================================================================
 
 void InstructionSelector::selectConstInt(const LIRInstr& instr) {
-    // mov vreg, imm
+    // mov vreg, imm — always use 64-bit to fully initialize register.
+    // Sub-64-bit constants have correct values in the low bits and zeros above.
     uint8_t w = widthOf(instr.type);
     if (w == 0) return;  // Unit
+    // Mask the immediate for unsigned sub-64-bit types to avoid sign-extension issues
+    int64_t imm = instr.const_int.value;
+    if (w < 64) {
+        // Zero-extend: mask to the correct bit width
+        uint64_t mask = (1ULL << w) - 1;
+        imm = static_cast<int64_t>(static_cast<uint64_t>(imm) & mask);
+    }
     emit(makeMov(MachOperand::virt(instr.result),
-                 MachOperand::immediate(instr.const_int.value), w));
+                 MachOperand::immediate(imm), 64));
 }
 
 void InstructionSelector::selectConstBool(const LIRInstr& instr) {
@@ -899,13 +907,35 @@ void InstructionSelector::selectLoad(const LIRInstr& instr) {
             }
         }
     } else {
-        MachInstr mi(X86Op::MovLoad);
-        mi.width = w;
-        mi.operand_count = 2;
-        mi.inline_ops[0] = MachOperand::virt(dst);
-        mi.inline_ops[1] = MachOperand::virt(ptr);
-        mi.is_volatile = instr.load.is_volatile;
-        emit(mi);
+        // For sub-32-bit loads (8/16-bit), use movzx/movsx to zero/sign-extend
+        // to 64-bit. Without this, upper register bits contain garbage from
+        // previous values, causing incorrect 64-bit comparisons.
+        if (w <= 16 && !instr.load.is_volatile) {
+            bool is_signed = instr.type < ctx_.types.size() &&
+                             ctx_.types.isSigned(instr.type);
+            // First do a narrow MovLoad, then extend
+            MachInstr ld(X86Op::MovLoad);
+            ld.width = w;
+            ld.operand_count = 2;
+            ld.inline_ops[0] = MachOperand::virt(dst);
+            ld.inline_ops[1] = MachOperand::virt(ptr);
+            emit(ld);
+            // Extend in-place: movzx/movsx dst64, dst8/16
+            MachInstr ext(is_signed ? X86Op::MovSX : X86Op::MovZX);
+            ext.width = w;
+            ext.operand_count = 2;
+            ext.inline_ops[0] = MachOperand::virt(dst);
+            ext.inline_ops[1] = MachOperand::virt(dst);
+            emit(ext);
+        } else {
+            MachInstr mi(X86Op::MovLoad);
+            mi.width = w;
+            mi.operand_count = 2;
+            mi.inline_ops[0] = MachOperand::virt(dst);
+            mi.inline_ops[1] = MachOperand::virt(ptr);
+            mi.is_volatile = instr.load.is_volatile;
+            emit(mi);
+        }
 
         // If loading from a var slot (stack_ptr_vreg) and the result is a
         // pointer type, mark it as a stack address. This prevents unsafe
