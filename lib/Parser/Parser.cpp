@@ -424,6 +424,13 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             dumpExpr(te->operand, out, ind + 1);
             break;
         }
+        case Expr::Kind::TupleLit: {
+            auto* tl = static_cast<const TupleLitExpr*>(expr);
+            out << "TupleLit(" << tl->count << ")\n";
+            for (uint32_t i = 0; i < tl->count; ++i)
+                dumpExpr(tl->elements[i], out, ind + 1);
+            break;
+        }
     }
 }
 
@@ -1814,6 +1821,29 @@ TypeRef Parser::parseType() {
         ref.fn_return = ret;
         return ref;
     }
+    // Tuple type: (T1, T2, ...)
+    if (check(TokenKind::LParen)) {
+        Token paren_tok = advance(); // consume '('
+        std::vector<TypeRef> elems;
+        while (!check(TokenKind::RParen) && !check(TokenKind::Eof)) {
+            elems.push_back(parseType());
+            if (!check(TokenKind::RParen)) {
+                expect(TokenKind::Comma, "expected ',' or ')' in tuple type");
+            }
+        }
+        expect(TokenKind::RParen, "expected ')' after tuple type");
+        TypeRef ref;
+        ref.kind = TypeRef::Kind::Tuple;
+        ref.name = "Tuple";
+        ref.loc = paren_tok.loc;
+        ref.tuple_count = static_cast<uint32_t>(elems.size());
+        if (!elems.empty()) {
+            ref.tuple_elements = arena_.makeArray<TypeRef>(elems.size());
+            for (size_t i = 0; i < elems.size(); ++i)
+                ref.tuple_elements[i] = elems[i];
+        }
+        return ref;
+    }
     // dyn TraitName — dynamic dispatch trait object (fat pointer)
     if (check(TokenKind::KwDyn)) {
         Token dyn_tok = advance(); // consume 'dyn'
@@ -2047,7 +2077,10 @@ Expr* Parser::parseExprInfix(Expr* lhs, uint8_t minBP) {
 
         // Dot operator: field access or method call
         if (op == TokenKind::Dot) {
-            Token field = expect(TokenKind::Ident, "expected field name after '.'");
+            // Allow integer literal for tuple field access: t.0, t.1
+            Token field = check(TokenKind::IntLit)
+                ? advance()
+                : expect(TokenKind::Ident, "expected field name after '.'");
             // Check for method call: expr.method(args)
             if (check(TokenKind::LParen)) {
                 advance(); // consume '('
@@ -2075,7 +2108,15 @@ Expr* Parser::parseExprInfix(Expr* lhs, uint8_t minBP) {
                 fa->kind = Expr::Kind::FieldAccess;
                 fa->loc = opTok.loc;
                 fa->object = lhs;
-                fa->field_name = field.text;
+                // For tuple field access (t.0, t.1), convert index to _N field name
+                if (field.kind == TokenKind::IntLit) {
+                    std::string name = "_" + std::string(field.text);
+                    char* buf = arena_.makeArray<char>(name.size());
+                    std::memcpy(buf, name.data(), name.size());
+                    fa->field_name = std::string_view(buf, name.size());
+                } else {
+                    fa->field_name = field.text;
+                }
                 lhs = fa;
             }
             continue;
@@ -2709,14 +2750,34 @@ Expr* Parser::parsePrimary() {
         return parseBlockExpr();
     }
 
-    // Parenthesized expression
+    // Parenthesized expression or tuple literal
     if (tok.kind == TokenKind::LParen) {
         advance();
         skipNewlines();
-        Expr* expr = parseExpr();
+        Expr* first = parseExpr();
         skipNewlines();
+        // If comma follows → tuple literal
+        if (check(TokenKind::Comma)) {
+            std::vector<Expr*> elems;
+            elems.push_back(first);
+            while (match(TokenKind::Comma)) {
+                skipNewlines();
+                if (check(TokenKind::RParen)) break; // trailing comma
+                elems.push_back(parseExpr());
+                skipNewlines();
+            }
+            expect(TokenKind::RParen, "expected ')' after tuple elements");
+            auto* tuple = arena_.make<TupleLitExpr>();
+            tuple->kind = Expr::Kind::TupleLit;
+            tuple->loc = tok.loc;
+            tuple->count = static_cast<uint32_t>(elems.size());
+            tuple->elements = arena_.makeArray<Expr*>(elems.size());
+            for (size_t i = 0; i < elems.size(); ++i)
+                tuple->elements[i] = elems[i];
+            return tuple;
+        }
         expect(TokenKind::RParen, "expected ')'");
-        return expr;
+        return first;
     }
 
     // Return
@@ -3072,7 +3133,7 @@ Expr* Parser::parseBlockExpr() {
             while (check(TokenKind::Dot) || check(TokenKind::LBracket)) {
                 if (check(TokenKind::Dot)) {
                     Token dotTok = advance();
-                    Token field = expect(TokenKind::Ident, "expected field name after '.'");
+                    Token field = check(TokenKind::IntLit) ? advance() : expect(TokenKind::Ident, "expected field name after '.'");
                     if (check(TokenKind::LParen)) {
                         advance(); // consume '('
                         std::vector<Expr*> mc_args;
@@ -3452,7 +3513,7 @@ Expr* Parser::parseLoopExpr() {
             // Parse dot chains
             while (check(TokenKind::Dot)) {
                 Token dotTok = advance();
-                Token field = expect(TokenKind::Ident, "expected field name after '.'");
+                Token field = check(TokenKind::IntLit) ? advance() : expect(TokenKind::Ident, "expected field name after '.'");
                 if (check(TokenKind::LParen)) {
                     advance(); // consume '('
                     std::vector<Expr*> mc_args;
@@ -3479,7 +3540,14 @@ Expr* Parser::parseLoopExpr() {
                     fa->kind = Expr::Kind::FieldAccess;
                     fa->loc = dotTok.loc;
                     fa->object = lhs;
-                    fa->field_name = field.text;
+                    if (field.kind == TokenKind::IntLit) {
+                        std::string fn = "_" + std::string(field.text);
+                        char* b = arena_.makeArray<char>(fn.size());
+                        std::memcpy(b, fn.data(), fn.size());
+                        fa->field_name = std::string_view(b, fn.size());
+                    } else {
+                        fa->field_name = field.text;
+                    }
                     lhs = fa;
                 }
             }
@@ -3618,12 +3686,19 @@ Expr* Parser::parseForRange() {
                 }
                 while (check(TokenKind::Dot)) {
                     advance();
-                    Token field = expect(TokenKind::Ident, "expected field name after '.'");
+                    Token field = check(TokenKind::IntLit) ? advance() : expect(TokenKind::Ident, "expected field name after '.'");
                     auto* fa = arena_.make<FieldAccessExpr>();
                     fa->kind = Expr::Kind::FieldAccess;
                     fa->loc = field.loc;
                     fa->object = lhs;
-                    fa->field_name = field.text;
+                    if (field.kind == TokenKind::IntLit) {
+                        std::string fn = "_" + std::string(field.text);
+                        char* b = arena_.makeArray<char>(fn.size());
+                        std::memcpy(b, fn.data(), fn.size());
+                        fa->field_name = std::string_view(b, fn.size());
+                    } else {
+                        fa->field_name = field.text;
+                    }
                     lhs = fa;
                 }
                 while (check(TokenKind::LBracket)) {
@@ -3730,12 +3805,19 @@ Expr* Parser::parseForRange() {
             // Field access chains
             while (check(TokenKind::Dot)) {
                 advance();
-                Token field = expect(TokenKind::Ident, "expected field name after '.'");
+                Token field = check(TokenKind::IntLit) ? advance() : expect(TokenKind::Ident, "expected field name after '.'");
                 auto* fa = arena_.make<FieldAccessExpr>();
                 fa->kind = Expr::Kind::FieldAccess;
                 fa->loc = field.loc;
                 fa->object = lhs;
-                fa->field_name = field.text;
+                if (field.kind == TokenKind::IntLit) {
+                    std::string fn = "_" + std::string(field.text);
+                    char* b = arena_.makeArray<char>(fn.size());
+                    std::memcpy(b, fn.data(), fn.size());
+                    fa->field_name = std::string_view(b, fn.size());
+                } else {
+                    fa->field_name = field.text;
+                }
                 lhs = fa;
             }
 
@@ -3878,12 +3960,19 @@ Expr* Parser::parseWhileLoop() {
 
             while (check(TokenKind::Dot)) {
                 advance();
-                Token field = expect(TokenKind::Ident, "expected field name after '.'");
+                Token field = check(TokenKind::IntLit) ? advance() : expect(TokenKind::Ident, "expected field name after '.'");
                 auto* fa = arena_.make<FieldAccessExpr>();
                 fa->kind = Expr::Kind::FieldAccess;
                 fa->loc = field.loc;
                 fa->object = lhs;
-                fa->field_name = field.text;
+                if (field.kind == TokenKind::IntLit) {
+                    std::string fn = "_" + std::string(field.text);
+                    char* b = arena_.makeArray<char>(fn.size());
+                    std::memcpy(b, fn.data(), fn.size());
+                    fa->field_name = std::string_view(b, fn.size());
+                } else {
+                    fa->field_name = field.text;
+                }
                 lhs = fa;
             }
 

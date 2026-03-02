@@ -82,6 +82,7 @@ private:
     HIRExpr* buildLambda(const Expr* expr, std::optional<TypeId> ctx_type);
     HIRExpr* buildMethodCall(const Expr* expr);
     HIRExpr* buildTry(const Expr* expr);
+    HIRExpr* buildTupleLit(const Expr* expr);
 
     // Statement building
     HIRStmt* buildStmt(const Stmt* stmt);

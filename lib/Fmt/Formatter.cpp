@@ -280,6 +280,14 @@ void Formatter::formatTypeRef(const TypeRef& t) {
         case TypeRef::Kind::Dyn:
             out_ << "dyn " << t.name;
             break;
+        case TypeRef::Kind::Tuple:
+            out_ << "(";
+            for (uint32_t i = 0; i < t.tuple_count; ++i) {
+                if (i > 0) out_ << ", ";
+                formatTypeRef(t.tuple_elements[i]);
+            }
+            out_ << ")";
+            break;
     }
 }
 
@@ -660,6 +668,16 @@ void Formatter::formatExpr(const Expr* expr) {
             auto* te = static_cast<const TryExpr*>(expr);
             formatExpr(te->operand);
             out_ << "?";
+            break;
+        }
+        case Expr::Kind::TupleLit: {
+            auto* tl = static_cast<const TupleLitExpr*>(expr);
+            out_ << "(";
+            for (uint32_t i = 0; i < tl->count; ++i) {
+                if (i > 0) out_ << ", ";
+                formatExpr(tl->elements[i]);
+            }
+            out_ << ")";
             break;
         }
     }

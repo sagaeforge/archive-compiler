@@ -430,6 +430,23 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
         }
         return ctx_.types.makeDynTrait(ref.name, trait_it->second.method_names);
     }
+    if (ref.kind == TypeRef::Kind::Tuple) {
+        // Tuple type → anonymous struct __Tuple_T1_T2_...
+        std::vector<FieldInfo> fields;
+        std::string tuple_name = "__Tuple";
+        for (uint32_t i = 0; i < ref.tuple_count; ++i) {
+            TypeId elem_type = resolveType(ref.tuple_elements[i]);
+            std::string fname = "_" + std::to_string(i);
+            fields.push_back({ctx_.strings.intern(fname), elem_type, false, -1});
+            tuple_name += "_" + std::string(ctx_.types.name(elem_type));
+        }
+        auto interned = ctx_.strings.intern(tuple_name);
+        auto it = named_types_.find(interned);
+        if (it != named_types_.end()) return it->second;
+        TypeId tid = ctx_.types.makeStruct(interned, fields);
+        named_types_[interned] = tid;
+        return tid;
+    }
     if (ref.name == "i8")   return TypeTable::I8;
     if (ref.name == "i16")  return TypeTable::I16;
     if (ref.name == "i32")  return TypeTable::I32;
@@ -1399,6 +1416,7 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
         case Expr::Kind::ArrayLit:   return buildArrayLit(expr);
         case Expr::Kind::IndexAccess:return buildIndexAccess(expr);
         case Expr::Kind::SliceExpr:  return buildSliceExpr(expr);
+        case Expr::Kind::TupleLit:   return buildTupleLit(expr);
         case Expr::Kind::Sizeof: {
             auto* se = static_cast<const SizeofExpr*>(expr);
             TypeId tid = resolveType(se->target);
@@ -2558,9 +2576,18 @@ HIRExpr* HIRBuilder::buildFieldAccess(const Expr* expr) {
         return e;
     }
 
+    // Tuple field access: .0, .1 → ._0, ._1
+    std::string_view lookup_name = fa->field_name;
+    std::string tuple_fname;
+    if (!lookup_name.empty() && std::isdigit(static_cast<unsigned char>(lookup_name[0]))) {
+        tuple_fname = "_" + std::string(lookup_name);
+        lookup_name = ctx_.strings.intern(tuple_fname);
+        e->field_name = lookup_name;
+    }
+
     // Look up field
     for (uint32_t i = 0; i < obj_info.struct_.field_count; ++i) {
-        if (obj_info.struct_.fields[i].name == fa->field_name) {
+        if (obj_info.struct_.fields[i].name == lookup_name) {
             // Check field visibility: priv fields only accessible within defining module
             if (!obj_info.struct_.fields[i].is_pub) {
                 auto it = struct_module_map_.find(obj_info.struct_.name);
@@ -3467,6 +3494,52 @@ HIRExpr* HIRBuilder::buildIndexAccess(const Expr* expr) {
         e->type = TypeTable::Error;
     }
     return e;
+}
+
+HIRExpr* HIRBuilder::buildTupleLit(const Expr* expr) {
+    auto* tl = static_cast<const TupleLitExpr*>(expr);
+
+    // Build all element expressions first to determine types
+    std::vector<HIRExpr*> elem_exprs;
+    std::vector<FieldInfo> fields;
+    std::string tuple_name = "__Tuple";
+    bool has_error = false;
+
+    for (uint32_t i = 0; i < tl->count; ++i) {
+        auto* e = buildExpr(tl->elements[i]);
+        elem_exprs.push_back(e);
+        if (e->type == TypeTable::Error) has_error = true;
+        std::string fname = "_" + std::to_string(i);
+        fields.push_back({ctx_.strings.intern(fname), e->type, false, -1});
+        tuple_name += "_" + std::string(ctx_.types.name(e->type));
+    }
+
+    if (has_error) return errorExpr(expr->loc);
+
+    // Find or create the tuple struct type
+    auto interned = ctx_.strings.intern(tuple_name);
+    auto it = named_types_.find(interned);
+    TypeId tuple_tid;
+    if (it != named_types_.end()) {
+        tuple_tid = it->second;
+    } else {
+        tuple_tid = ctx_.types.makeStruct(interned, fields);
+        named_types_[interned] = tuple_tid;
+    }
+
+    // Build HIR struct literal
+    auto* result = ctx_.arena.make<HIRStructLitExpr>();
+    result->kind = HIRExpr::Kind::StructLit;
+    result->loc = expr->loc;
+    result->struct_name = interned;
+    result->type = tuple_tid;
+    result->field_count = tl->count;
+    result->fields = ctx_.arena.makeArray<HIRFieldInit>(tl->count);
+    for (uint32_t i = 0; i < tl->count; ++i) {
+        std::string fname = "_" + std::to_string(i);
+        result->fields[i] = {ctx_.strings.intern(fname), elem_exprs[i], tl->elements[i]->loc};
+    }
+    return result;
 }
 
 HIRExpr* HIRBuilder::buildSliceExpr(const Expr* expr) {

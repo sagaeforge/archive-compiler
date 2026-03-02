@@ -1,0 +1,9 @@
+// Test tuple types: creation and field access via .0, .1
+fn make_pair(a: i64, b: i64) -> (i64, i64) {
+    (a, b)
+}
+
+fn main() -> i64 {
+    val t = make_pair(30, 12)
+    t.0 + t.1  // 42
+}

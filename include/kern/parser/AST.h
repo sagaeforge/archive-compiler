@@ -13,7 +13,7 @@ struct FnDecl;
 
 // --- Type Reference ---
 struct TypeRef {
-    enum class Kind { Named, Ptr, Fn, Never, Array, ConstVal, Dyn };
+    enum class Kind { Named, Ptr, Fn, Never, Array, ConstVal, Dyn, Tuple };
     Kind kind = Kind::Named;
     std::string_view name; // "i64", "bool", "Unit"
     SourceLocation loc;
@@ -31,6 +31,9 @@ struct TypeRef {
     uint32_t type_arg_count = 0;
     // For ConstVal: integer constant in type argument position (e.g. Buffer<i64, 4>)
     int64_t const_value = 0;
+    // For Tuple: (T1, T2, ...)
+    TypeRef* tuple_elements = nullptr;
+    uint32_t tuple_count = 0;
 };
 
 // --- Passing Mode ---
@@ -223,7 +226,7 @@ struct Expr {
         ArrayLit, IndexAccess, SliceExpr,
         Sizeof, Alignof, Offsetof,
         Lambda, MethodCall,
-        Try
+        Try, TupleLit
     };
     Kind kind;
     SourceLocation loc;
@@ -358,6 +361,11 @@ struct SliceExprNode : Expr {
     Expr* array;
     Expr* start;   // nullable (arr[..end] means start=0)
     Expr* end;     // nullable (arr[start..] means end=len)
+};
+
+struct TupleLitExpr : Expr {
+    Expr** elements;
+    uint32_t count;
 };
 
 struct CastExpr : Expr {
