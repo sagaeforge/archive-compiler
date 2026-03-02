@@ -217,7 +217,7 @@ struct Expr {
         If, Block, Return, Match,
         StructLit, FieldAccess,
         EnumAccess, UnionVariant,
-        Loop, ForRange, WhileLoop, InlineAsm,
+        Loop, ForRange, ForEach, WhileLoop, InlineAsm,
         ArrayLit, IndexAccess,
         Sizeof, Alignof, Offsetof,
         Lambda, MethodCall,
@@ -406,6 +406,14 @@ struct ForRangeExpr : Expr {
     std::string_view var_name;  // loop variable name
     Expr* start;                // range start (inclusive)
     Expr* end;                  // range end (exclusive)
+    Stmt** stmts;
+    uint32_t stmt_count;
+};
+
+// for item in collection { body }
+struct ForEachExpr : Expr {
+    std::string_view var_name;  // loop variable name
+    Expr* collection;           // array or slice expression
     Stmt** stmts;
     uint32_t stmt_count;
 };

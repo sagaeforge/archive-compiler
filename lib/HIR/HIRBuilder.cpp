@@ -1385,6 +1385,7 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
         case Expr::Kind::Cast:     return buildCast(expr);
         case Expr::Kind::Loop:       return buildLoop(expr, ctx_type);
         case Expr::Kind::ForRange:   return buildForRange(expr);
+        case Expr::Kind::ForEach:    return buildForEach(expr);
         case Expr::Kind::WhileLoop:  return buildWhileLoop(expr);
         case Expr::Kind::InlineAsm:  return buildInlineAsm(expr);
         case Expr::Kind::ArrayLit:   return buildArrayLit(expr);
@@ -2996,6 +2997,225 @@ HIRExpr* HIRBuilder::buildForRange(const Expr* expr) {
         add->type = iter_type;
 
         // continue(i + 1)
+        auto* cont = ctx_.arena.make<HIRContinueExpr>();
+        cont->kind = HIRExpr::Kind::Continue;
+        cont->loc = expr->loc;
+        cont->arg_count = 1;
+        cont->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        cont->args[0] = add;
+        cont->type = TypeTable::Unit;
+
+        auto* cont_stmt = ctx_.arena.make<HIRExprStmt>();
+        cont_stmt->kind = HIRStmt::Kind::ExprStmt;
+        cont_stmt->loc = expr->loc;
+        cont_stmt->expr = cont;
+        stmts_vec.push_back(cont_stmt);
+    }
+
+    body->stmt_count = static_cast<uint32_t>(stmts_vec.size());
+    body->stmts = ctx_.arena.makeArray<HIRStmt*>(body->stmt_count);
+    for (uint32_t i = 0; i < body->stmt_count; ++i) {
+        body->stmts[i] = stmts_vec[i];
+    }
+
+    loop->body = body;
+    return loop;
+}
+
+// ============================================================================
+// For-each desugaring: for item in collection { body }
+// → loop(__i = 0) { if __i >= len { break }; val item = collection[__i]; body; continue(__i + 1) }
+// ============================================================================
+
+HIRExpr* HIRBuilder::buildForEach(const Expr* expr) {
+    auto* fe = static_cast<const ForEachExpr*>(expr);
+
+    // Build collection expression to get its type
+    HIRExpr* col_expr = buildExpr(fe->collection);
+    TypeId col_type = col_expr->type;
+    const auto& col_info = ctx_.types.get(col_type);
+
+    // Determine element type and length
+    TypeId elem_type = TypeTable::I64;
+    int64_t array_len = 0;
+    bool is_array = (col_info.kind == TypeKind::Array);
+    bool is_slice = false;
+
+    if (is_array) {
+        elem_type = col_info.array.element;
+        array_len = static_cast<int64_t>(col_info.array.count);
+    } else if (col_info.kind == TypeKind::Struct && col_info.struct_.field_count == 2) {
+        // Slice: { ptr: Ptr<T>, len: u64 }
+        auto ptr_type = col_info.struct_.fields[0].type;
+        auto& ptr_info = ctx_.types.get(ptr_type);
+        if (ptr_info.kind == TypeKind::Ptr || ptr_info.kind == TypeKind::PtrMut) {
+            elem_type = ptr_info.ptr.pointee;
+            is_slice = true;
+        }
+    }
+
+    if (!is_array && !is_slice) {
+        ctx_.diag.error(expr->loc, "for-each requires an array or slice");
+        auto* unit = ctx_.arena.make<HIRIntLitExpr>();
+        unit->kind = HIRExpr::Kind::IntLit;
+        unit->loc = expr->loc;
+        unit->value = 0;
+        unit->type = TypeTable::Unit;
+        return unit;
+    }
+
+    auto* loop = ctx_.arena.make<HIRLoopExpr>();
+    loop->kind = HIRExpr::Kind::Loop;
+    loop->loc = expr->loc;
+    loop->type = TypeTable::Unit;
+
+    TypeId iter_type = TypeTable::I64;
+
+    // Binding: __i = 0
+    auto* zero = ctx_.arena.make<HIRIntLitExpr>();
+    zero->kind = HIRExpr::Kind::IntLit;
+    zero->loc = expr->loc;
+    zero->value = 0;
+    zero->type = iter_type;
+
+    std::string_view idx_name = ctx_.strings.intern("__foreach_i");
+
+    loop->binding_count = 1;
+    loop->bindings = ctx_.arena.makeArray<HIRLoopBinding>(1);
+    loop->bindings[0].name = idx_name;
+    loop->bindings[0].loc = expr->loc;
+    loop->bindings[0].init = zero;
+    loop->bindings[0].type = iter_type;
+
+    local_vars_[idx_name] = iter_type;
+
+    // Build length expression
+    HIRExpr* len_expr;
+    if (is_array) {
+        auto* len_lit = ctx_.arena.make<HIRIntLitExpr>();
+        len_lit->kind = HIRExpr::Kind::IntLit;
+        len_lit->loc = expr->loc;
+        len_lit->value = array_len;
+        len_lit->type = iter_type;
+        len_expr = len_lit;
+    } else {
+        // Slice: load .len field (field index 1)
+        auto* len_access = ctx_.arena.make<HIRFieldAccessExpr>();
+        len_access->kind = HIRExpr::Kind::FieldAccess;
+        len_access->loc = expr->loc;
+        len_access->object = col_expr;
+        len_access->field_name = ctx_.strings.intern("len");
+        len_access->type = TypeTable::U64;
+
+        // Cast u64 to i64 for comparison with loop counter
+        auto* cast = ctx_.arena.make<HIRCastExpr>();
+        cast->kind = HIRExpr::Kind::Cast;
+        cast->loc = expr->loc;
+        cast->operand = len_access;
+        cast->target_type = iter_type;
+        cast->type = iter_type;
+        len_expr = cast;
+    }
+
+    // Build body
+    auto* body = ctx_.arena.make<HIRBlockExpr>();
+    body->kind = HIRExpr::Kind::Block;
+    body->loc = expr->loc;
+    body->type = TypeTable::Unit;
+    body->result = nullptr;
+
+    std::vector<HIRStmt*> stmts_vec;
+
+    // 1. Guard: if __i >= len { break }
+    {
+        auto* i_ref = ctx_.arena.make<HIRIdentExpr>();
+        i_ref->kind = HIRExpr::Kind::Ident;
+        i_ref->loc = expr->loc;
+        i_ref->name = idx_name;
+        i_ref->type = iter_type;
+
+        auto* cmp = ctx_.arena.make<HIRBinOpExpr>();
+        cmp->kind = HIRExpr::Kind::BinOp;
+        cmp->loc = expr->loc;
+        cmp->op = HIRBinOp::GtEq;
+        cmp->lhs = i_ref;
+        cmp->rhs = len_expr;
+        cmp->type = TypeTable::Bool;
+
+        auto* brk = ctx_.arena.make<HIRBreakExpr>();
+        brk->kind = HIRExpr::Kind::Break;
+        brk->loc = expr->loc;
+        brk->value = nullptr;
+        brk->type = TypeTable::Unit;
+
+        auto* if_expr = ctx_.arena.make<HIRIfExpr>();
+        if_expr->kind = HIRExpr::Kind::If;
+        if_expr->loc = expr->loc;
+        if_expr->condition = cmp;
+        if_expr->then_branch = brk;
+        if_expr->else_branch = nullptr;
+        if_expr->type = TypeTable::Unit;
+
+        auto* guard_stmt = ctx_.arena.make<HIRExprStmt>();
+        guard_stmt->kind = HIRStmt::Kind::ExprStmt;
+        guard_stmt->loc = expr->loc;
+        guard_stmt->expr = if_expr;
+        stmts_vec.push_back(guard_stmt);
+    }
+
+    // 2. Bind element: val item = collection[__i]
+    {
+        auto* i_ref = ctx_.arena.make<HIRIdentExpr>();
+        i_ref->kind = HIRExpr::Kind::Ident;
+        i_ref->loc = expr->loc;
+        i_ref->name = idx_name;
+        i_ref->type = iter_type;
+
+        auto* index_access = ctx_.arena.make<HIRIndexAccessExpr>();
+        index_access->kind = HIRExpr::Kind::IndexAccess;
+        index_access->loc = expr->loc;
+        index_access->array = col_expr;
+        index_access->index = i_ref;
+        index_access->type = elem_type;
+
+        auto* val_stmt = ctx_.arena.make<HIRValDeclStmt>();
+        val_stmt->kind = HIRStmt::Kind::ValDecl;
+        val_stmt->loc = expr->loc;
+        val_stmt->name = ctx_.strings.intern(fe->var_name);
+        val_stmt->type = elem_type;
+        val_stmt->init = index_access;
+        stmts_vec.push_back(val_stmt);
+
+        local_vars_[val_stmt->name] = elem_type;
+    }
+
+    // 3. Build user body statements
+    for (uint32_t i = 0; i < fe->stmt_count; ++i) {
+        stmts_vec.push_back(buildStmt(fe->stmts[i]));
+    }
+
+    // 4. continue(__i + 1)
+    {
+        auto* i_ref = ctx_.arena.make<HIRIdentExpr>();
+        i_ref->kind = HIRExpr::Kind::Ident;
+        i_ref->loc = expr->loc;
+        i_ref->name = idx_name;
+        i_ref->type = iter_type;
+
+        auto* one = ctx_.arena.make<HIRIntLitExpr>();
+        one->kind = HIRExpr::Kind::IntLit;
+        one->loc = expr->loc;
+        one->value = 1;
+        one->type = iter_type;
+
+        auto* add = ctx_.arena.make<HIRBinOpExpr>();
+        add->kind = HIRExpr::Kind::BinOp;
+        add->loc = expr->loc;
+        add->op = HIRBinOp::Add;
+        add->lhs = i_ref;
+        add->rhs = one;
+        add->type = iter_type;
+
         auto* cont = ctx_.arena.make<HIRContinueExpr>();
         cont->kind = HIRExpr::Kind::Continue;
         cont->loc = expr->loc;

@@ -333,6 +333,13 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             dumpExpr(fr->end, out, ind + 2);
             break;
         }
+        case Expr::Kind::ForEach: {
+            auto* fe = static_cast<const ForEachExpr*>(expr);
+            out << "ForEach(" << fe->var_name << ")\n";
+            indent(out, ind + 1); out << "collection:\n";
+            dumpExpr(fe->collection, out, ind + 2);
+            break;
+        }
         case Expr::Kind::WhileLoop: {
             out << "WhileLoop\n";
             break;
@@ -3377,7 +3384,118 @@ Expr* Parser::parseForRange() {
 
     Expr* start = parseExpr();
 
-    expect(TokenKind::DotDot, "expected '..' for range");
+    // Detect for-each (no ..) vs for-range (..)
+    if (!check(TokenKind::DotDot)) {
+        // For-each: for item in collection { body }
+        // Will be desugared into for-range in HIRBuilder
+        skipNewlines();
+        expect(TokenKind::LBrace, "expected '{' for for-each body");
+        skipNewlines();
+
+        std::vector<Stmt*> fe_stmts;
+        while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+            if (check(TokenKind::KwVal) || check(TokenKind::KwVar)) {
+                fe_stmts.push_back(parseValDecl());
+            } else if (check(TokenKind::KwBreak)) {
+                Token brk_tok = advance();
+                auto* bs = arena_.make<BreakStmt>();
+                bs->kind = Stmt::Kind::Break;
+                bs->loc = brk_tok.loc;
+                bs->value = nullptr;
+                fe_stmts.push_back(bs);
+            } else if (check(TokenKind::KwContinue)) {
+                Token cnt_tok = advance();
+                auto* cs = arena_.make<ContinueStmt>();
+                cs->kind = Stmt::Kind::Continue;
+                cs->loc = cnt_tok.loc;
+                fe_stmts.push_back(cs);
+            } else if (check(TokenKind::Ident)) {
+                Token identTok = peek();
+                advance();
+                skipNewlines();
+                Expr* lhs;
+                if (check(TokenKind::LParen)) {
+                    lhs = parseCallExpr(identTok.text, identTok.loc);
+                } else {
+                    auto* ident = arena_.make<IdentExpr>();
+                    ident->kind = Expr::Kind::Ident;
+                    ident->loc = identTok.loc;
+                    ident->name = identTok.text;
+                    lhs = ident;
+                }
+                while (check(TokenKind::Dot)) {
+                    advance();
+                    Token field = expect(TokenKind::Ident, "expected field name after '.'");
+                    auto* fa = arena_.make<FieldAccessExpr>();
+                    fa->kind = Expr::Kind::FieldAccess;
+                    fa->loc = field.loc;
+                    fa->object = lhs;
+                    fa->field_name = field.text;
+                    lhs = fa;
+                }
+                while (check(TokenKind::LBracket)) {
+                    advance();
+                    Expr* idx = parseExpr();
+                    expect(TokenKind::RBracket, "expected ']'");
+                    auto* ia = arena_.make<IndexAccessExpr>();
+                    ia->kind = Expr::Kind::IndexAccess;
+                    ia->loc = identTok.loc;
+                    ia->array = lhs;
+                    ia->index = idx;
+                    lhs = ia;
+                }
+                skipNewlines();
+                if (check(TokenKind::Eq)) {
+                    advance();
+                    skipNewlines();
+                    Expr* value = parseExpr();
+                    if (lhs->kind == Expr::Kind::FieldAccess || lhs->kind == Expr::Kind::IndexAccess) {
+                        auto* fa_stmt = arena_.make<FieldAssignStmt>();
+                        fa_stmt->kind = Stmt::Kind::FieldAssign;
+                        fa_stmt->loc = identTok.loc;
+                        fa_stmt->target = lhs;
+                        fa_stmt->value = value;
+                        fe_stmts.push_back(fa_stmt);
+                    } else {
+                        auto* assign = arena_.make<AssignStmt>();
+                        assign->kind = Stmt::Kind::Assign;
+                        assign->loc = identTok.loc;
+                        assign->name = identTok.text;
+                        assign->value = value;
+                        fe_stmts.push_back(assign);
+                    }
+                } else {
+                    lhs = parseExprInfix(lhs, 0);
+                    auto* exprStmt = arena_.make<ExprStmt>();
+                    exprStmt->kind = Stmt::Kind::ExprStmt;
+                    exprStmt->loc = lhs->loc;
+                    exprStmt->expr = lhs;
+                    fe_stmts.push_back(exprStmt);
+                }
+            } else {
+                Expr* e = parseExpr();
+                auto* es = arena_.make<ExprStmt>();
+                es->kind = Stmt::Kind::ExprStmt;
+                es->loc = e->loc;
+                es->expr = e;
+                fe_stmts.push_back(es);
+            }
+            while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+        }
+        expect(TokenKind::RBrace, "expected '}' to close for-each body");
+
+        auto* fe = arena_.make<ForEachExpr>();
+        fe->kind = Expr::Kind::ForEach;
+        fe->loc = loc;
+        fe->var_name = var_tok.text;
+        fe->collection = start;
+        fe->stmt_count = static_cast<uint32_t>(fe_stmts.size());
+        fe->stmts = arena_.makeArray<Stmt*>(fe_stmts.size());
+        for (size_t i = 0; i < fe_stmts.size(); ++i) fe->stmts[i] = fe_stmts[i];
+        return fe;
+    }
+
+    advance(); // consume '..'
     skipNewlines();
 
     Expr* end = parseExpr();

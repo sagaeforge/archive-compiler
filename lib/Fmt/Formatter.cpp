@@ -520,6 +520,20 @@ void Formatter::formatExpr(const Expr* expr) {
             out_ << "}";
             break;
         }
+        case Expr::Kind::ForEach: {
+            auto* fe = static_cast<const ForEachExpr*>(expr);
+            out_ << "for " << fe->var_name << " in ";
+            formatExpr(fe->collection);
+            out_ << " {\n";
+            indent();
+            for (uint32_t i = 0; i < fe->stmt_count; ++i) {
+                formatStmt(fe->stmts[i]);
+            }
+            dedent();
+            writeIndent();
+            out_ << "}";
+            break;
+        }
 
         case Expr::Kind::InlineAsm: {
             auto* ia = static_cast<const InlineAsmExpr*>(expr);

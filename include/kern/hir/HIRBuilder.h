@@ -15,6 +15,27 @@ public:
 
     HIRModule* build(const Module* ast);
 
+    // Register types and function signatures from an external module
+    // without building HIR. Used for cross-module import injection.
+    // module_path is the module's dotted path (e.g. "math", "kern.memory").
+    void registerExports(const Module* ast, std::string_view module_path = {});
+
+    // Inject a single function signature from an external module
+    void injectFnSig(std::string_view name, const std::vector<TypeId>& param_types,
+                     TypeId return_type);
+
+    // Inject a named type from an external module
+    void injectNamedType(std::string_view name, TypeId tid);
+
+    // Inject a generic struct template from an external module
+    void injectGenericStruct(std::string_view name, const StructDecl* decl);
+
+    // Inject a generic union template from an external module
+    void injectGenericUnion(std::string_view name, const UnionDecl* decl);
+
+    // Inject a global variable type from an external module
+    void injectGlobalType(std::string_view name, TypeId tid);
+
     bool hasErrors() const;
 
 private:
@@ -51,6 +72,9 @@ private:
     HIRExpr* buildUnionVariant(const Expr* expr);
     HIRExpr* buildCast(const Expr* expr);
     HIRExpr* buildLoop(const Expr* expr, std::optional<TypeId> ctx_type);
+    HIRExpr* buildForRange(const Expr* expr);
+    HIRExpr* buildForEach(const Expr* expr);
+    HIRExpr* buildWhileLoop(const Expr* expr);
     HIRExpr* buildArrayLit(const Expr* expr);
     HIRExpr* buildIndexAccess(const Expr* expr);
     HIRExpr* buildInlineAsm(const Expr* expr);
@@ -66,6 +90,9 @@ private:
 
     // Error helpers
     HIRExpr* errorExpr(SourceLocation loc);
+
+    // Implicit integer widening: wraps expr in a Cast if it can be widened to target
+    HIRExpr* implicitWiden(HIRExpr* expr, TypeId target);
 
     // Type query helpers
     bool isIntegerType(TypeId id) const;
@@ -149,12 +176,24 @@ private:
     // Resolve method on a type: returns mangled fn name or empty
     std::string_view resolveMethod(TypeId type, std::string_view method) const;
 
+    // dyn Trait vtable tracking: key = "TypeName_TraitName", value = vtable label
+    struct VTableInfo {
+        std::string_view label;         // interned vtable global label
+        std::string_view trait_name;    // trait name
+        std::string_view type_name;     // concrete type name
+        std::vector<std::string_view> fn_labels;  // ordered function labels for vtable slots
+    };
+    std::vector<VTableInfo> vtable_globals_;
+
     // Built HIR functions (for const fn evaluation)
     std::unordered_map<std::string_view, HIRFnDecl*> hir_fns_;
 
     // Global variables (static val/var)
     std::unordered_map<std::string_view, HIRGlobalDecl*> global_vars_;
     std::unordered_map<std::string_view, TypeId> global_types_;  // pre-registered for ident resolution
+
+    // Cross-module import tracking: fn_name → source module path
+    std::unordered_map<std::string_view, std::string_view> fn_module_map_;
 };
 
 } // namespace kern
