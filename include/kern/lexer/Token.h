@@ -52,6 +52,7 @@ enum class TokenKind : uint8_t {
     KwPub,
     KwPriv,
     KwExtern,
+    KwUninit,
     KwNull,
     KwFor,
     KwIn,

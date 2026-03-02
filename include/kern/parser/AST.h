@@ -226,7 +226,7 @@ struct Expr {
         ArrayLit, IndexAccess, SliceExpr,
         Sizeof, Alignof, Offsetof,
         Lambda, MethodCall,
-        Try, TupleLit
+        Try, TupleLit, Uninit
     };
     Kind kind;
     SourceLocation loc;

@@ -680,6 +680,9 @@ void Formatter::formatExpr(const Expr* expr) {
             out_ << ")";
             break;
         }
+        case Expr::Kind::Uninit:
+            out_ << "uninit";
+            break;
     }
 }
 

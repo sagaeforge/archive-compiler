@@ -1417,6 +1417,15 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
         case Expr::Kind::IndexAccess:return buildIndexAccess(expr);
         case Expr::Kind::SliceExpr:  return buildSliceExpr(expr);
         case Expr::Kind::TupleLit:   return buildTupleLit(expr);
+        case Expr::Kind::Uninit: {
+            // uninit → zero-initialized value of context type
+            auto* e = ctx_.arena.make<HIRIntLitExpr>();
+            e->kind = HIRExpr::Kind::IntLit;
+            e->loc = expr->loc;
+            e->value = 0;
+            e->type = ctx_type.value_or(TypeTable::I64);
+            return e;
+        }
         case Expr::Kind::Sizeof: {
             auto* se = static_cast<const SizeofExpr*>(expr);
             TypeId tid = resolveType(se->target);

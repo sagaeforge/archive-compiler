@@ -431,6 +431,9 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
                 dumpExpr(tl->elements[i], out, ind + 1);
             break;
         }
+        case Expr::Kind::Uninit:
+            out << "Uninit\n";
+            break;
     }
 }
 
@@ -2778,6 +2781,15 @@ Expr* Parser::parsePrimary() {
         }
         expect(TokenKind::RParen, "expected ')'");
         return first;
+    }
+
+    // Uninit expression
+    if (tok.kind == TokenKind::KwUninit) {
+        advance();
+        auto* e = arena_.make<Expr>();
+        e->kind = Expr::Kind::Uninit;
+        e->loc = tok.loc;
+        return e;
     }
 
     // Return

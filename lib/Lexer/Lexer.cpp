@@ -49,6 +49,7 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::KwPub:      return "pub";
         case TokenKind::KwPriv:     return "priv";
         case TokenKind::KwExtern:   return "extern";
+        case TokenKind::KwUninit:   return "uninit";
         case TokenKind::KwNull:     return "null";
         case TokenKind::KwFor:      return "for";
         case TokenKind::KwIn:       return "in";
@@ -324,6 +325,7 @@ TokenKind Lexer::identifierKind(std::string_view text) {
     if (text == "pub")      return TokenKind::KwPub;
     if (text == "priv")     return TokenKind::KwPriv;
     if (text == "extern")   return TokenKind::KwExtern;
+    if (text == "uninit")   return TokenKind::KwUninit;
     if (text == "null")     return TokenKind::KwNull;
     if (text == "for")      return TokenKind::KwFor;
     if (text == "in")       return TokenKind::KwIn;
