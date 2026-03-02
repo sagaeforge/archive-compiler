@@ -265,6 +265,7 @@ public:
     bool isInteger(TypeId id) const;
     bool isPrimitive(TypeId id) const;
     const char* name(TypeId id) const;
+    std::string mangleName(TypeId id) const;
 
     // Integer range: returns {min, max} for the given integer type.
     // Returns {0, 0} for non-integer types.

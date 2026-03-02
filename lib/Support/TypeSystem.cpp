@@ -458,6 +458,36 @@ const char* TypeTable::name(TypeId id) const {
     return "?";
 }
 
+std::string TypeTable::mangleName(TypeId id) const {
+    if (id >= types_.size()) return "?";
+    const auto& ti = *types_[id];
+    switch (ti.kind) {
+    case TypeKind::Primitive:
+        return name(id);
+    case TypeKind::Struct:
+        return std::string(ti.struct_.name);
+    case TypeKind::Enum:
+        return std::string(ti.enum_.name);
+    case TypeKind::Union:
+        return std::string(ti.union_.name);
+    case TypeKind::Ptr:
+        return "Ptr_" + mangleName(ti.ptr.pointee);
+    case TypeKind::PtrMut:
+        return "PtrVar_" + mangleName(ti.ptr.pointee);
+    case TypeKind::Array:
+        return "Array_" + mangleName(ti.array.element) + "_" + std::to_string(ti.array.count);
+    case TypeKind::Fn:
+        return "Fn";
+    case TypeKind::TypeVar:
+        return std::string(ti.type_var.name);
+    case TypeKind::Never:
+        return "never";
+    case TypeKind::DynTrait:
+        return "dyn_" + std::string(ti.dyn_trait.trait_name);
+    }
+    return "?";
+}
+
 TypeTable::IntRange TypeTable::intRange(TypeId id) const {
     if (id >= types_.size()) return {0, 0};
     auto& ti = *types_[id];

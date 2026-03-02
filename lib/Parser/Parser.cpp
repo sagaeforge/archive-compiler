@@ -34,6 +34,53 @@ static std::string_view intSuffix(std::string_view text) {
     return {};
 }
 
+// Build a mangled name from a TypeRef for generic instantiation.
+// Recursively expands Ptr<T>, Array, Tuple, and nested generics.
+static std::string mangleTypeRef(const TypeRef& tr) {
+    switch (tr.kind) {
+    case TypeRef::Kind::Named:
+        if (tr.type_arg_count > 0) {
+            std::string result(tr.name);
+            for (uint32_t i = 0; i < tr.type_arg_count; ++i) {
+                result += "_";
+                if (tr.type_args[i].kind == TypeRef::Kind::ConstVal)
+                    result += std::to_string(tr.type_args[i].const_value);
+                else
+                    result += mangleTypeRef(tr.type_args[i]);
+            }
+            return result;
+        }
+        return std::string(tr.name);
+    case TypeRef::Kind::Ptr:
+        if (tr.pointee) {
+            if (tr.is_ptr_var)
+                return "PtrVar_" + mangleTypeRef(*tr.pointee);
+            return "Ptr_" + mangleTypeRef(*tr.pointee);
+        }
+        return tr.is_ptr_var ? "PtrVar" : "Ptr";
+    case TypeRef::Kind::Array:
+        if (tr.array_element)
+            return "Array_" + mangleTypeRef(*tr.array_element) + "_" + std::to_string(tr.array_size);
+        return "Array";
+    case TypeRef::Kind::Tuple:
+        {
+            std::string result = "Tuple";
+            for (uint32_t i = 0; i < tr.tuple_count; ++i)
+                result += "_" + mangleTypeRef(tr.tuple_elements[i]);
+            return result;
+        }
+    case TypeRef::Kind::Fn:
+        return "Fn";
+    case TypeRef::Kind::Never:
+        return "never";
+    case TypeRef::Kind::ConstVal:
+        return std::to_string(tr.const_value);
+    case TypeRef::Kind::Dyn:
+        return "dyn";
+    }
+    return std::string(tr.name);
+}
+
 // Strip underscore separators from integer literal text
 static std::string stripUnderscores(std::string_view text) {
     std::string result;
@@ -2495,7 +2542,7 @@ Expr* Parser::parsePrimary() {
             advance(); // consume '<'
             std::vector<TypeRef> type_args;
             bool valid = true;
-            while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
+            while (!checkGt() && !check(TokenKind::Eof)) {
                 // If we see something that can't be a type, bail out
                 if (!check(TokenKind::Ident) && !check(TokenKind::LBracket) &&
                     !check(TokenKind::KwFn) && !check(TokenKind::Exclaim) &&
@@ -2504,22 +2551,18 @@ Expr* Parser::parsePrimary() {
                     break;
                 }
                 type_args.push_back(parseType());
-                if (!check(TokenKind::Gt)) {
+                if (!checkGt()) {
                     if (!match(TokenKind::Comma)) { valid = false; break; }
                 }
             }
-            if (valid && check(TokenKind::Gt)) {
-                advance(); // consume '>'
+            if (valid && matchGt()) {
                 skipNewlines();
 
                 // Build mangled name helper
                 std::string mangled = std::string(tok.text);
                 for (auto& ta : type_args) {
                     mangled += "_";
-                    if (ta.kind == TypeRef::Kind::ConstVal)
-                        mangled += std::to_string(ta.const_value);
-                    else
-                        mangled += ta.name;
+                    mangled += mangleTypeRef(ta);
                 }
                 char* buf = arena_.makeArray<char>(mangled.size());
                 std::memcpy(buf, mangled.data(), mangled.size());
@@ -3150,28 +3193,24 @@ Expr* Parser::parseBlockExpr() {
                 advance(); // consume '<'
                 std::vector<TypeRef> ta;
                 bool va = true;
-                while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
+                while (!checkGt() && !check(TokenKind::Eof)) {
                     if (!check(TokenKind::Ident) && !check(TokenKind::LBracket) &&
                         !check(TokenKind::KwFn) && !check(TokenKind::Exclaim) &&
                         !check(TokenKind::IntLit)) {
                         va = false; break;
                     }
                     ta.push_back(parseType());
-                    if (!check(TokenKind::Gt)) {
+                    if (!checkGt()) {
                         if (!match(TokenKind::Comma)) { va = false; break; }
                     }
                 }
-                if (va && check(TokenKind::Gt)) {
-                    advance(); // consume '>'
+                if (va && matchGt()) {
                     skipNewlines();
 
                     std::string mangled = std::string(identTok.text);
                     for (auto& t : ta) {
                         mangled += "_";
-                        if (t.kind == TypeRef::Kind::ConstVal)
-                            mangled += std::to_string(t.const_value);
-                        else
-                            mangled += t.name;
+                        mangled += mangleTypeRef(t);
                     }
                     char* buf = arena_.makeArray<char>(mangled.size());
                     std::memcpy(buf, mangled.data(), mangled.size());

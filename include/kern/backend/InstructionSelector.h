@@ -21,6 +21,7 @@ class InstructionSelector {
     std::unordered_set<VReg> struct_vregs_; // vregs that hold struct base pointers
     std::unordered_map<VReg, uint32_t> struct_vreg_sizes_; // struct vreg → byte size
     std::unordered_set<VReg> stack_ptr_vregs_; // vregs that are stack pointers (from struct_alloc/addr_of)
+    std::unordered_set<VReg> struct_alloc_vregs_; // vregs from StructAlloc (var slots: load gives stored pointer)
     const GlobalData* globals_ = nullptr;   // module globals for label lookup
     uint32_t global_count_ = 0;
     uint32_t gpr_arg_slot_ = 0;  // current GPR arg slot (for multi-reg params)

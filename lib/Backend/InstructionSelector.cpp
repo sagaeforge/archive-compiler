@@ -177,6 +177,7 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     struct_vregs_.clear();
     struct_vreg_sizes_.clear();
     stack_ptr_vregs_.clear();
+    struct_alloc_vregs_.clear();
     gpr_arg_slot_ = 0;
     xmm_arg_slot_ = 0;
     next_param_idx_ = 0;
@@ -855,7 +856,7 @@ void InstructionSelector::selectLoad(const LIRInstr& instr) {
         mi.inline_ops[1] = MachOperand::virt(ptr);
         mi.is_volatile = instr.load.is_volatile;
         emit(mi);
-    } else if (isStructType(instr.type) && !stack_ptr_vregs_.count(ptr)) {
+    } else if (isStructType(instr.type) && !struct_alloc_vregs_.count(ptr)) {
         // Struct dereference: ptr points to actual struct data in memory.
         // Allocate stack space and copy the full struct from [ptr] to stack.
         // Result vreg holds a pointer to the stack copy (like StructAlloc).
@@ -989,6 +990,7 @@ void InstructionSelector::selectStructAlloc(const LIRInstr& instr) {
     emit(makeLea(MachOperand::virt(dst),
                  MachOperand::stack(offset)));
     stack_ptr_vregs_.insert(dst);
+    struct_alloc_vregs_.insert(dst);
 }
 
 // ============================================================================

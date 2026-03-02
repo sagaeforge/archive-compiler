@@ -438,7 +438,7 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
             TypeId elem_type = resolveType(ref.tuple_elements[i]);
             std::string fname = "_" + std::to_string(i);
             fields.push_back({ctx_.strings.intern(fname), elem_type, false, -1});
-            tuple_name += "_" + std::string(ctx_.types.name(elem_type));
+            tuple_name += "_" + ctx_.types.mangleName(elem_type);
         }
         auto interned = ctx_.strings.intern(tuple_name);
         auto it = named_types_.find(interned);
@@ -478,7 +478,7 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
     if (ref.name == "Slice" && ref.pointee) {
         TypeId elem_type = resolveType(*ref.pointee);
         // Create a unique name for this slice instantiation
-        std::string slice_name = "Slice_" + std::string(ctx_.types.name(elem_type));
+        std::string slice_name = "Slice_" + ctx_.types.mangleName(elem_type);
         auto interned = ctx_.strings.intern(slice_name);
         auto it = named_types_.find(interned);
         if (it != named_types_.end()) return it->second;
@@ -511,7 +511,7 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
             if (ref.type_args[i].kind == TypeRef::Kind::ConstVal) {
                 mangled += std::to_string(ref.type_args[i].const_value);
             } else {
-                mangled += ctx_.types.name(type_args[i]);
+                mangled += ctx_.types.mangleName(type_args[i]);
             }
         }
         auto interned_mangled = ctx_.strings.intern(mangled);
@@ -1008,6 +1008,18 @@ HIRModule* HIRBuilder::build(const Module* ast) {
         FieldInfo field = {ctx_.strings.intern("inner"), inner, false, 0};
         TypeId tid = ctx_.types.makeStruct(ctx_.strings.intern(nt->name), {&field, 1});
         named_types_[nt->name] = tid;
+    }
+
+    // Pre-register generic templates so they're available during field resolution.
+    // This is needed for self-referential types like struct Node { next: Option<Ptr<Node>> }
+    // where Option is a generic union that must be instantiatable during struct field resolution.
+    for (uint32_t i = 0; i < ast->union_count; ++i) {
+        if (ast->unions[i]->type_param_count > 0)
+            generic_unions_[ast->unions[i]->name] = ast->unions[i];
+    }
+    for (uint32_t i = 0; i < ast->struct_count; ++i) {
+        if (ast->structs[i]->type_param_count > 0)
+            generic_structs_[ast->structs[i]->name] = ast->structs[i];
     }
 
     registerStructDecls(ast);
@@ -2502,7 +2514,7 @@ HIRExpr* HIRBuilder::buildStructLit(const Expr* expr) {
                     const auto& dti = ctx_.types.get(data_expr->type);
                     if (dti.kind == TypeKind::Ptr || dti.kind == TypeKind::PtrMut) {
                         TypeId elem_type = dti.ptr.pointee;
-                        std::string slice_name = "Slice_" + std::string(ctx_.types.name(elem_type));
+                        std::string slice_name = "Slice_" + ctx_.types.mangleName(elem_type);
                         auto interned = ctx_.strings.intern(slice_name);
                         auto sit = named_types_.find(interned);
                         if (sit == named_types_.end()) {
@@ -3572,7 +3584,7 @@ HIRExpr* HIRBuilder::buildTupleLit(const Expr* expr) {
         if (e->type == TypeTable::Error) has_error = true;
         std::string fname = "_" + std::to_string(i);
         fields.push_back({ctx_.strings.intern(fname), e->type, false, -1});
-        tuple_name += "_" + std::string(ctx_.types.name(e->type));
+        tuple_name += "_" + ctx_.types.mangleName(e->type);
     }
 
     if (has_error) return errorExpr(expr->loc);
@@ -3643,7 +3655,7 @@ HIRExpr* HIRBuilder::buildSliceExpr(const Expr* expr) {
     }
 
     // Ensure Slice<T> type exists
-    std::string slice_name = "Slice_" + std::string(ctx_.types.name(elem_type));
+    std::string slice_name = "Slice_" + ctx_.types.mangleName(elem_type);
     auto interned = ctx_.strings.intern(slice_name);
     TypeId slice_type;
     auto it = named_types_.find(interned);

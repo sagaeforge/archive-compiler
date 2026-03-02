@@ -1,0 +1,22 @@
+// Self-referential struct with Option<Ptr<T>> (linked list)
+union Option<T> { Some(T), None }
+
+struct Node {
+    data: i64,
+    next: Option<Ptr<Node>>
+}
+
+fn sum_list(n: Ptr<Node>) -> i64 {
+    val node: Node = *n
+    match node.next {
+        Some(p) => node.data + sum_list(p)
+        None => node.data
+    }
+}
+
+fn main() -> i64 {
+    var c: Node = Node { data: 10, next: Option<Ptr<Node>>::None }
+    var b: Node = Node { data: 12, next: Option<Ptr<Node>>::Some(&c) }
+    var a: Node = Node { data: 20, next: Option<Ptr<Node>>::Some(&b) }
+    sum_list(&a)
+}

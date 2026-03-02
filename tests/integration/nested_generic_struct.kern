@@ -1,0 +1,13 @@
+// Nested generics with struct types: Option<Ptr<Pair>>
+// Tests monomorphization produces correct mangled names
+union Option<T> { Some(T), None }
+struct Pair { a: i64, b: i64 }
+
+fn main() -> i64 {
+    var p: Pair = Pair { a: 20, b: 22 }
+    val opt: Option<Ptr<Pair>> = Option<Ptr<Pair>>::Some(&p)
+    match opt {
+        Some(ptr) => (*ptr).a + (*ptr).b
+        None => 0
+    }
+}

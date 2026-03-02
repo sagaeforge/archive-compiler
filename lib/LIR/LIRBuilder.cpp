@@ -2581,24 +2581,77 @@ VReg LIRBuilder::lowerStructLit(const HIRStructLitExpr* expr) {
                 emit(store);
             }
         } else {
-            // Regular (non-bitfield) field: direct store
-            VReg fp = freshVReg();
-            LIRInstr fp_instr{};
-            fp_instr.op = LIROp::FieldPtr;
-            fp_instr.result = fp;
-            fp_instr.type = ctx_.types.makePtr(field_type, false);
-            fp_instr.field_ptr.base = base;
-            fp_instr.field_ptr.offset = offset;
-            fp_instr.loc = expr->fields[f].loc;
-            emit(fp_instr);
+            // Check if this field is an aggregate (struct/union) that needs inline copy
+            bool is_aggregate = false;
+            uint32_t field_size = 0;
+            if (field_type < ctx_.types.size()) {
+                const auto& fti = ctx_.types.get(field_type);
+                if (fti.kind == TypeKind::Struct || fti.kind == TypeKind::Union) {
+                    is_aggregate = true;
+                    field_size = ctx_.types.sizeOf(field_type);
+                }
+            }
 
-            LIRInstr store{};
-            store.op = LIROp::Store;
-            store.result = INVALID_VREG;
-            store.type = TypeTable::Unit;
-            store.store.ptr = fp;
-            store.store.value = val;
-            emit(store);
+            if (is_aggregate && field_size > 0) {
+                // Inline copy: copy aggregate data 8 bytes at a time
+                uint32_t aligned = (field_size + 7u) & ~7u;
+                for (uint32_t off = 0; off < aligned; off += 8) {
+                    VReg src_ptr = freshVReg();
+                    LIRInstr sp{};
+                    sp.op = LIROp::FieldPtr;
+                    sp.result = src_ptr;
+                    sp.type = ctx_.types.makePtr(TypeTable::I64, false);
+                    sp.field_ptr.base = val;
+                    sp.field_ptr.offset = off;
+                    sp.loc = expr->fields[f].loc;
+                    emit(sp);
+
+                    VReg tmp = freshVReg();
+                    LIRInstr ld{};
+                    ld.op = LIROp::Load;
+                    ld.result = tmp;
+                    ld.type = TypeTable::I64;
+                    ld.load.ptr = src_ptr;
+                    emit(ld);
+
+                    VReg dst_ptr = freshVReg();
+                    LIRInstr dp{};
+                    dp.op = LIROp::FieldPtr;
+                    dp.result = dst_ptr;
+                    dp.type = ctx_.types.makePtr(TypeTable::I64, false);
+                    dp.field_ptr.base = base;
+                    dp.field_ptr.offset = offset + off;
+                    dp.loc = expr->fields[f].loc;
+                    emit(dp);
+
+                    LIRInstr st{};
+                    st.op = LIROp::Store;
+                    st.result = INVALID_VREG;
+                    st.type = TypeTable::Unit;
+                    st.store.ptr = dst_ptr;
+                    st.store.value = tmp;
+                    emit(st);
+                }
+            } else {
+                // Scalar field: direct store
+                VReg fp = freshVReg();
+                LIRInstr fp_instr{};
+                fp_instr.op = LIROp::FieldPtr;
+                fp_instr.result = fp;
+                fp_instr.type = ctx_.types.makePtr(field_type, false);
+                fp_instr.field_ptr.base = base;
+                fp_instr.field_ptr.offset = offset;
+                fp_instr.loc = expr->fields[f].loc;
+                emit(fp_instr);
+
+                LIRInstr store{};
+                store.op = LIROp::Store;
+                store.result = INVALID_VREG;
+                store.type = TypeTable::Unit;
+                store.store.ptr = fp;
+                store.store.value = val;
+                emit(store);
+            }
         }
     }
 
