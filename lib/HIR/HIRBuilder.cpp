@@ -5106,7 +5106,8 @@ HIRExpr* HIRBuilder::buildMethodCall(const Expr* expr) {
     // Auto-borrow: if self expects Ptr<T> but obj is T, wrap in AddrOf
     if (obj->type != sig.param_types[0] && sig.param_types[0] < ctx_.types.size()) {
         const auto& self_ti = ctx_.types.get(sig.param_types[0]);
-        if (self_ti.kind == TypeKind::Ptr && self_ti.ptr.pointee == obj->type) {
+        if ((self_ti.kind == TypeKind::Ptr || self_ti.kind == TypeKind::PtrMut) &&
+            self_ti.ptr.pointee == obj->type) {
             auto* addr = ctx_.arena.make<HIRAddrOfExpr>();
             addr->kind = HIRExpr::Kind::AddrOf;
             addr->loc = obj->loc;

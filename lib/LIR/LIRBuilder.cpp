@@ -3399,11 +3399,13 @@ void LIRBuilder::lowerStmt(const HIRStmt* stmt) {
         }
         case HIRStmt::Kind::DerefAssign: {
             auto* s = static_cast<const HIRDerefAssignStmt*>(stmt);
-            // Unwrap deref to get the pointer address (not the loaded value)
+            // Get the target address — use lowerToAddress for field chains
             VReg ptr;
             if (s->target->kind == HIRExpr::Kind::Deref) {
                 auto* deref = static_cast<const HIRDerefExpr*>(s->target);
                 ptr = lowerExpr(deref->operand);
+            } else if (s->target->kind == HIRExpr::Kind::FieldAccess) {
+                ptr = lowerToAddress(s->target);
             } else {
                 ptr = lowerExpr(s->target);
             }
