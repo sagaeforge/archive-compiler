@@ -1,0 +1,14 @@
+// Test enum discriminant access via cast
+@repr(u8)
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+fn main() -> i64 {
+    val c = Color.Blue
+    val disc: u8 = c as u8
+    // Blue = 2 → 2 * 21 = 42
+    (disc as i64) * 21
+}
