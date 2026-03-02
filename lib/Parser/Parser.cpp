@@ -209,6 +209,17 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
                         dumpExpr(ias->value, out, ind + 3);
                         break;
                     }
+                    case Stmt::Kind::TupleDestruct: {
+                        auto* td = static_cast<const TupleDestructStmt*>(st);
+                        out << (td->is_var ? "VarTupleDestruct(" : "ValTupleDestruct(");
+                        for (uint32_t ti = 0; ti < td->name_count; ++ti) {
+                            if (ti > 0) out << ", ";
+                            out << td->names[ti];
+                        }
+                        out << ")\n";
+                        dumpExpr(td->init, out, ind + 2);
+                        break;
+                    }
                 }
             }
             if (bl->result) {
@@ -4223,6 +4234,34 @@ Pattern* Parser::parsePattern() {
 Stmt* Parser::parseValDecl() {
     Token kw = advance(); // val or var
     bool is_var = (kw.kind == TokenKind::KwVar);
+
+    // Tuple destructuring: val (a, b, c) = expr
+    if (check(TokenKind::LParen)) {
+        advance(); // consume '('
+        std::vector<std::string_view> names;
+        while (!check(TokenKind::RParen) && !check(TokenKind::Eof)) {
+            Token n = expect(TokenKind::Ident, "expected variable name in tuple destructuring");
+            names.push_back(n.text);
+            if (!check(TokenKind::RParen)) {
+                expect(TokenKind::Comma, "expected ',' or ')' in tuple destructuring");
+            }
+        }
+        expect(TokenKind::RParen, "expected ')' after tuple destructuring names");
+        expect(TokenKind::Eq, "expected '=' in tuple destructuring");
+        Expr* init = parseExpr();
+
+        auto* stmt = arena_.make<TupleDestructStmt>();
+        stmt->kind = Stmt::Kind::TupleDestruct;
+        stmt->loc = kw.loc;
+        stmt->is_var = is_var;
+        stmt->name_count = static_cast<uint32_t>(names.size());
+        stmt->names = arena_.makeArray<std::string_view>(names.size());
+        for (size_t i = 0; i < names.size(); ++i) {
+            stmt->names[i] = names[i];
+        }
+        stmt->init = init;
+        return stmt;
+    }
 
     Token name = expect(TokenKind::Ident, "expected variable name");
     TypeRef type{};

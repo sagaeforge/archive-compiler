@@ -86,6 +86,7 @@ private:
 
     // Statement building
     HIRStmt* buildStmt(const Stmt* stmt);
+    void buildTupleDestructStmts(const Stmt* stmt, HIRStmt** out, uint32_t& idx);
 
     // Pattern building
     HIRPattern* buildPattern(const Pattern* pat, TypeId scrutinee_type);

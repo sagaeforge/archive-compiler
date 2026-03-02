@@ -768,6 +768,17 @@ void Formatter::formatStmt(const Stmt* stmt) {
             formatExpr(ia->value);
             break;
         }
+        case Stmt::Kind::TupleDestruct: {
+            auto* td = static_cast<const TupleDestructStmt*>(stmt);
+            out_ << (td->is_var ? "var (" : "val (");
+            for (uint32_t i = 0; i < td->name_count; ++i) {
+                if (i > 0) out_ << ", ";
+                out_ << td->names[i];
+            }
+            out_ << ") = ";
+            formatExpr(td->init);
+            break;
+        }
     }
     out_ << "\n";
 }

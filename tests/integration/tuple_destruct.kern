@@ -1,0 +1,9 @@
+// Test tuple destructuring in val declarations
+fn make_pair(a: i64, b: i64) -> (i64, i64) {
+    (a, b)
+}
+
+fn main() -> i64 {
+    val (x, y) = make_pair(20, 22)
+    x + y
+}

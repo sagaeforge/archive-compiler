@@ -2407,10 +2407,25 @@ HIRExpr* HIRBuilder::buildBlock(const Expr* expr, std::optional<TypeId> ctx_type
     e->kind = HIRExpr::Kind::Block;
     e->loc = expr->loc;
 
-    e->stmt_count = block->stmt_count;
-    e->stmts = ctx_.arena.makeArray<HIRStmt*>(block->stmt_count);
+    // Count HIR stmts needed — TupleDestruct expands to N+1 stmts
+    uint32_t hir_stmt_count = 0;
     for (uint32_t i = 0; i < block->stmt_count; ++i) {
-        e->stmts[i] = buildStmt(block->stmts[i]);
+        if (block->stmts[i]->kind == Stmt::Kind::TupleDestruct) {
+            auto* td = static_cast<const TupleDestructStmt*>(block->stmts[i]);
+            hir_stmt_count += td->name_count + 1; // temp + N field bindings
+        } else {
+            hir_stmt_count++;
+        }
+    }
+    e->stmt_count = hir_stmt_count;
+    e->stmts = ctx_.arena.makeArray<HIRStmt*>(hir_stmt_count);
+    uint32_t si = 0;
+    for (uint32_t i = 0; i < block->stmt_count; ++i) {
+        if (block->stmts[i]->kind == Stmt::Kind::TupleDestruct) {
+            buildTupleDestructStmts(block->stmts[i], e->stmts, si);
+        } else {
+            e->stmts[si++] = buildStmt(block->stmts[i]);
+        }
     }
 
     if (block->result) {
@@ -4359,6 +4374,15 @@ HIRStmt* HIRBuilder::buildStmt(const Stmt* stmt) {
             s->value = buildExpr(ias->value);
             return s;
         }
+        case Stmt::Kind::TupleDestruct: {
+            // Should be handled in buildBlock expansion, not here
+            ctx_.diag.error(stmt->loc, "tuple destructuring in unexpected context");
+            auto* s = ctx_.arena.make<HIRExprStmt>();
+            s->kind = HIRStmt::Kind::ExprStmt;
+            s->loc = stmt->loc;
+            s->expr = errorExpr(stmt->loc);
+            return s;
+        }
     }
     // unreachable
     auto* s = ctx_.arena.make<HIRExprStmt>();
@@ -4366,6 +4390,94 @@ HIRStmt* HIRBuilder::buildStmt(const Stmt* stmt) {
     s->loc = stmt->loc;
     s->expr = errorExpr(stmt->loc);
     return s;
+}
+
+void HIRBuilder::buildTupleDestructStmts(const Stmt* stmt, HIRStmt** out, uint32_t& idx) {
+    auto* td = static_cast<const TupleDestructStmt*>(stmt);
+    // Build init expression (the tuple)
+    auto* init_expr = buildExpr(td->init);
+    TypeId tuple_type = init_expr->type;
+
+    // Create temp binding: val __tup_N = init
+    static uint32_t tup_counter = 0;
+    std::string tmp_name = "__tup_" + std::to_string(tup_counter++);
+    auto interned_tmp = ctx_.strings.intern(tmp_name);
+
+    auto* tmp_decl = ctx_.arena.make<HIRValDeclStmt>();
+    tmp_decl->kind = HIRStmt::Kind::ValDecl;
+    tmp_decl->loc = stmt->loc;
+    tmp_decl->name = interned_tmp;
+    tmp_decl->type = tuple_type;
+    tmp_decl->init = init_expr;
+    local_vars_[interned_tmp] = tuple_type;
+    out[idx++] = tmp_decl;
+
+    // Verify tuple type has enough fields
+    const TypeInfo* ti = nullptr;
+    if (tuple_type < ctx_.types.size()) {
+        ti = &ctx_.types.get(tuple_type);
+    }
+    if (!ti || ti->kind != TypeKind::Struct) {
+        ctx_.diag.error(stmt->loc, "tuple destructuring requires a struct/tuple type");
+        return;
+    }
+
+    // Create individual field bindings: val name_i = __tup._i
+    for (uint32_t i = 0; i < td->name_count; ++i) {
+        std::string field_name = "_" + std::to_string(i);
+        auto interned_field = ctx_.strings.intern(field_name);
+
+        // Find field type
+        TypeId field_type = TypeTable::Error;
+        for (uint32_t fi = 0; fi < ti->struct_.field_count; ++fi) {
+            if (ti->struct_.fields[fi].name == interned_field) {
+                field_type = ti->struct_.fields[fi].type;
+                break;
+            }
+        }
+        if (field_type == TypeTable::Error) {
+            ctx_.diag.error(stmt->loc, std::string("tuple has no field '") +
+                field_name + "' for destructuring element " + std::to_string(i));
+            continue;
+        }
+
+        // Build ident expr for the temp
+        auto* tmp_ref = ctx_.arena.make<HIRIdentExpr>();
+        tmp_ref->kind = HIRExpr::Kind::Ident;
+        tmp_ref->loc = stmt->loc;
+        tmp_ref->name = interned_tmp;
+        tmp_ref->type = tuple_type;
+
+        // Build field access: __tup._i
+        auto* fa = ctx_.arena.make<HIRFieldAccessExpr>();
+        fa->kind = HIRExpr::Kind::FieldAccess;
+        fa->loc = stmt->loc;
+        fa->object = tmp_ref;
+        fa->field_name = interned_field;
+        fa->type = field_type;
+
+        auto interned_name = ctx_.strings.intern(td->names[i]);
+        if (td->is_var) {
+            auto* s = ctx_.arena.make<HIRVarDeclStmt>();
+            s->kind = HIRStmt::Kind::VarDecl;
+            s->loc = stmt->loc;
+            s->name = interned_name;
+            s->type = field_type;
+            s->init = fa;
+            local_vars_[interned_name] = field_type;
+            mutable_vars_.insert(interned_name);
+            out[idx++] = s;
+        } else {
+            auto* s = ctx_.arena.make<HIRValDeclStmt>();
+            s->kind = HIRStmt::Kind::ValDecl;
+            s->loc = stmt->loc;
+            s->name = interned_name;
+            s->type = field_type;
+            s->init = fa;
+            local_vars_[interned_name] = field_type;
+            out[idx++] = s;
+        }
+    }
 }
 
 // ============================================================================

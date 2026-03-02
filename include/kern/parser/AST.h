@@ -465,7 +465,7 @@ struct InlineAsmExpr : Expr {
 
 // --- Statements ---
 struct Stmt {
-    enum class Kind { ValDecl, VarDecl, ExprStmt, Assign, FieldAssign, DerefAssign, Break, Continue, IndexAssign };
+    enum class Kind { ValDecl, VarDecl, ExprStmt, Assign, FieldAssign, DerefAssign, Break, Continue, IndexAssign, TupleDestruct };
     Kind kind;
     SourceLocation loc;
 };
@@ -516,6 +516,13 @@ struct IndexAssignStmt : Stmt {
     Expr* array;
     Expr* index;
     Expr* value;
+};
+
+struct TupleDestructStmt : Stmt {
+    std::string_view* names;  // arena-allocated array of binding names
+    uint32_t name_count;
+    bool is_var;              // true = var, false = val
+    Expr* init;               // the tuple expression
 };
 
 // --- Declarations ---
