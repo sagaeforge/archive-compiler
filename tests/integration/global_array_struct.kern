@@ -1,0 +1,12 @@
+// Global array of structs (GDT/IDT table pattern)
+struct TableEntry { base: i64, limit: i64 }
+
+static val table: [TableEntry; 3] = [
+    TableEntry { base: 0, limit: 0 },
+    TableEntry { base: 0, limit: 0xFFFFF },
+    TableEntry { base: 0, limit: 42 }
+]
+
+fn main() -> i64 {
+    table[2u64].limit
+}

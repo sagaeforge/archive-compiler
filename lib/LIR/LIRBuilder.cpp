@@ -234,23 +234,61 @@ LIRModule* LIRBuilder::build(const HIRModule* hir) {
                 // Array literal: extract each element as a constant
                 auto* arr = static_cast<const HIRArrayLitExpr*>(hgd->init);
                 uint32_t n = arr->element_count;
-                gd.variable.array_count = n;
-                gd.variable.array_values = ctx_.arena.makeArray<int64_t>(n);
                 TypeId elem_type = TypeTable::I64;
                 if (hgd->type_id < ctx_.types.size()) {
                     const auto& ti = ctx_.types.get(hgd->type_id);
                     if (ti.kind == TypeKind::Array) elem_type = ti.array.element;
                 }
                 uint32_t elem_sz = ctx_.types.sizeOf(elem_type);
-                gd.variable.size = static_cast<uint8_t>(elem_sz > 0 ? elem_sz : 8);
-                for (uint32_t j = 0; j < n; ++j) {
-                    int64_t v = 0;
-                    if (arr->elements[j]->kind == HIRExpr::Kind::IntLit) {
-                        v = static_cast<const HIRIntLitExpr*>(arr->elements[j])->value;
-                    } else if (arr->elements[j]->kind == HIRExpr::Kind::BoolLit) {
-                        v = static_cast<const HIRBoolLitExpr*>(arr->elements[j])->value ? 1 : 0;
+                const auto& eti = ctx_.types.get(elem_type);
+                bool elem_is_struct = (eti.kind == TypeKind::Struct);
+
+                if (elem_is_struct) {
+                    // Array of structs: serialize to raw bytes (init_bytes path)
+                    uint32_t total_sz = elem_sz * n;
+                    gd.variable.size = static_cast<uint8_t>(total_sz > 255 ? 255 : total_sz);
+                    gd.variable.init_bytes = ctx_.arena.makeArray<uint8_t>(total_sz);
+                    gd.variable.init_byte_count = total_sz;
+                    std::memset(gd.variable.init_bytes, 0, total_sz);
+                    for (uint32_t j = 0; j < n; ++j) {
+                        uint32_t base_off = elem_sz * j;
+                        if (arr->elements[j]->kind == HIRExpr::Kind::StructLit) {
+                            auto* slit = static_cast<const HIRStructLitExpr*>(arr->elements[j]);
+                            for (uint32_t fi = 0; fi < slit->field_count; ++fi) {
+                                for (uint32_t si = 0; si < eti.struct_.field_count; ++si) {
+                                    if (eti.struct_.fields[si].name == slit->fields[fi].name) {
+                                        int32_t foff = eti.struct_.fields[si].offset;
+                                        if (foff < 0) break;
+                                        uint32_t fsz = ctx_.types.sizeOf(eti.struct_.fields[si].type);
+                                        auto* fexpr = slit->fields[fi].value;
+                                        if (fexpr->kind == HIRExpr::Kind::IntLit) {
+                                            int64_t v = static_cast<const HIRIntLitExpr*>(fexpr)->value;
+                                            std::memcpy(gd.variable.init_bytes + base_off + foff,
+                                                       &v, std::min(fsz, 8u));
+                                        } else if (fexpr->kind == HIRExpr::Kind::BoolLit) {
+                                            uint8_t b = static_cast<const HIRBoolLitExpr*>(fexpr)->value ? 1 : 0;
+                                            gd.variable.init_bytes[base_off + foff] = b;
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
                     }
-                    gd.variable.array_values[j] = v;
+                } else {
+                    // Array of scalars: use array_values path
+                    gd.variable.array_count = n;
+                    gd.variable.array_values = ctx_.arena.makeArray<int64_t>(n);
+                    gd.variable.size = static_cast<uint8_t>(elem_sz > 0 ? elem_sz : 8);
+                    for (uint32_t j = 0; j < n; ++j) {
+                        int64_t v = 0;
+                        if (arr->elements[j]->kind == HIRExpr::Kind::IntLit) {
+                            v = static_cast<const HIRIntLitExpr*>(arr->elements[j])->value;
+                        } else if (arr->elements[j]->kind == HIRExpr::Kind::BoolLit) {
+                            v = static_cast<const HIRBoolLitExpr*>(arr->elements[j])->value ? 1 : 0;
+                        }
+                        gd.variable.array_values[j] = v;
+                    }
                 }
             } else if (hgd->init->kind == HIRExpr::Kind::FloatLit) {
                 // Float literal: serialize to raw bytes
