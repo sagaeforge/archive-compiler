@@ -447,6 +447,8 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
         named_types_[interned] = tid;
         return tid;
     }
+    // Empty name = elided type (return type inference)
+    if (ref.name.empty()) return INVALID_TYPE;
     if (ref.name == "i8")   return TypeTable::I8;
     if (ref.name == "i16")  return TypeTable::I16;
     if (ref.name == "i32")  return TypeTable::I32;
@@ -1262,11 +1264,12 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
     }
 
     current_return_type_ = resolveType(fn->return_type);
+    bool infer_return = (current_return_type_ == INVALID_TYPE);
 
     hfn->name = ctx_.strings.intern(fn->name);
     hfn->param_count = fn->param_count;
     hfn->params = ctx_.arena.makeArray<HIRParam>(fn->param_count);
-    hfn->return_type = current_return_type_;
+    hfn->return_type = infer_return ? TypeTable::Unit : current_return_type_;
     hfn->purity = 4; // Purity::Unknown
     hfn->is_recursive = false;
     hfn->is_tail_recursive = false;
@@ -1340,10 +1343,25 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
     }
 
     // Build body
-    hfn->body = buildExpr(fn->body, current_return_type_);
+    if (infer_return) {
+        hfn->body = buildExpr(fn->body, std::nullopt);
+    } else {
+        hfn->body = buildExpr(fn->body, current_return_type_);
+    }
+
+    // Infer return type from body if elided
+    if (infer_return && hfn->body && hfn->body->type != TypeTable::Error) {
+        current_return_type_ = hfn->body->type;
+        hfn->return_type = current_return_type_;
+        // Update fn_table_ so callers see the inferred return type
+        auto fn_it = fn_table_.find(ctx_.strings.intern(fn->name));
+        if (fn_it != fn_table_.end()) {
+            fn_it->second.return_type = current_return_type_;
+        }
+    }
 
     // Check return type match (skip for naked/interrupt — user controls return via asm)
-    if (!hfn->is_naked && !hfn->is_interrupt && hfn->body && hfn->body->type != TypeTable::Error &&
+    if (!infer_return && !hfn->is_naked && !hfn->is_interrupt && hfn->body && hfn->body->type != TypeTable::Error &&
         !typesMatchClosure(hfn->body->type, current_return_type_, ctx_.types, closure_struct_types_)) {
         hfn->body = implicitWiden(hfn->body, current_return_type_);
         if (!typesMatchClosure(hfn->body->type, current_return_type_, ctx_.types, closure_struct_types_)) {

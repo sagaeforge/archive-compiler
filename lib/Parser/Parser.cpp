@@ -475,7 +475,9 @@ void dumpAST(const Module* mod, std::ostream& out, int /*ind*/) {
             if (j > 0) out << ", ";
             out << fn->params[j].name << ": " << fn->params[j].type.name;
         }
-        out << ") -> " << fn->return_type.name;
+        out << ")";
+        if (!fn->return_type.name.empty())
+            out << " -> " << fn->return_type.name;
         if (fn->is_intrinsic) out << " [intrinsic]";
         out << ")\n";
         if (fn->body) {
@@ -1663,8 +1665,11 @@ FnDecl* Parser::parseFnDecl() {
     }
     expect(TokenKind::RParen, "expected ')' after parameters");
 
-    expect(TokenKind::Arrow, "expected '->' for return type");
-    TypeRef ret = parseType();
+    TypeRef ret;
+    if (match(TokenKind::Arrow)) {
+        ret = parseType();
+    }
+    // else: ret stays default (empty name = infer from body)
 
     // Parse optional effect clause: "with io, atomic"
     std::vector<std::string_view> effect_names;

@@ -116,8 +116,11 @@ void Formatter::formatFnDecl(const FnDecl* fn) {
         out_ << fn->params[i].name << ": ";
         formatTypeRef(fn->params[i].type);
     }
-    out_ << ") -> ";
-    formatTypeRef(fn->return_type);
+    out_ << ")";
+    if (!fn->return_type.name.empty() || fn->return_type.kind != TypeRef::Kind::Named) {
+        out_ << " -> ";
+        formatTypeRef(fn->return_type);
+    }
 
     if (fn->is_intrinsic) {
         out_ << " = intrinsic\n";

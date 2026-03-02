@@ -1,0 +1,8 @@
+// Test return type elision — infer return type from body
+fn add(a: i64, b: i64) {
+    a + b
+}
+
+fn main() -> i64 {
+    add(20, 22)
+}

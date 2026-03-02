@@ -334,13 +334,10 @@ TEST(ParserTest, ErrorMissingParamColon) {
     EXPECT_NE(out.str().find("expected ':'"), std::string::npos);
 }
 
-// --- Error: missing arrow ---
+// --- Error: stray tokens after function (no arrow, no body brace) ---
 TEST(ParserTest, ErrorMissingArrow) {
     auto r = parse("fn main() i64 { 42 }");
     EXPECT_TRUE(r.diag.hasErrors());
-    std::ostringstream out;
-    r.diag.printAll(out);
-    EXPECT_NE(out.str().find("expected '->'"), std::string::npos);
 }
 
 // --- Error: unexpected token in expression position ---
@@ -562,13 +559,13 @@ TEST(ParserTest, MultipleFnsAfterError) {
     EXPECT_NE(r.mod, nullptr);
 }
 
-// --- Missing return type arrow ---
-TEST(ParserTest, MissingReturnTypeArrow) {
-    auto r = parse("fn main() i64 { 42 }");
-    EXPECT_TRUE(r.diag.hasErrors());
-    std::ostringstream out;
-    r.diag.printAll(out);
-    EXPECT_NE(out.str().find("->"), std::string::npos);
+// --- Return type elision: fn without arrow infers type from body ---
+TEST(ParserTest, ReturnTypeElision) {
+    auto r = parse("fn main() { 42 }");
+    ASSERT_FALSE(r.diag.hasErrors());
+    ASSERT_EQ(r.mod->fn_count, 1u);
+    // return_type.name should be empty (elided)
+    EXPECT_TRUE(r.mod->functions[0]->return_type.name.empty());
 }
 
 // --- Float literal f64 ---
