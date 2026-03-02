@@ -37,7 +37,11 @@ TypeId TypeTable::add(TypeInfo info) {
 }
 
 const TypeInfo& TypeTable::get(TypeId id) const {
-    assert(id < types_.size() && "TypeId out of range");
+    // INVALID_TYPE (UINT32_MAX) can flow from error recovery paths;
+    // return the pre-registered Error type instead of crashing.
+    if (id >= types_.size()) {
+        return *types_[Error];
+    }
     return *types_[id];
 }
 
