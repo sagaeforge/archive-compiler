@@ -2893,6 +2893,11 @@ VReg LIRBuilder::lowerLoop(const HIRLoopExpr* expr) {
     current_loop_exit_ = exit_bb;
     current_loop_result_ = result;
 
+    // Register labeled loop target
+    if (!expr->label.empty()) {
+        labeled_loops_[expr->label] = {header_bb, exit_bb};
+    }
+
     for (uint32_t i = 0; i < expr->binding_count; ++i) {
         VReg arg_vreg = freshVReg();
         LIRInstr arg_i{};
@@ -2921,6 +2926,9 @@ VReg LIRBuilder::lowerLoop(const HIRLoopExpr* expr) {
     emit(exit_arg);
 
     // Restore loop context
+    if (!expr->label.empty()) {
+        labeled_loops_.erase(expr->label);
+    }
     current_loop_header_ = saved_loop_header;
     current_loop_exit_ = saved_loop_exit;
     current_loop_result_ = saved_loop_result;
@@ -2933,8 +2941,15 @@ VReg LIRBuilder::lowerBreak(const HIRBreakExpr* expr) {
     if (expr->value) {
         args.push_back(lowerExpr(expr->value));
     }
-    // Branch to loop exit block, passing the break value as block arg
-    emitBranchWithArgs(current_loop_exit_, args);
+    // Resolve target: labeled or innermost loop
+    uint32_t target_exit = current_loop_exit_;
+    if (!expr->label.empty()) {
+        auto it = labeled_loops_.find(expr->label);
+        if (it != labeled_loops_.end()) {
+            target_exit = it->second.exit_bb;
+        }
+    }
+    emitBranchWithArgs(target_exit, args);
     return args.empty() ? INVALID_VREG : args[0];
 }
 
@@ -2944,8 +2959,15 @@ VReg LIRBuilder::lowerContinue(const HIRContinueExpr* expr) {
     for (uint32_t i = 0; i < expr->arg_count; ++i) {
         args.push_back(lowerExpr(expr->args[i]));
     }
-    // Branch back to loop header with new accumulator values
-    emitBranchWithArgs(current_loop_header_, args);
+    // Resolve target: labeled or innermost loop
+    uint32_t target_header = current_loop_header_;
+    if (!expr->label.empty()) {
+        auto it = labeled_loops_.find(expr->label);
+        if (it != labeled_loops_.end()) {
+            target_header = it->second.header_bb;
+        }
+    }
+    emitBranchWithArgs(target_header, args);
     return INVALID_VREG;
 }
 

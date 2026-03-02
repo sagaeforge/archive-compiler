@@ -230,15 +230,18 @@ struct HIRLoopExpr : HIRExpr {
     HIRLoopBinding* bindings;
     uint32_t binding_count;
     HIRExpr* body;
+    std::string_view label;  // 'label, empty = no label
 };
 
 struct HIRBreakExpr : HIRExpr {
     HIRExpr* value;   // nullable — break value
+    std::string_view label;  // 'label target, empty = innermost
 };
 
 struct HIRContinueExpr : HIRExpr {
     HIRExpr** args;
     uint32_t arg_count;  // new accumulator values
+    std::string_view label;  // 'label target, empty = innermost
 };
 
 struct HIRArrayLitExpr : HIRExpr {

@@ -124,6 +124,13 @@ private:
     uint32_t current_loop_header_ = 0;
     uint32_t current_loop_exit_ = 0;
     VReg current_loop_result_ = INVALID_VREG;
+
+    // Labeled loop targets (for labeled break/continue)
+    struct LoopTarget {
+        uint32_t header_bb;
+        uint32_t exit_bb;
+    };
+    std::unordered_map<std::string_view, LoopTarget> labeled_loops_;
 };
 
 } // namespace kern

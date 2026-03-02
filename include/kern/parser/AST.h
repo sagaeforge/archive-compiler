@@ -400,6 +400,7 @@ struct LoopExpr : Expr {
     Stmt** stmts;
     uint32_t stmt_count;
     Expr* result;  // nullptr for Unit-returning loops
+    std::string_view label;  // 'label, empty = no label
 };
 
 // for i in start..end { body }
@@ -409,6 +410,7 @@ struct ForRangeExpr : Expr {
     Expr* end;                  // range end (exclusive)
     Stmt** stmts;
     uint32_t stmt_count;
+    std::string_view label;     // 'label, empty = no label
 };
 
 // for item in collection { body }
@@ -417,6 +419,7 @@ struct ForEachExpr : Expr {
     Expr* collection;           // array or slice expression
     Stmt** stmts;
     uint32_t stmt_count;
+    std::string_view label;     // 'label, empty = no label
 };
 
 // while cond { body }
@@ -424,6 +427,7 @@ struct WhileLoopExpr : Expr {
     Expr* condition;
     Stmt** stmts;
     uint32_t stmt_count;
+    std::string_view label;  // 'label, empty = no label
 };
 
 // ASM operand constraint: "=r"(var) / "r"(expr) / "+a"(var)
@@ -484,11 +488,13 @@ struct DerefAssignStmt : Stmt {
 
 struct BreakStmt : Stmt {
     Expr* value;  // nullptr for unit break
+    std::string_view label;  // 'label target, empty = innermost loop
 };
 
 struct ContinueStmt : Stmt {
     Expr** args;
     uint32_t arg_count;
+    std::string_view label;  // 'label target, empty = innermost loop
 };
 
 struct IndexAssignStmt : Stmt {

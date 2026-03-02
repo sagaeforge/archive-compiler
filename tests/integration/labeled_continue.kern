@@ -1,0 +1,18 @@
+fn main() -> i64 {
+    var count: i64 = 0
+    var i: i64 = 0
+    'outer: while i < 5 {
+        var j: i64 = 0
+        while j < 5 {
+            if j == 2 {
+                count = count + 1
+                i = i + 1
+                continue 'outer
+            }
+            j = j + 1
+        }
+        count = count + 100
+        i = i + 1
+    }
+    count
+}

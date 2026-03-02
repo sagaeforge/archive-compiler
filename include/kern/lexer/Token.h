@@ -102,6 +102,9 @@ enum class TokenKind : uint8_t {
     LBracket,    // [
     RBracket,    // ]
 
+    // Labels
+    Label,       // 'ident (loop label, e.g. 'outer)
+
     // Special
     Newline,
     Eof,

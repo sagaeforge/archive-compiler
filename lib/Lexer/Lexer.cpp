@@ -94,6 +94,7 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::RBrace:     return "}";
         case TokenKind::LBracket:   return "[";
         case TokenKind::RBracket:   return "]";
+        case TokenKind::Label:      return "Label";
         case TokenKind::Newline:    return "Newline";
         case TokenKind::Eof:        return "Eof";
         case TokenKind::Error:      return "Error";
@@ -431,6 +432,14 @@ Token Lexer::nextToken() {
         case '~': return makeToken(TokenKind::Tilde);
         case '@': return makeToken(TokenKind::At);
         case '?': return makeToken(TokenKind::Question);
+
+        case '\'':
+            // Label: 'ident
+            if (std::isalpha(static_cast<unsigned char>(peek())) || peek() == '_') {
+                while (!isAtEnd() && (std::isalnum(static_cast<unsigned char>(peek())) || peek() == '_')) advance();
+                return makeToken(TokenKind::Label);
+            }
+            return makeToken(TokenKind::Error);
 
         case '!':
             if (match('=')) return makeToken(TokenKind::NotEq);

@@ -2591,6 +2591,33 @@ Expr* Parser::parsePrimary() {
         return asmExpr;
     }
 
+    // Labeled loop: 'label: loop/for/while { ... }
+    if (tok.kind == TokenKind::Label) {
+        std::string_view label_text = tok.text;  // includes leading '
+        advance(); // consume label
+        expect(TokenKind::Colon, "expected ':' after loop label");
+        skipNewlines();
+        if (check(TokenKind::KwLoop)) {
+            auto* e = static_cast<LoopExpr*>(parseLoopExpr());
+            if (e) e->label = label_text;
+            return e;
+        } else if (check(TokenKind::KwFor)) {
+            auto* e = parseForRange();
+            if (e && e->kind == Expr::Kind::ForRange)
+                static_cast<ForRangeExpr*>(e)->label = label_text;
+            else if (e && e->kind == Expr::Kind::ForEach)
+                static_cast<ForEachExpr*>(e)->label = label_text;
+            return e;
+        } else if (check(TokenKind::KwWhile)) {
+            auto* e = static_cast<WhileLoopExpr*>(parseWhileLoop());
+            if (e) e->label = label_text;
+            return e;
+        } else {
+            diag_.error(tok.loc, "expected 'loop', 'for', or 'while' after label");
+            return nullptr;
+        }
+    }
+
     // Loop expression
     if (tok.kind == TokenKind::KwLoop) {
         return parseLoopExpr();
@@ -2713,6 +2740,10 @@ Expr* Parser::parseBlockExpr() {
             auto* bs = arena_.make<BreakStmt>();
             bs->kind = Stmt::Kind::Break;
             bs->loc = brk_tok.loc;
+            // Check for label: break 'label
+            if (check(TokenKind::Label)) {
+                bs->label = advance().text;
+            }
             // Check if there's a value to break with
             if (!check(TokenKind::RBrace) && !check(TokenKind::Newline) &&
                 !check(TokenKind::Semicolon) && !check(TokenKind::Eof)) {
@@ -2726,6 +2757,10 @@ Expr* Parser::parseBlockExpr() {
             auto* cs = arena_.make<ContinueStmt>();
             cs->kind = Stmt::Kind::Continue;
             cs->loc = cont_tok.loc;
+            // Check for label: continue 'label
+            if (check(TokenKind::Label)) {
+                cs->label = advance().text;
+            }
             // Parse accumulator update args: continue(expr1, expr2, ...)
             if (match(TokenKind::LParen)) {
                 std::vector<Expr*> args;
@@ -3231,6 +3266,9 @@ Expr* Parser::parseLoopExpr() {
             auto* bs = arena_.make<BreakStmt>();
             bs->kind = Stmt::Kind::Break;
             bs->loc = brk_tok.loc;
+            if (check(TokenKind::Label)) {
+                bs->label = advance().text;
+            }
             if (!check(TokenKind::RBrace) && !check(TokenKind::Newline) &&
                 !check(TokenKind::Semicolon) && !check(TokenKind::Eof)) {
                 bs->value = parseExpr();
@@ -3243,6 +3281,9 @@ Expr* Parser::parseLoopExpr() {
             auto* cs = arena_.make<ContinueStmt>();
             cs->kind = Stmt::Kind::Continue;
             cs->loc = cont_tok.loc;
+            if (check(TokenKind::Label)) {
+                cs->label = advance().text;
+            }
             if (match(TokenKind::LParen)) {
                 std::vector<Expr*> args;
                 if (!check(TokenKind::RParen)) {
@@ -3410,6 +3451,9 @@ Expr* Parser::parseForRange() {
                 auto* bs = arena_.make<BreakStmt>();
                 bs->kind = Stmt::Kind::Break;
                 bs->loc = brk_tok.loc;
+                if (check(TokenKind::Label)) {
+                    bs->label = advance().text;
+                }
                 bs->value = nullptr;
                 fe_stmts.push_back(bs);
             } else if (check(TokenKind::KwContinue)) {
@@ -3417,6 +3461,9 @@ Expr* Parser::parseForRange() {
                 auto* cs = arena_.make<ContinueStmt>();
                 cs->kind = Stmt::Kind::Continue;
                 cs->loc = cnt_tok.loc;
+                if (check(TokenKind::Label)) {
+                    cs->label = advance().text;
+                }
                 fe_stmts.push_back(cs);
             } else if (check(TokenKind::Ident)) {
                 Token identTok = peek();
@@ -3642,8 +3689,22 @@ Expr* Parser::parseWhileLoop() {
             auto* bs = arena_.make<BreakStmt>();
             bs->kind = Stmt::Kind::Break;
             bs->loc = brk_tok.loc;
+            if (check(TokenKind::Label)) {
+                bs->label = advance().text;
+            }
             bs->value = nullptr;
             stmts.push_back(bs);
+        } else if (check(TokenKind::KwContinue)) {
+            Token cnt_tok = advance();
+            auto* cs = arena_.make<ContinueStmt>();
+            cs->kind = Stmt::Kind::Continue;
+            cs->loc = cnt_tok.loc;
+            if (check(TokenKind::Label)) {
+                cs->label = advance().text;
+            }
+            cs->arg_count = 0;
+            cs->args = nullptr;
+            stmts.push_back(cs);
         } else if (check(TokenKind::Ident)) {
             Token identTok = peek();
             advance();

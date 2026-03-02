@@ -2883,6 +2883,7 @@ HIRExpr* HIRBuilder::buildLoop(const Expr* expr, std::optional<TypeId> ctx_type)
     }
 
     e->body = body;
+    e->label = loop->label;
     // Loop type = inferred from break values or ctx_type
     if (ctx_type.has_value()) {
         e->type = *ctx_type;
@@ -2907,6 +2908,7 @@ HIRExpr* HIRBuilder::buildForRange(const Expr* expr) {
     loop->kind = HIRExpr::Kind::Loop;
     loop->loc = expr->loc;
     loop->type = TypeTable::Unit;
+    loop->label = fr->label;
 
     // Build start expression to infer iterator type
     HIRExpr* start_expr = buildExpr(fr->start);
@@ -3082,6 +3084,7 @@ HIRExpr* HIRBuilder::buildForEach(const Expr* expr) {
     loop->kind = HIRExpr::Kind::Loop;
     loop->loc = expr->loc;
     loop->type = TypeTable::Unit;
+    loop->label = fe->label;
 
     TypeId iter_type = TypeTable::I64;
 
@@ -3269,6 +3272,7 @@ HIRExpr* HIRBuilder::buildWhileLoop(const Expr* expr) {
     loop->kind = HIRExpr::Kind::Loop;
     loop->loc = expr->loc;
     loop->type = TypeTable::Unit;
+    loop->label = wl->label;
     loop->binding_count = 0;
     loop->bindings = nullptr;
 
@@ -4010,6 +4014,7 @@ HIRStmt* HIRBuilder::buildStmt(const Stmt* stmt) {
             brk->kind = HIRExpr::Kind::Break;
             brk->loc = stmt->loc;
             brk->type = TypeTable::Unit;
+            brk->label = bs->label;
             if (bs->value) {
                 brk->value = buildExpr(bs->value);
                 brk->type = brk->value->type;
@@ -4028,6 +4033,7 @@ HIRStmt* HIRBuilder::buildStmt(const Stmt* stmt) {
             cont->kind = HIRExpr::Kind::Continue;
             cont->loc = stmt->loc;
             cont->type = TypeTable::Unit;
+            cont->label = cs->label;
             cont->arg_count = cs->arg_count;
             cont->args = ctx_.arena.makeArray<HIRExpr*>(cs->arg_count);
             for (uint32_t i = 0; i < cs->arg_count; ++i) {
