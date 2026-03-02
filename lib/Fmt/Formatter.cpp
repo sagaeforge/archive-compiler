@@ -576,6 +576,17 @@ void Formatter::formatExpr(const Expr* expr) {
             break;
         }
 
+        case Expr::Kind::SliceExpr: {
+            auto* se = static_cast<const SliceExprNode*>(expr);
+            formatExpr(se->array);
+            out_ << "[";
+            if (se->start) formatExpr(se->start);
+            out_ << "..";
+            if (se->end) formatExpr(se->end);
+            out_ << "]";
+            break;
+        }
+
         case Expr::Kind::Sizeof: {
             auto* sz = static_cast<const SizeofExpr*>(expr);
             out_ << "sizeof(";

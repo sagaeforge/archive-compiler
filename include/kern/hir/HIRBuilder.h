@@ -77,6 +77,7 @@ private:
     HIRExpr* buildWhileLoop(const Expr* expr);
     HIRExpr* buildArrayLit(const Expr* expr);
     HIRExpr* buildIndexAccess(const Expr* expr);
+    HIRExpr* buildSliceExpr(const Expr* expr);
     HIRExpr* buildInlineAsm(const Expr* expr);
     HIRExpr* buildLambda(const Expr* expr, std::optional<TypeId> ctx_type);
     HIRExpr* buildMethodCall(const Expr* expr);

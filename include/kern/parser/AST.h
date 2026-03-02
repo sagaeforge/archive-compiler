@@ -219,7 +219,7 @@ struct Expr {
         StructLit, FieldAccess,
         EnumAccess, UnionVariant,
         Loop, ForRange, ForEach, WhileLoop, InlineAsm,
-        ArrayLit, IndexAccess,
+        ArrayLit, IndexAccess, SliceExpr,
         Sizeof, Alignof, Offsetof,
         Lambda, MethodCall,
         Try
@@ -351,6 +351,12 @@ struct ArrayLitExpr : Expr {
 struct IndexAccessExpr : Expr {
     Expr* array;
     Expr* index;
+};
+
+struct SliceExprNode : Expr {
+    Expr* array;
+    Expr* start;   // nullable (arr[..end] means start=0)
+    Expr* end;     // nullable (arr[start..] means end=len)
 };
 
 struct CastExpr : Expr {

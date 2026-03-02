@@ -1395,6 +1395,7 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
         case Expr::Kind::InlineAsm:  return buildInlineAsm(expr);
         case Expr::Kind::ArrayLit:   return buildArrayLit(expr);
         case Expr::Kind::IndexAccess:return buildIndexAccess(expr);
+        case Expr::Kind::SliceExpr:  return buildSliceExpr(expr);
         case Expr::Kind::Sizeof: {
             auto* se = static_cast<const SizeofExpr*>(expr);
             TypeId tid = resolveType(se->target);
@@ -3438,6 +3439,164 @@ HIRExpr* HIRBuilder::buildIndexAccess(const Expr* expr) {
         e->type = TypeTable::Error;
     }
     return e;
+}
+
+HIRExpr* HIRBuilder::buildSliceExpr(const Expr* expr) {
+    auto* se = static_cast<const SliceExprNode*>(expr);
+    auto* arr_expr = buildExpr(se->array);
+    TypeId arr_type = arr_expr->type;
+
+    // Determine element type and get Slice type
+    TypeId elem_type = TypeTable::Error;
+    bool is_array = false;
+    uint32_t array_size = 0;
+
+    if (arr_type != TypeTable::Error && arr_type < ctx_.types.size()) {
+        const auto& ti = ctx_.types.get(arr_type);
+        if (ti.kind == TypeKind::Array) {
+            elem_type = ti.array.element;
+            is_array = true;
+            array_size = ti.array.count;
+        } else if (ti.kind == TypeKind::Ptr || ti.kind == TypeKind::PtrMut) {
+            elem_type = ti.ptr.pointee;
+        } else if (ti.kind == TypeKind::Struct &&
+                   ti.struct_.name.substr(0, 6) == "Slice_" &&
+                   ti.struct_.field_count >= 2) {
+            // Slicing a slice: s[start..end]
+            const auto& data_ti = ctx_.types.get(ti.struct_.fields[0].type);
+            if (data_ti.kind == TypeKind::Ptr || data_ti.kind == TypeKind::PtrMut) {
+                elem_type = data_ti.ptr.pointee;
+            }
+        }
+    }
+
+    if (elem_type == TypeTable::Error) {
+        ctx_.diag.error(expr->loc, "slice operation on non-array/slice type");
+        auto* err = ctx_.arena.make<HIRIntLitExpr>();
+        err->kind = HIRExpr::Kind::IntLit;
+        err->loc = expr->loc;
+        err->value = 0;
+        err->type = TypeTable::Error;
+        return err;
+    }
+
+    // Ensure Slice<T> type exists
+    std::string slice_name = "Slice_" + std::string(ctx_.types.name(elem_type));
+    auto interned = ctx_.strings.intern(slice_name);
+    TypeId slice_type;
+    auto it = named_types_.find(interned);
+    if (it != named_types_.end()) {
+        slice_type = it->second;
+    } else {
+        FieldInfo fields[] = {
+            {ctx_.strings.intern("data"), ctx_.types.makePtr(elem_type, false), false, 0},
+            {ctx_.strings.intern("len"), TypeTable::U64, false, 8},
+        };
+        slice_type = ctx_.types.makeStruct(interned, fields);
+        named_types_[interned] = slice_type;
+    }
+
+    // Build start expression (default 0u64 if omitted)
+    HIRExpr* start_expr;
+    if (se->start) {
+        start_expr = buildExpr(se->start);
+    } else {
+        auto* zero = ctx_.arena.make<HIRIntLitExpr>();
+        zero->kind = HIRExpr::Kind::IntLit;
+        zero->loc = expr->loc;
+        zero->value = 0;
+        zero->type = TypeTable::U64;
+        start_expr = zero;
+    }
+
+    // Build end expression (default array_size if omitted — only for fixed arrays)
+    HIRExpr* end_expr;
+    if (se->end) {
+        end_expr = buildExpr(se->end);
+    } else if (is_array) {
+        auto* size_lit = ctx_.arena.make<HIRIntLitExpr>();
+        size_lit->kind = HIRExpr::Kind::IntLit;
+        size_lit->loc = expr->loc;
+        size_lit->value = static_cast<int64_t>(array_size);
+        size_lit->type = TypeTable::U64;
+        end_expr = size_lit;
+    } else {
+        ctx_.diag.error(expr->loc, "open-ended slice requires fixed-size array");
+        auto* err = ctx_.arena.make<HIRIntLitExpr>();
+        err->kind = HIRExpr::Kind::IntLit;
+        err->loc = expr->loc;
+        err->value = 0;
+        err->type = TypeTable::Error;
+        return err;
+    }
+
+    // Build &arr[start] for the data field
+    // For arrays: &arr[start]
+    // For slices: s.data + start (pointer arithmetic)
+    HIRExpr* data_ptr;
+    const auto& arr_ti = ctx_.types.get(arr_type);
+    if (arr_ti.kind == TypeKind::Struct &&
+        arr_ti.struct_.name.substr(0, 6) == "Slice_") {
+        // Slicing a slice: data = s.data + start
+        auto* data_access = ctx_.arena.make<HIRFieldAccessExpr>();
+        data_access->kind = HIRExpr::Kind::FieldAccess;
+        data_access->loc = expr->loc;
+        data_access->object = arr_expr;
+        data_access->field_name = ctx_.strings.intern("data");
+        data_access->type = arr_ti.struct_.fields[0].type;
+
+        // data_ptr = s.data + start (pointer arithmetic via BinOp)
+        auto* add = ctx_.arena.make<HIRBinOpExpr>();
+        add->kind = HIRExpr::Kind::BinOp;
+        add->loc = expr->loc;
+        add->op = HIRBinOp::Add;
+        add->lhs = data_access;
+        add->rhs = start_expr;
+        add->type = data_access->type;
+        data_ptr = add;
+    } else {
+        // Array or pointer: &arr[start]
+        auto* idx_acc = ctx_.arena.make<HIRIndexAccessExpr>();
+        idx_acc->kind = HIRExpr::Kind::IndexAccess;
+        idx_acc->loc = expr->loc;
+        idx_acc->array = arr_expr;
+        idx_acc->index = start_expr;
+        idx_acc->type = elem_type;
+
+        auto* addr = ctx_.arena.make<HIRAddrOfExpr>();
+        addr->kind = HIRExpr::Kind::AddrOf;
+        addr->loc = expr->loc;
+        addr->operand = idx_acc;
+        addr->is_mutable = false;
+        addr->type = ctx_.types.makePtr(elem_type, false);
+        data_ptr = addr;
+    }
+
+    // Build len = end - start
+    auto* len_expr = ctx_.arena.make<HIRBinOpExpr>();
+    len_expr->kind = HIRExpr::Kind::BinOp;
+    len_expr->loc = expr->loc;
+    len_expr->op = HIRBinOp::Sub;
+    len_expr->lhs = end_expr;
+    len_expr->rhs = start_expr;
+    len_expr->type = TypeTable::U64;
+
+    // Build Slice { data: data_ptr, len: len_expr }
+    auto* sl = ctx_.arena.make<HIRStructLitExpr>();
+    sl->kind = HIRExpr::Kind::StructLit;
+    sl->loc = expr->loc;
+    sl->struct_name = interned;
+    sl->type = slice_type;
+    sl->field_count = 2;
+    sl->fields = ctx_.arena.makeArray<HIRFieldInit>(2);
+    sl->fields[0].name = ctx_.strings.intern("data");
+    sl->fields[0].value = data_ptr;
+    sl->fields[0].loc = expr->loc;
+    sl->fields[1].name = ctx_.strings.intern("len");
+    sl->fields[1].value = len_expr;
+    sl->fields[1].loc = expr->loc;
+
+    return sl;
 }
 
 // ============================================================================

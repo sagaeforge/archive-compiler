@@ -366,6 +366,21 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             dumpExpr(ia->index, out, ind + 2);
             break;
         }
+        case Expr::Kind::SliceExpr: {
+            auto* se = static_cast<const SliceExprNode*>(expr);
+            out << "SliceExpr\n";
+            indent(out, ind + 1); out << "array:\n";
+            dumpExpr(se->array, out, ind + 2);
+            if (se->start) {
+                indent(out, ind + 1); out << "start:\n";
+                dumpExpr(se->start, out, ind + 2);
+            }
+            if (se->end) {
+                indent(out, ind + 1); out << "end:\n";
+                dumpExpr(se->end, out, ind + 2);
+            }
+            break;
+        }
         case Expr::Kind::Sizeof: {
             auto* sz = static_cast<const SizeofExpr*>(expr);
             out << "Sizeof(" << sz->target.name << ")\n";
@@ -1963,13 +1978,48 @@ Expr* Parser::parseExprInfix(Expr* lhs, uint8_t minBP) {
             lhs = te;
             continue;
         }
-        // Index access: arr[idx] — postfix, same precedence as '.'
+        // Index access or slice: arr[idx] or arr[start..end]
         if (op == TokenKind::LBracket && !on_new_line) {
             if (200 < minBP) break; // same precedence as Dot
             advance(); // consume '['
             skipNewlines();
+            // Check for arr[..end] (start omitted)
+            if (check(TokenKind::DotDot) || check(TokenKind::DotDotEq)) {
+                advance(); // consume '..' or '..='
+                skipNewlines();
+                Expr* end_expr = parseExpr();
+                skipNewlines();
+                expect(TokenKind::RBracket, "expected ']' after slice");
+                auto* se = arena_.make<SliceExprNode>();
+                se->kind = Expr::Kind::SliceExpr;
+                se->loc = lhs->loc;
+                se->array = lhs;
+                se->start = nullptr;
+                se->end = end_expr;
+                lhs = se;
+                continue;
+            }
             Expr* idx = parseExpr();
             skipNewlines();
+            // Check for arr[start..end] or arr[start..]
+            if (check(TokenKind::DotDot) || check(TokenKind::DotDotEq)) {
+                advance(); // consume '..' or '..='
+                skipNewlines();
+                Expr* end_expr = nullptr;
+                if (!check(TokenKind::RBracket)) {
+                    end_expr = parseExpr();
+                    skipNewlines();
+                }
+                expect(TokenKind::RBracket, "expected ']' after slice");
+                auto* se = arena_.make<SliceExprNode>();
+                se->kind = Expr::Kind::SliceExpr;
+                se->loc = lhs->loc;
+                se->array = lhs;
+                se->start = idx;
+                se->end = end_expr;
+                lhs = se;
+                continue;
+            }
             expect(TokenKind::RBracket, "expected ']' after index");
             auto* ia = arena_.make<IndexAccessExpr>();
             ia->kind = Expr::Kind::IndexAccess;
