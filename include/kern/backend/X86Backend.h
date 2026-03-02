@@ -1,4 +1,5 @@
 #pragma once
+#include "kern/backend/TargetBackend.h"
 #include "kern/backend/MachIR.h"
 #include "kern/lir/LIR.h"
 #include "kern/support/CompilationContext.h"
@@ -10,20 +11,23 @@ namespace kern {
 //   1. InstructionSelector: LIR → MachIR (virtual registers)
 //   2. RegisterAllocator:   MachIR vregs → physical registers
 //   3. NASMEmitter:         MachIR → NASM assembly text
-class X86Backend {
+class X86Backend : public TargetBackend {
     CompilationContext& ctx_;
 
 public:
     explicit X86Backend(CompilationContext& ctx) : ctx_(ctx) {}
 
+    TargetArch arch() const override { return TargetArch::X86_64; }
+    std::string_view archName() const override { return "x86-64"; }
+
     // Full pipeline: LIR → MachIR → allocate → NASM
-    void emit(const LIRModule& lir, std::ostream& out);
+    void emit(const LIRModule& lir, std::ostream& out) override;
 
     // Partial: LIR → MachIR (for dump/debug)
-    MachModule* lower(const LIRModule& lir);
+    MachModule* lower(const LIRModule& lir) override;
 
     // Partial: run register allocation on MachModule
-    void allocateRegisters(MachModule& mod);
+    void allocateRegisters(MachModule& mod) override;
 };
 
 } // namespace kern

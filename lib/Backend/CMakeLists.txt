@@ -5,6 +5,7 @@ add_library(kern_backend
     RegisterAllocator.cpp
     Emitter.cpp
     X86Backend.cpp
+    TargetBackend.cpp
 )
 target_include_directories(kern_backend PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(kern_backend PUBLIC kern_lir kern_support)

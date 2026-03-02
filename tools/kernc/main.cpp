@@ -19,6 +19,7 @@ static void printUsage(const char* prog) {
               << "  --dump-purity   Dump purity analysis\n"
               << "  --freestanding  No _start wrapper, no libc linking\n"
               << "  --linker-script <file>  Use custom linker script\n"
+              << "  --target <arch> Target architecture (x86-64, aarch64)\n"
               << "  --help          Show this help\n";
 }
 
@@ -55,6 +56,16 @@ int main(int argc, char** argv) {
             opts.freestanding = true;
         } else if (arg == "--linker-script" && i + 1 < argc) {
             opts.linker_script = argv[++i];
+        } else if (arg == "--target" && i + 1 < argc) {
+            std::string target = argv[++i];
+            if (target == "x86-64" || target == "x86_64") {
+                opts.target = kern::TargetArch::X86_64;
+            } else if (target == "aarch64" || target == "arm64") {
+                opts.target = kern::TargetArch::AArch64;
+            } else {
+                std::cerr << "error: unknown target '" << target << "'\n";
+                return 1;
+            }
         } else if (arg[0] != '-') {
             opts.input_files.push_back(arg);
             if (opts.input_file.empty()) opts.input_file = arg;

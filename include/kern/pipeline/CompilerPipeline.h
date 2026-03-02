@@ -3,6 +3,7 @@
 #include "kern/hir/HIR.h"
 #include "kern/lir/LIR.h"
 #include "kern/backend/MachIR.h"
+#include "kern/backend/TargetBackend.h"
 #include "kern/parser/AST.h"
 #include <ostream>
 #include <string>
@@ -14,6 +15,7 @@ struct CompileOptions {
     std::string input_file;
     std::vector<std::string> input_files;  // multi-file compilation
     std::string output_file = "a.out";
+    TargetArch target = TargetArch::X86_64;
     bool asm_only = false;
     bool dump_tokens = false;
     bool dump_ast = false;

@@ -1,5 +1,7 @@
 #include "kern/backend/MachIR.h"
 #include "kern/backend/MachIRDump.h"
+#include "kern/backend/TargetBackend.h"
+#include "kern/backend/X86Backend.h"
 #include "kern/support/CompilationContext.h"
 
 #include <gtest/gtest.h>
@@ -351,4 +353,31 @@ TEST(MachIR, Width32Dump) {
     std::ostringstream oss;
     dumpMachInstr(mi, oss);
     EXPECT_EQ(oss.str(), "    add eax, edx\n");
+}
+
+// ============================================================================
+// TargetBackend Tests
+// ============================================================================
+
+TEST(TargetBackend, X86_64FactoryCreates) {
+    CompilationContext ctx;
+    auto* backend = createBackend(TargetArch::X86_64, ctx);
+    ASSERT_NE(backend, nullptr);
+    EXPECT_EQ(backend->arch(), TargetArch::X86_64);
+    EXPECT_EQ(backend->archName(), "x86-64");
+    delete backend;
+}
+
+TEST(TargetBackend, AArch64FactoryReturnsNull) {
+    CompilationContext ctx;
+    auto* backend = createBackend(TargetArch::AArch64, ctx);
+    EXPECT_EQ(backend, nullptr);
+}
+
+TEST(TargetBackend, X86BackendIsTargetBackend) {
+    CompilationContext ctx;
+    X86Backend backend(ctx);
+    TargetBackend& base = backend;
+    EXPECT_EQ(base.arch(), TargetArch::X86_64);
+    EXPECT_EQ(base.archName(), "x86-64");
 }
