@@ -1,0 +1,14 @@
+struct Counter { var value: i64 }
+
+impl Counter for Counter {
+    fn get(self: Counter) -> i64 { self.value }
+}
+
+fn main() -> i64 {
+    var c: Counter = Counter { value: 21 }
+    val result: i64 = match c.get() {
+        21 => c.get() * 2
+        _ => 0
+    }
+    result
+}

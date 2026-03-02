@@ -3,6 +3,7 @@ fn make_adder(n: i64) -> fn(i64) -> i64 {
 }
 
 fn main() -> i64 {
-    val add_10: fn(i64) -> i64 = make_adder(10)
-    add_10(32)
+    val add10: fn(i64) -> i64 = make_adder(10)
+    val add20: fn(i64) -> i64 = make_adder(20)
+    add10(12) + add20(0)
 }
