@@ -366,6 +366,17 @@ uint32_t TypeTable::alignOf(TypeId id) const {
     return 1;
 }
 
+int32_t TypeTable::offsetOf(TypeId id, std::string_view field_name) const {
+    const auto& ti = get(id);
+    if (ti.kind != TypeKind::Struct) return -1;
+    for (uint32_t i = 0; i < ti.struct_.field_count; ++i) {
+        if (ti.struct_.fields[i].name == field_name) {
+            return ti.struct_.fields[i].offset;
+        }
+    }
+    return -1;
+}
+
 uint32_t TypeTable::bitWidth(TypeId id) const {
     return sizeOf(id) * 8;
 }

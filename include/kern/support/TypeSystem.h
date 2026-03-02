@@ -254,6 +254,7 @@ public:
     // Type queries
     uint32_t sizeOf(TypeId id) const;
     uint32_t alignOf(TypeId id) const;
+    int32_t offsetOf(TypeId id, std::string_view field_name) const;
     uint32_t bitWidth(TypeId id) const;
     bool isFloat(TypeId id) const;
     bool isSigned(TypeId id) const;

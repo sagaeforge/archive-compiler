@@ -41,12 +41,20 @@ enum class TokenKind : uint8_t {
     KwImport,
     KwSizeof,
     KwAlignof,
+    KwOffsetof,
     KwTrait,
     KwImpl,
     KwConst,
+    KwDyn,
     KwWith,
     KwOwn,
     KwStatic,
+    KwPub,
+    KwExtern,
+    KwNull,
+    KwFor,
+    KwIn,
+    KwWhile,
 
     // Operators
     Plus,        // +
@@ -74,6 +82,8 @@ enum class TokenKind : uint8_t {
     GtEq,        // >=
     Arrow,       // ->
     FatArrow,    // =>
+    DotDot,      // ..
+    DotDotEq,    // ..=
     Colon,       // :
     ColonColon,  // ::
     Dot,         // .

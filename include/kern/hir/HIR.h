@@ -17,7 +17,7 @@ struct HIRPattern;
 
 struct HIRPattern {
     enum class Kind : uint8_t {
-        IntLit, BoolLit, Wildcard, Variable, Enum, Union
+        IntLit, BoolLit, Wildcard, Variable, Enum, Union, Range
     };
     Kind kind;
     TypeId type;
@@ -46,6 +46,12 @@ struct HIRFieldBinding {
     std::string_view field_name;    // interned
     std::string_view binding_name;  // interned
     SourceLocation loc;
+};
+
+struct HIRRangePattern : HIRPattern {
+    int64_t lo;
+    int64_t hi;
+    bool inclusive;  // true for lo..=hi, false for lo..hi
 };
 
 struct HIRUnionPattern : HIRPattern {

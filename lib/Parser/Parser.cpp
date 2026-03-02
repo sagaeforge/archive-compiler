@@ -248,6 +248,11 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
                     case Pattern::Kind::Enum:
                         out << static_cast<const EnumPattern*>(arm.pattern)->variant_name;
                         break;
+                    case Pattern::Kind::Range: {
+                        auto* rp = static_cast<const RangePattern*>(arm.pattern);
+                        out << rp->lo << (rp->inclusive ? "..=" : "..") << rp->hi;
+                        break;
+                    }
                     case Pattern::Kind::Union: {
                         auto* up = static_cast<const UnionPattern*>(arm.pattern);
                         out << up->variant_name;
@@ -362,6 +367,11 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
         case Expr::Kind::Alignof: {
             auto* al = static_cast<const AlignofExpr*>(expr);
             out << "Alignof(" << al->target.name << ")\n";
+            break;
+        }
+        case Expr::Kind::Offsetof: {
+            auto* oe = static_cast<const OffsetofExpr*>(expr);
+            out << "Offsetof(" << oe->target.name << ", " << oe->field_name << ")\n";
             break;
         }
         case Expr::Kind::Lambda: {
@@ -2425,6 +2435,22 @@ Expr* Parser::parsePrimary() {
         return e;
     }
 
+    // offsetof(Type, field) -> compile-time field offset
+    if (tok.kind == TokenKind::KwOffsetof) {
+        advance(); // consume 'offsetof'
+        expect(TokenKind::LParen, "expected '(' after 'offsetof'");
+        TypeRef target = parseType();
+        expect(TokenKind::Comma, "expected ',' after offsetof type");
+        Token field = expect(TokenKind::Ident, "expected field name in offsetof");
+        expect(TokenKind::RParen, "expected ')' after offsetof field");
+        auto* e = arena_.make<OffsetofExpr>();
+        e->kind = Expr::Kind::Offsetof;
+        e->loc = tok.loc;
+        e->target = target;
+        e->field_name = field.text;
+        return e;
+    }
+
     // Inline assembly: asm { "line1"; "line2"; }
     //   or extended:   asm("template" : "=r"(out) : "r"(in) : "cc")
     if (tok.kind == TokenKind::KwAsm) {
@@ -3585,24 +3611,44 @@ Expr* Parser::parseWhileLoop() {
 Pattern* Parser::parsePattern() {
     Token tok = peek();
 
-    // Integer literal pattern (including negative)
-    if (tok.kind == TokenKind::IntLit) {
-        advance();
-        auto* pat = arena_.make<IntLitPattern>();
-        pat->kind = Pattern::Kind::IntLit;
-        pat->loc = tok.loc;
-        pat->value = parseIntText(tok.text);
-        return pat;
-    }
+    // Integer literal pattern (including negative), possibly range
+    if (tok.kind == TokenKind::IntLit || tok.kind == TokenKind::Minus) {
+        int64_t lo;
+        if (tok.kind == TokenKind::Minus) {
+            advance();
+            Token num = expect(TokenKind::IntLit, "expected integer after '-' in pattern");
+            lo = -parseIntText(num.text);
+        } else {
+            advance();
+            lo = parseIntText(tok.text);
+        }
 
-    // Negative integer literal pattern
-    if (tok.kind == TokenKind::Minus) {
-        advance();
-        Token num = expect(TokenKind::IntLit, "expected integer after '-' in pattern");
+        // Check for range pattern: lo..hi or lo..=hi
+        if (check(TokenKind::DotDot) || check(TokenKind::DotDotEq)) {
+            bool inclusive = (peek().kind == TokenKind::DotDotEq);
+            advance(); // consume .. or ..=
+            // Parse high bound (possibly negative)
+            int64_t hi;
+            if (match(TokenKind::Minus)) {
+                Token num = expect(TokenKind::IntLit, "expected integer after '-' in range pattern");
+                hi = -parseIntText(num.text);
+            } else {
+                Token num = expect(TokenKind::IntLit, "expected integer in range pattern");
+                hi = parseIntText(num.text);
+            }
+            auto* pat = arena_.make<RangePattern>();
+            pat->kind = Pattern::Kind::Range;
+            pat->loc = tok.loc;
+            pat->lo = lo;
+            pat->hi = hi;
+            pat->inclusive = inclusive;
+            return pat;
+        }
+
         auto* pat = arena_.make<IntLitPattern>();
         pat->kind = Pattern::Kind::IntLit;
         pat->loc = tok.loc;
-        pat->value = -parseIntText(num.text);
+        pat->value = lo;
         return pat;
     }
 

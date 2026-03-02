@@ -10,25 +10,40 @@ namespace kern {
 void Formatter::formatModule(const Module* mod) {
     bool first = true;
 
+    auto sep = [&]() { if (!first) out_ << "\n"; first = false; };
+
+    for (uint32_t i = 0; i < mod->import_count; ++i) {
+        sep(); formatImportDecl(mod->imports[i]);
+    }
+    for (uint32_t i = 0; i < mod->type_alias_count; ++i) {
+        sep(); formatTypeAliasDecl(mod->type_aliases[i]);
+    }
+    for (uint32_t i = 0; i < mod->newtype_count; ++i) {
+        sep(); formatNewtypeDecl(mod->newtypes[i]);
+    }
     for (uint32_t i = 0; i < mod->struct_count; ++i) {
-        if (!first) out_ << "\n";
-        formatStructDecl(mod->structs[i]);
-        first = false;
+        sep(); formatStructDecl(mod->structs[i]);
     }
     for (uint32_t i = 0; i < mod->enum_count; ++i) {
-        if (!first) out_ << "\n";
-        formatEnumDecl(mod->enums[i]);
-        first = false;
+        sep(); formatEnumDecl(mod->enums[i]);
     }
     for (uint32_t i = 0; i < mod->union_count; ++i) {
-        if (!first) out_ << "\n";
-        formatUnionDecl(mod->unions[i]);
-        first = false;
+        sep(); formatUnionDecl(mod->unions[i]);
+    }
+    for (uint32_t i = 0; i < mod->trait_count; ++i) {
+        sep(); formatTraitDecl(mod->traits[i]);
+    }
+    for (uint32_t i = 0; i < mod->impl_count; ++i) {
+        sep(); formatImplDecl(mod->impls[i]);
+    }
+    for (uint32_t i = 0; i < mod->global_count; ++i) {
+        sep(); formatGlobalDecl(mod->globals[i]);
+    }
+    for (uint32_t i = 0; i < mod->static_assert_count; ++i) {
+        sep(); formatStaticAssertDecl(mod->static_asserts[i]);
     }
     for (uint32_t i = 0; i < mod->fn_count; ++i) {
-        if (!first) out_ << "\n";
-        formatFnDecl(mod->functions[i]);
-        first = false;
+        sep(); formatFnDecl(mod->functions[i]);
     }
 
     out_ << "\n";
@@ -127,6 +142,91 @@ void Formatter::formatFnDecl(const FnDecl* fn) {
     }
 }
 
+void Formatter::formatImportDecl(const ImportDecl* imp) {
+    out_ << "import " << imp->module_path;
+    if (imp->name_count > 0) {
+        out_ << " { ";
+        for (uint32_t i = 0; i < imp->name_count; ++i) {
+            if (i > 0) out_ << ", ";
+            out_ << imp->names[i];
+        }
+        out_ << " }";
+    }
+    out_ << "\n";
+}
+
+void Formatter::formatTypeAliasDecl(const TypeAliasDecl* ta) {
+    out_ << "type " << ta->name << " = ";
+    formatTypeRef(ta->target);
+    out_ << "\n";
+}
+
+void Formatter::formatNewtypeDecl(const NewtypeDecl* nt) {
+    out_ << "newtype " << nt->name << "(";
+    formatTypeRef(nt->inner);
+    out_ << ")\n";
+}
+
+void Formatter::formatStaticAssertDecl(const StaticAssertDecl* sa) {
+    out_ << "static_assert(";
+    if (sa->condition) formatExpr(sa->condition);
+    if (!sa->message.empty()) {
+        out_ << ", \"" << sa->message << "\"";
+    }
+    out_ << ")\n";
+}
+
+void Formatter::formatTraitDecl(const TraitDecl* t) {
+    out_ << "trait " << t->name << " {\n";
+    indent();
+    for (uint32_t i = 0; i < t->method_count; ++i) {
+        auto& m = t->methods[i];
+        writeIndent();
+        out_ << "fn " << m.name << "(";
+        for (uint32_t j = 0; j < m.param_count; ++j) {
+            if (j > 0) out_ << ", ";
+            out_ << m.params[j].name << ": ";
+            formatTypeRef(m.params[j].type);
+        }
+        out_ << ") -> ";
+        formatTypeRef(m.return_type);
+        if (m.effect_count > 0) {
+            out_ << " with ";
+            for (uint32_t j = 0; j < m.effect_count; ++j) {
+                if (j > 0) out_ << ", ";
+                out_ << m.effect_names[j];
+            }
+        }
+        out_ << "\n";
+    }
+    dedent();
+    out_ << "}\n";
+}
+
+void Formatter::formatImplDecl(const ImplDecl* imp) {
+    out_ << "impl " << imp->trait_name << " for ";
+    formatTypeRef(imp->target_type);
+    out_ << " {\n";
+    indent();
+    for (uint32_t i = 0; i < imp->method_count; ++i) {
+        writeIndent();
+        formatFnDecl(imp->methods[i]);
+    }
+    dedent();
+    out_ << "}\n";
+}
+
+void Formatter::formatGlobalDecl(const GlobalDecl* g) {
+    out_ << "static " << (g->is_mutable ? "var " : "val ");
+    out_ << g->name << ": ";
+    formatTypeRef(g->type);
+    if (g->init) {
+        out_ << " = ";
+        formatExpr(g->init);
+    }
+    out_ << "\n";
+}
+
 // ============================================================================
 // Type formatting
 // ============================================================================
@@ -135,6 +235,14 @@ void Formatter::formatTypeRef(const TypeRef& t) {
     switch (t.kind) {
         case TypeRef::Kind::Named:
             out_ << t.name;
+            if (t.type_arg_count > 0) {
+                out_ << "<";
+                for (uint32_t i = 0; i < t.type_arg_count; ++i) {
+                    if (i > 0) out_ << ", ";
+                    formatTypeRef(t.type_args[i]);
+                }
+                out_ << ">";
+            }
             break;
         case TypeRef::Kind::Ptr:
             out_ << "Ptr<";
@@ -143,7 +251,16 @@ void Formatter::formatTypeRef(const TypeRef& t) {
             out_ << ">";
             break;
         case TypeRef::Kind::Fn:
-            out_ << "fn";
+            out_ << "fn(";
+            for (uint32_t i = 0; i < t.fn_param_count; ++i) {
+                if (i > 0) out_ << ", ";
+                formatTypeRef(t.fn_params[i]);
+            }
+            out_ << ")";
+            if (t.fn_return) {
+                out_ << " -> ";
+                formatTypeRef(*t.fn_return);
+            }
             break;
         case TypeRef::Kind::Never:
             out_ << "Never";
@@ -158,6 +275,9 @@ void Formatter::formatTypeRef(const TypeRef& t) {
             break;
         case TypeRef::Kind::ConstVal:
             out_ << t.const_value;
+            break;
+        case TypeRef::Kind::Dyn:
+            out_ << "dyn " << t.name;
             break;
     }
 }
@@ -181,6 +301,10 @@ void Formatter::formatExpr(const Expr* expr) {
 
         case Expr::Kind::BoolLit:
             out_ << (static_cast<const BoolLitExpr*>(expr)->value ? "true" : "false");
+            break;
+
+        case Expr::Kind::NullLit:
+            out_ << "null";
             break;
 
         case Expr::Kind::StringLit: {
@@ -365,6 +489,38 @@ void Formatter::formatExpr(const Expr* expr) {
             break;
         }
 
+        case Expr::Kind::WhileLoop: {
+            auto* wl = static_cast<const WhileLoopExpr*>(expr);
+            out_ << "while ";
+            formatExpr(wl->condition);
+            out_ << " {\n";
+            indent();
+            for (uint32_t i = 0; i < wl->stmt_count; ++i) {
+                formatStmt(wl->stmts[i]);
+            }
+            dedent();
+            writeIndent();
+            out_ << "}";
+            break;
+        }
+
+        case Expr::Kind::ForRange: {
+            auto* fr = static_cast<const ForRangeExpr*>(expr);
+            out_ << "for " << fr->var_name << " in ";
+            formatExpr(fr->start);
+            out_ << "..";
+            formatExpr(fr->end);
+            out_ << " {\n";
+            indent();
+            for (uint32_t i = 0; i < fr->stmt_count; ++i) {
+                formatStmt(fr->stmts[i]);
+            }
+            dedent();
+            writeIndent();
+            out_ << "}";
+            break;
+        }
+
         case Expr::Kind::InlineAsm: {
             auto* ia = static_cast<const InlineAsmExpr*>(expr);
             out_ << "asm {\n";
@@ -422,9 +578,57 @@ void Formatter::formatExpr(const Expr* expr) {
             break;
         }
 
-        case Expr::Kind::Lambda:
-        case Expr::Kind::MethodCall:
-            break;  // v2 only — not formatted in v1 pipeline
+        case Expr::Kind::Offsetof: {
+            auto* oe = static_cast<const OffsetofExpr*>(expr);
+            out_ << "offsetof(";
+            formatTypeRef(oe->target);
+            out_ << ", " << oe->field_name << ")";
+            break;
+        }
+
+        case Expr::Kind::Lambda: {
+            auto* lam = static_cast<const LambdaExpr*>(expr);
+            out_ << "{ ";
+            for (uint32_t i = 0; i < lam->param_count; ++i) {
+                if (i > 0) out_ << ", ";
+                out_ << lam->params[i].name << ": ";
+                formatTypeRef(lam->params[i].type);
+            }
+            if (lam->param_count > 0) out_ << " => ";
+            if (lam->body) {
+                if (lam->body->kind == Expr::Kind::Block) {
+                    auto* blk = static_cast<const BlockExpr*>(lam->body);
+                    out_ << "\n";
+                    indent();
+                    for (uint32_t i = 0; i < blk->stmt_count; ++i)
+                        formatStmt(blk->stmts[i]);
+                    if (blk->result) {
+                        writeIndent();
+                        formatExpr(blk->result);
+                        out_ << "\n";
+                    }
+                    dedent();
+                    writeIndent();
+                } else {
+                    formatExpr(lam->body);
+                    out_ << " ";
+                }
+            }
+            out_ << "}";
+            break;
+        }
+
+        case Expr::Kind::MethodCall: {
+            auto* mc = static_cast<const MethodCallExpr*>(expr);
+            formatExpr(mc->object);
+            out_ << "." << mc->method_name << "(";
+            for (uint32_t i = 0; i < mc->arg_count; ++i) {
+                if (i > 0) out_ << ", ";
+                formatExpr(mc->args[i]);
+            }
+            out_ << ")";
+            break;
+        }
 
         case Expr::Kind::Try: {
             auto* te = static_cast<const TryExpr*>(expr);
@@ -559,6 +763,11 @@ void Formatter::formatPattern(const Pattern* pat) {
         case Pattern::Kind::Enum:
             out_ << static_cast<const EnumPattern*>(pat)->variant_name;
             break;
+        case Pattern::Kind::Range: {
+            auto* r = static_cast<const RangePattern*>(pat);
+            out_ << r->lo << (r->inclusive ? "..=" : "..") << r->hi;
+            break;
+        }
         case Pattern::Kind::Union: {
             auto* u = static_cast<const UnionPattern*>(pat);
             out_ << u->variant_name;

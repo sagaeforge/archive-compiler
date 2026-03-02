@@ -2103,6 +2103,57 @@ VReg LIRBuilder::lowerMatch(const HIRMatchExpr* expr) {
                 emitCondBranch(cmp, body_bb, next_bb);
                 break;
             }
+            case HIRPattern::Kind::Range: {
+                auto* pat = static_cast<const HIRRangePattern*>(arm.pattern);
+                // Emit: scrutinee >= lo && scrutinee <= hi (inclusive)
+                //    or: scrutinee >= lo && scrutinee < hi  (exclusive)
+                VReg lo_val = freshVReg();
+                LIRInstr lo_i{};
+                lo_i.op = LIROp::ConstInt;
+                lo_i.result = lo_val;
+                lo_i.type = scrut_type;
+                lo_i.const_int.value = pat->lo;
+                emit(lo_i);
+
+                VReg hi_val = freshVReg();
+                LIRInstr hi_i{};
+                hi_i.op = LIROp::ConstInt;
+                hi_i.result = hi_val;
+                hi_i.type = scrut_type;
+                hi_i.const_int.value = pat->hi;
+                emit(hi_i);
+
+                VReg ge_cmp = freshVReg();
+                LIRInstr ge_i{};
+                ge_i.op = LIROp::ICmpGe;
+                ge_i.result = ge_cmp;
+                ge_i.type = TypeTable::Bool;
+                ge_i.bin.lhs = scrutinee;
+                ge_i.bin.rhs = lo_val;
+                emit(ge_i);
+
+                VReg hi_cmp = freshVReg();
+                LIRInstr hi_ci{};
+                hi_ci.op = pat->inclusive ? LIROp::ICmpLe : LIROp::ICmpLt;
+                hi_ci.result = hi_cmp;
+                hi_ci.type = TypeTable::Bool;
+                hi_ci.bin.lhs = scrutinee;
+                hi_ci.bin.rhs = hi_val;
+                emit(hi_ci);
+
+                // AND the two conditions (bitwise AND on bools = logical AND)
+                VReg in_range = freshVReg();
+                LIRInstr and_i{};
+                and_i.op = LIROp::BAnd;
+                and_i.result = in_range;
+                and_i.type = TypeTable::Bool;
+                and_i.bin.lhs = ge_cmp;
+                and_i.bin.rhs = hi_cmp;
+                emit(and_i);
+
+                emitCondBranch(in_range, body_bb, next_bb);
+                break;
+            }
             case HIRPattern::Kind::BoolLit: {
                 auto* pat = static_cast<const HIRBoolLitPattern*>(arm.pattern);
                 VReg pat_val = freshVReg();

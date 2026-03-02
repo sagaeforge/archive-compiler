@@ -50,13 +50,19 @@ struct Param {
 
 // --- Patterns (for match expressions) ---
 struct Pattern {
-    enum class Kind { IntLit, BoolLit, Wildcard, Variable, Enum, Union };
+    enum class Kind { IntLit, BoolLit, Wildcard, Variable, Enum, Union, Range };
     Kind kind;
     SourceLocation loc;
 };
 
 struct IntLitPattern : Pattern {
     int64_t value;
+};
+
+struct RangePattern : Pattern {
+    int64_t lo;
+    int64_t hi;
+    bool inclusive;  // true for lo..=hi, false for lo..hi
 };
 
 struct BoolLitPattern : Pattern {
@@ -213,7 +219,7 @@ struct Expr {
         EnumAccess, UnionVariant,
         Loop, ForRange, WhileLoop, InlineAsm,
         ArrayLit, IndexAccess,
-        Sizeof, Alignof,
+        Sizeof, Alignof, Offsetof,
         Lambda, MethodCall,
         Try
     };
@@ -357,6 +363,11 @@ struct SizeofExpr : Expr {
 
 struct AlignofExpr : Expr {
     TypeRef target;
+};
+
+struct OffsetofExpr : Expr {
+    TypeRef target;
+    std::string_view field_name;
 };
 
 struct LambdaExpr : Expr {

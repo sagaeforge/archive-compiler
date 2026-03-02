@@ -56,6 +56,8 @@ HIRModule* MonomorphizationPass::run(HIRModule* mod) {
     new_mod->enums = mod->enums;
     new_mod->union_count = mod->union_count;
     new_mod->unions = mod->unions;
+    new_mod->global_count = mod->global_count;
+    new_mod->globals = mod->globals;
     new_mod->fn_count = static_cast<uint32_t>(new_fns.size());
     new_mod->functions = ctx_.arena.makeArray<HIRFnDecl*>(new_fns.size());
     for (size_t i = 0; i < new_fns.size(); ++i) {
@@ -888,6 +890,13 @@ HIRPattern* MonomorphizationPass::clonePattern(
         case HIRPattern::Kind::Enum: {
             auto* src = static_cast<HIREnumPattern*>(pat);
             auto* dst = ctx_.arena.make<HIREnumPattern>();
+            *dst = *src;
+            dst->type = substituteType(src->type, subst);
+            return dst;
+        }
+        case HIRPattern::Kind::Range: {
+            auto* src = static_cast<HIRRangePattern*>(pat);
+            auto* dst = ctx_.arena.make<HIRRangePattern>();
             *dst = *src;
             dst->type = substituteType(src->type, subst);
             return dst;

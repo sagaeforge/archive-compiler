@@ -1409,6 +1409,23 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
             e->type = TypeTable::U64;
             return e;
         }
+        case Expr::Kind::Offsetof: {
+            auto* oe = static_cast<const OffsetofExpr*>(expr);
+            TypeId tid = resolveType(oe->target);
+            int32_t off = ctx_.types.offsetOf(tid, oe->field_name);
+            if (off < 0) {
+                ctx_.diag.error(expr->loc,
+                    std::string("type '") + ctx_.types.name(tid) +
+                    "' has no field '" + std::string(oe->field_name) + "'");
+                off = 0;
+            }
+            auto* e = ctx_.arena.make<HIRIntLitExpr>();
+            e->kind = HIRExpr::Kind::IntLit;
+            e->loc = expr->loc;
+            e->value = static_cast<int64_t>(off);
+            e->type = TypeTable::U64;
+            return e;
+        }
         case Expr::Kind::Lambda:
             return buildLambda(expr, ctx_type);
         case Expr::Kind::MethodCall:
@@ -3279,6 +3296,13 @@ HIRExpr* HIRBuilder::buildMatch(const Expr* expr, std::optional<TypeId> ctx_type
                         ctx_.types.name(scrut_type));
                 }
                 break;
+            case HIRPattern::Kind::Range:
+                if (!isIntegerType(scrut_type)) {
+                    ctx_.diag.error(ast_arm.pattern->loc,
+                        std::string("range pattern incompatible with scrutinee type ") +
+                        ctx_.types.name(scrut_type));
+                }
+                break;
             case HIRPattern::Kind::BoolLit: {
                 if (scrut_type != TypeTable::Bool) {
                     ctx_.diag.error(ast_arm.pattern->loc,
@@ -3483,6 +3507,17 @@ HIRPattern* HIRBuilder::buildPattern(const Pattern* pat, TypeId scrut_type) {
             p->type = scrut_type;
             p->loc = pat->loc;
             p->variant_name = ctx_.strings.intern(asp->variant_name);
+            return p;
+        }
+        case Pattern::Kind::Range: {
+            auto* asp = static_cast<const RangePattern*>(pat);
+            auto* p = ctx_.arena.make<HIRRangePattern>();
+            p->kind = HIRPattern::Kind::Range;
+            p->type = scrut_type;
+            p->loc = pat->loc;
+            p->lo = asp->lo;
+            p->hi = asp->hi;
+            p->inclusive = asp->inclusive;
             return p;
         }
         case Pattern::Kind::Union: {

@@ -1,0 +1,21 @@
+struct Point {
+    x: i32
+    y: i32
+}
+
+struct Header {
+    magic: u8
+    flags: u8
+    length: u32
+    data: i64
+}
+
+fn main() -> i64 {
+    val a: i64 = offsetof(Point, x) as i64
+    val b: i64 = offsetof(Point, y) as i64
+    val c: i64 = offsetof(Header, magic) as i64
+    val d: i64 = offsetof(Header, flags) as i64
+    val e: i64 = offsetof(Header, length) as i64
+    val f: i64 = offsetof(Header, data) as i64
+    a + b + c + d + e + f
+}

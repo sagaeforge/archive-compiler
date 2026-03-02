@@ -66,6 +66,11 @@ static void dumpPattern(const HIRPattern* pat, const TypeTable& types, std::ostr
         case HIRPattern::Kind::Enum:
             out << "." << static_cast<const HIREnumPattern*>(pat)->variant_name;
             break;
+        case HIRPattern::Kind::Range: {
+            auto* r = static_cast<const HIRRangePattern*>(pat);
+            out << r->lo << (r->inclusive ? "..=" : "..") << r->hi;
+            break;
+        }
         case HIRPattern::Kind::Union: {
             auto* u = static_cast<const HIRUnionPattern*>(pat);
             out << "::" << u->variant_name;
