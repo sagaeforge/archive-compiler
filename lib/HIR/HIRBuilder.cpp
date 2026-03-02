@@ -3959,13 +3959,21 @@ HIRStmt* HIRBuilder::buildStmt(const Stmt* stmt) {
     switch (stmt->kind) {
         case Stmt::Kind::ValDecl: {
             auto* decl = static_cast<const ValDeclStmt*>(stmt);
-            TypeId expected = resolveType(decl->type);
+            bool has_type_annotation = !decl->type.name.empty() ||
+                                       decl->type.kind != TypeRef::Kind::Named;
+            TypeId expected = has_type_annotation ? resolveType(decl->type) : INVALID_TYPE;
             auto* s = ctx_.arena.make<HIRValDeclStmt>();
             s->kind = HIRStmt::Kind::ValDecl;
             s->loc = stmt->loc;
             s->name = ctx_.strings.intern(decl->name);
-            s->type = expected;
-            s->init = buildExpr(decl->init, expected);
+            if (has_type_annotation) {
+                s->type = expected;
+                s->init = buildExpr(decl->init, expected);
+            } else {
+                s->init = buildExpr(decl->init);
+                expected = s->init->type;
+                s->type = expected;
+            }
             if (s->init->type != TypeTable::Error && s->init->type != expected) {
                 // Allow closure struct to be assigned to Fn-typed variable
                 if (closure_struct_types_.count(s->init->type) &&
@@ -3999,13 +4007,21 @@ HIRStmt* HIRBuilder::buildStmt(const Stmt* stmt) {
         }
         case Stmt::Kind::VarDecl: {
             auto* decl = static_cast<const VarDeclStmt*>(stmt);
-            TypeId expected = resolveType(decl->type);
+            bool has_type_annotation = !decl->type.name.empty() ||
+                                       decl->type.kind != TypeRef::Kind::Named;
+            TypeId expected = has_type_annotation ? resolveType(decl->type) : INVALID_TYPE;
             auto* s = ctx_.arena.make<HIRVarDeclStmt>();
             s->kind = HIRStmt::Kind::VarDecl;
             s->loc = stmt->loc;
             s->name = ctx_.strings.intern(decl->name);
-            s->type = expected;
-            s->init = buildExpr(decl->init, expected);
+            if (has_type_annotation) {
+                s->type = expected;
+                s->init = buildExpr(decl->init, expected);
+            } else {
+                s->init = buildExpr(decl->init);
+                expected = s->init->type;
+                s->type = expected;
+            }
             if (s->init->type != TypeTable::Error && s->init->type != expected) {
                 s->init = implicitWiden(s->init, expected);
                 if (s->init->type != expected) {

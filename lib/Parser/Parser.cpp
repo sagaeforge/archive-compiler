@@ -4082,8 +4082,12 @@ Stmt* Parser::parseValDecl() {
     bool is_var = (kw.kind == TokenKind::KwVar);
 
     Token name = expect(TokenKind::Ident, "expected variable name");
-    expect(TokenKind::Colon, "expected ':' after variable name");
-    TypeRef type = parseType();
+    TypeRef type{};
+    if (check(TokenKind::Colon)) {
+        advance(); // consume ':'
+        type = parseType();
+    }
+    // If no type annotation, type.name will be empty — HIRBuilder infers from init
     expect(TokenKind::Eq, "expected '=' in binding");
     Expr* init = parseExpr();
 
