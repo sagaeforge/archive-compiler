@@ -1331,34 +1331,17 @@ void InstructionSelector::selectCast(const LIRInstr& instr) {
     }
 
     if (dst_w > src_w) {
-        // Widening: zero-extend or sign-extend
+        // Widening: movzx or movsx
         bool is_signed = ctx_.types.isSigned(src_type);
-        if (!is_signed) {
-            // Zero-extend: mov + mask
-            emit(makeMov(MachOperand::virt(dst), MachOperand::virt(src), 64));
-            int64_t mask = (src_w == 8) ? 0xFF :
-                           (src_w == 16) ? 0xFFFF :
-                           (src_w == 32) ? 0xFFFFFFFF : -1;
-            if (mask != -1) {
-                emit(makeAlu(X86Op::And, MachOperand::virt(dst),
-                             MachOperand::immediate(mask), 64));
-            }
-        } else {
-            // Sign-extend: shl + sar to propagate sign bit
-            emit(makeMov(MachOperand::virt(dst), MachOperand::virt(src), 64));
-            uint8_t shift = 64 - src_w;
-            emit(makeMov(MachOperand::precolored(PhysReg::RCX),
-                         MachOperand::immediate(shift), 64));
-            emit(makeAlu(X86Op::Shl, MachOperand::virt(dst),
-                         MachOperand::precolored(PhysReg::RCX), 64));
-            emit(makeMov(MachOperand::precolored(PhysReg::RCX),
-                         MachOperand::immediate(shift), 64));
-            emit(makeAlu(X86Op::Sar, MachOperand::virt(dst),
-                         MachOperand::precolored(PhysReg::RCX), 64));
-        }
+        X86Op ext_op = is_signed ? X86Op::MovSX : X86Op::MovZX;
+        MachInstr mi(ext_op);
+        mi.width = src_w;  // source width for movsx/movzx
+        mi.operand_count = 2;
+        mi.inline_ops[0] = MachOperand::virt(dst);
+        mi.inline_ops[1] = MachOperand::virt(src);
+        emit(mi);
     } else if (dst_w < src_w) {
         // Narrowing: mov + mask to truncate
-        // mov dst, src; and dst, mask
         emit(makeMov(MachOperand::virt(dst), MachOperand::virt(src), 64));
         int64_t mask = (dst_w == 8) ? 0xFF :
                        (dst_w == 16) ? 0xFFFF :

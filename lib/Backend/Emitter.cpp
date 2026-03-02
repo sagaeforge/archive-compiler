@@ -104,17 +104,29 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             break;
 
         case X86Op::MovZX:
-            out_ << "movzx ";
-            emitOperand(instr.dst(), 64);
-            out_ << ", ";
-            if (instr.src1().isStack()) {
-                out_ << sizePrefix(instr.width) << " ";
+            if (instr.width == 32) {
+                // x86-64: writing to 32-bit register auto-zeros upper 32 bits
+                out_ << "mov ";
+                emitOperand(instr.dst(), 32);
+                out_ << ", ";
+                if (instr.src1().isStack()) {
+                    out_ << sizePrefix(32) << " ";
+                }
+                emitOperand(instr.src1(), 32);
+            } else {
+                out_ << "movzx ";
+                emitOperand(instr.dst(), 64);
+                out_ << ", ";
+                if (instr.src1().isStack()) {
+                    out_ << sizePrefix(instr.width) << " ";
+                }
+                emitOperand(instr.src1(), instr.width);
             }
-            emitOperand(instr.src1(), instr.width);
             break;
 
         case X86Op::MovSX:
-            out_ << "movsx ";
+            // NASM: movsxd for 32→64, movsx for 8→N and 16→N
+            out_ << (instr.width == 32 ? "movsxd " : "movsx ");
             emitOperand(instr.dst(), 64);
             out_ << ", ";
             if (instr.src1().isStack()) {

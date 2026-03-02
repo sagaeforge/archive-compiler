@@ -465,6 +465,12 @@ static bool needsFixup(const MachInstr& instr) {
         instr.operand(0).isStack()) {
         return true;
     }
+    // MovSX/MovZX: dst must be register, src can be memory
+    if ((instr.op == X86Op::MovSX || instr.op == X86Op::MovZX) &&
+        instr.operand_count >= 2 &&
+        (instr.operand(0).isStack() || instr.operand(1).isStack())) {
+        return true;
+    }
     // IDiv: operand must be register (can't idiv a stack slot directly — well
     // actually x86 allows idiv mem, but our stack slots are [rbp+off] which is
     // memory, so it should work. Keep this for safety if width mismatches.)
@@ -743,6 +749,33 @@ void RegisterAllocator::rewrite(MachFunction& fn, const RegAllocation& alloc) {
                 } else if (src_stack) {
                     // sse reg, stack — this is actually valid for most SSE ops (one memory operand)
                     // But for safety, just emit as-is
+                    fixed.push_back(instr);
+                }
+            } else if ((instr.op == X86Op::MovSX || instr.op == X86Op::MovZX) &&
+                       instr.operand_count >= 2) {
+                // movsx/movzx can't have stack dst; src can be memory with size prefix
+                bool dst_stack = instr.operand(0).isStack();
+                bool src_stack = instr.operand(1).isStack();
+                if (dst_stack && src_stack) {
+                    // movsx stack_dst, stack_src → mov r11, stack_src; movsx r11, r11b/w/d; mov stack_dst, r11
+                    auto stack_dst = instr.operand(0);
+                    auto stack_src = instr.operand(1);
+                    fixed.push_back(makeMov(MachOperand::precolored(scratch),
+                                            stack_src, instr.width));
+                    instr.inline_ops[0] = MachOperand::precolored(scratch);
+                    instr.inline_ops[1] = MachOperand::precolored(scratch);
+                    fixed.push_back(instr);
+                    fixed.push_back(makeMov(stack_dst,
+                                            MachOperand::precolored(scratch), 64));
+                } else if (dst_stack) {
+                    // movsx stack_dst, reg_src → movsx r11, reg_src; mov stack_dst, r11
+                    auto stack_dst = instr.operand(0);
+                    instr.inline_ops[0] = MachOperand::precolored(scratch);
+                    fixed.push_back(instr);
+                    fixed.push_back(makeMov(stack_dst,
+                                            MachOperand::precolored(scratch), 64));
+                } else if (src_stack) {
+                    // movsx reg_dst, stack_src — valid with size prefix (emitter handles it)
                     fixed.push_back(instr);
                 }
             } else if (instr.operand_count >= 2 &&
