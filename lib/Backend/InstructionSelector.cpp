@@ -205,6 +205,17 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     for (uint32_t b = 0; b < fn.block_count; ++b) {
         current_block_ = b;
         const auto& block = fn.blocks[b];
+
+        // >16B struct return: capture hidden return pointer from RDI at the
+        // very start of the entry block.  Previously this was done inside
+        // selectBlockArg, but functions with zero parameters have no
+        // BlockArg instructions, leaving hidden_ret_ptr_ uninitialised.
+        if (b == 0 && hidden_ret_ptr_ != INVALID_VREG && gpr_arg_slot_ == 0) {
+            emit(makeMov(MachOperand::virt(hidden_ret_ptr_),
+                         MachOperand::precolored(GPR_ARG_REGS[0]), 64));
+            gpr_arg_slot_ = 1;  // visible params start from RSI
+        }
+
         for (uint32_t i = 0; i < block.instr_count; ++i) {
             selectInstr(block.instrs[i], fn);
         }
@@ -1493,13 +1504,9 @@ void InstructionSelector::selectBlockArg(const LIRInstr& instr,
     // arriving via ABI registers. Use gpr_arg_slot_ to track cumulative
     // GPR slot usage (multi-register params like 16B structs consume 2 slots).
     if (current_block_ == 0) {
-        // >16B struct return: capture hidden return pointer from first GPR (RDI)
-        // on the first BlockArg. This consumes gpr_arg_slot_ 0.
-        if (hidden_ret_ptr_ != INVALID_VREG && gpr_arg_slot_ == 0) {
-            emit(makeMov(MachOperand::virt(hidden_ret_ptr_),
-                         MachOperand::precolored(GPR_ARG_REGS[0]), 64));
-            gpr_arg_slot_ = 1;  // visible params start from RSI
-        }
+        // NOTE: hidden_ret_ptr_ capture from RDI is now emitted at the
+        // start of the entry block in selectFunction(), so it works even
+        // for zero-parameter functions.
 
         // Advance past any skipped (DCE'd) parameters so ABI register
         // assignment stays correct. E.g. if block_arg $0 was eliminated,

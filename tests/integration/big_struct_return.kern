@@ -1,0 +1,17 @@
+// >16B struct return (3 fields × 8B = 24B)
+// Uses hidden return pointer ABI (SysV AMD64: caller allocates, passes ptr in RDI)
+struct Big { a: i64, b: i64, c: i64 }
+
+fn make_big() -> Big {
+    Big { a: 10, b: 20, c: 12 }
+}
+
+fn make_big_param(x: i64, y: i64, z: i64) -> Big {
+    Big { a: x, b: y, c: z }
+}
+
+fn main() -> i64 {
+    val s1 = make_big()
+    val s2 = make_big_param(5, 3, 2)
+    s1.a + s1.b + s1.c + s2.a + s2.b + s2.c
+}

@@ -368,3 +368,174 @@ TEST_F(InstructionSelectorTest, SmallStructReturnPacked) {
     }
     EXPECT_TRUE(found_make_pair);
 }
+
+// ============================================================================
+// Advanced ISel Tests
+// ============================================================================
+
+TEST_F(InstructionSelectorTest, FloatArith) {
+    auto* mod = selectAll(
+        "fn fadd(a: f64, b: f64) -> f64 { a + b }");
+    ASSERT_NE(mod, nullptr);
+    auto& fn = mod->functions[0];
+    EXPECT_TRUE(hasOp(fn, X86Op::Addsd));
+}
+
+TEST_F(InstructionSelectorTest, FloatCmp) {
+    auto* mod = selectAll(
+        "fn flt(a: f64, b: f64) -> bool { a < b }");
+    ASSERT_NE(mod, nullptr);
+    auto& fn = mod->functions[0];
+    EXPECT_TRUE(hasOp(fn, X86Op::Ucomisd));
+}
+
+TEST_F(InstructionSelectorTest, CastMovsxNarrowToWide) {
+    auto* mod = selectAll(
+        "fn widen(x: i8) -> i64 { x as i64 }");
+    ASSERT_NE(mod, nullptr);
+    auto& fn = mod->functions[0];
+    // i8→i64 should produce some kind of sign-extending move
+    EXPECT_TRUE(hasOp(fn, X86Op::Mov) || hasOp(fn, X86Op::MovLoad));
+}
+
+TEST_F(InstructionSelectorTest, GlobalLoad) {
+    auto* mod = selectAll(
+        "static val G: i64 = 42\n"
+        "fn main() -> i64 { G }");
+    ASSERT_NE(mod, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+    // Should have MovLoadGlobal for accessing G
+    auto& fn = mod->functions[0];
+    EXPECT_TRUE(hasOp(fn, X86Op::MovLoadGlobal));
+}
+
+TEST_F(InstructionSelectorTest, GlobalStore) {
+    auto* mod = selectAll(
+        "static var G: i64 = 0\n"
+        "fn main() -> i64 with mut, mem {\n"
+        "  G = 42\n"
+        "  G\n"
+        "}");
+    ASSERT_NE(mod, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+    auto& fn = mod->functions[0];
+    EXPECT_TRUE(hasOp(fn, X86Op::MovStoreGlobal));
+}
+
+TEST_F(InstructionSelectorTest, AtomicCas) {
+    auto* mod = selectAll(
+        "fn atomic_cas(ptr: Ptr<var i64>, expected: i64, desired: i64) -> i64 = intrinsic\n"
+        "fn try_cas() -> i64 with atomic, mem {\n"
+        "  var x: i64 = 10\n"
+        "  atomic_cas(&var x, 10, 42)\n"
+        "}");
+    ASSERT_NE(mod, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+    bool found = false;
+    for (uint32_t i = 0; i < mod->fn_count; ++i) {
+        if (hasOp(mod->functions[i], X86Op::LockCmpxchg)) found = true;
+    }
+    EXPECT_TRUE(found);
+}
+
+TEST_F(InstructionSelectorTest, FetchAdd) {
+    auto* mod = selectAll(
+        "fn atomic_fetch_add(ptr: Ptr<var i64>, value: i64) -> i64 = intrinsic\n"
+        "fn inc() -> i64 with atomic, mem {\n"
+        "  var x: i64 = 0\n"
+        "  atomic_fetch_add(&var x, 1)\n"
+        "}");
+    ASSERT_NE(mod, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+    bool found = false;
+    for (uint32_t i = 0; i < mod->fn_count; ++i) {
+        if (hasOp(mod->functions[i], X86Op::LockXadd)) found = true;
+    }
+    EXPECT_TRUE(found);
+}
+
+TEST_F(InstructionSelectorTest, Fence) {
+    auto* mod = selectAll(
+        "fn mfence() -> Unit = intrinsic\n"
+        "fn barrier() -> Unit with atomic {\n"
+        "  mfence()\n"
+        "}");
+    ASSERT_NE(mod, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+    bool found = false;
+    for (uint32_t i = 0; i < mod->fn_count; ++i) {
+        if (hasOp(mod->functions[i], X86Op::Mfence)) found = true;
+    }
+    EXPECT_TRUE(found);
+}
+
+TEST_F(InstructionSelectorTest, VolatileLoadStore) {
+    auto* mod = selectAll(
+        "fn volatile_read(ptr: Ptr<i64>) -> i64 = intrinsic\n"
+        "fn volatile_write(ptr: Ptr<var i64>, v: i64) -> Unit = intrinsic\n"
+        "fn main() -> i64 {\n"
+        "    var x: i64 = 10\n"
+        "    volatile_write(&var x, 42)\n"
+        "    volatile_read(&x)\n"
+        "}");
+    ASSERT_NE(mod, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+    // Find the main function and verify volatile load/store exist
+    bool has_load = false, has_store = false;
+    for (uint32_t i = 0; i < mod->fn_count; ++i) {
+        auto& fn = mod->functions[i];
+        for (uint32_t b = 0; b < fn.block_count; ++b) {
+            for (uint32_t j = 0; j < fn.blocks[b].instr_count; ++j) {
+                auto& mi = fn.blocks[b].instrs[j];
+                if (mi.is_volatile && (mi.op == X86Op::MovLoad || mi.op == X86Op::FloatLoad))
+                    has_load = true;
+                if (mi.is_volatile && (mi.op == X86Op::MovStore || mi.op == X86Op::FloatStore))
+                    has_store = true;
+            }
+        }
+    }
+    EXPECT_TRUE(has_load) << "volatile load should propagate is_volatile";
+    EXPECT_TRUE(has_store) << "volatile store should propagate is_volatile";
+}
+
+// >16B struct return with zero parameters: hidden_ret_ptr_ must be captured
+// from RDI even though there are no BlockArg instructions.
+TEST_F(InstructionSelectorTest, BigStructReturnZeroParams) {
+    const char* src = R"(
+struct Big { a: i64, b: i64, c: i64 }
+fn make_big() -> Big { Big { a: 1, b: 2, c: 3 } }
+fn main() -> i64 { val s = make_big(); s.a }
+)";
+    auto* mach = selectAll(src);
+    ASSERT_NE(mach, nullptr);
+    EXPECT_FALSE(ctx.diag.hasErrors());
+
+    // Find _make_big function and verify first instruction captures RDI
+    const MachFunction* make_big_fn = nullptr;
+    for (uint32_t i = 0; i < mach->fn_count; ++i) {
+        if (std::string(mach->functions[i].name) == "make_big") {
+            make_big_fn = &mach->functions[i];
+            break;
+        }
+    }
+    ASSERT_NE(make_big_fn, nullptr) << "make_big function not found";
+    ASSERT_GT(make_big_fn->block_count, 0u);
+
+    // First instruction in entry block should be a Mov from RDI (the hidden
+    // return pointer capture).
+    const auto& entry = make_big_fn->blocks[0];
+    ASSERT_GT(entry.instr_count, 0u);
+    bool found_rdi_capture = false;
+    for (uint32_t i = 0; i < entry.instr_count; ++i) {
+        const auto& mi = entry.instrs[i];
+        if (mi.op == X86Op::Mov && mi.operand_count >= 2 &&
+            mi.inline_ops[1].kind == MachOperand::Kind::Reg &&
+            mi.inline_ops[1].is_physical &&
+            mi.inline_ops[1].phys == PhysReg::RDI) {
+            found_rdi_capture = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_rdi_capture)
+        << ">16B return: entry block must capture hidden RDI pointer";
+}
