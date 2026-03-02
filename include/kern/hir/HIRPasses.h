@@ -22,6 +22,15 @@ public:
     void run(HIRModule& module, CompilationContext& ctx) override;
 };
 
+// Ownership checking: detects use-after-move for 'own' parameters,
+// borrow escape (returning/storing borrowed values), and
+// simultaneous mutable borrow aliasing.
+class OwnershipCheckPass : public HIRPass {
+public:
+    std::string_view name() const override { return "OwnershipCheck"; }
+    void run(HIRModule& module, CompilationContext& ctx) override;
+};
+
 // Marks HIRCallExpr::is_tail_call for calls in tail position.
 // Sets HIRFnDecl::is_recursive and is_tail_recursive.
 class TailCallAnalysisPass : public HIRPass {

@@ -1239,8 +1239,17 @@ FnDecl* Parser::parseFnDecl() {
 Param Parser::parseParam() {
     Token name = expect(TokenKind::Ident, "expected parameter name");
     expect(TokenKind::Colon, "expected ':' after parameter name");
+    // Check for passing mode: "var Type" or "own Type"
+    PassingMode mode = PassingMode::Borrow;
+    if (check(TokenKind::KwVar)) {
+        advance();
+        mode = PassingMode::MutBorrow;
+    } else if (check(TokenKind::KwOwn)) {
+        advance();
+        mode = PassingMode::Own;
+    }
     TypeRef type = parseType();
-    return {name.text, type, name.loc};
+    return {name.text, type, name.loc, mode};
 }
 
 TypeRef Parser::parseType() {

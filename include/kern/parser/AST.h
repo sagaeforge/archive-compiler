@@ -33,11 +33,19 @@ struct TypeRef {
     int64_t const_value = 0;
 };
 
+// --- Passing Mode ---
+enum class PassingMode : uint8_t {
+    Borrow,      // default — immutable borrow
+    MutBorrow,   // var Type — mutable borrow
+    Own,         // own Type — ownership transfer
+};
+
 // --- Parameter ---
 struct Param {
     std::string_view name;
     TypeRef type;
     SourceLocation loc;
+    PassingMode mode = PassingMode::Borrow;
 };
 
 // --- Patterns (for match expressions) ---

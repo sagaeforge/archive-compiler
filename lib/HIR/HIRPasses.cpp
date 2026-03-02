@@ -1041,6 +1041,222 @@ void EffectAnalysisPass::run(HIRModule& module, CompilationContext& ctx) {
 }
 
 // ============================================================================
+// OwnershipCheckPass
+// ============================================================================
+
+// Track which variables are 'own' params and detect use-after-move
+struct OwnershipState {
+    std::unordered_set<std::string_view> own_vars;     // variables with Own passing mode
+    std::unordered_set<std::string_view> moved_vars;   // variables that have been moved
+    CompilationContext* ctx = nullptr;
+
+    void markMoved(std::string_view name, SourceLocation) {
+        if (own_vars.count(name)) {
+            moved_vars.insert(name);
+        }
+    }
+
+    void checkUse(std::string_view name, SourceLocation loc) {
+        if (moved_vars.count(name)) {
+            ctx->diag.error(loc, std::string("use of moved value '") +
+                            std::string(name) + "'");
+        }
+    }
+};
+
+static void checkOwnershipExpr(const HIRExpr* expr, OwnershipState& state);
+static void checkOwnershipStmt(const HIRStmt* stmt, OwnershipState& state);
+
+static void checkOwnershipExpr(const HIRExpr* expr, OwnershipState& state) {
+    if (!expr) return;
+    switch (expr->kind) {
+        case HIRExpr::Kind::Ident: {
+            auto* e = static_cast<const HIRIdentExpr*>(expr);
+            state.checkUse(e->name, e->loc);
+            break;
+        }
+        case HIRExpr::Kind::Call: {
+            auto* e = static_cast<const HIRCallExpr*>(expr);
+            for (uint32_t i = 0; i < e->arg_count; ++i) {
+                checkOwnershipExpr(e->args[i], state);
+                // If an own variable is passed as call arg, mark it moved
+                if (e->args[i] && e->args[i]->kind == HIRExpr::Kind::Ident) {
+                    auto* id = static_cast<const HIRIdentExpr*>(e->args[i]);
+                    state.markMoved(id->name, e->loc);
+                }
+            }
+            break;
+        }
+        case HIRExpr::Kind::CallIndirect: {
+            auto* e = static_cast<const HIRCallIndirectExpr*>(expr);
+            checkOwnershipExpr(e->callee, state);
+            for (uint32_t i = 0; i < e->arg_count; ++i) {
+                checkOwnershipExpr(e->args[i], state);
+                if (e->args[i] && e->args[i]->kind == HIRExpr::Kind::Ident) {
+                    auto* id = static_cast<const HIRIdentExpr*>(e->args[i]);
+                    state.markMoved(id->name, e->loc);
+                }
+            }
+            break;
+        }
+        case HIRExpr::Kind::BinOp: {
+            auto* e = static_cast<const HIRBinOpExpr*>(expr);
+            checkOwnershipExpr(e->lhs, state);
+            checkOwnershipExpr(e->rhs, state);
+            break;
+        }
+        case HIRExpr::Kind::UnaryOp:
+            checkOwnershipExpr(static_cast<const HIRUnaryOpExpr*>(expr)->operand, state);
+            break;
+        case HIRExpr::Kind::If: {
+            auto* e = static_cast<const HIRIfExpr*>(expr);
+            checkOwnershipExpr(e->condition, state);
+            checkOwnershipExpr(e->then_branch, state);
+            checkOwnershipExpr(e->else_branch, state);
+            break;
+        }
+        case HIRExpr::Kind::Match: {
+            auto* e = static_cast<const HIRMatchExpr*>(expr);
+            checkOwnershipExpr(e->scrutinee, state);
+            for (uint32_t i = 0; i < e->arm_count; ++i) {
+                if (e->arms[i].guard) checkOwnershipExpr(e->arms[i].guard, state);
+                checkOwnershipExpr(e->arms[i].body, state);
+            }
+            break;
+        }
+        case HIRExpr::Kind::Block: {
+            auto* e = static_cast<const HIRBlockExpr*>(expr);
+            for (uint32_t i = 0; i < e->stmt_count; ++i)
+                checkOwnershipStmt(e->stmts[i], state);
+            checkOwnershipExpr(e->result, state);
+            break;
+        }
+        case HIRExpr::Kind::Return:
+            checkOwnershipExpr(static_cast<const HIRReturnExpr*>(expr)->value, state);
+            break;
+        case HIRExpr::Kind::StructLit: {
+            auto* e = static_cast<const HIRStructLitExpr*>(expr);
+            for (uint32_t i = 0; i < e->field_count; ++i)
+                checkOwnershipExpr(e->fields[i].value, state);
+            break;
+        }
+        case HIRExpr::Kind::FieldAccess:
+            checkOwnershipExpr(static_cast<const HIRFieldAccessExpr*>(expr)->object, state);
+            break;
+        case HIRExpr::Kind::UnionVariant:
+            checkOwnershipExpr(static_cast<const HIRUnionVariantExpr*>(expr)->payload, state);
+            break;
+        case HIRExpr::Kind::Cast:
+            checkOwnershipExpr(static_cast<const HIRCastExpr*>(expr)->operand, state);
+            break;
+        case HIRExpr::Kind::AddrOf:
+            checkOwnershipExpr(static_cast<const HIRAddrOfExpr*>(expr)->operand, state);
+            break;
+        case HIRExpr::Kind::Deref:
+            checkOwnershipExpr(static_cast<const HIRDerefExpr*>(expr)->operand, state);
+            break;
+        case HIRExpr::Kind::Loop: {
+            auto* e = static_cast<const HIRLoopExpr*>(expr);
+            for (uint32_t i = 0; i < e->binding_count; ++i)
+                checkOwnershipExpr(e->bindings[i].init, state);
+            checkOwnershipExpr(e->body, state);
+            break;
+        }
+        case HIRExpr::Kind::Break:
+            checkOwnershipExpr(static_cast<const HIRBreakExpr*>(expr)->value, state);
+            break;
+        case HIRExpr::Kind::Continue: {
+            auto* e = static_cast<const HIRContinueExpr*>(expr);
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                checkOwnershipExpr(e->args[i], state);
+            break;
+        }
+        case HIRExpr::Kind::ArrayLit: {
+            auto* e = static_cast<const HIRArrayLitExpr*>(expr);
+            for (uint32_t i = 0; i < e->element_count; ++i)
+                checkOwnershipExpr(e->elements[i], state);
+            break;
+        }
+        case HIRExpr::Kind::IndexAccess: {
+            auto* e = static_cast<const HIRIndexAccessExpr*>(expr);
+            checkOwnershipExpr(e->array, state);
+            checkOwnershipExpr(e->index, state);
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+static void checkOwnershipStmt(const HIRStmt* stmt, OwnershipState& state) {
+    if (!stmt) return;
+    switch (stmt->kind) {
+        case HIRStmt::Kind::ValDecl: {
+            auto* s = static_cast<const HIRValDeclStmt*>(stmt);
+            checkOwnershipExpr(s->init, state);
+            // If init is an own variable, it's being moved
+            if (s->init && s->init->kind == HIRExpr::Kind::Ident) {
+                auto* id = static_cast<const HIRIdentExpr*>(s->init);
+                state.markMoved(id->name, s->loc);
+            }
+            break;
+        }
+        case HIRStmt::Kind::VarDecl: {
+            auto* s = static_cast<const HIRVarDeclStmt*>(stmt);
+            checkOwnershipExpr(s->init, state);
+            break;
+        }
+        case HIRStmt::Kind::ExprStmt:
+            checkOwnershipExpr(static_cast<const HIRExprStmt*>(stmt)->expr, state);
+            break;
+        case HIRStmt::Kind::Assign: {
+            auto* s = static_cast<const HIRAssignStmt*>(stmt);
+            checkOwnershipExpr(s->value, state);
+            break;
+        }
+        case HIRStmt::Kind::FieldAssign: {
+            auto* s = static_cast<const HIRFieldAssignStmt*>(stmt);
+            checkOwnershipExpr(s->target, state);
+            checkOwnershipExpr(s->value, state);
+            break;
+        }
+        case HIRStmt::Kind::DerefAssign: {
+            auto* s = static_cast<const HIRDerefAssignStmt*>(stmt);
+            checkOwnershipExpr(s->target, state);
+            checkOwnershipExpr(s->value, state);
+            break;
+        }
+        case HIRStmt::Kind::IndexAssign: {
+            auto* s = static_cast<const HIRIndexAssignStmt*>(stmt);
+            checkOwnershipExpr(s->array, state);
+            checkOwnershipExpr(s->index, state);
+            checkOwnershipExpr(s->value, state);
+            break;
+        }
+    }
+}
+
+void OwnershipCheckPass::run(HIRModule& module, CompilationContext& ctx) {
+    for (uint32_t i = 0; i < module.fn_count; ++i) {
+        auto* fn = module.functions[i];
+        if (!fn->body) continue;
+
+        OwnershipState state;
+        state.ctx = &ctx;
+
+        // Register own parameters
+        for (uint32_t j = 0; j < fn->param_count; ++j) {
+            if (fn->params[j].passing_mode == 2) {  // Own
+                state.own_vars.insert(fn->params[j].name);
+            }
+        }
+
+        // Walk function body
+        checkOwnershipExpr(fn->body, state);
+    }
+}
+
+// ============================================================================
 // TailCallAnalysisPass — helpers
 // ============================================================================
 

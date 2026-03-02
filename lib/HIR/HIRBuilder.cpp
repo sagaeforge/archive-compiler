@@ -930,7 +930,8 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
     for (uint32_t i = 0; i < fn->param_count; ++i) {
         TypeId pt = resolveType(fn->params[i].type);
         auto interned_name = ctx_.strings.intern(fn->params[i].name);
-        hfn->params[i] = {interned_name, pt, fn->params[i].loc};
+        hfn->params[i] = {interned_name, pt, fn->params[i].loc,
+                          static_cast<uint8_t>(fn->params[i].mode)};
         local_vars_[interned_name] = pt;
     }
 

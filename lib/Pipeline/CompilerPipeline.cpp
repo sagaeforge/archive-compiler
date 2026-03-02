@@ -41,6 +41,7 @@ HIRModule* CompilerPipeline::buildHIR(Module* ast) {
     HIRPassManager pm;
     pm.add<PurityAnalysisPass>();
     pm.add<EffectAnalysisPass>();
+    pm.add<OwnershipCheckPass>();
     pm.add<TailCallAnalysisPass>();
     pm.run(*hir, ctx_);
 

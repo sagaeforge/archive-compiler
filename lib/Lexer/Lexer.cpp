@@ -42,6 +42,7 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::KwImpl:     return "impl";
         case TokenKind::KwConst:    return "const";
         case TokenKind::KwWith:     return "with";
+        case TokenKind::KwOwn:      return "own";
         case TokenKind::Plus:       return "+";
         case TokenKind::Minus:      return "-";
         case TokenKind::Star:       return "*";
@@ -243,6 +244,7 @@ TokenKind Lexer::identifierKind(std::string_view text) {
     if (text == "impl")     return TokenKind::KwImpl;
     if (text == "const")    return TokenKind::KwConst;
     if (text == "with")     return TokenKind::KwWith;
+    if (text == "own")      return TokenKind::KwOwn;
     return TokenKind::Ident;
 }
 

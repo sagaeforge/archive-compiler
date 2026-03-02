@@ -353,6 +353,7 @@ struct HIRParam {
     std::string_view name;  // interned
     TypeId type;
     SourceLocation loc;
+    uint8_t passing_mode = 0;  // PassingMode::Borrow (0=Borrow, 1=MutBorrow, 2=Own)
 };
 
 struct HIRTypeParam {
