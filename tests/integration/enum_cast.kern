@@ -1,0 +1,20 @@
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+fn main() -> i64 {
+    val r: Color = Color.Red
+    val g: Color = Color.Green
+    val b: Color = Color.Blue
+
+    val ri: i64 = r as i64
+    val gi: i64 = g as i64
+    val bi: i64 = b as i64
+
+    val back: Color = 2 as Color
+    val back_i: i64 = back as i64
+
+    ri + gi + bi + back_i
+}

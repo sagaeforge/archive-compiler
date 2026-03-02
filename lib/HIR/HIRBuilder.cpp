@@ -2791,6 +2791,13 @@ HIRExpr* HIRBuilder::buildCast(const Expr* expr) {
         return slit;
     }
 
+    // Check for enum types
+    bool src_enum = false, dst_enum = false;
+    if (src_type < ctx_.types.size())
+        src_enum = (ctx_.types.get(src_type).kind == TypeKind::Enum);
+    if (target_type < ctx_.types.size())
+        dst_enum = (ctx_.types.get(target_type).kind == TypeKind::Enum);
+
     bool valid = (src_int && dst_int) ||
                  (src_int && dst_ptr) ||
                  (src_ptr && dst_int) ||
@@ -2798,6 +2805,9 @@ HIRExpr* HIRBuilder::buildCast(const Expr* expr) {
                  (src_float && dst_float) ||
                  (src_float && dst_int) ||
                  (src_int && dst_float) ||
+                 (src_enum && dst_int) ||   // enum → int
+                 (src_int && dst_enum) ||   // int → enum
+                 (src_enum && dst_enum) ||  // enum → enum
                  (src_type == target_type);
 
     if (!valid) {

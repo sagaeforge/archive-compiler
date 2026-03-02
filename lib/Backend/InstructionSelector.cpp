@@ -31,6 +31,9 @@ uint8_t InstructionSelector::widthOf(TypeId type) const {
             default: return 64;
         }
     }
+    if (info.kind == TypeKind::Enum) {
+        return static_cast<uint8_t>(info.enum_.backing_size * 8);
+    }
     return 64;  // pointers, structs, etc.
 }
 
