@@ -103,6 +103,9 @@ private:
     // Global data
     std::vector<GlobalData> globals_;
 
+    // Global variable label → GlobalData index (for LoadGlobal/StoreGlobal)
+    std::unordered_map<std::string_view, uint32_t> global_label_map_;
+
     // Block label counter for uniqueness
     uint32_t label_counter_ = 0;
 

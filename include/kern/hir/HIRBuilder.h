@@ -151,6 +151,10 @@ private:
 
     // Built HIR functions (for const fn evaluation)
     std::unordered_map<std::string_view, HIRFnDecl*> hir_fns_;
+
+    // Global variables (static val/var)
+    std::unordered_map<std::string_view, HIRGlobalDecl*> global_vars_;
+    std::unordered_map<std::string_view, TypeId> global_types_;  // pre-registered for ident resolution
 };
 
 } // namespace kern

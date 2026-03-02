@@ -385,6 +385,35 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             out_ << "], ";
             emitOperand(instr.src1(), 64);
             break;
+        case X86Op::MovLoadGlobal: {
+            // x86 can't do mem-to-mem mov, so if dst is stack, use rax as temp
+            auto& dst = instr.dst();
+            if (dst.isStack()) {
+                const char* tmp = (instr.width <= 32) ? "eax" : "rax";
+                out_ << "mov " << tmp << ", [rel _" << instr.global_label << "]\n";
+                out_ << "    mov ";
+                emitOperand(dst, instr.width);
+                out_ << ", " << tmp;
+            } else {
+                out_ << "mov ";
+                emitOperand(dst, instr.width);
+                out_ << ", [rel _" << instr.global_label << "]";
+            }
+            break;
+        }
+        case X86Op::MovStoreGlobal: {
+            auto& src = instr.dst();
+            if (src.isStack()) {
+                const char* tmp = (instr.width <= 32) ? "eax" : "rax";
+                out_ << "mov " << tmp << ", ";
+                emitOperand(src, instr.width);
+                out_ << "\n    mov [rel _" << instr.global_label << "], " << tmp;
+            } else {
+                out_ << "mov [rel _" << instr.global_label << "], ";
+                emitOperand(src, instr.width);
+            }
+            break;
+        }
     }
 
     out_ << "\n";
@@ -545,37 +574,71 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
 void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
     if (global_count == 0) return;
 
-    out_ << "section .rodata\n";
-
+    // .rodata: string literals, float constants, immutable globals
+    bool has_rodata = false;
     for (uint32_t i = 0; i < global_count; ++i) {
         const auto& g = globals[i];
-        out_ << g.label << ":\n";
+        if (g.kind == GlobalData::Variable && g.variable.is_mutable) continue;
+        if (!has_rodata) { out_ << "section .rodata\n"; has_rodata = true; }
 
         if (g.kind == GlobalData::StringLit) {
-            out_ << "    db ";
+            out_ << g.label << ":\n    db ";
             for (uint32_t j = 0; j < g.string_lit.length; ++j) {
                 if (j > 0) out_ << ", ";
                 out_ << static_cast<int>(static_cast<uint8_t>(g.string_lit.data[j]));
             }
             out_ << "\n";
-        } else {
-            // Float constant
+        } else if (g.kind == GlobalData::FloatConst) {
+            out_ << g.label << ":\n";
             if (g.float_const.is_f32) {
-                // dd as 32-bit float
                 uint32_t bits;
                 float f = static_cast<float>(g.float_const.value);
                 std::memcpy(&bits, &f, sizeof(bits));
                 out_ << "    dd 0x" << std::hex << bits << std::dec << "\n";
             } else {
-                // dq as 64-bit double
                 uint64_t bits;
                 std::memcpy(&bits, &g.float_const.value, sizeof(bits));
                 out_ << "    dq 0x" << std::hex << bits << std::dec << "\n";
             }
+        } else if (g.kind == GlobalData::Variable) {
+            // Immutable global variable → .rodata
+            out_ << "_" << g.label << ":\n";
+            emitGlobalVarDirective(g.variable);
         }
     }
+    if (has_rodata) out_ << "\n";
 
-    out_ << "\n";
+    // .data: mutable globals with non-zero initializer
+    bool has_data = false;
+    for (uint32_t i = 0; i < global_count; ++i) {
+        const auto& g = globals[i];
+        if (g.kind != GlobalData::Variable || !g.variable.is_mutable) continue;
+        if (g.variable.init_value == 0) continue;  // zero-init goes to .bss
+        if (!has_data) { out_ << "section .data\n"; has_data = true; }
+        out_ << "_" << g.label << ":\n";
+        emitGlobalVarDirective(g.variable);
+    }
+    if (has_data) out_ << "\n";
+
+    // .bss: mutable globals with zero initializer
+    bool has_bss = false;
+    for (uint32_t i = 0; i < global_count; ++i) {
+        const auto& g = globals[i];
+        if (g.kind != GlobalData::Variable || !g.variable.is_mutable) continue;
+        if (g.variable.init_value != 0) continue;
+        if (!has_bss) { out_ << "section .bss\n"; has_bss = true; }
+        out_ << "_" << g.label << ": resb " << static_cast<int>(g.variable.size) << "\n";
+    }
+    if (has_bss) out_ << "\n";
+}
+
+void NASMEmitter::emitGlobalVarDirective(const GlobalVariable& var) {
+    switch (var.size) {
+        case 1: out_ << "    db " << (var.init_value & 0xFF) << "\n"; break;
+        case 2: out_ << "    dw " << (var.init_value & 0xFFFF) << "\n"; break;
+        case 4: out_ << "    dd " << (var.init_value & 0xFFFFFFFF) << "\n"; break;
+        default: out_ << "    dq " << var.init_value << "\n"; break;
+    }
 }
 
 // ============================================================================

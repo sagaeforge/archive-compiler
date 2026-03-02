@@ -97,6 +97,8 @@ private:
     void selectFence(const LIRInstr& instr);
     void selectPercpuLoad(const LIRInstr& instr);
     void selectPercpuStore(const LIRInstr& instr);
+    void selectLoadGlobal(const LIRInstr& instr);
+    void selectStoreGlobal(const LIRInstr& instr);
 
     // Division: special handling for idiv/div
     void selectDiv(const LIRInstr& instr, bool is_mod);

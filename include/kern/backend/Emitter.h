@@ -40,6 +40,9 @@ private:
 
     // Memory size prefix for width (byte, word, dword, qword)
     static const char* sizePrefix(uint8_t width);
+
+    // Emit db/dw/dd/dq directive for a global variable
+    void emitGlobalVarDirective(const GlobalVariable& var);
 };
 
 } // namespace kern

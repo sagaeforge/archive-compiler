@@ -167,11 +167,45 @@ uint32_t LIRBuilder::unionVariantTag(TypeId union_type, std::string_view variant
 
 LIRModule* LIRBuilder::build(const HIRModule* hir) {
     auto* mod = ctx_.arena.make<LIRModule>();
+
+    // Pre-register global variable names so lowerIdent can find them during fn building
+    for (uint32_t i = 0; i < hir->global_count; ++i) {
+        // Use a placeholder index; real index assigned below when GlobalData is created
+        global_label_map_[hir->globals[i]->name] = i;
+    }
+
     mod->fn_count = hir->fn_count;
     mod->functions = ctx_.arena.makeArray<LIRFunction>(hir->fn_count);
 
     for (uint32_t i = 0; i < hir->fn_count; ++i) {
         mod->functions[i] = buildFunction(hir->functions[i]);
+    }
+
+    // Add user-declared globals from HIR
+    for (uint32_t i = 0; i < hir->global_count; ++i) {
+        auto* hgd = hir->globals[i];
+        GlobalData gd{};
+        gd.kind = GlobalData::Variable;
+        gd.index = static_cast<uint32_t>(globals_.size());
+        gd.label = hgd->name;
+        gd.variable.is_mutable = hgd->is_mutable;
+        // Determine size from type
+        uint32_t sz = ctx_.types.sizeOf(hgd->type_id);
+        gd.variable.size = static_cast<uint8_t>(sz > 0 ? sz : 8);
+        // Evaluate constant initializer
+        int64_t init_val = 0;
+        if (hgd->init) {
+            // Try to const-eval the initializer
+            if (hgd->init->kind == HIRExpr::Kind::IntLit) {
+                init_val = static_cast<const HIRIntLitExpr*>(hgd->init)->value;
+            } else if (hgd->init->kind == HIRExpr::Kind::BoolLit) {
+                init_val = static_cast<const HIRBoolLitExpr*>(hgd->init)->value ? 1 : 0;
+            }
+        }
+        gd.variable.init_value = init_val;
+        // Register label → GlobalData index for use in LoadGlobal
+        global_label_map_[hgd->name] = gd.index;
+        globals_.push_back(gd);
     }
 
     mod->global_count = static_cast<uint32_t>(globals_.size());
@@ -420,6 +454,20 @@ VReg LIRBuilder::lowerIdent(const HIRIdentExpr* expr) {
 
     auto it = locals_.find(expr->name);
     if (it != locals_.end()) return it->second;
+
+    // Check for global variables
+    auto gv_it = global_label_map_.find(expr->name);
+    if (gv_it != global_label_map_.end()) {
+        VReg r = freshVReg();
+        LIRInstr i{};
+        i.op = LIROp::LoadGlobal;
+        i.result = r;
+        i.type = expr->type;
+        i.load_global.label = expr->name;
+        i.loc = expr->loc;
+        emit(i);
+        return r;
+    }
 
     return INVALID_VREG;
 }
@@ -1549,16 +1597,28 @@ void LIRBuilder::lowerStmt(const HIRStmt* stmt) {
         case HIRStmt::Kind::Assign: {
             auto* s = static_cast<const HIRAssignStmt*>(stmt);
             VReg val = lowerExpr(s->value);
-            auto it = var_addrs_.find(s->name);
-            if (it != var_addrs_.end()) {
-                LIRInstr store{};
-                store.op = LIROp::Store;
-                store.result = INVALID_VREG;
-                store.type = TypeTable::Unit;
-                store.store.ptr = it->second;
-                store.store.value = val;
-                store.loc = s->loc;
-                emit(store);
+            auto gv_it = global_label_map_.find(s->name);
+            if (gv_it != global_label_map_.end()) {
+                LIRInstr sg{};
+                sg.op = LIROp::StoreGlobal;
+                sg.result = INVALID_VREG;
+                sg.type = s->value->type;
+                sg.store_global.label = s->name;
+                sg.store_global.value = val;
+                sg.loc = s->loc;
+                emit(sg);
+            } else {
+                auto it = var_addrs_.find(s->name);
+                if (it != var_addrs_.end()) {
+                    LIRInstr store{};
+                    store.op = LIROp::Store;
+                    store.result = INVALID_VREG;
+                    store.type = TypeTable::Unit;
+                    store.store.ptr = it->second;
+                    store.store.value = val;
+                    store.loc = s->loc;
+                    emit(store);
+                }
             }
             break;
         }

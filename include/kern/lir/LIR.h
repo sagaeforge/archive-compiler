@@ -85,6 +85,10 @@ enum class LIROp : uint8_t {
     // Per-CPU data
     PercpuLoad,     // load via GS segment
     PercpuStore,    // store via GS segment
+
+    // Global variables (.data/.bss/.rodata)
+    LoadGlobal,     // result = *label (load from global)
+    StoreGlobal,    // *label = value (store to global)
 };
 
 const char* lirOpName(LIROp op);
@@ -140,6 +144,8 @@ struct LIRAtomicFetchAddPayload { VReg ptr; VReg value; MemOrder order; };
 struct LIRFencePayload       { MemOrder order; };
 struct LIRPercpuPayload      { VReg offset; };
 struct LIRPercpuStorePayload { VReg offset; VReg value; };
+struct LIRLoadGlobalPayload  { std::string_view label; };
+struct LIRStoreGlobalPayload { std::string_view label; VReg value; };
 
 struct LIRInstr {
     LIROp op;
@@ -180,6 +186,8 @@ struct LIRInstr {
         LIRFencePayload      fence;
         LIRPercpuPayload     percpu_load;
         LIRPercpuStorePayload percpu_store;
+        LIRLoadGlobalPayload  load_global;
+        LIRStoreGlobalPayload store_global;
     };
 };
 
@@ -226,9 +234,14 @@ struct LIRFunction {
 
 struct GlobalStringLit { const char* data; uint32_t length; };
 struct GlobalFloatConst { double value; bool is_f32; };
+struct GlobalVariable {
+    int64_t init_value;     // integer init value (0 for .bss)
+    uint8_t size;           // 1/2/4/8 bytes
+    bool is_mutable;        // static var → .data/.bss, static val → .rodata
+};
 
 struct GlobalData {
-    enum Kind : uint8_t { StringLit, FloatConst };
+    enum Kind : uint8_t { StringLit, FloatConst, Variable };
     Kind kind;
     uint32_t index;             // unique index within module
     std::string_view label;     // NASM label (interned)
@@ -236,6 +249,7 @@ struct GlobalData {
     union {
         GlobalStringLit  string_lit;
         GlobalFloatConst float_const;
+        GlobalVariable   variable;
     };
 };
 

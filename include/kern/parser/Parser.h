@@ -32,6 +32,7 @@ private:
     NewtypeDecl* parseNewtype();
     TraitDecl* parseTraitDecl();
     ImplDecl* parseImplDecl();
+    GlobalDecl* parseGlobalDecl();
     Param parseParam();
 
     // Types

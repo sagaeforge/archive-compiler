@@ -707,6 +707,14 @@ HIRModule* HIRBuilder::build(const Module* ast) {
     registerImpls(ast);
     registerFnSigs(ast);
 
+    // Pre-register global variable types (so they're visible during fn building)
+    for (uint32_t i = 0; i < ast->global_count; ++i) {
+        auto* gd = ast->globals[i];
+        auto name = ctx_.strings.intern(gd->name);
+        TypeId tid = resolveType(gd->type);
+        global_types_[name] = tid;
+    }
+
     auto* mod = ctx_.arena.make<HIRModule>();
 
     // Struct declarations
@@ -740,6 +748,25 @@ HIRModule* HIRBuilder::build(const Module* ast) {
         hud->type_id = named_types_[ast->unions[i]->name];
         hud->loc = ast->unions[i]->loc;
         mod->unions[i] = hud;
+    }
+
+    // Build global declarations (before functions, so globals are visible in function bodies)
+    mod->global_count = ast->global_count;
+    mod->globals = ctx_.arena.makeArray<HIRGlobalDecl*>(ast->global_count);
+    for (uint32_t i = 0; i < ast->global_count; ++i) {
+        auto* gd = ast->globals[i];
+        auto* hgd = ctx_.arena.make<HIRGlobalDecl>();
+        hgd->name = ctx_.strings.intern(gd->name);
+        hgd->type_id = resolveType(gd->type);
+        hgd->is_mutable = gd->is_mutable;
+        hgd->loc = gd->loc;
+        if (gd->init) {
+            hgd->init = buildExpr(gd->init);
+        } else {
+            hgd->init = nullptr;
+        }
+        mod->globals[i] = hgd;
+        global_vars_[hgd->name] = hgd;
     }
 
     // Functions
@@ -777,18 +804,15 @@ HIRModule* HIRBuilder::build(const Module* ast) {
         for (uint32_t j = 0; j < id->method_count; ++j) {
             auto* fn = id->methods[j];
             auto method_name = ctx_.strings.intern(fn->name);
-            // Build mangled name
             std::string mangled = std::string(type_name) + "_" + std::string(method_name);
             char* buf = ctx_.arena.makeArray<char>(mangled.size());
             std::memcpy(buf, mangled.data(), mangled.size());
             auto interned_mangled = ctx_.strings.intern(std::string_view(buf, mangled.size()));
 
-            // Build the function with the mangled name
-            // Temporarily rename the FnDecl so buildFn uses the mangled name
             auto original_name = fn->name;
             fn->name = interned_mangled;
             HIRFnDecl* hfn = buildFn(fn);
-            fn->name = original_name;  // restore
+            fn->name = original_name;
             impl_fns.push_back(hfn);
         }
     }
@@ -1165,6 +1189,17 @@ HIRExpr* HIRBuilder::buildIdent(const Expr* expr) {
             e->type = outer_it->second;
             return e;
         }
+    }
+
+    // Check if it's a global variable
+    auto gv_it = global_types_.find(ident->name);
+    if (gv_it != global_types_.end()) {
+        auto* e = ctx_.arena.make<HIRIdentExpr>();
+        e->kind = HIRExpr::Kind::Ident;
+        e->loc = expr->loc;
+        e->name = ctx_.strings.intern(ident->name);
+        e->type = gv_it->second;
+        return e;
     }
 
     // Check if it's a function name → FnRef (function pointer)
@@ -2647,6 +2682,24 @@ HIRStmt* HIRBuilder::buildStmt(const Stmt* stmt) {
             s->kind = HIRStmt::Kind::Assign;
             s->loc = stmt->loc;
             s->name = ctx_.strings.intern(assign->name);
+
+            // Check global variables first
+            auto gv_it = global_vars_.find(assign->name);
+            if (gv_it != global_vars_.end()) {
+                if (!gv_it->second->is_mutable) {
+                    ctx_.diag.error(stmt->loc, std::string("cannot assign to immutable global '") +
+                                std::string(assign->name) + "'; use 'static var' instead of 'static val'");
+                    s->value = buildExpr(assign->value);
+                    return s;
+                }
+                TypeId gtype = gv_it->second->type_id;
+                s->value = buildExpr(assign->value, gtype);
+                if (s->value->type != TypeTable::Error && s->value->type != gtype) {
+                    ctx_.diag.error(stmt->loc, std::string("assignment type mismatch: expected ") +
+                                ctx_.types.name(gtype) + ", got " + ctx_.types.name(s->value->type));
+                }
+                return s;
+            }
 
             auto it = local_vars_.find(assign->name);
             if (it == local_vars_.end()) {

@@ -457,6 +457,15 @@ struct FnDecl {
     bool has_effect_clause = false;  // true if "with ..." clause present (including "with pure")
 };
 
+// --- Global variable declaration ---
+struct GlobalDecl {
+    std::string_view name;
+    TypeRef type;
+    Expr* init;              // initializer expression (nullptr for .bss)
+    bool is_mutable;         // true = "static var", false = "static val"
+    SourceLocation loc;
+};
+
 // --- Import declaration ---
 struct ImportDecl {
     std::string_view module_path;   // "kern.types"
@@ -488,6 +497,8 @@ struct Module {
     uint32_t trait_count;
     ImplDecl** impls;
     uint32_t impl_count;
+    GlobalDecl** globals;
+    uint32_t global_count;
 };
 
 // AST dumper

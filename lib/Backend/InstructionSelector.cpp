@@ -262,6 +262,8 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
         case LIROp::CompilerFence:  break;  // no instruction emitted
         case LIROp::PercpuLoad:     selectPercpuLoad(instr); break;
         case LIROp::PercpuStore:    selectPercpuStore(instr); break;
+        case LIROp::LoadGlobal:     selectLoadGlobal(instr); break;
+        case LIROp::StoreGlobal:    selectStoreGlobal(instr); break;
     }
 }
 
@@ -1574,6 +1576,24 @@ void InstructionSelector::selectPercpuStore(const LIRInstr& instr) {
     mi.operand_count = 2;
     mi.inline_ops[0] = MachOperand::virt(instr.percpu_store.offset);
     mi.inline_ops[1] = MachOperand::virt(instr.percpu_store.value);
+    emit(mi);
+}
+
+void InstructionSelector::selectLoadGlobal(const LIRInstr& instr) {
+    MachInstr mi(X86Op::MovLoadGlobal);
+    mi.width = widthOf(instr.type);
+    mi.operand_count = 1;
+    mi.inline_ops[0] = MachOperand::virt(instr.result);
+    mi.global_label = instr.load_global.label;
+    emit(mi);
+}
+
+void InstructionSelector::selectStoreGlobal(const LIRInstr& instr) {
+    MachInstr mi(X86Op::MovStoreGlobal);
+    mi.width = widthOf(instr.type);
+    mi.operand_count = 1;
+    mi.inline_ops[0] = MachOperand::virt(instr.store_global.value);
+    mi.global_label = instr.store_global.label;
     emit(mi);
 }
 

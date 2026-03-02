@@ -203,6 +203,10 @@ enum class X86Op : uint8_t {
     // Per-CPU data (GS segment)
     GsLoad,         // mov dst, [gs:offset]
     GsStore,        // mov [gs:offset], src
+
+    // Global variables (.data/.bss/.rodata)
+    MovLoadGlobal,  // mov dst, [rel label]
+    MovStoreGlobal, // mov [rel label], src
 };
 
 const char* x86OpName(X86Op op);
@@ -242,6 +246,9 @@ struct MachInstr {
 
     // For InlineAsm instructions
     MachInlineAsmData asm_data = {};
+
+    // For global variable access (MovLoadGlobal/MovStoreGlobal)
+    std::string_view global_label;
 
     MachInstr() : op(X86Op::Nop) {
         std::memset(inline_ops, 0, sizeof(inline_ops));

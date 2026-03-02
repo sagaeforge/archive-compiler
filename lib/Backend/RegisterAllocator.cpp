@@ -78,8 +78,9 @@ static bool isSSEOp(X86Op op) {
 
 static void scanOperandDefs(const MachInstr& instr, uint32_t idx,
                              std::unordered_map<uint32_t, LiveInterval>& intervals) {
-    // MovStore/FloatStore have no def — both operands are uses
-    if (instr.op == X86Op::MovStore || instr.op == X86Op::FloatStore) return;
+    // MovStore/FloatStore/MovStoreGlobal have no def — operands are uses
+    if (instr.op == X86Op::MovStore || instr.op == X86Op::FloatStore ||
+        instr.op == X86Op::MovStoreGlobal) return;
 
     // FloatLoad: dst is SSE (XMM), src is GPR
     bool is_sse = isSSEOp(instr.op) || instr.op == X86Op::FloatLoad;
@@ -105,7 +106,8 @@ static void scanOperandUses(const MachInstr& instr, uint32_t idx,
         instr.op == X86Op::Push || instr.op == X86Op::Call ||
         instr.op == X86Op::Jmp || instr.op == X86Op::Jcc ||
         instr.op == X86Op::Ucomisd || instr.op == X86Op::Ucomiss ||
-        instr.op == X86Op::MovStore || instr.op == X86Op::FloatStore) {
+        instr.op == X86Op::MovStore || instr.op == X86Op::FloatStore ||
+        instr.op == X86Op::MovStoreGlobal) {
         start = 0;  // MovStore: both ptr and val are uses
     }
     // Setcc: operand[0] is dst (def)

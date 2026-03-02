@@ -1,0 +1,5 @@
+static val ANSWER: i64 = 42
+
+fn main() -> i64 {
+    ANSWER
+}

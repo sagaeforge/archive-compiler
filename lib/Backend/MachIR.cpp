@@ -129,6 +129,8 @@ const char* x86OpName(X86Op op) {
         case X86Op::Lfence:      return "lfence";
         case X86Op::GsLoad:      return "gs_load";
         case X86Op::GsStore:     return "gs_store";
+        case X86Op::MovLoadGlobal:  return "mov_load_global";
+        case X86Op::MovStoreGlobal: return "mov_store_global";
     }
     return "?";
 }

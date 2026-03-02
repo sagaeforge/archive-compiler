@@ -429,6 +429,7 @@ Module* Parser::parseModule() {
     std::vector<TraitDecl*> traits;
     std::vector<ImplDecl*> impls;
     std::vector<ImportDecl*> imports;
+    std::vector<GlobalDecl*> globals;
     std::string_view module_name;
 
     // Register builtin struct-like types so struct literal syntax works
@@ -587,6 +588,9 @@ Module* Parser::parseModule() {
         } else if (check(TokenKind::KwImpl)) {
             auto* id = parseImplDecl();
             if (id) impls.push_back(id);
+        } else if (check(TokenKind::KwStatic)) {
+            auto* gd = parseGlobalDecl();
+            if (gd) globals.push_back(gd);
         } else if (peek().kind == TokenKind::Ident && peek().text == "static_assert") {
             advance(); // consume 'static_assert'
             expect(TokenKind::LParen, "expected '(' after static_assert");
@@ -759,6 +763,11 @@ Module* Parser::parseModule() {
     for (size_t j = 0; j < imports.size(); ++j) {
         mod->imports[j] = imports[j];
     }
+    mod->global_count = static_cast<uint32_t>(globals.size());
+    mod->globals = arena_.makeArray<GlobalDecl*>(globals.size());
+    for (size_t j = 0; j < globals.size(); ++j) {
+        mod->globals[j] = globals[j];
+    }
     return mod;
 }
 
@@ -909,6 +918,37 @@ ImplDecl* Parser::parseImplDecl() {
     }
     id->loc = loc;
     return id;
+}
+
+// --- Global Variable Declaration: static val/var name: Type = expr ---
+GlobalDecl* Parser::parseGlobalDecl() {
+    SourceLocation loc = peek().loc;
+    advance(); // consume 'static'
+
+    bool is_mutable = false;
+    if (check(TokenKind::KwVar)) {
+        is_mutable = true;
+        advance();
+    } else if (check(TokenKind::KwVal)) {
+        advance();
+    } else {
+        diag_.error(peek().loc, "expected 'val' or 'var' after 'static'");
+        return nullptr;
+    }
+
+    Token name = expect(TokenKind::Ident, "expected name in static declaration");
+    expect(TokenKind::Colon, "expected ':' after static variable name");
+    TypeRef type = parseType();
+    expect(TokenKind::Eq, "expected '=' in static declaration");
+    Expr* init = parseExpr();
+
+    auto* gd = arena_.make<GlobalDecl>();
+    gd->name = name.text;
+    gd->type = type;
+    gd->init = init;
+    gd->is_mutable = is_mutable;
+    gd->loc = loc;
+    return gd;
 }
 
 // --- Struct Declaration ---

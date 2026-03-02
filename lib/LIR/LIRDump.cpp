@@ -67,6 +67,8 @@ const char* lirOpName(LIROp op) {
         case LIROp::CompilerFence:  return "compiler_fence";
         case LIROp::PercpuLoad:     return "percpu_load";
         case LIROp::PercpuStore:    return "percpu_store";
+        case LIROp::LoadGlobal:     return "load_global";
+        case LIROp::StoreGlobal:    return "store_global";
     }
     return "?";
 }
@@ -210,6 +212,12 @@ void dumpLIRInstr(const LIRInstr& i, const TypeTable& types, std::ostream& out) 
         case LIROp::PercpuStore:
             out << " %v" << i.percpu_store.offset << ", %v" << i.percpu_store.value;
             break;
+        case LIROp::LoadGlobal:
+            out << " @" << i.load_global.label;
+            break;
+        case LIROp::StoreGlobal:
+            out << " @" << i.store_global.label << ", %v" << i.store_global.value;
+            break;
     }
 
     out << " : " << types.name(i.type);
@@ -271,6 +279,10 @@ void dumpLIR(const LIRModule* mod, const TypeTable& types, std::ostream& out) {
                     else out << ch;
                 }
                 out << "\" (" << g.string_lit.length << " bytes)";
+            } else if (g.kind == GlobalData::Variable) {
+                out << (g.variable.is_mutable ? "var " : "val ")
+                    << g.label << " = " << g.variable.init_value
+                    << " (" << static_cast<int>(g.variable.size) << "B)";
             } else {
                 out << "float " << g.float_const.value
                     << (g.float_const.is_f32 ? " (f32)" : " (f64)");

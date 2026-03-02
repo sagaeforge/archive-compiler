@@ -412,6 +412,14 @@ struct HIRUnionDecl {
     SourceLocation loc;
 };
 
+struct HIRGlobalDecl {
+    std::string_view name;  // interned
+    TypeId type_id;
+    HIRExpr* init;          // initializer expression (must be constant)
+    bool is_mutable;        // static var vs static val
+    SourceLocation loc;
+};
+
 // ============================================================================
 // HIR Module (top-level container)
 // ============================================================================
@@ -428,6 +436,9 @@ struct HIRModule {
 
     HIRUnionDecl** unions;
     uint32_t union_count;
+
+    HIRGlobalDecl** globals;
+    uint32_t global_count;
 };
 
 } // namespace kern
