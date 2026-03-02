@@ -1,0 +1,15 @@
+struct Pair { val a: i64, val b: i64 }
+
+fn fib_pair(n: i64) -> Pair {
+    if n <= 1 {
+        Pair { a: 0, b: 1 }
+    } else {
+        val p: Pair = fib_pair(n - 1)
+        Pair { a: p.b, b: p.a + p.b }
+    }
+}
+
+fn main() -> i64 {
+    val p: Pair = fib_pair(8)
+    p.b - p.a
+}
