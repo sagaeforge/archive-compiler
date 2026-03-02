@@ -244,6 +244,23 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             }
             break;
 
+        case X86Op::FloatLoad:
+            // movss/movsd xmm, [gpr]  — float load from pointer
+            out_ << (instr.width == 32 ? "movss" : "movsd") << " ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", [";
+            emitOperand(instr.src1(), 64);
+            out_ << "]";
+            break;
+
+        case X86Op::FloatStore:
+            // movss/movsd [gpr], xmm  — float store to pointer
+            out_ << (instr.width == 32 ? "movss" : "movsd") << " [";
+            emitOperand(instr.dst(), 64);
+            out_ << "], ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
         case X86Op::Addss:
         case X86Op::Addsd:
         case X86Op::Subss:

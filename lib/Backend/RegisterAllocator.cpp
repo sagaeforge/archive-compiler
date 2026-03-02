@@ -78,10 +78,11 @@ static bool isSSEOp(X86Op op) {
 
 static void scanOperandDefs(const MachInstr& instr, uint32_t idx,
                              std::unordered_map<uint32_t, LiveInterval>& intervals) {
-    // MovStore has no def — both operands are uses
-    if (instr.op == X86Op::MovStore) return;
+    // MovStore/FloatStore have no def — both operands are uses
+    if (instr.op == X86Op::MovStore || instr.op == X86Op::FloatStore) return;
 
-    bool is_sse = isSSEOp(instr.op);
+    // FloatLoad: dst is SSE (XMM), src is GPR
+    bool is_sse = isSSEOp(instr.op) || instr.op == X86Op::FloatLoad;
 
     // For most instructions, operand[0] is the destination (def)
     if (instr.operand_count > 0) {
@@ -104,7 +105,7 @@ static void scanOperandUses(const MachInstr& instr, uint32_t idx,
         instr.op == X86Op::Push || instr.op == X86Op::Call ||
         instr.op == X86Op::Jmp || instr.op == X86Op::Jcc ||
         instr.op == X86Op::Ucomisd || instr.op == X86Op::Ucomiss ||
-        instr.op == X86Op::MovStore) {
+        instr.op == X86Op::MovStore || instr.op == X86Op::FloatStore) {
         start = 0;  // MovStore: both ptr and val are uses
     }
     // Setcc: operand[0] is dst (def)
@@ -117,12 +118,25 @@ static void scanOperandUses(const MachInstr& instr, uint32_t idx,
 
     bool is_sse = isSSEOp(instr.op);
 
-    for (uint8_t i = start; i < instr.operand_count; ++i) {
-        const auto& op = instr.operand(i);
-        if (op.isVirtual()) {
-            recordVRegUse(intervals, op.vreg, idx, is_sse);
-        } else if (op.isPhysical()) {
-            recordPhysUse(intervals, op.phys, idx);
+    // FloatStore: operand[0]=ptr(GPR), operand[1]=value(XMM) — mixed registers
+    if (instr.op == X86Op::FloatStore) {
+        for (uint8_t i = start; i < instr.operand_count; ++i) {
+            const auto& op = instr.operand(i);
+            bool op_sse = (i == 1);  // value operand is XMM
+            if (op.isVirtual()) {
+                recordVRegUse(intervals, op.vreg, idx, op_sse);
+            } else if (op.isPhysical()) {
+                recordPhysUse(intervals, op.phys, idx);
+            }
+        }
+    } else {
+        for (uint8_t i = start; i < instr.operand_count; ++i) {
+            const auto& op = instr.operand(i);
+            if (op.isVirtual()) {
+                recordVRegUse(intervals, op.vreg, idx, is_sse);
+            } else if (op.isPhysical()) {
+                recordPhysUse(intervals, op.phys, idx);
+            }
         }
     }
 
@@ -463,14 +477,16 @@ static bool needsFixup(const MachInstr& instr) {
         instr.operand(1).isStack()) {
         return true;
     }
-    // MovLoad: mov dst, [src] — either operand being stack needs fixup
-    if (instr.op == X86Op::MovLoad && instr.operand_count >= 2) {
+    // MovLoad/FloatLoad: load from [src] — either operand being stack needs fixup
+    if ((instr.op == X86Op::MovLoad || instr.op == X86Op::FloatLoad) &&
+        instr.operand_count >= 2) {
         if (instr.operand(0).isStack() || instr.operand(1).isStack()) {
             return true;
         }
     }
-    // MovStore: mov [dst], src — either operand being stack needs fixup
-    if (instr.op == X86Op::MovStore && instr.operand_count >= 2) {
+    // MovStore/FloatStore: store to [dst] — either operand being stack needs fixup
+    if ((instr.op == X86Op::MovStore || instr.op == X86Op::FloatStore) &&
+        instr.operand_count >= 2) {
         if (instr.operand(0).isStack() || instr.operand(1).isStack()) {
             return true;
         }
@@ -619,6 +635,58 @@ void RegisterAllocator::rewrite(MachFunction& fn, const RegAllocation& alloc) {
                     instr.inline_ops[1] = MachOperand::precolored(scratch);
                     fixed.push_back(instr);
                 }
+            } else if (instr.op == X86Op::FloatLoad && instr.operand_count >= 2) {
+                // FloatLoad: movsd xmm_dst, [gpr_ptr]
+                // If ptr is spilled: load ptr to r11 first
+                bool dst_stack = instr.operand(0).isStack();
+                bool ptr_stack = instr.operand(1).isStack();
+                if (ptr_stack) {
+                    auto stack_ptr = instr.operand(1);
+                    fixed.push_back(makeMov(MachOperand::precolored(scratch),
+                                            stack_ptr, 64));
+                    instr.inline_ops[1] = MachOperand::precolored(scratch);
+                }
+                if (dst_stack) {
+                    // Result goes to stack: use xmm15 scratch then store
+                    PhysReg xmm_scratch = PhysReg::XMM15;
+                    auto stack_dst = instr.operand(0);
+                    instr.inline_ops[0] = MachOperand::precolored(xmm_scratch);
+                    fixed.push_back(instr);
+                    X86Op sse_op = (instr.width == 32) ? X86Op::Movss : X86Op::Movsd;
+                    MachInstr store(sse_op);
+                    store.width = instr.width;
+                    store.operand_count = 2;
+                    store.inline_ops[0] = stack_dst;
+                    store.inline_ops[1] = MachOperand::precolored(xmm_scratch);
+                    fixed.push_back(store);
+                } else {
+                    fixed.push_back(instr);
+                }
+            } else if (instr.op == X86Op::FloatStore && instr.operand_count >= 2) {
+                // FloatStore: movsd [gpr_ptr], xmm_val
+                // If ptr is spilled: load ptr to r11 first
+                // If val is spilled: load to xmm15 first
+                bool ptr_stack = instr.operand(0).isStack();
+                bool val_stack = instr.operand(1).isStack();
+                if (ptr_stack) {
+                    auto stack_ptr = instr.operand(0);
+                    fixed.push_back(makeMov(MachOperand::precolored(scratch),
+                                            stack_ptr, 64));
+                    instr.inline_ops[0] = MachOperand::precolored(scratch);
+                }
+                if (val_stack) {
+                    PhysReg xmm_scratch = PhysReg::XMM15;
+                    auto stack_val = instr.operand(1);
+                    X86Op sse_op = (instr.width == 32) ? X86Op::Movss : X86Op::Movsd;
+                    MachInstr load(sse_op);
+                    load.width = instr.width;
+                    load.operand_count = 2;
+                    load.inline_ops[0] = MachOperand::precolored(xmm_scratch);
+                    load.inline_ops[1] = stack_val;
+                    fixed.push_back(load);
+                    instr.inline_ops[1] = MachOperand::precolored(xmm_scratch);
+                }
+                fixed.push_back(instr);
             } else if (isSSEOp(instr.op) && instr.operand_count >= 2) {
                 // SSE with stack operand(s)
                 // Use XMM15 as scratch for SSE instructions

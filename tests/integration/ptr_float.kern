@@ -1,0 +1,8 @@
+fn main() -> i64 {
+    var x: f64 = 1.0
+    val p: Ptr<var f64> = &var x
+    *p = 42.0
+    val q: Ptr<f64> = &x
+    val v: f64 = *q
+    if v == 42.0 { 42 } else { 1 }
+}

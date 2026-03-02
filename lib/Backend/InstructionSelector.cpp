@@ -676,8 +676,8 @@ void InstructionSelector::selectLoad(const LIRInstr& instr) {
     VReg ptr = instr.load.ptr;
 
     if (isFloat(instr.type)) {
-        X86Op op = (w == 32) ? X86Op::Movss : X86Op::Movsd;
-        MachInstr mi(op);
+        // Float load from pointer: movss/movsd xmm, [gpr]
+        MachInstr mi(X86Op::FloatLoad);
         mi.width = w;
         mi.operand_count = 2;
         mi.inline_ops[0] = MachOperand::virt(dst);
@@ -695,19 +695,22 @@ void InstructionSelector::selectLoad(const LIRInstr& instr) {
 
 void InstructionSelector::selectStore(const LIRInstr& instr) {
     // mov [ptr], value  — store to memory at ptr
-    uint8_t w = widthOf(instr.type);
     VReg ptr = instr.store.ptr;
     VReg val = instr.store.value;
 
-    if (isFloat(instr.type)) {
-        X86Op op = (w == 32) ? X86Op::Movss : X86Op::Movsd;
-        MachInstr mi(op);
-        mi.width = w;
+    // Check if the value vreg is a float (store type is Unit, not the value type)
+    auto fit = float_vregs_.find(val);
+    if (fit != float_vregs_.end()) {
+        // Float store to pointer: movss/movsd [gpr], xmm
+        uint8_t fw = fit->second;
+        MachInstr mi(X86Op::FloatStore);
+        mi.width = fw;
         mi.operand_count = 2;
         mi.inline_ops[0] = MachOperand::virt(ptr);
         mi.inline_ops[1] = MachOperand::virt(val);
         emit(mi);
     } else {
+        uint8_t w = widthOf(instr.type);
         MachInstr mi(X86Op::MovStore);
         mi.width = w;
         mi.operand_count = 2;

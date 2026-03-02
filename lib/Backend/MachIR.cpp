@@ -101,6 +101,8 @@ const char* x86OpName(X86Op op) {
         case X86Op::Ret:    return "ret";
         case X86Op::Movss:  return "movss";
         case X86Op::Movsd:  return "movsd";
+        case X86Op::FloatLoad:  return "float_load";
+        case X86Op::FloatStore: return "float_store";
         case X86Op::Addss:  return "addss";
         case X86Op::Addsd:  return "addsd";
         case X86Op::Subss:  return "subss";

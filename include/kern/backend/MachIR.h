@@ -174,6 +174,8 @@ enum class X86Op : uint8_t {
 
     // SSE
     Movss, Movsd,
+    FloatLoad,   // movss/movsd xmm, [gpr]  — float load from ptr
+    FloatStore,  // movss/movsd [gpr], xmm  — float store to ptr
     Addss, Addsd, Subss, Subsd,
     Mulss, Mulsd, Divss, Divsd,
     Ucomisd, Ucomiss,
