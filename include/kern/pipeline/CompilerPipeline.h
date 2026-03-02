@@ -42,6 +42,7 @@ private:
     Module* parse(const std::string& source, const std::string& filename);
     HIRModule* buildHIR(Module* ast);
     LIRModule* buildLIR(HIRModule* hir);
+    void optimizeLIR(LIRModule* lir);
     MachModule* buildMachIR(LIRModule* lir);
     void emitASM(MachModule* mach, LIRModule* lir, std::ostream& asm_out,
                  bool freestanding = false);

@@ -1,6 +1,7 @@
 #include "kern/lir/LIR.h"
 #include "kern/lir/LIRDump.h"
 #include "kern/lir/LIRPass.h"
+#include "kern/lir/LIRPasses.h"
 #include "kern/support/CompilationContext.h"
 #include <gtest/gtest.h>
 #include <sstream>
@@ -477,6 +478,285 @@ TEST_F(LIRTest, PassManagerRuns) {
 
 TEST_F(LIRTest, INVALID_VREG_Value) {
     EXPECT_EQ(INVALID_VREG, UINT32_MAX);
+}
+
+// ============================================================================
+// Optimization pass tests
+// ============================================================================
+
+// Helper: build a single-function, single-block LIR module
+struct SimpleModule {
+    LIRModule mod;
+    LIRFunction fn;
+    LIRBlock block;
+    LIRInstr* instrs;
+    uint32_t instr_count;
+};
+
+static SimpleModule makeSimpleModule(CompilationContext& ctx, LIRInstr* instrs, uint32_t count) {
+    SimpleModule m{};
+    m.instrs = ctx.arena.makeArray<LIRInstr>(count);
+    for (uint32_t i = 0; i < count; ++i) m.instrs[i] = instrs[i];
+    m.instr_count = count;
+
+    m.block.label = "entry";
+    m.block.param_types = nullptr;
+    m.block.param_count = 0;
+    m.block.instrs = m.instrs;
+    m.block.instr_count = count;
+
+    auto* blocks = ctx.arena.makeArray<LIRBlock>(1);
+    blocks[0] = m.block;
+
+    m.fn.name = "test";
+    m.fn.param_types = nullptr;
+    m.fn.param_count = 0;
+    m.fn.return_type = TypeTable::I64;
+    m.fn.next_vreg = 10;
+    m.fn.purity = 0;
+    m.fn.is_recursive = false;
+    m.fn.is_tail_recursive = false;
+    m.fn.is_intrinsic = false;
+    m.fn.is_naked = false;
+    m.fn.is_interrupt = false;
+    m.fn.blocks = blocks;
+    m.fn.block_count = 1;
+
+    auto* fns = ctx.arena.makeArray<LIRFunction>(1);
+    fns[0] = m.fn;
+
+    m.mod.functions = fns;
+    m.mod.fn_count = 1;
+    m.mod.globals = nullptr;
+    m.mod.global_count = 0;
+
+    return m;
+}
+
+TEST_F(LIRTest, ConstFoldAdd) {
+    LIRInstr instrs[3];
+    instrs[0] = makeConstInt(0, 10, TypeTable::I64);
+    instrs[1] = makeConstInt(1, 32, TypeTable::I64);
+    instrs[2] = makeBinOp(LIROp::Add, 2, 0, 1, TypeTable::I64);
+
+    auto m = makeSimpleModule(ctx, instrs, 3);
+    ConstFoldPass pass;
+    pass.run(m.mod, ctx);
+
+    auto& folded = m.mod.functions[0].blocks[0].instrs[2];
+    EXPECT_EQ(folded.op, LIROp::ConstInt);
+    EXPECT_EQ(folded.const_int.value, 42);
+}
+
+TEST_F(LIRTest, ConstFoldSub) {
+    LIRInstr instrs[3];
+    instrs[0] = makeConstInt(0, 50, TypeTable::I64);
+    instrs[1] = makeConstInt(1, 8, TypeTable::I64);
+    instrs[2] = makeBinOp(LIROp::Sub, 2, 0, 1, TypeTable::I64);
+
+    auto m = makeSimpleModule(ctx, instrs, 3);
+    ConstFoldPass pass;
+    pass.run(m.mod, ctx);
+
+    auto& folded = m.mod.functions[0].blocks[0].instrs[2];
+    EXPECT_EQ(folded.op, LIROp::ConstInt);
+    EXPECT_EQ(folded.const_int.value, 42);
+}
+
+TEST_F(LIRTest, ConstFoldMul) {
+    LIRInstr instrs[3];
+    instrs[0] = makeConstInt(0, 6, TypeTable::I64);
+    instrs[1] = makeConstInt(1, 7, TypeTable::I64);
+    instrs[2] = makeBinOp(LIROp::Mul, 2, 0, 1, TypeTable::I64);
+
+    auto m = makeSimpleModule(ctx, instrs, 3);
+    ConstFoldPass pass;
+    pass.run(m.mod, ctx);
+
+    auto& folded = m.mod.functions[0].blocks[0].instrs[2];
+    EXPECT_EQ(folded.op, LIROp::ConstInt);
+    EXPECT_EQ(folded.const_int.value, 42);
+}
+
+TEST_F(LIRTest, ConstFoldDiv) {
+    LIRInstr instrs[3];
+    instrs[0] = makeConstInt(0, 84, TypeTable::I64);
+    instrs[1] = makeConstInt(1, 2, TypeTable::I64);
+    instrs[2] = makeBinOp(LIROp::Div, 2, 0, 1, TypeTable::I64);
+
+    auto m = makeSimpleModule(ctx, instrs, 3);
+    ConstFoldPass pass;
+    pass.run(m.mod, ctx);
+
+    auto& folded = m.mod.functions[0].blocks[0].instrs[2];
+    EXPECT_EQ(folded.op, LIROp::ConstInt);
+    EXPECT_EQ(folded.const_int.value, 42);
+}
+
+TEST_F(LIRTest, ConstFoldDivByZero) {
+    LIRInstr instrs[3];
+    instrs[0] = makeConstInt(0, 42, TypeTable::I64);
+    instrs[1] = makeConstInt(1, 0, TypeTable::I64);
+    instrs[2] = makeBinOp(LIROp::Div, 2, 0, 1, TypeTable::I64);
+
+    auto m = makeSimpleModule(ctx, instrs, 3);
+    ConstFoldPass pass;
+    pass.run(m.mod, ctx);
+
+    // Should NOT fold — division by zero
+    auto& notfolded = m.mod.functions[0].blocks[0].instrs[2];
+    EXPECT_EQ(notfolded.op, LIROp::Div);
+}
+
+TEST_F(LIRTest, ConstFoldICmpEq) {
+    LIRInstr instrs[3];
+    instrs[0] = makeConstInt(0, 42, TypeTable::I64);
+    instrs[1] = makeConstInt(1, 42, TypeTable::I64);
+    instrs[2] = makeBinOp(LIROp::ICmpEq, 2, 0, 1, TypeTable::Bool);
+
+    auto m = makeSimpleModule(ctx, instrs, 3);
+    ConstFoldPass pass;
+    pass.run(m.mod, ctx);
+
+    auto& folded = m.mod.functions[0].blocks[0].instrs[2];
+    EXPECT_EQ(folded.op, LIROp::ConstBool);
+    EXPECT_TRUE(folded.const_bool.value);
+}
+
+TEST_F(LIRTest, ConstFoldNeg) {
+    LIRInstr instrs[2];
+    instrs[0] = makeConstInt(0, -42, TypeTable::I64);
+    LIRInstr neg{};
+    neg.op = LIROp::Neg;
+    neg.result = 1;
+    neg.type = TypeTable::I64;
+    neg.unary.operand = 0;
+    instrs[1] = neg;
+
+    auto m = makeSimpleModule(ctx, instrs, 2);
+    ConstFoldPass pass;
+    pass.run(m.mod, ctx);
+
+    auto& folded = m.mod.functions[0].blocks[0].instrs[1];
+    EXPECT_EQ(folded.op, LIROp::ConstInt);
+    EXPECT_EQ(folded.const_int.value, 42);
+}
+
+TEST_F(LIRTest, ConstFoldChained) {
+    // (10 + 20) + 12 = 42 — requires two ConstFold passes or chained tracking
+    LIRInstr instrs[5];
+    instrs[0] = makeConstInt(0, 10, TypeTable::I64);
+    instrs[1] = makeConstInt(1, 20, TypeTable::I64);
+    instrs[2] = makeBinOp(LIROp::Add, 2, 0, 1, TypeTable::I64);
+    instrs[3] = makeConstInt(3, 12, TypeTable::I64);
+    instrs[4] = makeBinOp(LIROp::Add, 4, 2, 3, TypeTable::I64);
+
+    auto m = makeSimpleModule(ctx, instrs, 5);
+    ConstFoldPass pass;
+    pass.run(m.mod, ctx);
+
+    // First add should fold to const 30
+    auto& first = m.mod.functions[0].blocks[0].instrs[2];
+    EXPECT_EQ(first.op, LIROp::ConstInt);
+    EXPECT_EQ(first.const_int.value, 30);
+
+    // Second add should also fold (chained) to const 42
+    auto& second = m.mod.functions[0].blocks[0].instrs[4];
+    EXPECT_EQ(second.op, LIROp::ConstInt);
+    EXPECT_EQ(second.const_int.value, 42);
+}
+
+TEST_F(LIRTest, DCERemovesUnused) {
+    // const_int %0 = 42 (used by ret)
+    // const_int %1 = 99 (unused → should be removed)
+    // ret %0
+    LIRInstr instrs[3];
+    instrs[0] = makeConstInt(0, 42, TypeTable::I64);
+    instrs[1] = makeConstInt(1, 99, TypeTable::I64);
+    instrs[2] = makeRet(0, TypeTable::I64);
+
+    auto m = makeSimpleModule(ctx, instrs, 3);
+    DeadCodeElimPass pass;
+    pass.run(m.mod, ctx);
+
+    auto& block = m.mod.functions[0].blocks[0];
+    EXPECT_EQ(block.instr_count, 2u);
+    EXPECT_EQ(block.instrs[0].op, LIROp::ConstInt);
+    EXPECT_EQ(block.instrs[0].const_int.value, 42);
+    EXPECT_EQ(block.instrs[1].op, LIROp::Ret);
+}
+
+TEST_F(LIRTest, DCEKeepsSideEffects) {
+    // store %0, %1 (side effect → must keep even though no result)
+    LIRInstr instrs[3];
+    instrs[0] = makeConstInt(0, 42, TypeTable::I64);
+    instrs[1] = makeConstInt(1, 99, TypeTable::I64);
+    LIRInstr store{};
+    store.op = LIROp::Store;
+    store.result = INVALID_VREG;
+    store.type = TypeTable::Unit;
+    store.store.ptr = 0;
+    store.store.value = 1;
+    instrs[2] = store;
+
+    auto m = makeSimpleModule(ctx, instrs, 3);
+    DeadCodeElimPass pass;
+    pass.run(m.mod, ctx);
+
+    // All 3 instructions should remain (store uses both vregs, and store has side effects)
+    auto& block = m.mod.functions[0].blocks[0];
+    EXPECT_EQ(block.instr_count, 3u);
+}
+
+TEST_F(LIRTest, ConstFoldBitwise) {
+    // 0xFF & 0x0F = 0x0F
+    LIRInstr instrs[3];
+    instrs[0] = makeConstInt(0, 0xFF, TypeTable::I64);
+    instrs[1] = makeConstInt(1, 0x0F, TypeTable::I64);
+    instrs[2] = makeBinOp(LIROp::BAnd, 2, 0, 1, TypeTable::I64);
+
+    auto m = makeSimpleModule(ctx, instrs, 3);
+    ConstFoldPass pass;
+    pass.run(m.mod, ctx);
+
+    auto& folded = m.mod.functions[0].blocks[0].instrs[2];
+    EXPECT_EQ(folded.op, LIROp::ConstInt);
+    EXPECT_EQ(folded.const_int.value, 0x0F);
+}
+
+TEST_F(LIRTest, ConstFoldShift) {
+    // 1 << 5 = 32
+    LIRInstr instrs[3];
+    instrs[0] = makeConstInt(0, 1, TypeTable::I64);
+    instrs[1] = makeConstInt(1, 5, TypeTable::I64);
+    instrs[2] = makeBinOp(LIROp::Shl, 2, 0, 1, TypeTable::I64);
+
+    auto m = makeSimpleModule(ctx, instrs, 3);
+    ConstFoldPass pass;
+    pass.run(m.mod, ctx);
+
+    auto& folded = m.mod.functions[0].blocks[0].instrs[2];
+    EXPECT_EQ(folded.op, LIROp::ConstInt);
+    EXPECT_EQ(folded.const_int.value, 32);
+}
+
+TEST_F(LIRTest, ConstFoldNotBool) {
+    LIRInstr instrs[2];
+    instrs[0] = makeConstBool(0, true);
+    LIRInstr notI{};
+    notI.op = LIROp::Not;
+    notI.result = 1;
+    notI.type = TypeTable::Bool;
+    notI.unary.operand = 0;
+    instrs[1] = notI;
+
+    auto m = makeSimpleModule(ctx, instrs, 2);
+    ConstFoldPass pass;
+    pass.run(m.mod, ctx);
+
+    auto& folded = m.mod.functions[0].blocks[0].instrs[1];
+    EXPECT_EQ(folded.op, LIROp::ConstBool);
+    EXPECT_FALSE(folded.const_bool.value);
 }
 
 } // namespace kern

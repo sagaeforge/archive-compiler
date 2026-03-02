@@ -7,6 +7,8 @@
 #include "kern/hir/MonomorphizationPass.h"
 #include "kern/lir/LIRBuilder.h"
 #include "kern/lir/LIRDump.h"
+#include "kern/lir/LIRPass.h"
+#include "kern/lir/LIRPasses.h"
 #include "kern/backend/X86Backend.h"
 #include "kern/backend/Emitter.h"
 #include "kern/backend/MachIRDump.h"
@@ -51,6 +53,15 @@ HIRModule* CompilerPipeline::buildHIR(Module* ast) {
 LIRModule* CompilerPipeline::buildLIR(HIRModule* hir) {
     LIRBuilder builder(ctx_);
     return builder.build(hir);
+}
+
+void CompilerPipeline::optimizeLIR(LIRModule* lir) {
+    LIRPassManager pm;
+    pm.add<ConstFoldPass>();
+    pm.add<ConstPropPass>();
+    pm.add<ConstFoldPass>();   // second pass catches propagated constants
+    pm.add<DeadCodeElimPass>();
+    pm.run(*lir, ctx_);
 }
 
 MachModule* CompilerPipeline::buildMachIR(LIRModule* lir) {
@@ -206,6 +217,9 @@ int CompilerPipeline::run(const std::string& source, const CompileOptions& opts,
     // --- LIR ---
     LIRModule* lir = buildLIR(hir);
 
+    // --- LIR Optimization ---
+    optimizeLIR(lir);
+
     if (opts.dump_lir) {
         dumpLIR(lir, ctx_.types, out);
         if (!opts.dump_machir && !opts.asm_only) {
@@ -336,6 +350,7 @@ int CompilerPipeline::runMultiFile(const CompileOptions& opts,
         if (!hir || file_ctx.diag.hasErrors()) { file_ctx.diag.printAll(err); return 1; }
 
         LIRModule* lir = file_pipeline.buildLIR(hir);
+        file_pipeline.optimizeLIR(lir);
         MachModule* mach = file_pipeline.buildMachIR(lir);
 
         std::string asm_file = "/tmp/kern_" + std::to_string(getpid()) + "_" +
