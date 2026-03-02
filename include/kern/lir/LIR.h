@@ -257,6 +257,7 @@ struct LIRFunction {
     bool is_interrupt;
     bool is_inline = false;     // @inline — hint to inline
     bool is_noinline = false;   // @noinline — prevent inlining
+    bool is_noreturn = false;   // @noreturn — function never returns
     bool is_pub = false;        // pub fn — export as global symbol
     bool is_extern = false;     // extern "C" fn — external C linkage
     bool is_variadic = false;   // fn(x: T, ...) — C-style varargs

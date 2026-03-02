@@ -395,6 +395,7 @@ LIRFunction LIRBuilder::buildFunction(const HIRFnDecl* fn) {
     lir_fn.is_interrupt = fn->is_interrupt;
     lir_fn.is_inline = fn->is_inline;
     lir_fn.is_noinline = fn->is_noinline;
+    lir_fn.is_noreturn = fn->is_noreturn;
     lir_fn.is_pub = fn->is_pub;
     lir_fn.is_extern = fn->is_extern;
     lir_fn.is_variadic = fn->is_variadic;

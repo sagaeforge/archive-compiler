@@ -783,6 +783,7 @@ Module* Parser::parseModule() {
         bool is_interrupt = false;
         bool is_inline = false;
         bool is_noinline = false;
+        bool is_noreturn = false;
         bool is_const_fn = false;
         bool is_repr_c = false;
         uint8_t repr_backing_size = 0;  // @repr(u8)=1, @repr(u16)=2, etc.
@@ -794,9 +795,11 @@ Module* Parser::parseModule() {
         std::string_view link_name;
         while (check(TokenKind::At)) {
             advance(); // consume '@'
-            // Accept Ident or KwConst (const is a keyword but valid as annotation)
+            // Accept Ident or keywords that double as annotation names
             Token anno;
             if (check(TokenKind::KwConst)) {
+                anno = advance();
+            } else if (check(TokenKind::KwNoreturn)) {
                 anno = advance();
             } else {
                 anno = expect(TokenKind::Ident, "expected annotation name after '@'");
@@ -811,6 +814,8 @@ Module* Parser::parseModule() {
                 is_inline = true;
             } else if (anno.text == "noinline") {
                 is_noinline = true;
+            } else if (anno.text == "noreturn") {
+                is_noreturn = true;
             } else if (anno.text == "const") {
                 is_const_fn = true;
             } else if (anno.text == "cfg") {
@@ -924,6 +929,7 @@ Module* Parser::parseModule() {
                 fn->is_interrupt = is_interrupt;
                 fn->is_inline = is_inline;
                 fn->is_noinline = is_noinline;
+                fn->is_noreturn = is_noreturn;
                 fn->is_const = is_const_fn;
                 fn->is_pub = is_pub;
                 fn->is_extern = is_extern;

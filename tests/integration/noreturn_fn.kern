@@ -1,0 +1,12 @@
+// Test @noreturn function attribute
+// The @noreturn function enters an infinite loop; main exits before calling it.
+
+@noreturn
+fn spin_forever() -> Unit {
+    loop { }
+}
+
+fn main() -> i64 {
+    val x: i64 = 42
+    x
+}
