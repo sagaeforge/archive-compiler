@@ -1,0 +1,13 @@
+struct Entry {
+    key: i64,
+    value: i64
+}
+
+fn main() -> i64 with mem, mut {
+    var data: [Entry; 2] = [Entry { key: 0, value: 0 }, Entry { key: 0, value: 0 }]
+    var idx: i64 = 0
+    data[idx] = Entry { key: 1, value: 10 }
+    idx = 1
+    data[idx] = Entry { key: 2, value: 32 }
+    data[0].value + data[1].value
+}

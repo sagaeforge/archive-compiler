@@ -3473,15 +3473,21 @@ void LIRBuilder::lowerStmt(const HIRStmt* stmt) {
             add.loc = s->loc;
             emit(add);
 
-            // Store value at elem_ptr
-            LIRInstr store{};
-            store.op = LIROp::Store;
-            store.result = INVALID_VREG;
-            store.type = TypeTable::Unit;
-            store.store.ptr = elem_ptr;
-            store.store.value = val;
-            store.loc = s->loc;
-            emit(store);
+            // Store value at elem_ptr — use struct copy for aggregates
+            TypeId val_type = s->value->type;
+            if (isAggregate(val_type)) {
+                uint32_t sz = ctx_.types.sizeOf(val_type);
+                emitStructCopy(elem_ptr, val, sz, s->loc);
+            } else {
+                LIRInstr store{};
+                store.op = LIROp::Store;
+                store.result = INVALID_VREG;
+                store.type = TypeTable::Unit;
+                store.store.ptr = elem_ptr;
+                store.store.value = val;
+                store.loc = s->loc;
+                emit(store);
+            }
             break;
         }
     }
