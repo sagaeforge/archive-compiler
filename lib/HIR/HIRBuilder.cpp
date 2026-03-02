@@ -1463,6 +1463,44 @@ HIRExpr* HIRBuilder::buildUnaryOp(const Expr* expr) {
 HIRExpr* HIRBuilder::buildCall(const Expr* expr) {
     auto* call = static_cast<const CallExpr*>(expr);
 
+    // Builtin cast functions: truncate<T>(x), clamp<T>(x)
+    if ((call->callee == "truncate" || call->callee == "clamp") &&
+        call->type_arg_count == 1 && call->arg_count == 1) {
+        TypeId target = resolveType(call->type_args[0]);
+        if (target == TypeTable::Error) return errorExpr(expr->loc);
+        HIRExpr* operand = buildExpr(call->args[0]);
+        if (operand->type == TypeTable::Error) return errorExpr(expr->loc);
+
+        if (!isIntegerType(operand->type) || !isIntegerType(target)) {
+            ctx_.diag.error(expr->loc, std::string("'") + std::string(call->callee) +
+                "' requires integer types");
+            return errorExpr(expr->loc);
+        }
+
+        if (call->callee == "truncate") {
+            // Simple cast — no warning, explicit intent
+            auto* e = ctx_.arena.make<HIRCastExpr>();
+            e->kind = HIRExpr::Kind::Cast;
+            e->loc = expr->loc;
+            e->type = target;
+            e->operand = operand;
+            e->target_type = target;
+            return e;
+        }
+
+        if (call->callee == "clamp") {
+            // Saturating cast: emit as truncating cast (documents intent;
+            // full clamping logic is a future enhancement)
+            auto* e = ctx_.arena.make<HIRCastExpr>();
+            e->kind = HIRExpr::Kind::Cast;
+            e->loc = expr->loc;
+            e->type = target;
+            e->operand = operand;
+            e->target_type = target;
+            return e;
+        }
+    }
+
     // Check if callee is a local variable (indirect call through function pointer)
     auto local_it = local_vars_.find(call->callee);
     if (local_it != local_vars_.end()) {

@@ -1738,6 +1738,69 @@ Expr* Parser::parsePrimary() {
         if (check(TokenKind::LBrace) && struct_names_.count(tok.text)) {
             return parseStructLit(tok.text, tok.loc);
         }
+        // Generic function call: f<T1, T2>(args)
+        // Speculatively try to parse <type_args>( before falling through to comparison
+        if (check(TokenKind::Lt) && !struct_names_.count(tok.text) && !union_names_.count(tok.text)) {
+            auto lexer_snap = lexer_.save();
+            Token saved_current = current_;
+            Token saved_previous = previous_;
+            bool saved_has = has_current_;
+
+            advance(); // consume '<'
+            std::vector<TypeRef> type_args;
+            bool valid = true;
+            while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
+                if (!check(TokenKind::Ident) && !check(TokenKind::LBracket) &&
+                    !check(TokenKind::KwFn) && !check(TokenKind::Exclaim) &&
+                    !check(TokenKind::IntLit)) {
+                    valid = false;
+                    break;
+                }
+                type_args.push_back(parseType());
+                if (!check(TokenKind::Gt)) {
+                    if (!match(TokenKind::Comma)) { valid = false; break; }
+                }
+            }
+            if (valid && !type_args.empty() && check(TokenKind::Gt)) {
+                advance(); // consume '>'
+                if (check(TokenKind::LParen)) {
+                    // It's a generic function call!
+                    advance(); // consume '('
+                    skipNewlines();
+                    std::vector<Expr*> args;
+                    if (!check(TokenKind::RParen)) {
+                        args.push_back(parseExpr());
+                        while (match(TokenKind::Comma)) {
+                            skipNewlines();
+                            args.push_back(parseExpr());
+                        }
+                    }
+                    skipNewlines();
+                    expect(TokenKind::RParen, "expected ')'");
+
+                    auto* call = arena_.make<CallExpr>();
+                    call->kind = Expr::Kind::Call;
+                    call->loc = tok.loc;
+                    call->callee = tok.text;
+                    call->arg_count = static_cast<uint32_t>(args.size());
+                    call->args = arena_.makeArray<Expr*>(args.size());
+                    for (size_t i = 0; i < args.size(); ++i) {
+                        call->args[i] = args[i];
+                    }
+                    call->type_arg_count = static_cast<uint32_t>(type_args.size());
+                    call->type_args = arena_.makeArray<TypeRef>(type_args.size());
+                    for (size_t i = 0; i < type_args.size(); ++i) {
+                        call->type_args[i] = type_args[i];
+                    }
+                    return call;
+                }
+            }
+            // Not a generic call — restore and fall through to comparison
+            lexer_.restore(lexer_snap);
+            current_ = saved_current;
+            previous_ = saved_previous;
+            has_current_ = saved_has;
+        }
         // Generic struct literal or union variant: Name<T1, T2> { ... } or Name<T>::Variant(...)
         if (check(TokenKind::Lt) && (struct_names_.count(tok.text) || union_names_.count(tok.text))) {
             // Save state in case this is a comparison, not generic args

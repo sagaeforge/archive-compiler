@@ -1,0 +1,5 @@
+fn main() -> i64 {
+    val big: i64 = 298
+    val small: i8 = truncate<i8>(big)
+    small as i64
+}
