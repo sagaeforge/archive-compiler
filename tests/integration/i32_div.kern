@@ -1,0 +1,6 @@
+fn div32(a: i32, b: i32) -> i32 { a / b }
+
+fn main() -> i64 {
+    val x: i32 = div32(84, 2)
+    x as i64
+}

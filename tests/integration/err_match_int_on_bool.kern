@@ -1,0 +1,7 @@
+fn main() -> i64 {
+    val x: bool = true
+    match x {
+        1 => 10
+        _ => 0
+    }
+}

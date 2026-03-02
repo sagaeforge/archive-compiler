@@ -1,0 +1,7 @@
+fn weighted_sum(a: f64, w1: i64, b: f64, w2: i64) -> i64 {
+    w1 + w2
+}
+
+fn main() -> i64 {
+    weighted_sum(1.5, 20, 2.5, 22)
+}

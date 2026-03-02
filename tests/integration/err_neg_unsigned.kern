@@ -1,0 +1,3 @@
+fn negate(x: u64) -> u64 { -x }
+
+fn main() -> i64 { 0 }
