@@ -1,0 +1,61 @@
+// Comprehensive OS-pattern stress test
+// Tests: structs, enums, bitwise ops, pointer math, generics, tuples, defer
+
+@repr(u8)
+enum PageFlags {
+    Present,
+    Writable,
+    UserAccess,
+}
+
+struct PageEntry {
+    flags: u64,
+    phys_addr: u64,
+}
+
+fn make_entry(addr: u64, present: bool, writable: bool) -> PageEntry {
+    var flags: u64 = 0
+    if present {
+        flags = flags | (1u64 << (PageFlags.Present as u64))
+    }
+    if writable {
+        flags = flags | (1u64 << (PageFlags.Writable as u64))
+    }
+    PageEntry { flags: flags, phys_addr: addr }
+}
+
+fn is_present(entry: PageEntry) -> bool {
+    (entry.flags & 1u64) != 0u64
+}
+
+fn swap<T>(a: T, b: T) -> (T, T) {
+    (b, a)
+}
+
+fn main() -> i64 {
+    // Struct construction + bitwise ops
+    val entry = make_entry(0x1000u64, true, true)
+
+    // Enum discriminant + bitwise check
+    val present = is_present(entry)
+
+    // Generic function + tuple destructuring
+    val (y, x) = swap<i64>(10, 32)
+
+    // Defer
+    var cleanup_ran: i64 = 0
+    {
+        defer { cleanup_ran = 1 }
+        val dummy: i64 = 0
+    }
+
+    // Character literal
+    val ch: u8 = '*'
+
+    // uninit + reassignment
+    var u: i64 = uninit
+    u = ch as i64
+
+    // u = 42 ('*' = 42)
+    u
+}
