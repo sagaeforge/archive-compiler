@@ -542,7 +542,7 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
                 auto& f = sd->fields[j];
                 TypeId ft = resolveType(f.type);
                 fields.push_back({ctx_.strings.intern(f.name), ft, f.is_mutable, -1,
-                              f.bit_width, 0});
+                              f.bit_width, 0, f.is_pub});
             }
 
             TypeId tid = ctx_.types.makeStruct(interned_mangled, fields,
@@ -677,7 +677,7 @@ void HIRBuilder::registerStructDecls(const Module* ast) {
             auto& f = sd->fields[j];
             TypeId ft = resolveType(f.type);
             fields.push_back({ctx_.strings.intern(f.name), ft, f.is_mutable, -1,
-                              f.bit_width, 0});
+                              f.bit_width, 0, f.is_pub});
         }
 
         TypeId tid = named_types_[sd->name];
@@ -812,12 +812,13 @@ void HIRBuilder::registerExports(const Module* ast, std::string_view module_path
             auto& f = sd->fields[j];
             TypeId ft = resolveType(f.type);
             fields.push_back({ctx_.strings.intern(f.name), ft, f.is_mutable, -1,
-                              f.bit_width, 0});
+                              f.bit_width, 0, f.is_pub});
         }
         TypeId tid = ctx_.types.makeStruct(ctx_.strings.intern(sd->name), fields,
                                             sd->is_packed, sd->explicit_align,
                                             sd->is_repr_c);
         named_types_[sd->name] = tid;
+        struct_module_map_[sd->name] = mod_name;
     }
 
     // Register enum types (pub only)
@@ -971,6 +972,8 @@ void HIRBuilder::injectGlobalType(std::string_view name, TypeId tid) {
 
 HIRModule* HIRBuilder::build(const Module* ast) {
     if (!ast) return nullptr;
+
+    current_module_ = ast->module_name;
 
     // Register type aliases first (they may be used by other types)
     for (uint32_t i = 0; i < ast->type_alias_count; ++i) {
@@ -2473,12 +2476,25 @@ HIRExpr* HIRBuilder::buildStructLit(const Expr* expr) {
     e->fields = ctx_.arena.makeArray<HIRFieldInit>(sl->field_count);
     bool has_error = false;
 
+    // Check if constructing a struct from another module with priv fields
+    auto struct_mod_it = struct_module_map_.find(sl->struct_name);
+    bool is_foreign_struct = struct_mod_it != struct_module_map_.end() &&
+                             struct_mod_it->second != current_module_;
+
     for (uint32_t i = 0; i < sl->field_count; ++i) {
         bool found = false;
         for (uint32_t j = 0; j < type_info.struct_.field_count; ++j) {
             const auto& fd = type_info.struct_.fields[j];
             if (fd.name == sl->fields[i].name) {
                 found = true;
+                // Check priv field access in struct literal
+                if (!fd.is_pub && is_foreign_struct) {
+                    ctx_.diag.error(sl->fields[i].loc,
+                        std::string("field '") + std::string(fd.name) +
+                        "' of struct '" + std::string(sl->struct_name) +
+                        "' is private");
+                    has_error = true;
+                }
                 auto* val = buildExpr(sl->fields[i].value, fd.type);
                 e->fields[i] = {ctx_.strings.intern(sl->fields[i].name), val, sl->fields[i].loc};
                 if (val->type != TypeTable::Error && val->type != fd.type) {
@@ -2545,6 +2561,18 @@ HIRExpr* HIRBuilder::buildFieldAccess(const Expr* expr) {
     // Look up field
     for (uint32_t i = 0; i < obj_info.struct_.field_count; ++i) {
         if (obj_info.struct_.fields[i].name == fa->field_name) {
+            // Check field visibility: priv fields only accessible within defining module
+            if (!obj_info.struct_.fields[i].is_pub) {
+                auto it = struct_module_map_.find(obj_info.struct_.name);
+                if (it != struct_module_map_.end() && it->second != current_module_) {
+                    ctx_.diag.error(expr->loc,
+                        std::string("field '") + std::string(fa->field_name) +
+                        "' of struct '" + std::string(obj_info.struct_.name) +
+                        "' is private");
+                    e->type = TypeTable::Error;
+                    return e;
+                }
+            }
             e->type = obj_info.struct_.fields[i].type;
             return e;
         }

@@ -1,0 +1,11 @@
+// Test priv field keyword — within same module, priv fields are accessible
+struct Point {
+    pub x: i64
+    pub y: i64
+    priv internal: i64
+}
+
+fn main() -> i64 {
+    val p = Point { x: 10, y: 20, internal: 12 }
+    p.x + p.y + p.internal  // 42 — accessible within same module
+}

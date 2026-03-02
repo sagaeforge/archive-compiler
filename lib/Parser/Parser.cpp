@@ -1401,6 +1401,15 @@ StructDecl* Parser::parseStructDecl() {
     while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
         FieldDecl fd;
         fd.is_mutable = false;
+        fd.is_pub = true;  // default: public (backward compat)
+        // Parse optional visibility: pub / priv
+        if (check(TokenKind::KwPub)) {
+            advance();
+            fd.is_pub = true;
+        } else if (check(TokenKind::KwPriv)) {
+            advance();
+            fd.is_pub = false;
+        }
         if (check(TokenKind::KwVar)) {
             advance();
             fd.is_mutable = true;

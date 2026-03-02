@@ -117,6 +117,7 @@ struct FieldInfo {
     int32_t offset;         // byte offset within struct, -1 if not yet computed
     uint32_t bit_width = 0; // 0 = full-width field, >0 = bitfield width in bits
     uint32_t bit_offset = 0;// bit offset within the storage unit (for bitfields)
+    bool is_pub = true;     // pub field — accessible from other modules (default: true)
 };
 
 struct VariantInfo {

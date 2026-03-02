@@ -63,6 +63,7 @@ void Formatter::formatStructDecl(const StructDecl* s) {
     indent();
     for (uint32_t i = 0; i < s->field_count; ++i) {
         writeIndent();
+        if (!s->fields[i].is_pub) out_ << "priv ";
         if (s->fields[i].is_mutable) out_ << "var ";
         out_ << s->fields[i].name << ": ";
         formatTypeRef(s->fields[i].type);

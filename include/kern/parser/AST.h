@@ -105,6 +105,7 @@ struct FieldDecl {
     std::string_view name;
     TypeRef type;
     bool is_mutable;
+    bool is_pub = true;         // pub field — accessible from other modules (default: true)
     uint32_t bit_width = 0;     // 0 = full-width field, >0 = bitfield width in bits
     SourceLocation loc;
 };

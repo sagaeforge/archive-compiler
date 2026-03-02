@@ -195,6 +195,11 @@ private:
 
     // Cross-module import tracking: fn_name → source module path
     std::unordered_map<std::string_view, std::string_view> fn_module_map_;
+
+    // Cross-module visibility: struct_name → defining module path
+    std::unordered_map<std::string_view, std::string_view> struct_module_map_;
+    // Current module being compiled (empty for single-file compilation)
+    std::string_view current_module_;
 };
 
 } // namespace kern
