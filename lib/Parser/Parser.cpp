@@ -666,6 +666,30 @@ bool Parser::match(TokenKind kind) {
     return false;
 }
 
+bool Parser::checkGt() {
+    if (check(TokenKind::Gt)) return true;
+    // Split '>>' (Shr) into '>' + '>' for nested generics
+    return check(TokenKind::Shr);
+}
+
+bool Parser::matchGt() {
+    if (match(TokenKind::Gt)) return true;
+    // Split '>>' (Shr): consume one '>' and leave the next as current token
+    if (check(TokenKind::Shr)) {
+        // Replace the '>>' token with a single '>' at position+1
+        Token shr = peek();
+        advance(); // consume the '>>'
+        // Inject a synthetic '>' token as the current lookahead
+        current_.kind = TokenKind::Gt;
+        current_.text = std::string_view(shr.text.data() + 1, 1);
+        current_.loc = shr.loc;
+        current_.loc.col += 1;
+        has_current_ = true;
+        return true;
+    }
+    return false;
+}
+
 void Parser::skipNewlines() {
     while (check(TokenKind::Newline)) {
         advance();
@@ -1906,7 +1930,9 @@ TypeRef Parser::parseType() {
         }
         auto* pointee = arena_.make<TypeRef>();
         *pointee = parseType();
-        expect(TokenKind::Gt, "expected '>' after Ptr type parameter");
+        if (!matchGt()) {
+            diag_.error(peek().loc, "expected '>' after Ptr type parameter");
+        }
         TypeRef ref;
         ref.kind = TypeRef::Kind::Ptr;
         ref.name = is_var ? "Ptr<var>" : "Ptr";
@@ -1920,7 +1946,9 @@ TypeRef Parser::parseType() {
         advance(); // consume '<'
         auto* elem = arena_.make<TypeRef>();
         *elem = parseType();
-        expect(TokenKind::Gt, "expected '>' after Slice type parameter");
+        if (!matchGt()) {
+            diag_.error(peek().loc, "expected '>' after Slice type parameter");
+        }
         TypeRef ref;
         ref.kind = TypeRef::Kind::Named;
         ref.name = "Slice";
@@ -1932,13 +1960,15 @@ TypeRef Parser::parseType() {
     if (check(TokenKind::Lt)) {
         advance(); // consume '<'
         std::vector<TypeRef> args;
-        while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
+        while (!checkGt() && !check(TokenKind::Eof)) {
             args.push_back(parseType());
-            if (!check(TokenKind::Gt)) {
+            if (!checkGt()) {
                 expect(TokenKind::Comma, "expected ',' or '>' in type argument list");
             }
         }
-        expect(TokenKind::Gt, "expected '>' after type arguments");
+        if (!matchGt()) {
+            diag_.error(peek().loc, "expected '>' after type arguments");
+        }
         TypeRef ref;
         ref.kind = TypeRef::Kind::Named;
         ref.name = tok.text;

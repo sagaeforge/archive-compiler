@@ -26,6 +26,8 @@ private:
     Token expect(TokenKind kind, const char* message);
     bool check(TokenKind kind);
     bool match(TokenKind kind);
+    bool checkGt();   // Check for '>' including splitting '>>' in generic contexts
+    bool matchGt();   // Match '>' including splitting '>>'
     void skipNewlines();
 
     // Declarations
