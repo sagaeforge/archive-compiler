@@ -157,6 +157,7 @@ uint32_t LIRBuilder::unionVariantTag(TypeId union_type, std::string_view variant
     for (uint32_t i = 0; i < ti.union_.variant_count; ++i) {
         if (ti.union_.variants[i].name == variant_name) return i;
     }
+    assert(false && "union variant not found — should be caught by HIRBuilder");
     return 0;
 }
 
@@ -1208,12 +1209,15 @@ VReg LIRBuilder::lowerStructLit(const HIRStructLitExpr* expr) {
 
         TypeId field_type = TypeTable::I64;
         if (ti.kind == TypeKind::Struct) {
+            bool found = false;
             for (uint32_t fi = 0; fi < ti.struct_.field_count; ++fi) {
                 if (ti.struct_.fields[fi].name == expr->fields[f].name) {
                     field_type = ti.struct_.fields[fi].type;
+                    found = true;
                     break;
                 }
             }
+            assert(found && "struct field not found — should be caught by HIRBuilder");
         }
 
         VReg fp = freshVReg();
