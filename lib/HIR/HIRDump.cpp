@@ -517,6 +517,13 @@ void dumpHIR(const HIRModule* mod, const TypeTable& types, std::ostream& out) {
     for (uint32_t i = 0; i < mod->fn_count; ++i) {
         auto* fn = mod->functions[i];
         out << "(fn " << fn->name << " [" << purityName(fn->purity) << "]";
+        if (fn->declared_effects != EFFECT_NONE || fn->inferred_effects != EFFECT_NONE) {
+            out << " [effects: " << effectSetString(fn->inferred_effects);
+            if (fn->declared_effects != EFFECT_NONE) {
+                out << " declared: " << effectSetString(fn->declared_effects);
+            }
+            out << "]";
+        }
         if (fn->is_recursive) out << " [recursive]";
         if (fn->is_tail_recursive) out << " [tail-recursive]";
         if (fn->is_intrinsic) out << " [intrinsic]";

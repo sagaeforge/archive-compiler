@@ -133,6 +133,7 @@ private:
     struct TraitInfo {
         std::string_view name;
         std::vector<std::string_view> method_names;
+        std::vector<EffectSet> method_effects;  // declared effects per method
     };
     std::unordered_map<std::string_view, TraitInfo> trait_table_;
 

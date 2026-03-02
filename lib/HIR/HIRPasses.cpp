@@ -712,6 +712,335 @@ void PurityAnalysisPass::run(HIRModule& module, CompilationContext& ctx) {
 }
 
 // ============================================================================
+// EffectAnalysisPass
+// ============================================================================
+
+// Helper: check if expression calls an atomic intrinsic
+static bool exprUsesAtomicIntrinsic(const HIRExpr* expr);
+static bool stmtUsesAtomicIntrinsic(const HIRStmt* stmt);
+
+static bool isAtomicIntrinsicName(std::string_view name) {
+    return name == "atomic_load" || name == "atomic_store" ||
+           name == "atomic_cas" || name == "atomic_fetch_add" ||
+           name == "mfence" || name == "sfence" || name == "lfence" ||
+           name == "compiler_barrier";
+}
+
+static bool isIoIntrinsicName(std::string_view name) {
+    return name == "volatile_read" || name == "volatile_write";
+}
+
+static bool exprUsesAtomicIntrinsic(const HIRExpr* expr) {
+    if (!expr) return false;
+    switch (expr->kind) {
+        case HIRExpr::Kind::Call: {
+            auto* e = static_cast<const HIRCallExpr*>(expr);
+            if (isAtomicIntrinsicName(e->callee)) return true;
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (exprUsesAtomicIntrinsic(e->args[i])) return true;
+            return false;
+        }
+        case HIRExpr::Kind::Block: {
+            auto* e = static_cast<const HIRBlockExpr*>(expr);
+            for (uint32_t i = 0; i < e->stmt_count; ++i)
+                if (stmtUsesAtomicIntrinsic(e->stmts[i])) return true;
+            return exprUsesAtomicIntrinsic(e->result);
+        }
+        case HIRExpr::Kind::If: {
+            auto* e = static_cast<const HIRIfExpr*>(expr);
+            return exprUsesAtomicIntrinsic(e->condition) ||
+                   exprUsesAtomicIntrinsic(e->then_branch) ||
+                   exprUsesAtomicIntrinsic(e->else_branch);
+        }
+        case HIRExpr::Kind::Match: {
+            auto* e = static_cast<const HIRMatchExpr*>(expr);
+            if (exprUsesAtomicIntrinsic(e->scrutinee)) return true;
+            for (uint32_t i = 0; i < e->arm_count; ++i) {
+                if (e->arms[i].guard && exprUsesAtomicIntrinsic(e->arms[i].guard)) return true;
+                if (exprUsesAtomicIntrinsic(e->arms[i].body)) return true;
+            }
+            return false;
+        }
+        case HIRExpr::Kind::Return:
+            return exprUsesAtomicIntrinsic(static_cast<const HIRReturnExpr*>(expr)->value);
+        case HIRExpr::Kind::Loop: {
+            auto* e = static_cast<const HIRLoopExpr*>(expr);
+            for (uint32_t i = 0; i < e->binding_count; ++i)
+                if (exprUsesAtomicIntrinsic(e->bindings[i].init)) return true;
+            return exprUsesAtomicIntrinsic(e->body);
+        }
+        case HIRExpr::Kind::BinOp: {
+            auto* e = static_cast<const HIRBinOpExpr*>(expr);
+            return exprUsesAtomicIntrinsic(e->lhs) || exprUsesAtomicIntrinsic(e->rhs);
+        }
+        case HIRExpr::Kind::UnaryOp:
+            return exprUsesAtomicIntrinsic(static_cast<const HIRUnaryOpExpr*>(expr)->operand);
+        case HIRExpr::Kind::CallIndirect: {
+            auto* e = static_cast<const HIRCallIndirectExpr*>(expr);
+            if (exprUsesAtomicIntrinsic(e->callee)) return true;
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (exprUsesAtomicIntrinsic(e->args[i])) return true;
+            return false;
+        }
+        default:
+            return false;
+    }
+}
+
+static bool stmtUsesAtomicIntrinsic(const HIRStmt* stmt) {
+    if (!stmt) return false;
+    switch (stmt->kind) {
+        case HIRStmt::Kind::ValDecl:
+            return exprUsesAtomicIntrinsic(static_cast<const HIRValDeclStmt*>(stmt)->init);
+        case HIRStmt::Kind::VarDecl:
+            return exprUsesAtomicIntrinsic(static_cast<const HIRVarDeclStmt*>(stmt)->init);
+        case HIRStmt::Kind::ExprStmt:
+            return exprUsesAtomicIntrinsic(static_cast<const HIRExprStmt*>(stmt)->expr);
+        case HIRStmt::Kind::Assign:
+            return exprUsesAtomicIntrinsic(static_cast<const HIRAssignStmt*>(stmt)->value);
+        case HIRStmt::Kind::FieldAssign: {
+            auto* s = static_cast<const HIRFieldAssignStmt*>(stmt);
+            return exprUsesAtomicIntrinsic(s->target) || exprUsesAtomicIntrinsic(s->value);
+        }
+        case HIRStmt::Kind::DerefAssign: {
+            auto* s = static_cast<const HIRDerefAssignStmt*>(stmt);
+            return exprUsesAtomicIntrinsic(s->target) || exprUsesAtomicIntrinsic(s->value);
+        }
+        case HIRStmt::Kind::IndexAssign: {
+            auto* s = static_cast<const HIRIndexAssignStmt*>(stmt);
+            return exprUsesAtomicIntrinsic(s->array) || exprUsesAtomicIntrinsic(s->index) ||
+                   exprUsesAtomicIntrinsic(s->value);
+        }
+    }
+    return false;
+}
+
+// Helper: check if expression calls a volatile/IO intrinsic directly
+static bool exprUsesIoIntrinsic(const HIRExpr* expr);
+static bool stmtUsesIoIntrinsic(const HIRStmt* stmt);
+
+static bool exprUsesIoIntrinsic(const HIRExpr* expr) {
+    if (!expr) return false;
+    switch (expr->kind) {
+        case HIRExpr::Kind::Call: {
+            auto* e = static_cast<const HIRCallExpr*>(expr);
+            if (isIoIntrinsicName(e->callee)) return true;
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (exprUsesIoIntrinsic(e->args[i])) return true;
+            return false;
+        }
+        case HIRExpr::Kind::Block: {
+            auto* e = static_cast<const HIRBlockExpr*>(expr);
+            for (uint32_t i = 0; i < e->stmt_count; ++i)
+                if (stmtUsesIoIntrinsic(e->stmts[i])) return true;
+            return exprUsesIoIntrinsic(e->result);
+        }
+        case HIRExpr::Kind::If: {
+            auto* e = static_cast<const HIRIfExpr*>(expr);
+            return exprUsesIoIntrinsic(e->condition) ||
+                   exprUsesIoIntrinsic(e->then_branch) ||
+                   exprUsesIoIntrinsic(e->else_branch);
+        }
+        case HIRExpr::Kind::Match: {
+            auto* e = static_cast<const HIRMatchExpr*>(expr);
+            if (exprUsesIoIntrinsic(e->scrutinee)) return true;
+            for (uint32_t i = 0; i < e->arm_count; ++i) {
+                if (e->arms[i].guard && exprUsesIoIntrinsic(e->arms[i].guard)) return true;
+                if (exprUsesIoIntrinsic(e->arms[i].body)) return true;
+            }
+            return false;
+        }
+        case HIRExpr::Kind::Return:
+            return exprUsesIoIntrinsic(static_cast<const HIRReturnExpr*>(expr)->value);
+        case HIRExpr::Kind::Loop: {
+            auto* e = static_cast<const HIRLoopExpr*>(expr);
+            for (uint32_t i = 0; i < e->binding_count; ++i)
+                if (exprUsesIoIntrinsic(e->bindings[i].init)) return true;
+            return exprUsesIoIntrinsic(e->body);
+        }
+        case HIRExpr::Kind::BinOp: {
+            auto* e = static_cast<const HIRBinOpExpr*>(expr);
+            return exprUsesIoIntrinsic(e->lhs) || exprUsesIoIntrinsic(e->rhs);
+        }
+        case HIRExpr::Kind::UnaryOp:
+            return exprUsesIoIntrinsic(static_cast<const HIRUnaryOpExpr*>(expr)->operand);
+        case HIRExpr::Kind::CallIndirect: {
+            auto* e = static_cast<const HIRCallIndirectExpr*>(expr);
+            if (exprUsesIoIntrinsic(e->callee)) return true;
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (exprUsesIoIntrinsic(e->args[i])) return true;
+            return false;
+        }
+        default:
+            return false;
+    }
+}
+
+static bool stmtUsesIoIntrinsic(const HIRStmt* stmt) {
+    if (!stmt) return false;
+    switch (stmt->kind) {
+        case HIRStmt::Kind::ValDecl:
+            return exprUsesIoIntrinsic(static_cast<const HIRValDeclStmt*>(stmt)->init);
+        case HIRStmt::Kind::VarDecl:
+            return exprUsesIoIntrinsic(static_cast<const HIRVarDeclStmt*>(stmt)->init);
+        case HIRStmt::Kind::ExprStmt:
+            return exprUsesIoIntrinsic(static_cast<const HIRExprStmt*>(stmt)->expr);
+        case HIRStmt::Kind::Assign:
+            return exprUsesIoIntrinsic(static_cast<const HIRAssignStmt*>(stmt)->value);
+        case HIRStmt::Kind::FieldAssign: {
+            auto* s = static_cast<const HIRFieldAssignStmt*>(stmt);
+            return exprUsesIoIntrinsic(s->target) || exprUsesIoIntrinsic(s->value);
+        }
+        case HIRStmt::Kind::DerefAssign: {
+            auto* s = static_cast<const HIRDerefAssignStmt*>(stmt);
+            return exprUsesIoIntrinsic(s->target) || exprUsesIoIntrinsic(s->value);
+        }
+        case HIRStmt::Kind::IndexAssign: {
+            auto* s = static_cast<const HIRIndexAssignStmt*>(stmt);
+            return exprUsesIoIntrinsic(s->array) || exprUsesIoIntrinsic(s->index) ||
+                   exprUsesIoIntrinsic(s->value);
+        }
+    }
+    return false;
+}
+
+void EffectAnalysisPass::run(HIRModule& module, CompilationContext& ctx) {
+    // Build function map and call graph (same as PurityAnalysisPass)
+    std::unordered_map<std::string_view, HIRFnDecl*> fn_map;
+    std::unordered_map<std::string_view, std::unordered_set<std::string_view>> call_graph;
+
+    for (uint32_t i = 0; i < module.fn_count; ++i) {
+        auto* fn = module.functions[i];
+        fn_map[fn->name] = fn;
+        std::unordered_set<std::string_view> callees;
+        if (fn->body) collectCallees(fn->body, callees);
+        call_graph[fn->name] = std::move(callees);
+    }
+
+    // Topological sort (Kahn's on reversed call graph — callees before callers)
+    std::unordered_map<std::string_view, int> out_degree;
+    std::unordered_map<std::string_view, std::vector<std::string_view>> reverse_graph;
+    for (auto& [name, _] : fn_map) {
+        out_degree[name] = 0;
+        reverse_graph[name] = {};
+    }
+    for (auto& [caller, callees] : call_graph) {
+        for (auto& callee : callees) {
+            if (callee == caller) continue;
+            if (!fn_map.count(callee)) continue;
+            out_degree[caller]++;
+            reverse_graph[callee].push_back(caller);
+        }
+    }
+
+    std::queue<std::string_view> queue;
+    for (auto& [name, deg] : out_degree) {
+        if (deg == 0) queue.push(name);
+    }
+
+    std::vector<std::string_view> order;
+    std::unordered_set<std::string_view> visited;
+    while (!queue.empty()) {
+        auto name = queue.front(); queue.pop();
+        order.push_back(name);
+        visited.insert(name);
+        for (auto& caller : reverse_graph[name]) {
+            if (--out_degree[caller] == 0) queue.push(caller);
+        }
+    }
+    for (auto& [name, _] : fn_map) {
+        if (!visited.count(name)) order.push_back(name);
+    }
+
+    // Effect inference results
+    std::unordered_map<std::string_view, EffectSet> effect_map;
+
+    // Process in order (leaves first — callees before callers)
+    for (auto& name : order) {
+        auto* fn = fn_map[name];
+        EffectSet effects = EFFECT_NONE;
+
+        // Intrinsic functions (= intrinsic): default to IO
+        if (fn->is_intrinsic) {
+            effects = addEffect(effects, Effect::IO);
+        } else if (fn->body) {
+            // Local: var mutation → Mut
+            if (exprUsesVar(fn->body)) {
+                effects = addEffect(effects, Effect::Mut);
+            }
+            // Local: pointer writes → Mem
+            if (exprUsesPtrWrite(fn->body)) {
+                effects = addEffect(effects, Effect::Mem);
+            }
+            // Local: inline asm → IO
+            if (exprUsesInlineAsm(fn->body)) {
+                effects = addEffect(effects, Effect::IO);
+            }
+            // Local: volatile_read/write → IO
+            if (exprUsesIoIntrinsic(fn->body)) {
+                effects = addEffect(effects, Effect::IO);
+            }
+            // Local: atomic intrinsics → Atomic
+            if (exprUsesAtomicIntrinsic(fn->body)) {
+                effects = addEffect(effects, Effect::Atomic);
+            }
+            // Propagate from callees (all effects propagate, unlike Purity where Mut was local)
+            for (auto& callee : call_graph[name]) {
+                if (!effect_map.count(callee)) continue;
+                effects = unionEffects(effects, effect_map[callee]);
+            }
+        }
+
+        effect_map[name] = effects;
+        fn->inferred_effects = effects;
+
+        // Validate: if declared_effects is set, check that it covers inferred
+        if (fn->declared_effects != EFFECT_NONE || fn->inferred_effects != EFFECT_NONE) {
+            // If function has declared effects, check inferred is subset
+            if (fn->declared_effects != EFFECT_NONE &&
+                !effectSubset(fn->inferred_effects, fn->declared_effects)) {
+                EffectSet missing = fn->inferred_effects & ~fn->declared_effects;
+                ctx.diag.error(fn->loc,
+                    std::string("function '") + std::string(name) +
+                    "' has undeclared effects: " + effectSetString(missing) +
+                    " (declared: " + effectSetString(fn->declared_effects) + ")");
+            }
+        }
+    }
+
+    // Call-site enforcement: caller must have callee's effects
+    for (auto& [name, callees] : call_graph) {
+        auto* fn = fn_map[name];
+        // Use declared effects if annotated, otherwise inferred
+        EffectSet caller_effects = (fn->declared_effects != EFFECT_NONE)
+            ? fn->declared_effects : fn->inferred_effects;
+
+        for (auto& callee_name : callees) {
+            EffectSet callee_effects;
+            if (fn_map.count(callee_name)) {
+                auto* callee_fn = fn_map[callee_name];
+                callee_effects = (callee_fn->declared_effects != EFFECT_NONE)
+                    ? callee_fn->declared_effects : callee_fn->inferred_effects;
+            } else if (effect_map.count(callee_name)) {
+                callee_effects = effect_map[callee_name];
+            } else {
+                continue;
+            }
+
+            if (!effectSubset(callee_effects, caller_effects)) {
+                EffectSet missing = callee_effects & ~caller_effects;
+                ctx.diag.error(fn->loc,
+                    std::string("function '") + std::string(name) +
+                    "' calls '" + std::string(callee_name) +
+                    "' which requires effects: " + effectSetString(callee_effects) +
+                    ", but caller has: " + effectSetString(caller_effects) +
+                    " (missing: " + effectSetString(missing) + ")");
+            }
+        }
+    }
+}
+
+// ============================================================================
 // TailCallAnalysisPass — helpers
 // ============================================================================
 

@@ -1,0 +1,8 @@
+// Effect system: explicitly marked pure function
+fn add(a: i64, b: i64) -> i64 with pure {
+    a + b
+}
+
+fn main() -> i64 {
+    add(20, 22)
+}

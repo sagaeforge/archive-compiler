@@ -1,0 +1,12 @@
+// Effect system error: pure function calling effectful function
+fn impure_fn() -> i64 with io {
+    42
+}
+
+fn pure_fn() -> i64 with pure {
+    impure_fn()
+}
+
+fn main() -> i64 {
+    pure_fn()
+}

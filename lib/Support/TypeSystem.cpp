@@ -56,12 +56,13 @@ TypeId TypeTable::makePtr(TypeId pointee, bool is_mutable) {
     return add(ti);
 }
 
-TypeId TypeTable::makeFn(std::span<const TypeId> params, TypeId ret) {
+TypeId TypeTable::makeFn(std::span<const TypeId> params, TypeId ret, EffectSet effects) {
     // Deduplicate: return existing TypeId if same function type exists
     for (uint32_t i = 0; i < types_.size(); ++i) {
         if (types_[i]->kind == TypeKind::Fn &&
             types_[i]->fn.param_count == static_cast<uint32_t>(params.size()) &&
-            types_[i]->fn.return_type == ret) {
+            types_[i]->fn.return_type == ret &&
+            types_[i]->fn.effects == effects) {
             bool match = true;
             for (uint32_t j = 0; j < params.size(); ++j) {
                 if (types_[i]->fn.params[j] != params[j]) { match = false; break; }
@@ -78,6 +79,7 @@ TypeId TypeTable::makeFn(std::span<const TypeId> params, TypeId ret) {
     ti.fn.params = param_copy;
     ti.fn.param_count = static_cast<uint32_t>(params.size());
     ti.fn.return_type = ret;
+    ti.fn.effects = effects;
     return add(ti);
 }
 

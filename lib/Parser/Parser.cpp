@@ -820,6 +820,22 @@ TraitDecl* Parser::parseTraitDecl() {
         expect(TokenKind::Arrow, "expected '->' for return type");
         TypeRef ret = parseType();
 
+        // Parse optional effect clause for trait methods
+        std::vector<std::string_view> eff_names;
+        if (check(TokenKind::KwWith)) {
+            advance();
+            if (check(TokenKind::Ident) && peek().text == "pure") {
+                advance();
+            } else {
+                Token eff = expect(TokenKind::Ident, "expected effect name after 'with'");
+                eff_names.push_back(eff.text);
+                while (match(TokenKind::Comma)) {
+                    Token eff2 = expect(TokenKind::Ident, "expected effect name after ','");
+                    eff_names.push_back(eff2.text);
+                }
+            }
+        }
+
         TraitMethodSig sig;
         sig.name = methodName.text;
         sig.param_count = static_cast<uint32_t>(params.size());
@@ -829,6 +845,13 @@ TraitDecl* Parser::parseTraitDecl() {
         }
         sig.return_type = ret;
         sig.loc = methodName.loc;
+        sig.effect_count = static_cast<uint32_t>(eff_names.size());
+        if (!eff_names.empty()) {
+            sig.effect_names = arena_.makeArray<std::string_view>(eff_names.size());
+            for (size_t j = 0; j < eff_names.size(); ++j) {
+                sig.effect_names[j] = eff_names[j];
+            }
+        }
         methods.push_back(sig);
         skipNewlines();
     }
@@ -1147,6 +1170,24 @@ FnDecl* Parser::parseFnDecl() {
     expect(TokenKind::Arrow, "expected '->' for return type");
     TypeRef ret = parseType();
 
+    // Parse optional effect clause: "with io, atomic"
+    std::vector<std::string_view> effect_names;
+    if (check(TokenKind::KwWith)) {
+        advance(); // consume 'with'
+        // Parse "pure" as a special case (explicitly annotated pure)
+        if (check(TokenKind::Ident) && peek().text == "pure") {
+            advance(); // consume 'pure' — effect_names stays empty
+        } else {
+            // Parse comma-separated effect names
+            Token eff = expect(TokenKind::Ident, "expected effect name after 'with'");
+            effect_names.push_back(eff.text);
+            while (match(TokenKind::Comma)) {
+                Token eff2 = expect(TokenKind::Ident, "expected effect name after ','");
+                effect_names.push_back(eff2.text);
+            }
+        }
+    }
+
     skipNewlines();
 
     // Check for `= intrinsic`
@@ -1183,6 +1224,13 @@ FnDecl* Parser::parseFnDecl() {
         fn->type_params = arena_.makeArray<TypeParam>(type_params.size());
         for (size_t i = 0; i < type_params.size(); ++i) {
             fn->type_params[i] = type_params[i];
+        }
+    }
+    fn->effect_count = static_cast<uint32_t>(effect_names.size());
+    if (!effect_names.empty()) {
+        fn->effect_names = arena_.makeArray<std::string_view>(effect_names.size());
+        for (size_t i = 0; i < effect_names.size(); ++i) {
+            fn->effect_names[i] = effect_names[i];
         }
     }
     return fn;

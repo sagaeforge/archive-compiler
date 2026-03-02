@@ -909,6 +909,21 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
     hfn->is_naked = fn->is_naked;
     hfn->is_interrupt = fn->is_interrupt;
     hfn->section_name = fn->section_name;
+
+    // Process effect annotations from "with io, atomic" clause
+    EffectSet declared = EFFECT_NONE;
+    for (uint32_t i = 0; i < fn->effect_count; ++i) {
+        Effect eff;
+        if (parseEffectName(fn->effect_names[i], eff)) {
+            declared = addEffect(declared, eff);
+        } else {
+            ctx_.diag.error(fn->loc, std::string("unknown effect '") +
+                            std::string(fn->effect_names[i]) + "'");
+        }
+    }
+    hfn->declared_effects = declared;
+    hfn->inferred_effects = EFFECT_NONE;
+
     hfn->loc = fn->loc;
 
     // Register parameters
@@ -2976,6 +2991,15 @@ void HIRBuilder::registerTraits(const Module* ast) {
         info.name = ctx_.strings.intern(td->name);
         for (uint32_t j = 0; j < td->method_count; ++j) {
             info.method_names.push_back(ctx_.strings.intern(td->methods[j].name));
+            // Parse effect annotations on trait methods
+            EffectSet effects = EFFECT_NONE;
+            for (uint32_t k = 0; k < td->methods[j].effect_count; ++k) {
+                Effect eff;
+                if (parseEffectName(td->methods[j].effect_names[k], eff)) {
+                    effects = addEffect(effects, eff);
+                }
+            }
+            info.method_effects.push_back(effects);
         }
         trait_table_[info.name] = info;
     }

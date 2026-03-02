@@ -382,7 +382,7 @@ TypeId MonomorphizationPass::substituteType(
             TypeId ret = substituteType(ti.fn.return_type, subst);
             if (ret != ti.fn.return_type) changed = true;
             if (!changed) return type;
-            return ctx_.types.makeFn(params, ret);
+            return ctx_.types.makeFn(params, ret, ti.fn.effects);
         }
         case TypeKind::Array: {
             TypeId elem = substituteType(ti.array.element, subst);

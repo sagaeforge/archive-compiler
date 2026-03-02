@@ -1,0 +1,10 @@
+// Effect system: function with 'io' effect annotation
+fn volatile_read(ptr: Ptr<u8>) -> u8 with io = intrinsic
+
+fn read_port(port: u16) -> u8 with io {
+    volatile_read(port as Ptr<u8>)
+}
+
+fn main() -> i64 {
+    42
+}

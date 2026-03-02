@@ -269,3 +269,98 @@ TEST_F(TypeSystemTest, MultiplePtrTypes) {
     EXPECT_EQ(tt.sizeOf(p2), 8);
     EXPECT_EQ(tt.sizeOf(p3), 8);
 }
+
+// ============================================================================
+// EffectSet tests
+// ============================================================================
+
+TEST(EffectSetTest, EmptyIsNone) {
+    EXPECT_EQ(EFFECT_NONE, 0);
+}
+
+TEST(EffectSetTest, SingleEffects) {
+    EXPECT_EQ(EFFECT_MUT, 1);
+    EXPECT_EQ(EFFECT_MEM, 2);
+    EXPECT_EQ(EFFECT_IO, 4);
+    EXPECT_EQ(EFFECT_ATOMIC, 8);
+}
+
+TEST(EffectSetTest, HasEffect) {
+    EffectSet set = EFFECT_IO | EFFECT_ATOMIC;
+    EXPECT_TRUE(hasEffect(set, Effect::IO));
+    EXPECT_TRUE(hasEffect(set, Effect::Atomic));
+    EXPECT_FALSE(hasEffect(set, Effect::Mut));
+    EXPECT_FALSE(hasEffect(set, Effect::Mem));
+}
+
+TEST(EffectSetTest, AddEffect) {
+    EffectSet set = EFFECT_NONE;
+    set = addEffect(set, Effect::IO);
+    EXPECT_TRUE(hasEffect(set, Effect::IO));
+    EXPECT_FALSE(hasEffect(set, Effect::Mut));
+    set = addEffect(set, Effect::Mut);
+    EXPECT_TRUE(hasEffect(set, Effect::IO));
+    EXPECT_TRUE(hasEffect(set, Effect::Mut));
+}
+
+TEST(EffectSetTest, UnionEffects) {
+    EffectSet a = EFFECT_IO | EFFECT_MUT;
+    EffectSet b = EFFECT_MEM | EFFECT_ATOMIC;
+    EffectSet u = unionEffects(a, b);
+    EXPECT_TRUE(hasEffect(u, Effect::IO));
+    EXPECT_TRUE(hasEffect(u, Effect::Mut));
+    EXPECT_TRUE(hasEffect(u, Effect::Mem));
+    EXPECT_TRUE(hasEffect(u, Effect::Atomic));
+}
+
+TEST(EffectSetTest, Subset) {
+    EffectSet sub = EFFECT_IO;
+    EffectSet super = EFFECT_IO | EFFECT_MEM;
+    EXPECT_TRUE(effectSubset(sub, super));
+    EXPECT_FALSE(effectSubset(super, sub));
+    EXPECT_TRUE(effectSubset(EFFECT_NONE, super));
+    EXPECT_TRUE(effectSubset(sub, sub));
+}
+
+TEST(EffectSetTest, ParseEffectName) {
+    Effect e;
+    EXPECT_TRUE(parseEffectName("io", e));
+    EXPECT_EQ(e, Effect::IO);
+    EXPECT_TRUE(parseEffectName("mut", e));
+    EXPECT_EQ(e, Effect::Mut);
+    EXPECT_TRUE(parseEffectName("mem", e));
+    EXPECT_EQ(e, Effect::Mem);
+    EXPECT_TRUE(parseEffectName("atomic", e));
+    EXPECT_EQ(e, Effect::Atomic);
+    EXPECT_FALSE(parseEffectName("unknown", e));
+}
+
+TEST(EffectSetTest, EffectName) {
+    EXPECT_STREQ(effectName(Effect::Mut), "mut");
+    EXPECT_STREQ(effectName(Effect::Mem), "mem");
+    EXPECT_STREQ(effectName(Effect::IO), "io");
+    EXPECT_STREQ(effectName(Effect::Atomic), "atomic");
+}
+
+TEST(EffectSetTest, EffectSetString) {
+    EXPECT_EQ(effectSetString(EFFECT_NONE), "pure");
+    EXPECT_EQ(effectSetString(EFFECT_IO), "io");
+    EXPECT_EQ(effectSetString(EFFECT_IO | EFFECT_ATOMIC), "io, atomic");
+    EXPECT_EQ(effectSetString(EFFECT_MUT | EFFECT_MEM | EFFECT_IO | EFFECT_ATOMIC),
+              "mut, mem, io, atomic");
+}
+
+TEST_F(TypeSystemTest, FnTypeWithEffects) {
+    TypeTable tt(arena);
+    TypeId params[] = {TypeTable::I64};
+    TypeId fn1 = tt.makeFn(params, TypeTable::I64);
+    TypeId fn2 = tt.makeFn(params, TypeTable::I64, EFFECT_IO);
+    TypeId fn3 = tt.makeFn(params, TypeTable::I64, EFFECT_IO);
+    // Different effects → different types
+    EXPECT_NE(fn1, fn2);
+    // Same effects → same type (dedup)
+    EXPECT_EQ(fn2, fn3);
+    // Verify effect is stored
+    EXPECT_EQ(tt.get(fn1).fn.effects, EFFECT_NONE);
+    EXPECT_EQ(tt.get(fn2).fn.effects, EFFECT_IO);
+}

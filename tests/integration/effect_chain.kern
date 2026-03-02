@@ -1,0 +1,17 @@
+// Effect system: effect propagation through call chain
+fn leaf() -> i64 with mut {
+    var x: i64 = 42
+    x
+}
+
+fn middle() -> i64 with mut {
+    leaf()
+}
+
+fn top() -> i64 with mut {
+    middle()
+}
+
+fn main() -> i64 {
+    top()
+}

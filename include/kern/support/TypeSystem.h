@@ -7,6 +7,80 @@
 
 namespace kern {
 
+// ============================================================================
+// Effect System — compile-time annotations erased before LIR
+// ============================================================================
+
+enum class Effect : uint8_t {
+    Mut    = 1 << 0,   // Mutable state (var bindings, field mutation)
+    Mem    = 1 << 1,   // Pointer/heap memory access
+    IO     = 1 << 2,   // Hardware I/O, volatile, asm, intrinsics
+    Atomic = 1 << 3,   // Atomic operations (lock cmpxchg, lock xadd, fences)
+};
+
+using EffectSet = uint8_t;
+
+static constexpr EffectSet EFFECT_NONE   = 0;
+static constexpr EffectSet EFFECT_MUT    = static_cast<EffectSet>(Effect::Mut);
+static constexpr EffectSet EFFECT_MEM    = static_cast<EffectSet>(Effect::Mem);
+static constexpr EffectSet EFFECT_IO     = static_cast<EffectSet>(Effect::IO);
+static constexpr EffectSet EFFECT_ATOMIC = static_cast<EffectSet>(Effect::Atomic);
+
+inline bool hasEffect(EffectSet set, Effect e) {
+    return (set & static_cast<uint8_t>(e)) != 0;
+}
+
+inline EffectSet addEffect(EffectSet set, Effect e) {
+    return set | static_cast<uint8_t>(e);
+}
+
+inline EffectSet unionEffects(EffectSet a, EffectSet b) {
+    return a | b;
+}
+
+// Returns true if 'sub' is a subset of 'super' (caller has all callee's effects)
+inline bool effectSubset(EffectSet sub, EffectSet super) {
+    return (sub & super) == sub;
+}
+
+// Parse effect name string to Effect enum (returns false if unknown)
+inline bool parseEffectName(std::string_view name, Effect& out) {
+    if (name == "mut")    { out = Effect::Mut;    return true; }
+    if (name == "mem")    { out = Effect::Mem;    return true; }
+    if (name == "io")     { out = Effect::IO;     return true; }
+    if (name == "atomic") { out = Effect::Atomic; return true; }
+    return false;
+}
+
+inline const char* effectName(Effect e) {
+    switch (e) {
+        case Effect::Mut:    return "mut";
+        case Effect::Mem:    return "mem";
+        case Effect::IO:     return "io";
+        case Effect::Atomic: return "atomic";
+    }
+    return "?";
+}
+
+// Format an EffectSet as comma-separated names (e.g. "io, atomic")
+// Returns "pure" for empty set
+inline std::string effectSetString(EffectSet set) {
+    if (set == EFFECT_NONE) return "pure";
+    std::string result;
+    static constexpr Effect ALL_EFFECTS[] = {Effect::Mut, Effect::Mem, Effect::IO, Effect::Atomic};
+    for (auto e : ALL_EFFECTS) {
+        if (hasEffect(set, e)) {
+            if (!result.empty()) result += ", ";
+            result += effectName(e);
+        }
+    }
+    return result;
+}
+
+// ============================================================================
+// Type System
+// ============================================================================
+
 // TypeId is a lightweight handle into the TypeTable.
 // Primitives are pre-registered at indices 0-12.
 using TypeId = uint32_t;
@@ -81,6 +155,7 @@ struct FnData {
     TypeId* params;
     uint32_t param_count;
     TypeId return_type;
+    EffectSet effects;     // declared effects (0 = pure)
 };
 
 struct ArrayData {
@@ -147,7 +222,7 @@ public:
 
     // Convenience constructors — return TypeId
     TypeId makePtr(TypeId pointee, bool is_mutable);
-    TypeId makeFn(std::span<const TypeId> params, TypeId ret);
+    TypeId makeFn(std::span<const TypeId> params, TypeId ret, EffectSet effects = EFFECT_NONE);
     TypeId makeStruct(std::string_view name, std::span<const FieldInfo> fields,
                       bool is_packed = false, uint32_t explicit_align = 0);
     TypeId makeEnum(std::string_view name, std::span<const std::string_view> variant_names,

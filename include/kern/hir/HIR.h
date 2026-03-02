@@ -383,6 +383,10 @@ struct HIRFnDecl {
     bool is_interrupt;       // @interrupt — iretq return, save all regs
     std::string_view section_name;  // @section("name"), empty = default
 
+    // Effect system (v2)
+    EffectSet declared_effects = EFFECT_NONE;  // from "with io, atomic" annotation
+    EffectSet inferred_effects = EFFECT_NONE;  // computed by EffectAnalysisPass
+
     SourceLocation loc;
 };
 

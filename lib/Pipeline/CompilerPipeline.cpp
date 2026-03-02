@@ -40,6 +40,7 @@ HIRModule* CompilerPipeline::buildHIR(Module* ast) {
     // Run HIR passes
     HIRPassManager pm;
     pm.add<PurityAnalysisPass>();
+    pm.add<EffectAnalysisPass>();
     pm.add<TailCallAnalysisPass>();
     pm.run(*hir, ctx_);
 

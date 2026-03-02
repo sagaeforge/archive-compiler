@@ -163,6 +163,9 @@ struct TraitMethodSig {
     uint32_t param_count;
     TypeRef return_type;
     SourceLocation loc;
+    // Effect clause: "with io" → effect_names = {"io"}
+    std::string_view* effect_names = nullptr;
+    uint32_t effect_count = 0;
 };
 
 struct TraitDecl {
@@ -438,6 +441,9 @@ struct FnDecl {
     TypeParam* type_params = nullptr; // generic type parameters (<T, U>)
     uint32_t type_param_count = 0;
     std::string_view section_name;    // @section("name"), empty = default
+    // Effect clause: "with io, atomic" → effect_names = {"io", "atomic"}
+    std::string_view* effect_names = nullptr;
+    uint32_t effect_count = 0;
 };
 
 // --- Import declaration ---
