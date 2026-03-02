@@ -389,6 +389,7 @@ struct HIRFnDecl {
     // Effect system (v2)
     EffectSet declared_effects = EFFECT_NONE;  // from "with io, atomic" annotation
     EffectSet inferred_effects = EFFECT_NONE;  // computed by EffectAnalysisPass
+    bool has_effect_annotation = false;        // true if "with ..." clause present
 
     SourceLocation loc;
 };

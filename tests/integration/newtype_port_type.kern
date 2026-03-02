@@ -1,0 +1,16 @@
+struct PortU8 {
+    number: u16
+}
+
+struct PortU16 {
+    number: u16
+}
+
+fn read_u8_port(p: PortU8) -> u16 {
+    p.number
+}
+
+fn main() -> i64 {
+    val com1: PortU8 = PortU8 { number: 42 }
+    read_u8_port(com1) as i64
+}

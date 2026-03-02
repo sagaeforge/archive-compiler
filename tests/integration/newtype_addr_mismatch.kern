@@ -1,0 +1,11 @@
+newtype PhysAddr(u64)
+newtype VirtAddr(u64)
+
+fn takes_phys(addr: PhysAddr) -> u64 {
+    addr.inner
+}
+
+fn main() -> i64 {
+    val v: VirtAddr = VirtAddr { inner: 42 }
+    takes_phys(v) as i64
+}

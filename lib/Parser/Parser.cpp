@@ -1172,8 +1172,10 @@ FnDecl* Parser::parseFnDecl() {
 
     // Parse optional effect clause: "with io, atomic"
     std::vector<std::string_view> effect_names;
+    bool has_effect_clause = false;
     if (check(TokenKind::KwWith)) {
         advance(); // consume 'with'
+        has_effect_clause = true;
         // Parse "pure" as a special case (explicitly annotated pure)
         if (check(TokenKind::Ident) && peek().text == "pure") {
             advance(); // consume 'pure' — effect_names stays empty
@@ -1227,6 +1229,7 @@ FnDecl* Parser::parseFnDecl() {
         }
     }
     fn->effect_count = static_cast<uint32_t>(effect_names.size());
+    fn->has_effect_clause = has_effect_clause;
     if (!effect_names.empty()) {
         fn->effect_names = arena_.makeArray<std::string_view>(effect_names.size());
         for (size_t i = 0; i < effect_names.size(); ++i) {

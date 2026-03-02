@@ -917,14 +917,16 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
 
     // Process effect annotations from "with io, atomic" clause
     EffectSet declared = EFFECT_NONE;
+    hfn->has_effect_annotation = fn->has_effect_clause;
     for (uint32_t i = 0; i < fn->effect_count; ++i) {
         Effect eff;
         if (parseEffectName(fn->effect_names[i], eff)) {
             declared = addEffect(declared, eff);
-        } else {
+        } else if (fn->effect_names[i] != "pure") {
             ctx_.diag.error(fn->loc, std::string("unknown effect '") +
                             std::string(fn->effect_names[i]) + "'");
         }
+        // "pure" is a valid annotation that means EFFECT_NONE (no error)
     }
     hfn->declared_effects = declared;
     hfn->inferred_effects = EFFECT_NONE;

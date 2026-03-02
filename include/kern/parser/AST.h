@@ -454,6 +454,7 @@ struct FnDecl {
     // Effect clause: "with io, atomic" → effect_names = {"io", "atomic"}
     std::string_view* effect_names = nullptr;
     uint32_t effect_count = 0;
+    bool has_effect_clause = false;  // true if "with ..." clause present (including "with pure")
 };
 
 // --- Import declaration ---

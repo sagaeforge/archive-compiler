@@ -399,9 +399,8 @@ static bool exprUsesPtrWrite(const HIRExpr* expr) {
             return exprUsesPtrWrite(e->payload);
         }
         case HIRExpr::Kind::AddrOf: {
-            auto* e = static_cast<const HIRAddrOfExpr*>(expr);
-            if (e->is_mutable) return true;
-            return exprUsesPtrWrite(e->operand);
+            // Any pointer creation (& or &var) requires mem effect
+            return true;
         }
         case HIRExpr::Kind::Deref: {
             auto* e = static_cast<const HIRDerefExpr*>(expr);
@@ -994,17 +993,14 @@ void EffectAnalysisPass::run(HIRModule& module, CompilationContext& ctx) {
         effect_map[name] = effects;
         fn->inferred_effects = effects;
 
-        // Validate: if declared_effects is set, check that it covers inferred
-        if (fn->declared_effects != EFFECT_NONE || fn->inferred_effects != EFFECT_NONE) {
-            // If function has declared effects, check inferred is subset
-            if (fn->declared_effects != EFFECT_NONE &&
-                !effectSubset(fn->inferred_effects, fn->declared_effects)) {
-                EffectSet missing = fn->inferred_effects & ~fn->declared_effects;
-                ctx.diag.error(fn->loc,
-                    std::string("function '") + std::string(name) +
-                    "' has undeclared effects: " + effectSetString(missing) +
-                    " (declared: " + effectSetString(fn->declared_effects) + ")");
-            }
+        // Validate: if function has effect annotation, check declared covers inferred
+        if (fn->has_effect_annotation &&
+            !effectSubset(fn->inferred_effects, fn->declared_effects)) {
+            EffectSet missing = fn->inferred_effects & ~fn->declared_effects;
+            ctx.diag.error(fn->loc,
+                std::string("function '") + std::string(name) +
+                "' has undeclared effects: " + effectSetString(missing) +
+                " (declared: " + effectSetString(fn->declared_effects) + ")");
         }
     }
 
@@ -1012,14 +1008,14 @@ void EffectAnalysisPass::run(HIRModule& module, CompilationContext& ctx) {
     for (auto& [name, callees] : call_graph) {
         auto* fn = fn_map[name];
         // Use declared effects if annotated, otherwise inferred
-        EffectSet caller_effects = (fn->declared_effects != EFFECT_NONE)
+        EffectSet caller_effects = fn->has_effect_annotation
             ? fn->declared_effects : fn->inferred_effects;
 
         for (auto& callee_name : callees) {
             EffectSet callee_effects;
             if (fn_map.count(callee_name)) {
                 auto* callee_fn = fn_map[callee_name];
-                callee_effects = (callee_fn->declared_effects != EFFECT_NONE)
+                callee_effects = callee_fn->has_effect_annotation
                     ? callee_fn->declared_effects : callee_fn->inferred_effects;
             } else if (effect_map.count(callee_name)) {
                 callee_effects = effect_map[callee_name];
