@@ -5,6 +5,61 @@
 
 namespace kern {
 
+// Strip integer type suffix (u8, u16, u32, u64, i8, i16, i32, i64) from text
+static std::string_view stripIntSuffix(std::string_view text) {
+    // Check for 3-char suffixes: u16, u32, u64, i16, i32, i64
+    if (text.size() >= 4) {
+        auto tail3 = text.substr(text.size() - 3);
+        if (tail3 == "u16" || tail3 == "u32" || tail3 == "u64" ||
+            tail3 == "i16" || tail3 == "i32" || tail3 == "i64") {
+            return text.substr(0, text.size() - 3);
+        }
+    }
+    // Check for 2-char suffixes: u8, i8
+    if (text.size() >= 3) {
+        auto tail2 = text.substr(text.size() - 2);
+        if (tail2 == "u8" || tail2 == "i8") {
+            return text.substr(0, text.size() - 2);
+        }
+    }
+    return text;
+}
+
+// Extract integer type suffix as a string (empty if none)
+static std::string_view intSuffix(std::string_view text) {
+    auto stripped = stripIntSuffix(text);
+    if (stripped.size() < text.size()) {
+        return text.substr(stripped.size());
+    }
+    return {};
+}
+
+// Strip underscore separators from integer literal text
+static std::string stripUnderscores(std::string_view text) {
+    std::string result;
+    result.reserve(text.size());
+    for (char c : text) {
+        if (c != '_') result += c;
+    }
+    return result;
+}
+
+// Parse integer literal text (hex, binary, octal, decimal) to int64
+static int64_t parseIntText(std::string_view text) {
+    text = stripIntSuffix(text);
+    std::string clean = stripUnderscores(text);
+    if (clean.size() > 2 && clean[0] == '0') {
+        char prefix = clean[1];
+        if (prefix == 'x' || prefix == 'X')
+            return static_cast<int64_t>(std::stoull(clean, nullptr, 16));
+        if (prefix == 'b' || prefix == 'B')
+            return static_cast<int64_t>(std::stoull(clean.substr(2), nullptr, 2));
+        if (prefix == 'o' || prefix == 'O')
+            return static_cast<int64_t>(std::stoull(clean.substr(2), nullptr, 8));
+    }
+    return static_cast<int64_t>(std::stoull(clean));
+}
+
 // --- AST Dump ---
 static void indent(std::ostream& out, int level) {
     for (int i = 0; i < level; ++i) out << "  ";
@@ -24,6 +79,9 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
         }
         case Expr::Kind::BoolLit:
             out << "BoolLit(" << (static_cast<const BoolLitExpr*>(expr)->value ? "true" : "false") << ")\n";
+            break;
+        case Expr::Kind::NullLit:
+            out << "NullLit\n";
             break;
         case Expr::Kind::StringLit: {
             auto* sl = static_cast<const StringLitExpr*>(expr);
@@ -261,6 +319,19 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             }
             break;
         }
+        case Expr::Kind::ForRange: {
+            auto* fr = static_cast<const ForRangeExpr*>(expr);
+            out << "ForRange(" << fr->var_name << ")\n";
+            indent(out, ind + 1); out << "start:\n";
+            dumpExpr(fr->start, out, ind + 2);
+            indent(out, ind + 1); out << "end:\n";
+            dumpExpr(fr->end, out, ind + 2);
+            break;
+        }
+        case Expr::Kind::WhileLoop: {
+            out << "WhileLoop\n";
+            break;
+        }
         case Expr::Kind::InlineAsm: {
             auto* ia = static_cast<const InlineAsmExpr*>(expr);
             out << "InlineAsm(" << ia->line_count << " lines)\n";
@@ -337,7 +408,11 @@ void dumpAST(const Module* mod, std::ostream& out, int /*ind*/) {
         auto* ed = mod->enums[i];
         out << "EnumDecl(" << ed->name << ")\n";
         for (uint32_t j = 0; j < ed->variant_count; ++j) {
-            out << "  " << ed->variants[j].name << "\n";
+            out << "  " << ed->variants[j].name;
+            if (ed->variants[j].has_value) {
+                out << " = " << ed->variants[j].value;
+            }
+            out << "\n";
         }
     }
     for (uint32_t i = 0; i < mod->union_count; ++i) {
@@ -371,6 +446,125 @@ void dumpAST(const Module* mod, std::ostream& out, int /*ind*/) {
 
 Parser::Parser(Lexer& lexer, Arena& arena, DiagnosticEngine& diag)
     : lexer_(lexer), arena_(arena), diag_(diag) {}
+
+void Parser::setCfg(std::string_view key, std::string_view value) {
+    cfg_flags_[key] = value;
+}
+
+void Parser::setCfg(std::string_view key) {
+    cfg_flags_[key] = "";
+}
+
+bool Parser::evaluateCfg() {
+    // Called after consuming "cfg" ident and expects '(' condition ')'
+    expect(TokenKind::LParen, "expected '(' after @cfg");
+
+    bool negated = false;
+    if (check(TokenKind::KwNot) || (check(TokenKind::Ident) && peek().text == "not")) {
+        advance();
+        negated = true;
+        expect(TokenKind::LParen, "expected '(' after 'not'");
+    }
+
+    Token key = expect(TokenKind::Ident, "expected cfg key");
+    bool result = false;
+
+    if (check(TokenKind::Eq)) {
+        // @cfg(key = "value")
+        advance(); // consume '='
+        Token val = expect(TokenKind::StringLit, "expected string value in @cfg");
+        auto val_text = val.text;
+        if (val_text.size() >= 2 && val_text.front() == '"' && val_text.back() == '"') {
+            val_text = val_text.substr(1, val_text.size() - 2);
+        }
+        auto it = cfg_flags_.find(key.text);
+        result = (it != cfg_flags_.end() && it->second == val_text);
+    } else {
+        // @cfg(key) — boolean presence check
+        result = cfg_flags_.count(key.text) > 0;
+    }
+
+    if (negated) {
+        result = !result;
+        expect(TokenKind::RParen, "expected ')' after not(...)");
+    }
+
+    expect(TokenKind::RParen, "expected ')' after @cfg(...)");
+    return result;
+}
+
+void Parser::skipTopLevelItem() {
+    // Skip tokens until the next top-level boundary
+    // Handle balanced braces
+    if (check(TokenKind::KwFn)) {
+        // fn ... { ... } or fn ... = intrinsic
+        while (!check(TokenKind::Eof)) {
+            if (check(TokenKind::LBrace)) {
+                advance();
+                int depth = 1;
+                while (depth > 0 && !check(TokenKind::Eof)) {
+                    if (check(TokenKind::LBrace)) depth++;
+                    else if (check(TokenKind::RBrace)) depth--;
+                    advance();
+                }
+                return;
+            }
+            if (check(TokenKind::Eq)) {
+                advance(); // consume '='
+                if (check(TokenKind::Ident) && peek().text == "intrinsic") {
+                    advance();
+                }
+                skipNewlines();
+                return;
+            }
+            if (check(TokenKind::Newline)) {
+                // Check if next non-newline token starts a new item
+                skipNewlines();
+                if (check(TokenKind::KwFn) || check(TokenKind::KwStruct) ||
+                    check(TokenKind::KwEnum) || check(TokenKind::KwUnion) ||
+                    check(TokenKind::KwTrait) || check(TokenKind::KwImpl) ||
+                    check(TokenKind::KwPub) || check(TokenKind::At) ||
+                    check(TokenKind::KwStatic) || check(TokenKind::KwExtern) ||
+                    check(TokenKind::Eof)) {
+                    return;
+                }
+                continue;
+            }
+            advance();
+        }
+    } else if (check(TokenKind::KwStruct) || check(TokenKind::KwEnum) ||
+               check(TokenKind::KwUnion) || check(TokenKind::KwTrait) ||
+               check(TokenKind::KwImpl)) {
+        // Skip past the opening brace and its matching close
+        while (!check(TokenKind::Eof)) {
+            if (check(TokenKind::LBrace)) {
+                advance();
+                int depth = 1;
+                while (depth > 0 && !check(TokenKind::Eof)) {
+                    if (check(TokenKind::LBrace)) depth++;
+                    else if (check(TokenKind::RBrace)) depth--;
+                    advance();
+                }
+                skipNewlines();
+                return;
+            }
+            advance();
+        }
+    } else if (check(TokenKind::KwStatic)) {
+        // static val/var ... = expr
+        while (!check(TokenKind::Eof) && !check(TokenKind::Newline)) {
+            advance();
+        }
+        skipNewlines();
+        return;
+    } else {
+        // Unknown — skip to next newline
+        while (!check(TokenKind::Eof) && !check(TokenKind::Newline)) {
+            advance();
+        }
+        skipNewlines();
+    }
+}
 
 Token Parser::peek() {
     if (!has_current_) {
@@ -454,7 +648,7 @@ Module* Parser::parseModule() {
         skipNewlines();
     }
 
-    // Parse import declarations: import kern.types (PhysAddr, VirtAddr)
+    // Parse import declarations: [pub] import kern.types (PhysAddr, VirtAddr)
     while (check(TokenKind::KwImport)) {
         auto loc = peek().loc;
         advance();
@@ -473,6 +667,7 @@ Module* Parser::parseModule() {
         auto* imp = arena_.make<ImportDecl>();
         imp->module_path = std::string_view(pbuf, path_buf.size());
         imp->loc = loc;
+        imp->is_pub = false;
         imp->names = nullptr;
         imp->name_count = 0;
 
@@ -499,13 +694,85 @@ Module* Parser::parseModule() {
     }
 
     while (!check(TokenKind::Eof)) {
-        // Parse annotations (@packed, @align(N), @section("name"))
+        // Parse visibility modifier: pub
+        bool is_pub = false;
+        if (check(TokenKind::KwPub)) {
+            is_pub = true;
+            advance();
+            skipNewlines();
+        }
+
+        // Parse extern modifier: extern "C"
+        bool is_extern = false;
+        std::string_view extern_abi;
+        if (check(TokenKind::KwExtern)) {
+            is_extern = true;
+            advance();
+            if (check(TokenKind::StringLit)) {
+                auto abi_tok = advance();
+                extern_abi = abi_tok.text;
+                // Strip quotes: "C" → C
+                if (extern_abi.size() >= 2 && extern_abi.front() == '"' && extern_abi.back() == '"') {
+                    extern_abi = extern_abi.substr(1, extern_abi.size() - 2);
+                }
+            }
+            skipNewlines();
+        }
+
+        // pub import — re-export
+        if (is_pub && check(TokenKind::KwImport)) {
+            auto loc = peek().loc;
+            advance();
+            std::string path_buf;
+            Token first = expect(TokenKind::Ident, "expected module path");
+            path_buf = std::string(first.text);
+            while (check(TokenKind::Dot)) {
+                advance();
+                Token part = expect(TokenKind::Ident, "expected module path part after '.'");
+                path_buf += ".";
+                path_buf += std::string(part.text);
+            }
+            char* pbuf = arena_.makeArray<char>(path_buf.size());
+            std::memcpy(pbuf, path_buf.data(), path_buf.size());
+            auto* imp = arena_.make<ImportDecl>();
+            imp->module_path = std::string_view(pbuf, path_buf.size());
+            imp->loc = loc;
+            imp->is_pub = true;
+            imp->names = nullptr;
+            imp->name_count = 0;
+            if (check(TokenKind::LParen)) {
+                advance();
+                std::vector<std::string_view> names;
+                while (!check(TokenKind::RParen) && !check(TokenKind::Eof)) {
+                    Token n = expect(TokenKind::Ident, "expected import name");
+                    names.push_back(n.text);
+                    if (check(TokenKind::Comma)) advance();
+                }
+                expect(TokenKind::RParen, "expected ')' after import names");
+                if (!names.empty()) {
+                    imp->names = arena_.makeArray<std::string_view>(names.size());
+                    for (uint32_t j = 0; j < names.size(); ++j) imp->names[j] = names[j];
+                    imp->name_count = static_cast<uint32_t>(names.size());
+                }
+            }
+            imports.push_back(imp);
+            skipNewlines();
+            continue;
+        }
+
+        // Parse annotations (@packed, @align(N), @section("name"), @cfg(...))
         bool is_packed = false;
         bool is_naked = false;
         bool is_interrupt = false;
         bool is_const_fn = false;
+        bool is_repr_c = false;
+        uint8_t repr_backing_size = 0;  // @repr(u8)=1, @repr(u16)=2, etc.
+        bool is_weak = false;
+        bool is_no_mangle = false;
+        bool cfg_excluded = false;
         uint32_t explicit_align = 0;
         std::string_view section_name;
+        std::string_view link_name;
         while (check(TokenKind::At)) {
             advance(); // consume '@'
             // Accept Ident or KwConst (const is a keyword but valid as annotation)
@@ -523,6 +790,10 @@ Module* Parser::parseModule() {
                 is_interrupt = true;
             } else if (anno.text == "const") {
                 is_const_fn = true;
+            } else if (anno.text == "cfg") {
+                if (!evaluateCfg()) {
+                    cfg_excluded = true;
+                }
             } else if (anno.text == "align") {
                 expect(TokenKind::LParen, "expected '(' after @align");
                 Token val = expect(TokenKind::IntLit, "expected integer in @align(N)");
@@ -537,9 +808,60 @@ Module* Parser::parseModule() {
                     section_name = section_name.substr(1, section_name.size() - 2);
                 }
                 expect(TokenKind::RParen, "expected ')' after @section(\"name\")");
+            } else if (anno.text == "repr") {
+                expect(TokenKind::LParen, "expected '(' after @repr");
+                Token val = expect(TokenKind::Ident, "expected repr kind in @repr(C)");
+                if (val.text == "C") {
+                    is_repr_c = true;
+                } else if (val.text == "u8" || val.text == "i8") {
+                    repr_backing_size = 1;
+                } else if (val.text == "u16" || val.text == "i16") {
+                    repr_backing_size = 2;
+                } else if (val.text == "u32" || val.text == "i32") {
+                    repr_backing_size = 4;
+                } else if (val.text == "u64" || val.text == "i64") {
+                    repr_backing_size = 8;
+                } else {
+                    diag_.error(val.loc, std::string("unknown repr kind '") +
+                                std::string(val.text) + "'; expected 'C', 'u8', 'u16', 'u32', or 'u64'");
+                }
+                expect(TokenKind::RParen, "expected ')' after @repr(C)");
+            } else if (anno.text == "weak") {
+                is_weak = true;
+            } else if (anno.text == "no_mangle") {
+                is_no_mangle = true;
+            } else if (anno.text == "link_name") {
+                expect(TokenKind::LParen, "expected '(' after @link_name");
+                Token val = expect(TokenKind::StringLit, "expected string in @link_name(\"name\")");
+                link_name = val.text;
+                if (link_name.size() >= 2 && link_name.front() == '"' && link_name.back() == '"') {
+                    link_name = link_name.substr(1, link_name.size() - 2);
+                }
+                expect(TokenKind::RParen, "expected ')' after @link_name(\"name\")");
             } else {
                 diag_.error(anno.loc, std::string("unknown annotation '@") +
                             std::string(anno.text) + "'");
+            }
+            skipNewlines();
+        }
+
+        // If @cfg excluded this item, skip it entirely
+        if (cfg_excluded) {
+            skipTopLevelItem();
+            skipNewlines();
+            continue;
+        }
+
+        // Parse extern modifier after annotations (e.g., @link_name("x") extern static val)
+        if (!is_extern && check(TokenKind::KwExtern)) {
+            is_extern = true;
+            advance();
+            if (check(TokenKind::StringLit)) {
+                auto abi_tok = advance();
+                extern_abi = abi_tok.text;
+                if (extern_abi.size() >= 2 && extern_abi.front() == '"' && extern_abi.back() == '"') {
+                    extern_abi = extern_abi.substr(1, extern_abi.size() - 2);
+                }
             }
             skipNewlines();
         }
@@ -548,6 +870,7 @@ Module* Parser::parseModule() {
             StructDecl* sd = parseStructDecl();
             if (sd) {
                 sd->is_packed = is_packed;
+                sd->is_pub = is_pub;
                 sd->explicit_align = explicit_align;
                 structs.push_back(sd);
                 struct_names_.insert(sd->name);
@@ -555,12 +878,18 @@ Module* Parser::parseModule() {
         } else if (check(TokenKind::KwEnum)) {
             EnumDecl* ed = parseEnumDecl();
             if (ed) {
+                ed->is_pub = is_pub;
+                if (repr_backing_size > 0) {
+                    ed->backing_size = repr_backing_size;
+                }
                 enums.push_back(ed);
                 enum_names_.insert(ed->name);
             }
         } else if (check(TokenKind::KwUnion)) {
             UnionDecl* ud = parseUnionDecl();
             if (ud) {
+                ud->is_pub = is_pub;
+                ud->is_repr_c = is_repr_c;
                 unions.push_back(ud);
                 union_names_.insert(ud->name);
             }
@@ -570,27 +899,60 @@ Module* Parser::parseModule() {
                 fn->is_naked = is_naked;
                 fn->is_interrupt = is_interrupt;
                 fn->is_const = is_const_fn;
+                fn->is_pub = is_pub;
+                fn->is_extern = is_extern;
+                fn->is_weak = is_weak;
+                fn->is_no_mangle = is_no_mangle;
+                fn->extern_abi = extern_abi;
                 fn->section_name = section_name;
+                fn->link_name = link_name;
+                if (is_no_mangle && fn->link_name.empty()) {
+                    fn->link_name = fn->name;
+                }
+                if (is_extern && fn->body) {
+                    // extern functions should not have a body
+                    fn->body = nullptr;
+                }
+                if (!fn->body && !is_extern && !fn->is_intrinsic) {
+                    diag_.error(fn->loc, "function '" + std::string(fn->name) +
+                                "' has no body (use 'extern fn' for forward declarations)");
+                }
                 fns.push_back(fn);
             }
         } else if (check(TokenKind::KwType)) {
             auto* ta = parseTypeAlias();
-            if (ta) type_aliases.push_back(ta);
+            if (ta) {
+                ta->is_pub = is_pub;
+                type_aliases.push_back(ta);
+            }
         } else if (check(TokenKind::KwNewtype)) {
             auto* nt = parseNewtype();
             if (nt) {
+                nt->is_pub = is_pub;
                 newtypes.push_back(nt);
                 struct_names_.insert(nt->name);
             }
         } else if (check(TokenKind::KwTrait)) {
             auto* td = parseTraitDecl();
-            if (td) traits.push_back(td);
+            if (td) {
+                td->is_pub = is_pub;
+                traits.push_back(td);
+            }
         } else if (check(TokenKind::KwImpl)) {
             auto* id = parseImplDecl();
             if (id) impls.push_back(id);
         } else if (check(TokenKind::KwStatic)) {
             auto* gd = parseGlobalDecl();
-            if (gd) globals.push_back(gd);
+            if (gd) {
+                gd->is_pub = is_pub;
+                gd->is_extern = is_extern;
+                gd->section_name = section_name;
+                gd->link_name = link_name;
+                if (is_no_mangle && gd->link_name.empty()) {
+                    gd->link_name = gd->name;
+                }
+                globals.push_back(gd);
+            }
         } else if (peek().kind == TokenKind::Ident && peek().text == "static_assert") {
             advance(); // consume 'static_assert'
             expect(TokenKind::LParen, "expected '(' after static_assert");
@@ -885,11 +1247,8 @@ ImplDecl* Parser::parseImplDecl() {
     SourceLocation loc = peek().loc;
     advance(); // consume 'impl'
     Token traitName = expect(TokenKind::Ident, "expected trait name after 'impl'");
-    // Expect 'for' keyword (used as contextual keyword, not a reserved word)
-    Token forTok = expect(TokenKind::Ident, "expected 'for' after trait name");
-    if (forTok.text != "for") {
-        diag_.error(forTok.loc, "expected 'for' after trait name in impl declaration");
-    }
+    // Expect 'for' keyword
+    expect(TokenKind::KwFor, "expected 'for' after trait name in impl declaration");
     TypeRef target = parseType();
     skipNewlines();
     expect(TokenKind::LBrace, "expected '{' in impl block");
@@ -939,8 +1298,11 @@ GlobalDecl* Parser::parseGlobalDecl() {
     Token name = expect(TokenKind::Ident, "expected name in static declaration");
     expect(TokenKind::Colon, "expected ':' after static variable name");
     TypeRef type = parseType();
-    expect(TokenKind::Eq, "expected '=' in static declaration");
-    Expr* init = parseExpr();
+
+    Expr* init = nullptr;
+    if (match(TokenKind::Eq)) {
+        init = parseExpr();
+    }
 
     auto* gd = arena_.make<GlobalDecl>();
     gd->name = name.text;
@@ -1003,6 +1365,12 @@ StructDecl* Parser::parseStructDecl() {
         fd.loc = field_name.loc;
         expect(TokenKind::Colon, "expected ':' after field name");
         fd.type = parseType();
+        // Optional bitfield width: `field: u32 : 5`
+        if (check(TokenKind::Colon)) {
+            advance();
+            Token width_tok = expect(TokenKind::IntLit, "expected bitfield width");
+            fd.bit_width = static_cast<uint32_t>(std::stoul(std::string(width_tok.text)));
+        }
         fields.push_back(fd);
         // Skip comma, semicolons, newlines between fields
         while (match(TokenKind::Comma) || match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
@@ -1042,6 +1410,13 @@ EnumDecl* Parser::parseEnumDecl() {
         EnumVariant ev;
         ev.name = vname.text;
         ev.loc = vname.loc;
+        // Optional explicit discriminant: = IntLit
+        if (check(TokenKind::Eq)) {
+            advance();
+            Token val = expect(TokenKind::IntLit, "expected integer discriminant after '='");
+            ev.value = parseIntText(val.text);
+            ev.has_value = true;
+        }
         variants.push_back(ev);
         while (match(TokenKind::Comma) || match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
     }
@@ -1166,6 +1541,7 @@ FnDecl* Parser::parseFnDecl() {
 
     std::vector<Param> params;
     bool has_pattern_params = false;
+    bool is_variadic = false;
     Pattern* pattern_param = nullptr;
 
     if (!check(TokenKind::RParen)) {
@@ -1178,7 +1554,7 @@ FnDecl* Parser::parseFnDecl() {
             auto* pat = arena_.make<IntLitPattern>();
             pat->kind = Pattern::Kind::IntLit;
             pat->loc = first.loc;
-            pat->value = static_cast<int64_t>(std::stoull(std::string(first.text)));
+            pat->value = parseIntText(first.text);
             pattern_param = pat;
         } else if (first.kind == TokenKind::Minus) {
             // fn f(-1) -> i64 { ... }
@@ -1188,7 +1564,7 @@ FnDecl* Parser::parseFnDecl() {
             auto* pat = arena_.make<IntLitPattern>();
             pat->kind = Pattern::Kind::IntLit;
             pat->loc = first.loc;
-            pat->value = -static_cast<int64_t>(std::stoull(std::string(num.text)));
+            pat->value = -parseIntText(num.text);
             pattern_param = pat;
         } else if (first.kind == TokenKind::KwTrue || first.kind == TokenKind::KwFalse) {
             advance();
@@ -1201,6 +1577,20 @@ FnDecl* Parser::parseFnDecl() {
         } else {
             params.push_back(parseParam());
             while (match(TokenKind::Comma)) {
+                // Check for variadic "..." (DotDot + Dot, or three Dots)
+                if (check(TokenKind::DotDot)) {
+                    advance(); // consume ..
+                    expect(TokenKind::Dot, "expected '...' for variadic parameters");
+                    is_variadic = true;
+                    break;
+                }
+                if (check(TokenKind::Dot)) {
+                    advance(); // first .
+                    expect(TokenKind::Dot, "expected '..' in '...'");
+                    expect(TokenKind::Dot, "expected '...' for variadic parameters");
+                    is_variadic = true;
+                    break;
+                }
                 params.push_back(parseParam());
             }
         }
@@ -1232,7 +1622,7 @@ FnDecl* Parser::parseFnDecl() {
 
     skipNewlines();
 
-    // Check for `= intrinsic`
+    // Check for `= intrinsic`, body block, or forward declaration (no body)
     bool is_intrinsic = false;
     Expr* body = nullptr;
     if (check(TokenKind::Eq)) {
@@ -1244,9 +1634,10 @@ FnDecl* Parser::parseFnDecl() {
             diag_.error(kw.loc, std::string("expected 'intrinsic', got '") +
                         std::string(kw.text) + "'");
         }
-    } else {
+    } else if (check(TokenKind::LBrace)) {
         body = parseBlockExpr();
     }
+    // else: forward declaration (extern fn) — body remains nullptr
 
     auto* fn = arena_.make<FnDecl>();
     fn->name = nameTok.text;
@@ -1259,6 +1650,7 @@ FnDecl* Parser::parseFnDecl() {
     fn->body = body;
     fn->loc = loc;
     fn->is_intrinsic = is_intrinsic;
+    fn->is_variadic = is_variadic;
     fn->has_pattern_params = has_pattern_params;
     fn->pattern_param = pattern_param;
     fn->type_param_count = static_cast<uint32_t>(type_params.size());
@@ -1303,7 +1695,7 @@ TypeRef Parser::parseType() {
         ref.kind = TypeRef::Kind::ConstVal;
         ref.name = tok.text;
         ref.loc = tok.loc;
-        ref.const_value = std::stoll(std::string(tok.text));
+        ref.const_value = parseIntText(tok.text);
         return ref;
     }
 
@@ -1330,7 +1722,7 @@ TypeRef Parser::parseType() {
         ref.array_element = elem;
         if (check(TokenKind::IntLit)) {
             Token size_tok = advance();
-            ref.array_size = static_cast<uint32_t>(std::stoull(std::string(size_tok.text)));
+            ref.array_size = static_cast<uint32_t>(parseIntText(size_tok.text));
         } else if (check(TokenKind::Ident)) {
             Token name_tok = advance();
             ref.array_size_name = name_tok.text;
@@ -1364,6 +1756,16 @@ TypeRef Parser::parseType() {
                 ref.fn_params[i] = params[i];
         }
         ref.fn_return = ret;
+        return ref;
+    }
+    // dyn TraitName — dynamic dispatch trait object (fat pointer)
+    if (check(TokenKind::KwDyn)) {
+        Token dyn_tok = advance(); // consume 'dyn'
+        Token trait_tok = expect(TokenKind::Ident, "expected trait name after 'dyn'");
+        TypeRef ref;
+        ref.kind = TypeRef::Kind::Dyn;
+        ref.name = trait_tok.text;  // trait name
+        ref.loc = dyn_tok.loc;
         return ref;
     }
     Token tok = expect(TokenKind::Ident, "expected type name");
@@ -1713,12 +2115,8 @@ Expr* Parser::parsePrimary() {
         auto* lit = arena_.make<IntLitExpr>();
         lit->kind = Expr::Kind::IntLit;
         lit->loc = tok.loc;
-        // Parse int value
-        if (tok.text.size() > 2 && tok.text[0] == '0' && (tok.text[1] == 'x' || tok.text[1] == 'X')) {
-            lit->value = static_cast<int64_t>(std::stoull(std::string(tok.text), nullptr, 16));
-        } else {
-            lit->value = static_cast<int64_t>(std::stoull(std::string(tok.text)));
-        }
+        lit->value = parseIntText(tok.text);
+        lit->suffix = intSuffix(tok.text);
         return lit;
     }
 
@@ -1742,6 +2140,15 @@ Expr* Parser::parsePrimary() {
         lit->kind = Expr::Kind::BoolLit;
         lit->loc = tok.loc;
         lit->value = (tok.kind == TokenKind::KwTrue);
+        return lit;
+    }
+
+    // Null literal
+    if (tok.kind == TokenKind::KwNull) {
+        advance();
+        auto* lit = arena_.make<NullLitExpr>();
+        lit->kind = Expr::Kind::NullLit;
+        lit->loc = tok.loc;
         return lit;
     }
 
@@ -2019,37 +2426,142 @@ Expr* Parser::parsePrimary() {
     }
 
     // Inline assembly: asm { "line1"; "line2"; }
+    //   or extended:   asm("template" : "=r"(out) : "r"(in) : "cc")
     if (tok.kind == TokenKind::KwAsm) {
         advance(); // consume 'asm'
-        expect(TokenKind::LBrace, "expected '{' after 'asm'");
-        skipNewlines();
-        std::vector<StringLitExpr*> lines;
-        while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
-            Token str_tok = expect(TokenKind::StringLit, "expected string literal in asm block");
-            auto* sle = arena_.make<StringLitExpr>();
-            sle->kind = Expr::Kind::StringLit;
-            sle->loc = str_tok.loc;
-            // Process escape sequences (same as regular string parsing)
-            sle->data = str_tok.text.data() + 1;  // skip opening quote
-            sle->length = static_cast<uint32_t>(str_tok.text.size() - 2);  // skip quotes
-            lines.push_back(sle);
-            while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
-        }
-        expect(TokenKind::RBrace, "expected '}' after asm block");
+
         auto* asmExpr = arena_.make<InlineAsmExpr>();
         asmExpr->kind = Expr::Kind::InlineAsm;
         asmExpr->loc = tok.loc;
-        asmExpr->line_count = static_cast<uint32_t>(lines.size());
-        asmExpr->lines = arena_.makeArray<StringLitExpr*>(lines.size());
-        for (size_t i = 0; i < lines.size(); ++i) {
-            asmExpr->lines[i] = lines[i];
+        asmExpr->outputs = nullptr;
+        asmExpr->output_count = 0;
+        asmExpr->inputs = nullptr;
+        asmExpr->input_count = 0;
+        asmExpr->clobbers = nullptr;
+        asmExpr->clobber_count = 0;
+
+        if (check(TokenKind::LParen)) {
+            // Extended asm: asm("template" : "=r"(out) : "r"(in) : "cc")
+            advance(); // consume '('
+            skipNewlines();
+
+            // Parse template string(s) — one or more string literals
+            std::vector<StringLitExpr*> lines;
+            while (check(TokenKind::StringLit)) {
+                Token str_tok = advance();
+                auto* sle = arena_.make<StringLitExpr>();
+                sle->kind = Expr::Kind::StringLit;
+                sle->loc = str_tok.loc;
+                sle->data = str_tok.text.data() + 1;
+                sle->length = static_cast<uint32_t>(str_tok.text.size() - 2);
+                lines.push_back(sle);
+                while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+            }
+            asmExpr->line_count = static_cast<uint32_t>(lines.size());
+            asmExpr->lines = arena_.makeArray<StringLitExpr*>(lines.size());
+            for (size_t i = 0; i < lines.size(); ++i) asmExpr->lines[i] = lines[i];
+
+            // Parse output constraints (after first ':')
+            if (match(TokenKind::Colon)) {
+                skipNewlines();
+                std::vector<AsmOperand> outputs;
+                while (check(TokenKind::StringLit)) {
+                    AsmOperand op;
+                    Token ct = advance();
+                    op.constraint = ct.text.substr(1, ct.text.size() - 2); // strip quotes
+                    expect(TokenKind::LParen, "expected '(' after constraint");
+                    Token name = expect(TokenKind::Ident, "expected variable name");
+                    op.var_name = name.text;
+                    expect(TokenKind::RParen, "expected ')' after variable name");
+                    outputs.push_back(op);
+                    if (!match(TokenKind::Comma)) break;
+                    skipNewlines();
+                }
+                if (!outputs.empty()) {
+                    asmExpr->output_count = static_cast<uint32_t>(outputs.size());
+                    asmExpr->outputs = arena_.makeArray<AsmOperand>(outputs.size());
+                    for (size_t i = 0; i < outputs.size(); ++i) asmExpr->outputs[i] = outputs[i];
+                }
+
+                // Parse input constraints (after second ':')
+                if (match(TokenKind::Colon)) {
+                    skipNewlines();
+                    std::vector<AsmOperand> inputs;
+                    while (check(TokenKind::StringLit)) {
+                        AsmOperand op;
+                        Token ct = advance();
+                        op.constraint = ct.text.substr(1, ct.text.size() - 2);
+                        expect(TokenKind::LParen, "expected '(' after constraint");
+                        Token name = expect(TokenKind::Ident, "expected variable name");
+                        op.var_name = name.text;
+                        expect(TokenKind::RParen, "expected ')' after variable name");
+                        inputs.push_back(op);
+                        if (!match(TokenKind::Comma)) break;
+                        skipNewlines();
+                    }
+                    if (!inputs.empty()) {
+                        asmExpr->input_count = static_cast<uint32_t>(inputs.size());
+                        asmExpr->inputs = arena_.makeArray<AsmOperand>(inputs.size());
+                        for (size_t i = 0; i < inputs.size(); ++i) asmExpr->inputs[i] = inputs[i];
+                    }
+
+                    // Parse clobber list (after third ':')
+                    if (match(TokenKind::Colon)) {
+                        skipNewlines();
+                        std::vector<std::string_view> clobbers;
+                        while (check(TokenKind::StringLit)) {
+                            Token ct = advance();
+                            clobbers.push_back(ct.text.substr(1, ct.text.size() - 2));
+                            if (!match(TokenKind::Comma)) break;
+                            skipNewlines();
+                        }
+                        if (!clobbers.empty()) {
+                            asmExpr->clobber_count = static_cast<uint32_t>(clobbers.size());
+                            asmExpr->clobbers = arena_.makeArray<std::string_view>(clobbers.size());
+                            for (size_t i = 0; i < clobbers.size(); ++i) asmExpr->clobbers[i] = clobbers[i];
+                        }
+                    }
+                }
+            }
+
+            expect(TokenKind::RParen, "expected ')' after asm expression");
+        } else {
+            // Legacy asm: asm { "line1"; "line2"; }
+            expect(TokenKind::LBrace, "expected '{' or '(' after 'asm'");
+            skipNewlines();
+            std::vector<StringLitExpr*> lines;
+            while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+                Token str_tok = expect(TokenKind::StringLit, "expected string literal in asm block");
+                auto* sle = arena_.make<StringLitExpr>();
+                sle->kind = Expr::Kind::StringLit;
+                sle->loc = str_tok.loc;
+                sle->data = str_tok.text.data() + 1;
+                sle->length = static_cast<uint32_t>(str_tok.text.size() - 2);
+                lines.push_back(sle);
+                while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+            }
+            expect(TokenKind::RBrace, "expected '}' after asm block");
+            asmExpr->line_count = static_cast<uint32_t>(lines.size());
+            asmExpr->lines = arena_.makeArray<StringLitExpr*>(lines.size());
+            for (size_t i = 0; i < lines.size(); ++i) asmExpr->lines[i] = lines[i];
         }
+
         return asmExpr;
     }
 
     // Loop expression
     if (tok.kind == TokenKind::KwLoop) {
         return parseLoopExpr();
+    }
+
+    // For-in-range: for i in start..end { body }
+    if (tok.kind == TokenKind::KwFor) {
+        return parseForRange();
+    }
+
+    // While loop: while cond { body }
+    if (tok.kind == TokenKind::KwWhile) {
+        return parseWhileLoop();
     }
 
     // Lambda or Block expression
@@ -2205,6 +2717,74 @@ Expr* Parser::parseBlockExpr() {
                 lhs = parseCallExpr(identTok.text, identTok.loc);
             } else if (check(TokenKind::LBrace) && struct_names_.count(identTok.text)) {
                 lhs = parseStructLit(identTok.text, identTok.loc);
+            } else if (check(TokenKind::Lt) && !struct_names_.count(identTok.text) && !union_names_.count(identTok.text)) {
+                // Speculative generic function call: f<T1, T2>(args)
+                auto lexer_snap = lexer_.save();
+                Token saved_current2 = current_;
+                Token saved_previous2 = previous_;
+                bool saved_has2 = has_current_;
+
+                advance(); // consume '<'
+                std::vector<TypeRef> type_args;
+                bool valid = true;
+                while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
+                    if (!check(TokenKind::Ident) && !check(TokenKind::LBracket) &&
+                        !check(TokenKind::KwFn) && !check(TokenKind::Exclaim) &&
+                        !check(TokenKind::IntLit)) {
+                        valid = false;
+                        break;
+                    }
+                    type_args.push_back(parseType());
+                    if (!check(TokenKind::Gt)) {
+                        if (!match(TokenKind::Comma)) { valid = false; break; }
+                    }
+                }
+                if (valid && !type_args.empty() && check(TokenKind::Gt)) {
+                    advance(); // consume '>'
+                    if (check(TokenKind::LParen)) {
+                        // It's a generic function call!
+                        advance(); // consume '('
+                        skipNewlines();
+                        std::vector<Expr*> args;
+                        if (!check(TokenKind::RParen)) {
+                            args.push_back(parseExpr());
+                            while (match(TokenKind::Comma)) {
+                                skipNewlines();
+                                args.push_back(parseExpr());
+                            }
+                        }
+                        skipNewlines();
+                        expect(TokenKind::RParen, "expected ')'");
+
+                        auto* call = arena_.make<CallExpr>();
+                        call->kind = Expr::Kind::Call;
+                        call->loc = identTok.loc;
+                        call->callee = identTok.text;
+                        call->arg_count = static_cast<uint32_t>(args.size());
+                        call->args = arena_.makeArray<Expr*>(args.size());
+                        for (size_t i = 0; i < args.size(); ++i) {
+                            call->args[i] = args[i];
+                        }
+                        call->type_arg_count = static_cast<uint32_t>(type_args.size());
+                        call->type_args = arena_.makeArray<TypeRef>(type_args.size());
+                        for (size_t i = 0; i < type_args.size(); ++i) {
+                            call->type_args[i] = type_args[i];
+                        }
+                        lhs = call;
+                        goto block_ident_done;
+                    }
+                }
+                // Not a generic call — restore and fall through to plain ident
+                lexer_.restore(lexer_snap);
+                current_ = saved_current2;
+                previous_ = saved_previous2;
+                has_current_ = saved_has2;
+
+                auto* ident = arena_.make<IdentExpr>();
+                ident->kind = Expr::Kind::Ident;
+                ident->loc = identTok.loc;
+                ident->name = identTok.text;
+                lhs = ident;
             } else if (check(TokenKind::Lt) && (struct_names_.count(identTok.text) || union_names_.count(identTok.text))) {
                 // Generic struct literal or union variant in block context
                 auto lexer_snap = lexer_.save();
@@ -2760,6 +3340,248 @@ Expr* Parser::parseLoopExpr() {
     return loop;
 }
 
+// for i in start..end { stmts }
+Expr* Parser::parseForRange() {
+    SourceLocation loc = peek().loc;
+    expect(TokenKind::KwFor, "expected 'for'");
+
+    Token var_tok = expect(TokenKind::Ident, "expected loop variable name");
+    expect(TokenKind::KwIn, "expected 'in' after loop variable");
+    skipNewlines();
+
+    Expr* start = parseExpr();
+
+    expect(TokenKind::DotDot, "expected '..' for range");
+    skipNewlines();
+
+    Expr* end = parseExpr();
+    skipNewlines();
+
+    // Parse body block
+    expect(TokenKind::LBrace, "expected '{' for for-range body");
+    skipNewlines();
+
+    std::vector<Stmt*> stmts;
+    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        if (check(TokenKind::KwVal) || check(TokenKind::KwVar)) {
+            stmts.push_back(parseValDecl());
+        } else if (check(TokenKind::Ident)) {
+            Token identTok = peek();
+            advance();
+            skipNewlines();
+
+            Expr* lhs;
+            if (check(TokenKind::LParen)) {
+                lhs = parseCallExpr(identTok.text, identTok.loc);
+            } else {
+                auto* ident = arena_.make<IdentExpr>();
+                ident->kind = Expr::Kind::Ident;
+                ident->loc = identTok.loc;
+                ident->name = identTok.text;
+                lhs = ident;
+            }
+
+            // Field access chains
+            while (check(TokenKind::Dot)) {
+                advance();
+                Token field = expect(TokenKind::Ident, "expected field name after '.'");
+                auto* fa = arena_.make<FieldAccessExpr>();
+                fa->kind = Expr::Kind::FieldAccess;
+                fa->loc = field.loc;
+                fa->object = lhs;
+                fa->field_name = field.text;
+                lhs = fa;
+            }
+
+            // Index access
+            while (check(TokenKind::LBracket)) {
+                advance();
+                Expr* idx = parseExpr();
+                expect(TokenKind::RBracket, "expected ']'");
+                auto* ia = arena_.make<IndexAccessExpr>();
+                ia->kind = Expr::Kind::IndexAccess;
+                ia->loc = identTok.loc;
+                ia->array = lhs;
+                ia->index = idx;
+                lhs = ia;
+            }
+            skipNewlines();
+
+            if (check(TokenKind::Eq)) {
+                advance();
+                skipNewlines();
+                Expr* value = parseExpr();
+                if (lhs->kind == Expr::Kind::FieldAccess) {
+                    auto* fa_stmt = arena_.make<FieldAssignStmt>();
+                    fa_stmt->kind = Stmt::Kind::FieldAssign;
+                    fa_stmt->loc = identTok.loc;
+                    fa_stmt->target = lhs;
+                    fa_stmt->value = value;
+                    stmts.push_back(fa_stmt);
+                } else if (lhs->kind == Expr::Kind::IndexAccess) {
+                    auto* ia_stmt = arena_.make<FieldAssignStmt>();
+                    ia_stmt->kind = Stmt::Kind::FieldAssign;
+                    ia_stmt->loc = identTok.loc;
+                    ia_stmt->target = lhs;
+                    ia_stmt->value = value;
+                    stmts.push_back(ia_stmt);
+                } else {
+                    auto* assign = arena_.make<AssignStmt>();
+                    assign->kind = Stmt::Kind::Assign;
+                    assign->loc = identTok.loc;
+                    assign->name = identTok.text;
+                    assign->value = value;
+                    stmts.push_back(assign);
+                }
+            } else {
+                lhs = parseExprInfix(lhs, 0);
+                auto* exprStmt = arena_.make<ExprStmt>();
+                exprStmt->kind = Stmt::Kind::ExprStmt;
+                exprStmt->loc = lhs->loc;
+                exprStmt->expr = lhs;
+                stmts.push_back(exprStmt);
+            }
+        } else {
+            Expr* expr = parseExpr();
+            auto* es = arena_.make<ExprStmt>();
+            es->kind = Stmt::Kind::ExprStmt;
+            es->loc = expr->loc;
+            es->expr = expr;
+            stmts.push_back(es);
+        }
+        while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+    }
+    expect(TokenKind::RBrace, "expected '}' after for-range body");
+
+    auto* fr = arena_.make<ForRangeExpr>();
+    fr->kind = Expr::Kind::ForRange;
+    fr->loc = loc;
+    fr->var_name = var_tok.text;
+    fr->start = start;
+    fr->end = end;
+    fr->stmt_count = static_cast<uint32_t>(stmts.size());
+    fr->stmts = arena_.makeArray<Stmt*>(stmts.size());
+    for (size_t i = 0; i < stmts.size(); ++i) {
+        fr->stmts[i] = stmts[i];
+    }
+    return fr;
+}
+
+// while cond { stmts }
+Expr* Parser::parseWhileLoop() {
+    SourceLocation loc = peek().loc;
+    expect(TokenKind::KwWhile, "expected 'while'");
+    skipNewlines();
+
+    Expr* cond = parseExpr();
+    skipNewlines();
+
+    // Parse body block (reuses for-range body logic with assignments)
+    expect(TokenKind::LBrace, "expected '{' for while body");
+    skipNewlines();
+
+    std::vector<Stmt*> stmts;
+    while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        if (check(TokenKind::KwVal) || check(TokenKind::KwVar)) {
+            stmts.push_back(parseValDecl());
+        } else if (check(TokenKind::KwBreak)) {
+            Token brk_tok = advance();
+            auto* bs = arena_.make<BreakStmt>();
+            bs->kind = Stmt::Kind::Break;
+            bs->loc = brk_tok.loc;
+            bs->value = nullptr;
+            stmts.push_back(bs);
+        } else if (check(TokenKind::Ident)) {
+            Token identTok = peek();
+            advance();
+            skipNewlines();
+
+            Expr* lhs;
+            if (check(TokenKind::LParen)) {
+                lhs = parseCallExpr(identTok.text, identTok.loc);
+            } else {
+                auto* ident = arena_.make<IdentExpr>();
+                ident->kind = Expr::Kind::Ident;
+                ident->loc = identTok.loc;
+                ident->name = identTok.text;
+                lhs = ident;
+            }
+
+            while (check(TokenKind::Dot)) {
+                advance();
+                Token field = expect(TokenKind::Ident, "expected field name after '.'");
+                auto* fa = arena_.make<FieldAccessExpr>();
+                fa->kind = Expr::Kind::FieldAccess;
+                fa->loc = field.loc;
+                fa->object = lhs;
+                fa->field_name = field.text;
+                lhs = fa;
+            }
+
+            while (check(TokenKind::LBracket)) {
+                advance();
+                Expr* idx = parseExpr();
+                expect(TokenKind::RBracket, "expected ']'");
+                auto* ia = arena_.make<IndexAccessExpr>();
+                ia->kind = Expr::Kind::IndexAccess;
+                ia->loc = identTok.loc;
+                ia->array = lhs;
+                ia->index = idx;
+                lhs = ia;
+            }
+            skipNewlines();
+
+            if (check(TokenKind::Eq)) {
+                advance();
+                skipNewlines();
+                Expr* value = parseExpr();
+                if (lhs->kind == Expr::Kind::FieldAccess || lhs->kind == Expr::Kind::IndexAccess) {
+                    auto* fa_stmt = arena_.make<FieldAssignStmt>();
+                    fa_stmt->kind = Stmt::Kind::FieldAssign;
+                    fa_stmt->loc = identTok.loc;
+                    fa_stmt->target = lhs;
+                    fa_stmt->value = value;
+                    stmts.push_back(fa_stmt);
+                } else {
+                    auto* assign = arena_.make<AssignStmt>();
+                    assign->kind = Stmt::Kind::Assign;
+                    assign->loc = identTok.loc;
+                    assign->name = identTok.text;
+                    assign->value = value;
+                    stmts.push_back(assign);
+                }
+            } else {
+                lhs = parseExprInfix(lhs, 0);
+                auto* exprStmt = arena_.make<ExprStmt>();
+                exprStmt->kind = Stmt::Kind::ExprStmt;
+                exprStmt->loc = lhs->loc;
+                exprStmt->expr = lhs;
+                stmts.push_back(exprStmt);
+            }
+        } else {
+            Expr* expr = parseExpr();
+            auto* es = arena_.make<ExprStmt>();
+            es->kind = Stmt::Kind::ExprStmt;
+            es->loc = expr->loc;
+            es->expr = expr;
+            stmts.push_back(es);
+        }
+        while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+    }
+    expect(TokenKind::RBrace, "expected '}' after while body");
+
+    auto* wl = arena_.make<WhileLoopExpr>();
+    wl->kind = Expr::Kind::WhileLoop;
+    wl->loc = loc;
+    wl->condition = cond;
+    wl->stmt_count = static_cast<uint32_t>(stmts.size());
+    wl->stmts = arena_.makeArray<Stmt*>(stmts.size());
+    for (size_t i = 0; i < stmts.size(); ++i) {
+        wl->stmts[i] = stmts[i];
+    }
+    return wl;
+}
+
 Pattern* Parser::parsePattern() {
     Token tok = peek();
 
@@ -2769,7 +3591,7 @@ Pattern* Parser::parsePattern() {
         auto* pat = arena_.make<IntLitPattern>();
         pat->kind = Pattern::Kind::IntLit;
         pat->loc = tok.loc;
-        pat->value = static_cast<int64_t>(std::stoull(std::string(tok.text)));
+        pat->value = parseIntText(tok.text);
         return pat;
     }
 
@@ -2780,7 +3602,7 @@ Pattern* Parser::parsePattern() {
         auto* pat = arena_.make<IntLitPattern>();
         pat->kind = Pattern::Kind::IntLit;
         pat->loc = tok.loc;
-        pat->value = -static_cast<int64_t>(std::stoull(std::string(num.text)));
+        pat->value = -parseIntText(num.text);
         return pat;
     }
 

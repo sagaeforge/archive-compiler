@@ -89,6 +89,16 @@ enum class LIROp : uint8_t {
     // Global variables (.data/.bss/.rodata)
     LoadGlobal,     // result = *label (load from global)
     StoreGlobal,    // *label = value (store to global)
+
+    // Bit manipulation
+    Clz,            // count leading zeros (bsr on x86)
+    Ctz,            // count trailing zeros (bsf on x86)
+    Popcnt,         // population count (popcnt on x86)
+    Bswap,          // byte swap (bswap on x86)
+
+    // Port I/O (x86 in/out)
+    PortIn,         // inb/inw/inl: read from I/O port
+    PortOut,        // outb/outw/outl: write to I/O port
 };
 
 const char* lirOpName(LIROp op);
@@ -106,9 +116,11 @@ struct LIRBinPayload   { VReg lhs; VReg rhs; };
 struct LIRUnaryPayload { VReg operand; };
 struct LIRCallPayload  {
     std::string_view callee;    // interned
+    std::string_view callee_module;  // module path of callee (empty if same module)
     VReg* args;
     uint32_t arg_count;
     bool is_tail;
+    bool is_variadic;
 };
 struct LIRBranchPayload    { uint32_t target; VReg* args; uint32_t arg_count; };
 struct LIRCondBrPayload    { VReg cond; uint32_t true_target; uint32_t false_target; };
@@ -125,8 +137,22 @@ struct LIRCallIndirectPayload {
     VReg* args;
     uint32_t arg_count;
 };
-struct LIRFnRefPayload { std::string_view fn_name; };
-struct LIRInlineAsmPayload { const char** lines; uint32_t* line_lengths; uint32_t line_count; };
+struct LIRFnRefPayload { std::string_view fn_name; std::string_view fn_module; };
+struct LIRAsmOperand {
+    std::string_view constraint;
+    VReg vreg;  // vreg holding the value (for inputs) or receiving value (for outputs)
+};
+struct LIRInlineAsmPayload {
+    const char** lines;
+    uint32_t* line_lengths;
+    uint32_t line_count;
+    LIRAsmOperand* outputs;
+    uint32_t output_count;
+    LIRAsmOperand* inputs;
+    uint32_t input_count;
+    std::string_view* clobbers;
+    uint32_t clobber_count;
+};
 
 // Memory ordering for atomic operations
 enum class MemOrder : uint8_t {
@@ -146,6 +172,8 @@ struct LIRPercpuPayload      { VReg offset; };
 struct LIRPercpuStorePayload { VReg offset; VReg value; };
 struct LIRLoadGlobalPayload  { std::string_view label; };
 struct LIRStoreGlobalPayload { std::string_view label; VReg value; };
+struct LIRPortInPayload  { VReg port; };
+struct LIRPortOutPayload { VReg port; VReg value; };
 
 struct LIRInstr {
     LIROp op;
@@ -188,6 +216,8 @@ struct LIRInstr {
         LIRPercpuStorePayload percpu_store;
         LIRLoadGlobalPayload  load_global;
         LIRStoreGlobalPayload store_global;
+        LIRPortInPayload      port_in;
+        LIRPortOutPayload     port_out;
     };
 };
 
@@ -225,7 +255,12 @@ struct LIRFunction {
     bool is_intrinsic;
     bool is_naked;
     bool is_interrupt;
+    bool is_pub = false;        // pub fn — export as global symbol
+    bool is_extern = false;     // extern "C" fn — external C linkage
+    bool is_variadic = false;   // fn(x: T, ...) — C-style varargs
+    bool is_weak = false;       // @weak — weak symbol linkage
     std::string_view section_name;  // @section("name"), empty = default
+    std::string_view link_name;     // @link_name("name"), empty = auto
 };
 
 // ============================================================================
@@ -235,13 +270,25 @@ struct LIRFunction {
 struct GlobalStringLit { const char* data; uint32_t length; };
 struct GlobalFloatConst { double value; bool is_f32; };
 struct GlobalVariable {
-    int64_t init_value;     // integer init value (0 for .bss)
-    uint8_t size;           // 1/2/4/8 bytes
-    bool is_mutable;        // static var → .data/.bss, static val → .rodata
+    int64_t init_value;       // integer init value (0 for .bss)
+    uint8_t size;             // 1/2/4/8 bytes (element size for arrays)
+    bool is_mutable;          // static var → .data/.bss, static val → .rodata
+    bool is_extern;           // extern static — linker-defined symbol (no storage)
+    int64_t* array_values;    // array initializer values (nullptr if scalar)
+    uint32_t array_count;     // number of elements (0 if scalar)
+    uint8_t* init_bytes;      // raw byte initializer (struct/float literals)
+    uint32_t init_byte_count; // byte count for init_bytes (0 if unused)
+    std::string_view section_name;  // @section("name"), empty = default
+    std::string_view link_name;     // @link_name("name"), empty = use label
+};
+
+struct GlobalVTable {
+    std::string_view* fn_labels;  // ordered function labels for vtable slots
+    uint32_t method_count;
 };
 
 struct GlobalData {
-    enum Kind : uint8_t { StringLit, FloatConst, Variable };
+    enum Kind : uint8_t { StringLit, FloatConst, Variable, VTable };
     Kind kind;
     uint32_t index;             // unique index within module
     std::string_view label;     // NASM label (interned)
@@ -250,7 +297,10 @@ struct GlobalData {
         GlobalStringLit  string_lit;
         GlobalFloatConst float_const;
         GlobalVariable   variable;
+        GlobalVTable     vtable;
     };
+
+    GlobalData() : kind(StringLit), index(0), string_lit{} {}
 };
 
 // ============================================================================
@@ -258,6 +308,8 @@ struct GlobalData {
 // ============================================================================
 
 struct LIRModule {
+    std::string_view module_name;  // propagated from HIRModule
+
     LIRFunction* functions;
     uint32_t fn_count;
 

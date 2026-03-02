@@ -13,7 +13,7 @@ struct FnDecl;
 
 // --- Type Reference ---
 struct TypeRef {
-    enum class Kind { Named, Ptr, Fn, Never, Array, ConstVal };
+    enum class Kind { Named, Ptr, Fn, Never, Array, ConstVal, Dyn };
     Kind kind = Kind::Named;
     std::string_view name; // "i64", "bool", "Unit"
     SourceLocation loc;
@@ -99,6 +99,7 @@ struct FieldDecl {
     std::string_view name;
     TypeRef type;
     bool is_mutable;
+    uint32_t bit_width = 0;     // 0 = full-width field, >0 = bitfield width in bits
     SourceLocation loc;
 };
 
@@ -109,6 +110,7 @@ struct StructDecl {
     uint32_t field_count;
     SourceLocation loc;
     bool is_packed = false;         // @packed
+    bool is_pub = false;            // pub struct
     uint32_t explicit_align = 0;   // @align(N), 0 = natural alignment
     TypeParam* type_params = nullptr;
     uint32_t type_param_count = 0;
@@ -118,6 +120,8 @@ struct StructDecl {
 struct EnumVariant {
     std::string_view name;
     SourceLocation loc;
+    int64_t value = -1;      // explicit discriminant, -1 = auto-assigned
+    bool has_value = false;
 };
 
 struct EnumDecl {
@@ -125,6 +129,8 @@ struct EnumDecl {
     EnumVariant* variants;
     uint32_t variant_count;
     SourceLocation loc;
+    bool is_pub = false;            // pub enum
+    uint8_t backing_size = 8;       // @repr(u8)=1, @repr(u16)=2, @repr(u32)=4, default=8
 };
 
 // --- Union declaration ---
@@ -139,6 +145,8 @@ struct UnionDecl {
     UnionVariantDecl* variants;
     uint32_t variant_count;
     SourceLocation loc;
+    bool is_pub = false;            // pub union
+    bool is_repr_c = false;         // @repr(C) — untagged C-style union
     TypeParam* type_params = nullptr;
     uint32_t type_param_count = 0;
 };
@@ -148,6 +156,7 @@ struct TypeAliasDecl {
     std::string_view name;
     TypeRef target;
     SourceLocation loc;
+    bool is_pub = false;            // pub type
 };
 
 // --- Newtype ---
@@ -155,6 +164,7 @@ struct NewtypeDecl {
     std::string_view name;
     TypeRef inner;
     SourceLocation loc;
+    bool is_pub = false;            // pub newtype
 };
 
 // --- Static assert ---
@@ -181,6 +191,7 @@ struct TraitDecl {
     TraitMethodSig* methods;
     uint32_t method_count;
     SourceLocation loc;
+    bool is_pub = false;            // pub trait
 };
 
 // --- Impl declaration ---
@@ -195,12 +206,12 @@ struct ImplDecl {
 // --- Expressions ---
 struct Expr {
     enum class Kind {
-        IntLit, FloatLit, BoolLit, StringLit, Ident,
+        IntLit, FloatLit, BoolLit, StringLit, NullLit, Ident,
         BinOp, UnaryOp, Call, Cast,
         If, Block, Return, Match,
         StructLit, FieldAccess,
         EnumAccess, UnionVariant,
-        Loop, InlineAsm,
+        Loop, ForRange, WhileLoop, InlineAsm,
         ArrayLit, IndexAccess,
         Sizeof, Alignof,
         Lambda, MethodCall,
@@ -212,6 +223,7 @@ struct Expr {
 
 struct IntLitExpr : Expr {
     int64_t value;
+    std::string_view suffix;  // "u8", "i32", etc. (empty = no suffix)
 };
 
 struct FloatLitExpr : Expr {
@@ -222,6 +234,8 @@ struct FloatLitExpr : Expr {
 struct BoolLitExpr : Expr {
     bool value;
 };
+
+struct NullLitExpr : Expr {};
 
 struct StringLitExpr : Expr {
     const char* data;    // processed bytes (escape sequences resolved)
@@ -376,9 +390,38 @@ struct LoopExpr : Expr {
     Expr* result;  // nullptr for Unit-returning loops
 };
 
+// for i in start..end { body }
+struct ForRangeExpr : Expr {
+    std::string_view var_name;  // loop variable name
+    Expr* start;                // range start (inclusive)
+    Expr* end;                  // range end (exclusive)
+    Stmt** stmts;
+    uint32_t stmt_count;
+};
+
+// while cond { body }
+struct WhileLoopExpr : Expr {
+    Expr* condition;
+    Stmt** stmts;
+    uint32_t stmt_count;
+};
+
+// ASM operand constraint: "=r"(var) / "r"(expr) / "+a"(var)
+struct AsmOperand {
+    std::string_view constraint;   // "=r", "r", "m", "a", "=a", etc.
+    std::string_view var_name;     // variable name for output / input
+};
+
 struct InlineAsmExpr : Expr {
     StringLitExpr** lines;
     uint32_t line_count;
+    // Extended asm (GCC-style constraints)
+    AsmOperand* outputs;            // "=r"(var) bindings
+    uint32_t output_count;
+    AsmOperand* inputs;             // "r"(var) bindings
+    uint32_t input_count;
+    std::string_view* clobbers;     // "cc", "memory", register names
+    uint32_t clobber_count;
 };
 
 // --- Statements ---
@@ -440,17 +483,24 @@ struct FnDecl {
     Param* params;
     uint32_t param_count;
     TypeRef return_type;
-    Expr* body; // BlockExpr (nullptr for intrinsics)
+    Expr* body; // BlockExpr (nullptr for intrinsics and extern)
     SourceLocation loc;
     bool is_intrinsic = false;
     bool is_const = false;           // const fn — compile-time evaluable
     bool is_naked = false;           // @naked annotation
     bool is_interrupt = false;       // @interrupt annotation
+    bool is_pub = false;             // pub fn — visible to other modules
+    bool is_extern = false;          // extern "C" fn — external linkage
+    bool is_variadic = false;        // fn(x: i64, ...) — C-style varargs
     bool has_pattern_params = false; // function-level pattern matching
     Pattern* pattern_param = nullptr; // pattern for first param (when has_pattern_params)
     TypeParam* type_params = nullptr; // generic type parameters (<T, U>)
     uint32_t type_param_count = 0;
     std::string_view section_name;    // @section("name"), empty = default
+    std::string_view link_name;       // @link_name("name"), empty = auto
+    std::string_view extern_abi;      // "C" for extern "C", empty otherwise
+    bool is_weak = false;             // @weak — weak symbol linkage
+    bool is_no_mangle = false;       // @no_mangle — suppress module name mangling
     // Effect clause: "with io, atomic" → effect_names = {"io", "atomic"}
     std::string_view* effect_names = nullptr;
     uint32_t effect_count = 0;
@@ -463,6 +513,10 @@ struct GlobalDecl {
     TypeRef type;
     Expr* init;              // initializer expression (nullptr for .bss)
     bool is_mutable;         // true = "static var", false = "static val"
+    bool is_pub = false;     // pub static
+    bool is_extern = false;  // extern static — linker-defined symbol
+    std::string_view section_name;  // @section("name"), empty = default
+    std::string_view link_name;  // @link_name("name"), empty = use name as-is
     SourceLocation loc;
 };
 
@@ -471,6 +525,7 @@ struct ImportDecl {
     std::string_view module_path;   // "kern.types"
     std::string_view* names;        // imported names: (PhysAddr, VirtAddr)
     uint32_t name_count;
+    bool is_pub = false;            // pub import — re-export
     SourceLocation loc;
 };
 

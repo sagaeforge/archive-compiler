@@ -149,6 +149,7 @@ struct HIRUnaryOpExpr : HIRExpr {
 
 struct HIRCallExpr : HIRExpr {
     std::string_view callee;  // interned
+    std::string_view callee_module;  // module path of callee (for cross-module calls)
     HIRExpr** args;
     uint32_t arg_count;
     bool is_tail_call;        // filled by TailCallAnalysisPass
@@ -209,6 +210,7 @@ struct HIRUnionVariantExpr : HIRExpr {
 struct HIRCastExpr : HIRExpr {
     HIRExpr* operand;
     TypeId target_type;  // type being cast to (same as this->type)
+    bool is_explicit_truncate = false;  // set by truncate<T>/clamp<T> builtins
 };
 
 struct HIRLoopBinding {
@@ -248,13 +250,25 @@ struct HIRInlineAsmLine {
     uint32_t length;
 };
 
+struct HIRAsmOperand {
+    std::string_view constraint;   // "=r", "r", "a", etc.
+    std::string_view var_name;     // variable name
+};
+
 struct HIRInlineAsmExpr : HIRExpr {
     HIRInlineAsmLine* lines;
     uint32_t line_count;
+    HIRAsmOperand* outputs;
+    uint32_t output_count;
+    HIRAsmOperand* inputs;
+    uint32_t input_count;
+    std::string_view* clobbers;
+    uint32_t clobber_count;
 };
 
 struct HIRFnRefExpr : HIRExpr {
     std::string_view fn_name;   // interned — name of the referenced function
+    std::string_view fn_module; // module path of function (for cross-module refs)
 };
 
 struct HIRCallIndirectExpr : HIRExpr {
@@ -370,7 +384,7 @@ struct HIRFnDecl {
     HIRParam* params;
     uint32_t param_count;
     TypeId return_type;
-    HIRExpr* body;           // nullable (intrinsic)
+    HIRExpr* body;           // nullable (intrinsic / extern)
 
     // Generic type parameters
     HIRTypeParam* type_params = nullptr;
@@ -384,7 +398,12 @@ struct HIRFnDecl {
     bool is_const;           // @const fn — compile-time evaluable
     bool is_naked;           // @naked — skip prologue/epilogue
     bool is_interrupt;       // @interrupt — iretq return, save all regs
+    bool is_pub = false;     // pub fn — visible to other modules
+    bool is_extern = false;  // extern "C" fn — external C linkage
+    bool is_variadic = false; // fn(x: T, ...) — C-style varargs
+    bool is_weak = false;     // @weak — weak symbol linkage
     std::string_view section_name;  // @section("name"), empty = default
+    std::string_view link_name;     // @link_name("name"), empty = auto
 
     // Effect system (v2)
     EffectSet declared_effects = EFFECT_NONE;  // from "with io, atomic" annotation
@@ -417,6 +436,9 @@ struct HIRGlobalDecl {
     TypeId type_id;
     HIRExpr* init;          // initializer expression (must be constant)
     bool is_mutable;        // static var vs static val
+    bool is_extern = false; // extern static — linker-defined symbol
+    std::string_view section_name;  // @section("name"), empty = default
+    std::string_view link_name;     // @link_name("name"), empty = use name
     SourceLocation loc;
 };
 
@@ -425,6 +447,8 @@ struct HIRGlobalDecl {
 // ============================================================================
 
 struct HIRModule {
+    std::string_view module_name;  // "kern.memory" or empty for single-file
+
     HIRFnDecl** functions;
     uint32_t fn_count;
 
@@ -439,6 +463,15 @@ struct HIRModule {
 
     HIRGlobalDecl** globals;
     uint32_t global_count;
+
+    // dyn Trait vtable globals
+    struct VTableEntry {
+        std::string_view label;      // vtable global label (interned)
+        std::string_view* fn_labels; // ordered fn labels for vtable slots
+        uint32_t method_count;
+    };
+    VTableEntry* vtables;
+    uint32_t vtable_count;
 };
 
 } // namespace kern

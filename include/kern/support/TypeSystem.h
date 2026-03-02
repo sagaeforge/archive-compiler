@@ -25,6 +25,7 @@ static constexpr EffectSet EFFECT_MUT    = static_cast<EffectSet>(Effect::Mut);
 static constexpr EffectSet EFFECT_MEM    = static_cast<EffectSet>(Effect::Mem);
 static constexpr EffectSet EFFECT_IO     = static_cast<EffectSet>(Effect::IO);
 static constexpr EffectSet EFFECT_ATOMIC = static_cast<EffectSet>(Effect::Atomic);
+static constexpr EffectSet EFFECT_ALL   = EFFECT_MUT | EFFECT_MEM | EFFECT_IO | EFFECT_ATOMIC;
 
 inline bool hasEffect(EffectSet set, Effect e) {
     return (set & static_cast<uint8_t>(e)) != 0;
@@ -106,13 +107,16 @@ enum class TypeKind : uint8_t {
     Array,
     TypeVar,
     Never,  // bottom type (!)
+    DynTrait,  // dyn Trait — fat pointer {data_ptr, vtable_ptr}
 };
 
 struct FieldInfo {
     std::string_view name;
     TypeId type;
     bool is_mutable;
-    int32_t offset;  // byte offset within struct, -1 if not yet computed
+    int32_t offset;         // byte offset within struct, -1 if not yet computed
+    uint32_t bit_width = 0; // 0 = full-width field, >0 = bitfield width in bits
+    uint32_t bit_offset = 0;// bit offset within the storage unit (for bitfields)
 };
 
 struct VariantInfo {
@@ -138,12 +142,14 @@ struct EnumData {
     int64_t* values;
     std::string_view* names;
     uint32_t variant_count;
+    uint8_t backing_size = 8;  // 1/2/4/8 bytes (@repr(u8/u16/u32/u64))
 };
 
 struct UnionData {
     std::string_view name;
     VariantInfo* variants;
     uint32_t variant_count;
+    bool is_repr_c = false;     // untagged C-style union (no discriminant tag)
 };
 
 struct PtrData {
@@ -167,6 +173,12 @@ struct TypeVarData {
     std::string_view name;
 };
 
+struct DynTraitData {
+    std::string_view trait_name;    // interned trait name
+    std::string_view* method_names; // ordered method names (vtable slot order)
+    uint32_t method_count;
+};
+
 struct TypeInfo {
     TypeKind kind;
     union {
@@ -178,6 +190,7 @@ struct TypeInfo {
         FnData fn;
         ArrayData array;
         TypeVarData type_var;
+        DynTraitData dyn_trait;
     };
 
     static TypeInfo makePrimitive(PrimitiveKind p) {
@@ -225,10 +238,18 @@ public:
     TypeId makeFn(std::span<const TypeId> params, TypeId ret, EffectSet effects = EFFECT_NONE);
     TypeId makeStruct(std::string_view name, std::span<const FieldInfo> fields,
                       bool is_packed = false, uint32_t explicit_align = 0);
+    // Create a forward-declared struct (no fields/size yet) for self-referential types
+    TypeId makeOpaqueStruct(std::string_view name);
+    // Fill in fields for a previously opaque struct
+    void updateStruct(TypeId id, std::span<const FieldInfo> fields,
+                      bool is_packed = false, uint32_t explicit_align = 0);
     TypeId makeEnum(std::string_view name, std::span<const std::string_view> variant_names,
-                    std::span<const int64_t> values);
-    TypeId makeUnion(std::string_view name, std::span<const VariantInfo> variants);
+                    std::span<const int64_t> values, uint8_t backing_size = 8);
+    TypeId makeUnion(std::string_view name, std::span<const VariantInfo> variants,
+                     bool is_repr_c = false);
     TypeId makeArrayType(TypeId element, uint32_t count);
+    TypeId makeDynTrait(std::string_view trait_name,
+                        std::span<const std::string_view> method_names);
 
     // Type queries
     uint32_t sizeOf(TypeId id) const;
@@ -239,6 +260,11 @@ public:
     bool isInteger(TypeId id) const;
     bool isPrimitive(TypeId id) const;
     const char* name(TypeId id) const;
+
+    // Integer range: returns {min, max} for the given integer type.
+    // Returns {0, 0} for non-integer types.
+    struct IntRange { int64_t min; uint64_t max; };
+    IntRange intRange(TypeId id) const;
 
 private:
     void registerPrimitives();

@@ -88,16 +88,43 @@ TypeId TypeTable::makeStruct(std::string_view name, std::span<const FieldInfo> f
     auto* field_copy = arena_.makeArray<FieldInfo>(fields.size());
     uint32_t offset = 0;
     uint32_t max_align = 1;
+    uint32_t bit_pos = 0;       // current bit position within storage unit
+    uint32_t unit_bits = 0;     // total bits in current storage unit (0 = none)
 
     for (size_t i = 0; i < fields.size(); ++i) {
         field_copy[i] = fields[i];
         uint32_t field_size = sizeOf(fields[i].type);
+        uint32_t field_bits = field_size * 8;
         uint32_t field_align = is_packed ? 1 : alignOf(fields[i].type);
-        // Align offset
-        offset = (offset + field_align - 1) & ~(field_align - 1);
-        field_copy[i].offset = static_cast<int32_t>(offset);
-        offset += field_size;
-        if (field_align > max_align) max_align = field_align;
+
+        if (fields[i].bit_width > 0) {
+            // Bitfield: pack into current storage unit if same type and room exists
+            if (unit_bits > 0 && bit_pos + fields[i].bit_width <= unit_bits) {
+                // Pack into existing unit at current bit position
+                field_copy[i].offset = static_cast<int32_t>(offset - field_size);
+                field_copy[i].bit_offset = bit_pos;
+                field_copy[i].bit_width = fields[i].bit_width;
+                bit_pos += fields[i].bit_width;
+            } else {
+                // Start a new storage unit
+                offset = (offset + field_align - 1) & ~(field_align - 1);
+                field_copy[i].offset = static_cast<int32_t>(offset);
+                field_copy[i].bit_offset = 0;
+                field_copy[i].bit_width = fields[i].bit_width;
+                bit_pos = fields[i].bit_width;
+                unit_bits = field_bits;
+                offset += field_size;
+                if (field_align > max_align) max_align = field_align;
+            }
+        } else {
+            // Regular field: reset bitfield packing state
+            bit_pos = 0;
+            unit_bits = 0;
+            offset = (offset + field_align - 1) & ~(field_align - 1);
+            field_copy[i].offset = static_cast<int32_t>(offset);
+            offset += field_size;
+            if (field_align > max_align) max_align = field_align;
+        }
     }
     // Override alignment if explicit
     if (explicit_align > 0) max_align = explicit_align;
@@ -115,9 +142,75 @@ TypeId TypeTable::makeStruct(std::string_view name, std::span<const FieldInfo> f
     return add(ti);
 }
 
+TypeId TypeTable::makeOpaqueStruct(std::string_view name) {
+    TypeInfo ti{};
+    ti.kind = TypeKind::Struct;
+    ti.struct_.name = name;
+    ti.struct_.fields = nullptr;
+    ti.struct_.field_count = 0;
+    ti.struct_.size = 0;
+    ti.struct_.align = 1;
+    ti.struct_.is_packed = false;
+    return add(ti);
+}
+
+void TypeTable::updateStruct(TypeId id, std::span<const FieldInfo> fields,
+                             bool is_packed, uint32_t explicit_align) {
+    assert(id < types_.size() && "TypeId out of range");
+    auto* info = types_[id];
+    assert(info->kind == TypeKind::Struct && "updateStruct on non-struct type");
+
+    auto* field_copy = arena_.makeArray<FieldInfo>(fields.size());
+    uint32_t offset = 0;
+    uint32_t max_align = 1;
+    uint32_t bit_pos = 0;
+    uint32_t unit_bits = 0;
+
+    for (size_t i = 0; i < fields.size(); ++i) {
+        field_copy[i] = fields[i];
+        uint32_t field_size = sizeOf(fields[i].type);
+        uint32_t field_bits = field_size * 8;
+        uint32_t field_align = is_packed ? 1 : alignOf(fields[i].type);
+
+        if (fields[i].bit_width > 0) {
+            if (unit_bits > 0 && bit_pos + fields[i].bit_width <= unit_bits) {
+                field_copy[i].offset = static_cast<int32_t>(offset - field_size);
+                field_copy[i].bit_offset = bit_pos;
+                field_copy[i].bit_width = fields[i].bit_width;
+                bit_pos += fields[i].bit_width;
+            } else {
+                offset = (offset + field_align - 1) & ~(field_align - 1);
+                field_copy[i].offset = static_cast<int32_t>(offset);
+                field_copy[i].bit_offset = 0;
+                field_copy[i].bit_width = fields[i].bit_width;
+                bit_pos = fields[i].bit_width;
+                unit_bits = field_bits;
+                offset += field_size;
+                if (field_align > max_align) max_align = field_align;
+            }
+        } else {
+            bit_pos = 0;
+            unit_bits = 0;
+            offset = (offset + field_align - 1) & ~(field_align - 1);
+            field_copy[i].offset = static_cast<int32_t>(offset);
+            offset += field_size;
+            if (field_align > max_align) max_align = field_align;
+        }
+    }
+    if (explicit_align > 0) max_align = explicit_align;
+    uint32_t total_size = (offset + max_align - 1) & ~(max_align - 1);
+
+    info->struct_.fields = field_copy;
+    info->struct_.field_count = static_cast<uint32_t>(fields.size());
+    info->struct_.size = total_size;
+    info->struct_.align = max_align;
+    info->struct_.is_packed = is_packed;
+}
+
 TypeId TypeTable::makeEnum(std::string_view name,
                            std::span<const std::string_view> variant_names,
-                           std::span<const int64_t> values) {
+                           std::span<const int64_t> values,
+                           uint8_t backing_size) {
     assert(variant_names.size() == values.size());
     auto count = static_cast<uint32_t>(variant_names.size());
 
@@ -133,10 +226,12 @@ TypeId TypeTable::makeEnum(std::string_view name,
     ti.enum_.names = name_copy;
     ti.enum_.values = val_copy;
     ti.enum_.variant_count = count;
+    ti.enum_.backing_size = backing_size;
     return add(ti);
 }
 
-TypeId TypeTable::makeUnion(std::string_view name, std::span<const VariantInfo> variants) {
+TypeId TypeTable::makeUnion(std::string_view name, std::span<const VariantInfo> variants,
+                            bool is_repr_c) {
     auto count = static_cast<uint32_t>(variants.size());
     auto* var_copy = arena_.makeArray<VariantInfo>(count);
     std::memcpy(var_copy, variants.data(), count * sizeof(VariantInfo));
@@ -146,6 +241,7 @@ TypeId TypeTable::makeUnion(std::string_view name, std::span<const VariantInfo> 
     ti.union_.name = name;
     ti.union_.variants = var_copy;
     ti.union_.variant_count = count;
+    ti.union_.is_repr_c = is_repr_c;
     return add(ti);
 }
 
@@ -161,6 +257,30 @@ TypeId TypeTable::makeArrayType(TypeId element, uint32_t count) {
     ti.kind = TypeKind::Array;
     ti.array.element = element;
     ti.array.count = count;
+    return add(ti);
+}
+
+TypeId TypeTable::makeDynTrait(std::string_view trait_name,
+                               std::span<const std::string_view> method_names) {
+    // Deduplicate by trait name
+    for (size_t i = 0; i < types_.size(); ++i) {
+        const auto& t = *types_[i];
+        if (t.kind == TypeKind::DynTrait && t.dyn_trait.trait_name == trait_name) {
+            return static_cast<TypeId>(i);
+        }
+    }
+    TypeInfo ti{};
+    ti.kind = TypeKind::DynTrait;
+    ti.dyn_trait.trait_name = trait_name;
+    ti.dyn_trait.method_count = static_cast<uint32_t>(method_names.size());
+    if (!method_names.empty()) {
+        ti.dyn_trait.method_names = arena_.makeArray<std::string_view>(method_names.size());
+        for (size_t i = 0; i < method_names.size(); ++i) {
+            ti.dyn_trait.method_names[i] = method_names[i];
+        }
+    } else {
+        ti.dyn_trait.method_names = nullptr;
+    }
     return add(ti);
 }
 
@@ -180,9 +300,8 @@ uint32_t TypeTable::sizeOf(TypeId id) const {
     case TypeKind::Struct:
         return ti.struct_.size;
     case TypeKind::Enum:
-        return 8;  // enum tag is i64
+        return ti.enum_.backing_size;  // default 8, @repr(u8)=1, etc.
     case TypeKind::Union: {
-        // tag(8) + max payload size, aligned to 8
         uint32_t max_payload = 0;
         for (uint32_t i = 0; i < ti.union_.variant_count; ++i) {
             if (ti.union_.variants[i].payload_type != INVALID_TYPE) {
@@ -190,6 +309,11 @@ uint32_t TypeTable::sizeOf(TypeId id) const {
                 if (ps > max_payload) max_payload = ps;
             }
         }
+        if (ti.union_.is_repr_c) {
+            // Untagged union: no discriminant, all variants at offset 0
+            return (max_payload + 7) & ~7u;
+        }
+        // Tagged union: 8-byte tag + max payload, aligned to 8
         return 8 + ((max_payload + 7) & ~7u);
     }
     case TypeKind::Ptr:
@@ -203,6 +327,8 @@ uint32_t TypeTable::sizeOf(TypeId id) const {
         return 0;  // unknown at this point
     case TypeKind::Never:
         return 0;  // never type has no size
+    case TypeKind::DynTrait:
+        return 16; // fat pointer: data_ptr(8) + vtable_ptr(8)
     }
     return 0;
 }
@@ -222,6 +348,7 @@ uint32_t TypeTable::alignOf(TypeId id) const {
     case TypeKind::Struct:
         return ti.struct_.align;
     case TypeKind::Enum:
+        return ti.enum_.backing_size;
     case TypeKind::Union:
     case TypeKind::Ptr:
     case TypeKind::PtrMut:
@@ -233,6 +360,8 @@ uint32_t TypeTable::alignOf(TypeId id) const {
         return 1;
     case TypeKind::Never:
         return 1;
+    case TypeKind::DynTrait:
+        return 8;
     }
     return 1;
 }
@@ -308,8 +437,26 @@ const char* TypeTable::name(TypeId id) const {
     case TypeKind::Array:  return "Array";
     case TypeKind::TypeVar: return "TypeVar";
     case TypeKind::Never:  return "!";
+    case TypeKind::DynTrait: return "dyn";
     }
     return "?";
+}
+
+TypeTable::IntRange TypeTable::intRange(TypeId id) const {
+    if (id >= types_.size()) return {0, 0};
+    auto& ti = *types_[id];
+    if (ti.kind != TypeKind::Primitive) return {0, 0};
+    switch (ti.primitive.prim) {
+        case PrimitiveKind::I8:  return {-128, 127};
+        case PrimitiveKind::I16: return {-32768, 32767};
+        case PrimitiveKind::I32: return {-2147483648LL, 2147483647};
+        case PrimitiveKind::I64: return {INT64_MIN, static_cast<uint64_t>(INT64_MAX)};
+        case PrimitiveKind::U8:  return {0, 255};
+        case PrimitiveKind::U16: return {0, 65535};
+        case PrimitiveKind::U32: return {0, 4294967295ULL};
+        case PrimitiveKind::U64: return {0, UINT64_MAX};
+        default: return {0, 0};
+    }
 }
 
 } // namespace kern

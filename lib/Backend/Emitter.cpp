@@ -1,5 +1,8 @@
 #include "kern/backend/Emitter.h"
 #include <cstring>
+#include <vector>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace kern {
 
@@ -312,15 +315,36 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             emitOperand(instr.src1(), instr.width);
             break;
 
+        // Float <-> Integer conversions
+        case X86Op::Cvttsd2si:
+        case X86Op::Cvttss2si:
+            // cvttsd2si gpr, xmm  /  cvttss2si gpr, xmm
+            out_ << x86OpName(instr.op) << " ";
+            emitOperand(instr.dst(), instr.width);  // GPR with target width
+            out_ << ", ";
+            emitOperand(instr.src1(), 128);  // XMM (always full name)
+            break;
+
+        case X86Op::Cvtsi2sd:
+        case X86Op::Cvtsi2ss:
+            // cvtsi2sd xmm, gpr  /  cvtsi2ss xmm, gpr
+            out_ << x86OpName(instr.op) << " ";
+            emitOperand(instr.dst(), 128);   // XMM dest
+            out_ << ", ";
+            emitOperand(instr.src1(), instr.width);  // GPR source
+            break;
+
+        case X86Op::Cvtsd2ss:
+        case X86Op::Cvtss2sd:
+            // cvtsd2ss xmm, xmm  /  cvtss2sd xmm, xmm
+            out_ << x86OpName(instr.op) << " ";
+            emitOperand(instr.dst(), 128);   // XMM dest
+            out_ << ", ";
+            emitOperand(instr.src1(), 128);  // XMM source
+            break;
+
         case X86Op::Pseudo_ParallelMove:
-            // Expand to sequential moves (TODO: cycle-break)
-            for (uint8_t i = 0; i + 1 < instr.operand_count; i += 2) {
-                out_ << "    mov ";
-                emitOperand(instr.operand(i), 64);
-                out_ << ", ";
-                emitOperand(instr.operand(i + 1), 64);
-                if (i + 2 < instr.operand_count) out_ << "\n";
-            }
+            emitParallelMove(instr);
             return;  // don't add newline
 
         case X86Op::Pseudo_FrameSetup:
@@ -335,10 +359,38 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             break;
 
         case X86Op::InlineAsm:
-            // Emit raw assembly lines directly
-            for (uint32_t i = 0; i < instr.asm_data.line_count; ++i) {
-                if (i > 0) out_ << "\n    ";
-                out_.write(instr.asm_data.lines[i], instr.asm_data.line_lengths[i]);
+            if (instr.asm_data.output_count == 0 && instr.asm_data.input_count == 0) {
+                // Legacy: emit raw assembly lines directly
+                for (uint32_t i = 0; i < instr.asm_data.line_count; ++i) {
+                    if (i > 0) out_ << "\n    ";
+                    out_.write(instr.asm_data.lines[i], instr.asm_data.line_lengths[i]);
+                }
+            } else {
+                // Extended: substitute $N with resolved register names
+                // Operand numbering: outputs first, then inputs
+                for (uint32_t i = 0; i < instr.asm_data.line_count; ++i) {
+                    if (i > 0) out_ << "\n    ";
+                    const char* text = instr.asm_data.lines[i];
+                    uint32_t len = instr.asm_data.line_lengths[i];
+                    for (uint32_t j = 0; j < len; ++j) {
+                        if (text[j] == '$' && j + 1 < len && text[j + 1] >= '0' && text[j + 1] <= '9') {
+                            uint32_t idx = text[j + 1] - '0';
+                            ++j; // skip digit
+                            if (idx < instr.asm_data.output_count) {
+                                out_ << physRegName(instr.asm_data.outputs[idx].phys);
+                            } else {
+                                uint32_t in_idx = idx - instr.asm_data.output_count;
+                                if (in_idx < instr.asm_data.input_count) {
+                                    out_ << physRegName(instr.asm_data.inputs[in_idx].phys);
+                                } else {
+                                    out_ << '$' << static_cast<char>('0' + idx);
+                                }
+                            }
+                        } else {
+                            out_ << text[j];
+                        }
+                    }
+                }
             }
             break;
 
@@ -388,35 +440,209 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
         case X86Op::MovLoadGlobal: {
             // x86 can't do mem-to-mem mov, so if dst is stack, use rax as temp
             auto& dst = instr.dst();
+            const char* sp = symPrefix();
             if (dst.isStack()) {
                 const char* tmp = (instr.width <= 32) ? "eax" : "rax";
-                out_ << "mov " << tmp << ", [rel _" << instr.global_label << "]\n";
+                out_ << "mov " << tmp << ", [rel " << sp << instr.global_label << "]\n";
                 out_ << "    mov ";
                 emitOperand(dst, instr.width);
                 out_ << ", " << tmp;
             } else {
                 out_ << "mov ";
                 emitOperand(dst, instr.width);
-                out_ << ", [rel _" << instr.global_label << "]";
+                out_ << ", [rel " << sp << instr.global_label << "]";
             }
             break;
         }
         case X86Op::MovStoreGlobal: {
             auto& src = instr.dst();
+            const char* sp = symPrefix();
             if (src.isStack()) {
                 const char* tmp = (instr.width <= 32) ? "eax" : "rax";
                 out_ << "mov " << tmp << ", ";
                 emitOperand(src, instr.width);
-                out_ << "\n    mov [rel _" << instr.global_label << "], " << tmp;
+                out_ << "\n    mov [rel " << sp << instr.global_label << "], " << tmp;
             } else {
-                out_ << "mov [rel _" << instr.global_label << "], ";
+                out_ << "mov [rel " << sp << instr.global_label << "], ";
                 emitOperand(src, instr.width);
             }
             break;
         }
+
+        case X86Op::LeaGlobal: {
+            const char* sp = symPrefix();
+            auto& dst = instr.dst();
+            if (dst.isStack()) {
+                out_ << "lea rax, [rel " << sp << instr.global_label << "]\n";
+                out_ << "    mov ";
+                emitOperand(dst, 64);
+                out_ << ", rax";
+            } else {
+                out_ << "lea ";
+                emitOperand(dst, 64);
+                out_ << ", [rel " << sp << instr.global_label << "]";
+            }
+            break;
+        }
+
+        case X86Op::Bsf:
+            out_ << "bsf ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
+        case X86Op::Bsr:
+            out_ << "bsr ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
+        case X86Op::Popcnt:
+            out_ << "popcnt ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
+        case X86Op::Bswap:
+            out_ << "bswap ";
+            emitOperand(instr.dst(), instr.width);
+            break;
+
+        case X86Op::In:
+            // in al/ax/eax, dx  (width determines accumulator size)
+            out_ << "in ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", dx";
+            break;
+
+        case X86Op::Out:
+            // out dx, al/ax/eax
+            out_ << "out dx, ";
+            emitOperand(instr.src1(), instr.width);
+            break;
     }
 
     out_ << "\n";
+}
+
+// ============================================================================
+// Parallel Move (cycle-breaking)
+// ============================================================================
+
+// Helper: get a unique key for a physical register operand
+static uint8_t physKey(PhysReg r) {
+    return static_cast<uint8_t>(r);
+}
+
+void NASMEmitter::emitParallelMove(const MachInstr& instr) {
+    // Collect dst→src pairs (only physical registers)
+    struct MovePair {
+        MachOperand dst;
+        MachOperand src;
+    };
+    std::vector<MovePair> moves;
+    for (uint8_t i = 0; i + 1 < instr.operand_count; i += 2) {
+        moves.push_back({instr.operand(i), instr.operand(i + 1)});
+    }
+
+    if (moves.empty()) return;
+
+    // Build adjacency: dst_reg → index in moves
+    // We need to detect cycles among physical register moves
+    std::unordered_map<uint8_t, uint32_t> dst_map; // phys_key → move index
+    for (uint32_t i = 0; i < moves.size(); ++i) {
+        if (moves[i].dst.isPhysical()) {
+            dst_map[physKey(moves[i].dst.phys)] = i;
+        }
+    }
+
+    // Track which moves have been emitted
+    std::vector<bool> emitted(moves.size(), false);
+
+    // Pass 1: emit non-cyclic moves via topological ordering
+    // A move is "ready" if its dst is not a src of any un-emitted move
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (uint32_t i = 0; i < moves.size(); ++i) {
+            if (emitted[i]) continue;
+            // Check if this move's dst register is used as a src by another un-emitted move
+            bool blocked = false;
+            if (moves[i].dst.isPhysical()) {
+                uint8_t dk = physKey(moves[i].dst.phys);
+                for (uint32_t j = 0; j < moves.size(); ++j) {
+                    if (j == i || emitted[j]) continue;
+                    if (moves[j].src.isPhysical() && physKey(moves[j].src.phys) == dk) {
+                        blocked = true;
+                        break;
+                    }
+                }
+            }
+            if (!blocked) {
+                // Safe to emit
+                out_ << "    mov ";
+                emitOperand(moves[i].dst, 64);
+                out_ << ", ";
+                emitOperand(moves[i].src, 64);
+                out_ << "\n";
+                emitted[i] = true;
+                changed = true;
+            }
+        }
+    }
+
+    // Pass 2: remaining moves form cycles — break with xchg / scratch r11
+    for (uint32_t i = 0; i < moves.size(); ++i) {
+        if (emitted[i]) continue;
+
+        // Find the cycle starting from move i
+        std::vector<uint32_t> cycle;
+        uint32_t cur = i;
+        while (cur < moves.size() && !emitted[cur]) {
+            cycle.push_back(cur);
+            emitted[cur] = true;
+            // Follow: the src of cur is the dst of the next move in the cycle
+            if (!moves[cur].src.isPhysical()) break;
+            auto it = dst_map.find(physKey(moves[cur].src.phys));
+            if (it == dst_map.end() || emitted[it->second]) break;
+            cur = it->second;
+        }
+
+        if (cycle.size() == 2) {
+            // 2-cycle: use xchg
+            out_ << "    xchg ";
+            emitOperand(moves[cycle[0]].dst, 64);
+            out_ << ", ";
+            emitOperand(moves[cycle[1]].dst, 64);
+            out_ << "\n";
+        } else if (cycle.size() > 2) {
+            // N-cycle: use r11 as scratch
+            // Save first dst to r11, shift all moves, then move r11 to last dst
+            out_ << "    mov r11, ";
+            emitOperand(moves[cycle[0]].dst, 64);
+            out_ << "\n";
+            for (uint32_t c = 0; c + 1 < cycle.size(); ++c) {
+                out_ << "    mov ";
+                emitOperand(moves[cycle[c]].dst, 64);
+                out_ << ", ";
+                emitOperand(moves[cycle[c]].src, 64);
+                out_ << "\n";
+            }
+            out_ << "    mov ";
+            emitOperand(moves[cycle.back()].dst, 64);
+            out_ << ", r11\n";
+        } else if (cycle.size() == 1) {
+            // Single un-emitted move (src isn't physical or no cycle) — just emit
+            out_ << "    mov ";
+            emitOperand(moves[cycle[0]].dst, 64);
+            out_ << ", ";
+            emitOperand(moves[cycle[0]].src, 64);
+            out_ << "\n";
+        }
+    }
 }
 
 // ============================================================================
@@ -441,6 +667,11 @@ void NASMEmitter::emitPrologue(const MachFunction& fn) {
         out_ << "    push r13\n";
         out_ << "    push r14\n";
         out_ << "    push r15\n";
+        // Save all 16 XMM registers (256 bytes, unaligned store)
+        out_ << "    sub rsp, 256\n";
+        for (int i = 0; i < 16; ++i) {
+            out_ << "    movdqu [rsp+" << (i * 16) << "], xmm" << i << "\n";
+        }
         out_ << "    mov rbp, rsp\n";
     } else {
         out_ << "    push rbp\n";
@@ -469,8 +700,13 @@ void NASMEmitter::emitEpilogue(const MachFunction& fn) {
     }
 
     if (fn.is_interrupt) {
-        // Interrupt handler: restore ALL GPRs + iretq
+        // Interrupt handler: restore all XMM + GPRs + iretq
         out_ << "    mov rsp, rbp\n";
+        // Restore 16 XMM registers
+        for (int i = 0; i < 16; ++i) {
+            out_ << "    movdqu xmm" << i << ", [rsp+" << (i * 16) << "]\n";
+        }
+        out_ << "    add rsp, 256\n";
         out_ << "    pop r15\n";
         out_ << "    pop r14\n";
         out_ << "    pop r13\n";
@@ -504,14 +740,21 @@ void NASMEmitter::emitEpilogue(const MachFunction& fn) {
 // ============================================================================
 
 void NASMEmitter::emitFunction(const MachFunction& fn) {
-    if (fn.is_intrinsic) return;
+    if (fn.is_intrinsic || fn.is_extern) return;
 
     // Emit custom section directive if specified
     if (!fn.section_name.empty()) {
         out_ << "section " << fn.section_name << "\n";
     }
 
-    out_ << "_" << fn.name << ":\n";
+    // Function label: @link_name overrides, otherwise mangled if module context exists
+    if (!fn.link_name.empty()) {
+        out_ << symPrefix() << fn.link_name << ":\n";
+    } else if (!module_name_.empty() && fn.name != "main") {
+        out_ << symPrefix() << module_name_ << "__" << fn.name << ":\n";
+    } else {
+        out_ << symPrefix() << fn.name << ":\n";
+    }
 
     if (!fn.is_naked) {
         emitPrologue(fn);
@@ -574,11 +817,26 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
 void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
     if (global_count == 0) return;
 
-    // .rodata: string literals, float constants, immutable globals
+    // Emit extern declarations for extern globals
+    for (uint32_t i = 0; i < global_count; ++i) {
+        const auto& g = globals[i];
+        if (g.kind != GlobalData::Variable || !g.variable.is_extern) continue;
+        std::string sym;
+        if (!g.variable.link_name.empty()) {
+            sym = std::string(symPrefix()) + std::string(g.variable.link_name);
+        } else {
+            sym = std::string(symPrefix()) + std::string(g.label);
+        }
+        out_ << "extern " << sym << "\n";
+    }
+
+    // .rodata: string literals, float constants, immutable globals (without custom section)
     bool has_rodata = false;
     for (uint32_t i = 0; i < global_count; ++i) {
         const auto& g = globals[i];
+        if (g.kind == GlobalData::Variable && g.variable.is_extern) continue;
         if (g.kind == GlobalData::Variable && g.variable.is_mutable) continue;
+        if (g.kind == GlobalData::Variable && !g.variable.section_name.empty()) continue;
         if (!has_rodata) { out_ << "section .rodata\n"; has_rodata = true; }
 
         if (g.kind == GlobalData::StringLit) {
@@ -602,37 +860,105 @@ void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
             }
         } else if (g.kind == GlobalData::Variable) {
             // Immutable global variable → .rodata
-            out_ << "_" << g.label << ":\n";
+            out_ << symPrefix() << g.label << ":\n";
             emitGlobalVarDirective(g.variable);
+        } else if (g.kind == GlobalData::VTable) {
+            // VTable: array of function pointer labels
+            out_ << "align 8\n";
+            out_ << symPrefix() << g.label << ":\n";
+            for (uint32_t j = 0; j < g.vtable.method_count; ++j) {
+                auto fn_label = g.vtable.fn_labels[j];
+                // Mangle: symPrefix + module__fn_name (or just symPrefix + fn_name)
+                if (!module_name_.empty() &&
+                    fn_label.find("__") == std::string_view::npos &&
+                    fn_label != "main") {
+                    out_ << "    dq " << symPrefix() << module_name_ << "__" << fn_label << "\n";
+                } else {
+                    out_ << "    dq " << symPrefix() << fn_label << "\n";
+                }
+            }
         }
     }
     if (has_rodata) out_ << "\n";
 
-    // .data: mutable globals with non-zero initializer
+    // .data: mutable globals with non-zero initializer (without custom section)
     bool has_data = false;
     for (uint32_t i = 0; i < global_count; ++i) {
         const auto& g = globals[i];
         if (g.kind != GlobalData::Variable || !g.variable.is_mutable) continue;
-        if (g.variable.init_value == 0) continue;  // zero-init goes to .bss
+        if (g.variable.is_extern) continue;
+        if (!g.variable.section_name.empty()) continue;
+        bool has_init = g.variable.init_value != 0 || g.variable.array_count > 0 ||
+                        g.variable.init_byte_count > 0;
+        if (!has_init) continue;  // zero-init goes to .bss
         if (!has_data) { out_ << "section .data\n"; has_data = true; }
-        out_ << "_" << g.label << ":\n";
+        out_ << symPrefix() << g.label << ":\n";
         emitGlobalVarDirective(g.variable);
     }
     if (has_data) out_ << "\n";
 
-    // .bss: mutable globals with zero initializer
+    // .bss: mutable globals with zero initializer (without custom section)
     bool has_bss = false;
     for (uint32_t i = 0; i < global_count; ++i) {
         const auto& g = globals[i];
         if (g.kind != GlobalData::Variable || !g.variable.is_mutable) continue;
-        if (g.variable.init_value != 0) continue;
+        if (g.variable.is_extern) continue;
+        if (!g.variable.section_name.empty()) continue;
+        if (g.variable.init_value != 0 || g.variable.array_count > 0 ||
+            g.variable.init_byte_count > 0) continue;
         if (!has_bss) { out_ << "section .bss\n"; has_bss = true; }
-        out_ << "_" << g.label << ": resb " << static_cast<int>(g.variable.size) << "\n";
+        // For structs, init_byte_count may carry the full size
+        uint32_t bss_sz = g.variable.init_byte_count > 0 ? g.variable.init_byte_count
+                         : static_cast<uint32_t>(g.variable.size);
+        out_ << symPrefix() << g.label << ": resb " << bss_sz << "\n";
     }
     if (has_bss) out_ << "\n";
+
+    // Custom sections: globals with @section("name")
+    for (uint32_t i = 0; i < global_count; ++i) {
+        const auto& g = globals[i];
+        if (g.kind != GlobalData::Variable) continue;
+        if (g.variable.is_extern) continue;
+        if (g.variable.section_name.empty()) continue;
+        out_ << "section " << g.variable.section_name << "\n";
+        out_ << symPrefix() << g.label << ":\n";
+        bool is_zero = (g.variable.init_value == 0 && g.variable.array_count == 0 &&
+                        g.variable.init_byte_count == 0);
+        if (is_zero) {
+            uint32_t sz = g.variable.init_byte_count > 0 ? g.variable.init_byte_count
+                         : static_cast<uint32_t>(g.variable.size);
+            out_ << "    resb " << sz << "\n";
+        } else {
+            emitGlobalVarDirective(g.variable);
+        }
+        out_ << "\n";
+    }
 }
 
 void NASMEmitter::emitGlobalVarDirective(const GlobalVariable& var) {
+    // Raw byte initializer (struct/float literals)
+    if (var.init_bytes && var.init_byte_count > 0) {
+        out_ << "    db ";
+        for (uint32_t i = 0; i < var.init_byte_count; ++i) {
+            if (i > 0) out_ << ", ";
+            out_ << static_cast<int>(var.init_bytes[i]);
+        }
+        out_ << "\n";
+        return;
+    }
+    if (var.array_values && var.array_count > 0) {
+        // Array initializer: emit one directive per element
+        for (uint32_t i = 0; i < var.array_count; ++i) {
+            int64_t v = var.array_values[i];
+            switch (var.size) {
+                case 1: out_ << "    db " << (v & 0xFF) << "\n"; break;
+                case 2: out_ << "    dw " << (v & 0xFFFF) << "\n"; break;
+                case 4: out_ << "    dd " << (v & 0xFFFFFFFF) << "\n"; break;
+                default: out_ << "    dq " << v << "\n"; break;
+            }
+        }
+        return;
+    }
     switch (var.size) {
         case 1: out_ << "    db " << (var.init_value & 0xFF) << "\n"; break;
         case 2: out_ << "    dw " << (var.init_value & 0xFFFF) << "\n"; break;
@@ -646,12 +972,17 @@ void NASMEmitter::emitGlobalVarDirective(const GlobalVariable& var) {
 // ============================================================================
 
 void NASMEmitter::emitStartWrapper() {
+    const char* sp = symPrefix();
     out_ << "section .text\n";
-    out_ << "global _start\n\n";
-    out_ << "_start:\n";
-    out_ << "    call _main\n";
+    out_ << "global " << sp << "start\n\n";
+    out_ << sp << "start:\n";
+    out_ << "    call " << sp << "main\n";
     out_ << "    mov  rdi, rax\n";
-    out_ << "    mov  rax, 0x02000001\n";  // macOS exit syscall
+    if (format_ == OutputFormat::Elf64) {
+        out_ << "    mov  rax, 60\n";          // Linux x86-64 exit syscall
+    } else {
+        out_ << "    mov  rax, 0x02000001\n";  // macOS exit syscall
+    }
     out_ << "    syscall\n";
 }
 
@@ -661,16 +992,44 @@ void NASMEmitter::emitStartWrapper() {
 
 void NASMEmitter::emitModule(const MachModule& mod, const LIRModule& lir_mod,
                               bool freestanding) {
-    // Emit extern declarations for intrinsic (externally-defined) functions
+    module_name_ = mod.module_name;
+    const char* sp = symPrefix();
+
+    // Emit extern declarations for intrinsic and extern "C" functions
+    // (skip if the function is also defined in this module)
+    std::unordered_set<std::string_view> defined_names;
     for (uint32_t i = 0; i < mod.fn_count; ++i) {
-        if (mod.functions[i].is_intrinsic) {
-            out_ << "extern _" << mod.functions[i].name << "\n";
+        if (mod.functions[i].block_count > 0) {
+            defined_names.insert(mod.functions[i].name);
         }
     }
-    // Export non-intrinsic functions as global symbols
     for (uint32_t i = 0; i < mod.fn_count; ++i) {
-        if (!mod.functions[i].is_intrinsic) {
-            out_ << "global _" << mod.functions[i].name << "\n";
+        if ((mod.functions[i].is_intrinsic || mod.functions[i].is_extern)
+            && !defined_names.count(mod.functions[i].name)) {
+            out_ << "extern " << sp << mod.functions[i].name << "\n";
+        }
+    }
+
+    // Emit extern declarations for cross-module imports
+    // These labels already include the correct prefix from ISel
+    for (uint32_t i = 0; i < mod.extern_label_count; ++i) {
+        out_ << "extern " << mod.extern_labels[i] << "\n";
+    }
+    // Export functions as global symbols
+    for (uint32_t i = 0; i < mod.fn_count; ++i) {
+        auto& fn = mod.functions[i];
+        if (fn.is_intrinsic || fn.is_extern) continue;
+        std::string sym;
+        if (!fn.link_name.empty()) {
+            sym = std::string(sp) + std::string(fn.link_name);
+        } else if (!mod.module_name.empty() && fn.name != "main") {
+            sym = std::string(sp) + std::string(mod.module_name) + "__" + std::string(fn.name);
+        } else {
+            sym = std::string(sp) + std::string(fn.name);
+        }
+        out_ << "global " << sym << "\n";
+        if (fn.is_weak) {
+            out_ << "weak " << sym << "\n";
         }
     }
 
@@ -691,9 +1050,9 @@ void NASMEmitter::emitModule(const MachModule& mod, const LIRModule& lir_mod,
         emitStartWrapper();
     }
 
-    // In freestanding mode, export _main as global entry
+    // In freestanding mode, export main as global entry
     if (freestanding && has_main) {
-        out_ << "global _main\n";
+        out_ << "global " << sp << "main\n";
     }
 }
 

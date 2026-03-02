@@ -4,6 +4,7 @@
 #include "kern/support/CompilationContext.h"
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace kern {
@@ -44,6 +45,7 @@ private:
     VReg lowerContinue(const HIRContinueExpr* expr);
     VReg lowerArrayLit(const HIRArrayLitExpr* expr);
     VReg lowerIndexAccess(const HIRIndexAccessExpr* expr);
+    VReg lowerIndexElementPtr(const HIRIndexAccessExpr* expr);
     VReg lowerInlineAsm(const HIRInlineAsmExpr* expr);
     VReg lowerFnRef(const HIRFnRefExpr* expr);
     VReg lowerCallIndirect(const HIRCallIndirectExpr* expr);
@@ -105,6 +107,15 @@ private:
 
     // Global variable label → GlobalData index (for LoadGlobal/StoreGlobal)
     std::unordered_map<std::string_view, uint32_t> global_label_map_;
+
+    // Source name → NASM label (handles link_name for extern globals)
+    std::unordered_map<std::string_view, std::string_view> global_nasm_label_;
+
+    // VTable labels (need lea instead of mov in LoadGlobal)
+    std::unordered_set<std::string_view> vtable_labels_;
+
+    // Variadic function names (for setting AL=0 in SysV ABI calls)
+    std::unordered_set<std::string_view> variadic_fns_;
 
     // Block label counter for uniqueness
     uint32_t label_counter_ = 0;

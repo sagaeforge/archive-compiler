@@ -1,0 +1,8 @@
+fn identity<T>(x: T) -> T { x }
+fn add<T>(a: T, b: T) -> T { a + b }
+
+fn main() -> i64 {
+    val a: i64 = identity<i64>(20)
+    val b: i64 = add<i64>(a, 22)
+    b
+}

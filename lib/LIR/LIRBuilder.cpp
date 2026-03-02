@@ -186,6 +186,9 @@ LIRModule* LIRBuilder::build(const HIRModule* hir) {
     for (uint32_t i = 0; i < hir->global_count; ++i) {
         // Use a placeholder index; real index assigned below when GlobalData is created
         global_label_map_[hir->globals[i]->name] = i;
+        // Map source name → NASM label (link_name overrides for extern globals)
+        auto* hgd = hir->globals[i];
+        global_nasm_label_[hgd->name] = (!hgd->link_name.empty()) ? hgd->link_name : hgd->name;
     }
 
     // Pre-register vtable labels so lowerIdent can resolve them during fn building
@@ -214,9 +217,12 @@ LIRModule* LIRBuilder::build(const HIRModule* hir) {
         GlobalData gd{};
         gd.kind = GlobalData::Variable;
         gd.index = static_cast<uint32_t>(globals_.size());
-        gd.label = hgd->name;
+        // Use link_name as NASM label for extern globals (matches extern declaration)
+        gd.label = (!hgd->link_name.empty()) ? hgd->link_name : hgd->name;
         gd.variable.is_mutable = hgd->is_mutable;
+        gd.variable.is_extern = hgd->is_extern;
         gd.variable.section_name = hgd->section_name;
+        gd.variable.link_name = hgd->link_name;
         gd.variable.array_values = nullptr;
         gd.variable.array_count = 0;
         gd.variable.init_bytes = nullptr;
@@ -622,7 +628,9 @@ VReg LIRBuilder::lowerIdent(const HIRIdentExpr* expr) {
         } else {
             i.type = expr->type;
         }
-        i.load_global.label = expr->name;
+        // Use NASM label (handles link_name for extern globals)
+        auto nasm_it = global_nasm_label_.find(expr->name);
+        i.load_global.label = (nasm_it != global_nasm_label_.end()) ? nasm_it->second : expr->name;
         i.loc = expr->loc;
         emit(i);
         return r;
@@ -2939,7 +2947,9 @@ void LIRBuilder::lowerStmt(const HIRStmt* stmt) {
                 sg.op = LIROp::StoreGlobal;
                 sg.result = INVALID_VREG;
                 sg.type = s->value->type;
-                sg.store_global.label = s->name;
+                // Use NASM label (handles link_name for extern globals)
+                auto nasm_it = global_nasm_label_.find(s->name);
+                sg.store_global.label = (nasm_it != global_nasm_label_.end()) ? nasm_it->second : s->name;
                 sg.store_global.value = val;
                 sg.loc = s->loc;
                 emit(sg);
