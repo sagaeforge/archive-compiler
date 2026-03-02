@@ -452,4 +452,105 @@ TEST_F(LIRBuilderTest, FullDump) {
     EXPECT_TRUE(s.find(".entry_0") != std::string::npos) << s;
 }
 
+// ============================================================================
+// CPU intrinsics — debug registers, FS/GS base, cache, segment, rdpmc
+// ============================================================================
+
+TEST_F(LIRBuilderTest, DebugRegisterRead) {
+    auto* mod = buildLIR(
+        "fn read_dr0() -> u64 = intrinsic\n"
+        "fn main() -> i64 {\n"
+        "    val x: u64 = read_dr0()\n"
+        "    x as i64\n"
+        "}"
+    );
+    ASSERT_NE(mod, nullptr);
+    auto s = dumpFn(mod, 1);
+    EXPECT_TRUE(s.find("inline_asm") != std::string::npos) << s;
+}
+
+TEST_F(LIRBuilderTest, DebugRegisterWrite) {
+    auto* mod = buildLIR(
+        "fn write_dr0(v: u64) -> Unit = intrinsic\n"
+        "fn main() -> i64 {\n"
+        "    write_dr0(4194304)\n"
+        "    0\n"
+        "}"
+    );
+    ASSERT_NE(mod, nullptr);
+    auto s = dumpFn(mod, 1);
+    EXPECT_TRUE(s.find("inline_asm") != std::string::npos) << s;
+}
+
+TEST_F(LIRBuilderTest, FsGsBaseIntrinsics) {
+    auto* mod = buildLIR(
+        "fn rdfsbase() -> u64 = intrinsic\n"
+        "fn wrfsbase(v: u64) -> Unit = intrinsic\n"
+        "fn main() -> i64 {\n"
+        "    val base: u64 = rdfsbase()\n"
+        "    wrfsbase(base)\n"
+        "    0\n"
+        "}"
+    );
+    ASSERT_NE(mod, nullptr);
+    auto s = dumpFn(mod, 2);
+    EXPECT_TRUE(s.find("inline_asm") != std::string::npos) << s;
+}
+
+TEST_F(LIRBuilderTest, CacheFlushIntrinsics) {
+    auto* mod = buildLIR(
+        "fn clflush(a: u64) -> Unit = intrinsic\n"
+        "fn main() -> i64 {\n"
+        "    clflush(4096)\n"
+        "    0\n"
+        "}"
+    );
+    ASSERT_NE(mod, nullptr);
+    auto s = dumpFn(mod, 1);
+    EXPECT_TRUE(s.find("inline_asm") != std::string::npos) << s;
+}
+
+TEST_F(LIRBuilderTest, SegmentDescriptorIntrinsics) {
+    auto* mod = buildLIR(
+        "fn lldt(s: u64) -> Unit = intrinsic\n"
+        "fn sldt() -> u64 = intrinsic\n"
+        "fn main() -> i64 {\n"
+        "    lldt(0x28)\n"
+        "    val sel: u64 = sldt()\n"
+        "    sel as i64\n"
+        "}"
+    );
+    ASSERT_NE(mod, nullptr);
+    auto s = dumpFn(mod, 2);
+    EXPECT_TRUE(s.find("inline_asm") != std::string::npos) << s;
+}
+
+TEST_F(LIRBuilderTest, MachineStatusWordIntrinsics) {
+    auto* mod = buildLIR(
+        "fn lmsw(v: u64) -> Unit = intrinsic\n"
+        "fn smsw() -> u64 = intrinsic\n"
+        "fn main() -> i64 {\n"
+        "    lmsw(1)\n"
+        "    val msw: u64 = smsw()\n"
+        "    msw as i64\n"
+        "}"
+    );
+    ASSERT_NE(mod, nullptr);
+    auto s = dumpFn(mod, 2);
+    EXPECT_TRUE(s.find("inline_asm") != std::string::npos) << s;
+}
+
+TEST_F(LIRBuilderTest, RdpmcIntrinsic) {
+    auto* mod = buildLIR(
+        "fn rdpmc(counter: u64) -> u64 = intrinsic\n"
+        "fn main() -> i64 {\n"
+        "    val count: u64 = rdpmc(0)\n"
+        "    count as i64\n"
+        "}"
+    );
+    ASSERT_NE(mod, nullptr);
+    auto s = dumpFn(mod, 1);
+    EXPECT_TRUE(s.find("inline_asm") != std::string::npos) << s;
+}
+
 } // namespace kern

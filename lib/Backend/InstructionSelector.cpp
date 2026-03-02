@@ -38,6 +38,7 @@ uint32_t InstructionSelector::sizeOfType(TypeId type) const {
     if (type >= ctx_.types.size()) return 8;
     const auto& info = ctx_.types.get(type);
     if (info.kind == TypeKind::Struct) return info.struct_.size;
+    if (info.kind == TypeKind::DynTrait) return 16;  // fat pointer: data_ptr + vtable_ptr
     if (info.kind == TypeKind::Union) {
         // Union: tag (8B) + max payload. Estimate conservatively.
         uint32_t max_payload = 0;
@@ -67,7 +68,8 @@ uint32_t InstructionSelector::sizeOfType(TypeId type) const {
 bool InstructionSelector::isStructType(TypeId type) const {
     if (type >= ctx_.types.size()) return false;
     const auto& info = ctx_.types.get(type);
-    return info.kind == TypeKind::Struct || info.kind == TypeKind::Union;
+    return info.kind == TypeKind::Struct || info.kind == TypeKind::Union ||
+           info.kind == TypeKind::DynTrait;
 }
 
 bool InstructionSelector::isFloat(TypeId type) const {
@@ -94,6 +96,8 @@ std::string_view InstructionSelector::blockLabel(const LIRFunction& fn,
 
 MachModule* InstructionSelector::select(const LIRModule& lir_mod) {
     auto* mod = ctx_.arena.make<MachModule>();
+    mod->module_name = lir_mod.module_name;
+    module_name_ = lir_mod.module_name;
     mod->fn_count = lir_mod.fn_count;
     mod->functions = ctx_.arena.makeArray<MachFunction>(lir_mod.fn_count);
 
@@ -101,9 +105,49 @@ MachModule* InstructionSelector::select(const LIRModule& lir_mod) {
     globals_ = lir_mod.globals;
     global_count_ = lir_mod.global_count;
 
+    extern_labels_.clear();
+    link_names_.clear();
+
+    // Pre-scan for @link_name mappings
+    // Also collect names of functions with definitions (have blocks)
+    std::unordered_set<std::string_view> defined_fns;
+    for (uint32_t i = 0; i < lir_mod.fn_count; ++i) {
+        if (!lir_mod.functions[i].link_name.empty()) {
+            link_names_[lir_mod.functions[i].name] = lir_mod.functions[i].link_name;
+        }
+        if (lir_mod.functions[i].block_count > 0) {
+            defined_fns.insert(lir_mod.functions[i].name);
+        }
+    }
+
+    // Track extern fn declarations as extern labels for the linker
+    // (only if not also defined in this module)
+    for (uint32_t i = 0; i < lir_mod.fn_count; ++i) {
+        if (lir_mod.functions[i].is_extern && lir_mod.functions[i].block_count == 0
+            && !defined_fns.count(lir_mod.functions[i].name)) {
+            const char* sp = symPrefix();
+            auto name = lir_mod.functions[i].link_name.empty()
+                        ? lir_mod.functions[i].name
+                        : lir_mod.functions[i].link_name;
+            char buf[512];
+            int len = snprintf(buf, sizeof(buf), "%s%.*s", sp,
+                               static_cast<int>(name.size()), name.data());
+            extern_labels_.push_back(ctx_.strings.intern(std::string_view(buf, len)));
+        }
+    }
+
     for (uint32_t i = 0; i < lir_mod.fn_count; ++i) {
         auto* mf = selectFunction(lir_mod.functions[i]);
         mod->functions[i] = *mf;
+    }
+
+    // Copy cross-module extern labels to module
+    if (!extern_labels_.empty()) {
+        mod->extern_label_count = static_cast<uint32_t>(extern_labels_.size());
+        mod->extern_labels = ctx_.arena.makeArray<std::string_view>(mod->extern_label_count);
+        for (uint32_t i = 0; i < mod->extern_label_count; ++i) {
+            mod->extern_labels[i] = extern_labels_[i];
+        }
     }
 
     return mod;
@@ -115,7 +159,11 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     mf->is_intrinsic = fn.is_intrinsic;
     mf->is_naked = fn.is_naked;
     mf->is_interrupt = fn.is_interrupt;
+    mf->is_pub = fn.is_pub;
+    mf->is_extern = fn.is_extern;
+    mf->is_weak = fn.is_weak;
     mf->section_name = fn.section_name;
+    mf->link_name = fn.link_name;
     mf->next_vreg = fn.next_vreg;
     next_vreg_ = fn.next_vreg;
     struct_alloc_bytes_ = 0;
@@ -125,6 +173,7 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     stack_ptr_vregs_.clear();
     gpr_arg_slot_ = 0;
     xmm_arg_slot_ = 0;
+    next_param_idx_ = 0;
     fn_return_type_ = fn.return_type;
     hidden_ret_ptr_ = INVALID_VREG;
 
@@ -249,7 +298,7 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
         case LIROp::CondBranch:  selectCondBranch(instr, fn); break;
         case LIROp::Ret:         selectRet(instr); break;
         case LIROp::Call:        selectCall(instr); break;
-        case LIROp::BlockArg:    selectBlockArg(instr); break;
+        case LIROp::BlockArg:    selectBlockArg(instr, fn); break;
         case LIROp::Cast:        selectCast(instr); break;
         case LIROp::InlineAsm:   selectInlineAsm(instr); break;
         case LIROp::CallIndirect: selectCallIndirect(instr); break;
@@ -264,6 +313,12 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
         case LIROp::PercpuStore:    selectPercpuStore(instr); break;
         case LIROp::LoadGlobal:     selectLoadGlobal(instr); break;
         case LIROp::StoreGlobal:    selectStoreGlobal(instr); break;
+        case LIROp::Clz:            selectClz(instr); break;
+        case LIROp::Ctz:            selectCtz(instr); break;
+        case LIROp::Popcnt:         selectPopcnt(instr); break;
+        case LIROp::Bswap:          selectBswap(instr); break;
+        case LIROp::PortIn:         selectPortIn(instr); break;
+        case LIROp::PortOut:        selectPortOut(instr); break;
     }
 }
 
@@ -781,14 +836,69 @@ void InstructionSelector::selectLoad(const LIRInstr& instr) {
         mi.operand_count = 2;
         mi.inline_ops[0] = MachOperand::virt(dst);
         mi.inline_ops[1] = MachOperand::virt(ptr);
+        mi.is_volatile = instr.load.is_volatile;
         emit(mi);
+    } else if (isStructType(instr.type) && !stack_ptr_vregs_.count(ptr)) {
+        // Struct dereference: ptr points to actual struct data in memory.
+        // Allocate stack space and copy the full struct from [ptr] to stack.
+        // Result vreg holds a pointer to the stack copy (like StructAlloc).
+        // Note: if ptr IS a stack_ptr_vreg (e.g. var slot), it holds an 8-byte
+        // pointer — fall through to the scalar load path.
+        uint32_t sz = sizeOfType(instr.type);
+        sz = (sz + 7u) & ~7u;
+        struct_alloc_bytes_ += sz;
+        static constexpr int32_t CALLEE_SAVED_AREA = NUM_CALLEE_SAVED * 8;
+        int32_t slot = -CALLEE_SAVED_AREA - static_cast<int32_t>(struct_alloc_bytes_);
+
+        // LEA dst, [rbp + slot]  — dst = pointer to stack copy
+        emit(makeLea(MachOperand::virt(dst), MachOperand::stack(slot)));
+        stack_ptr_vregs_.insert(dst);
+
+        // Copy data from [ptr] to [dst] in 8-byte chunks
+        VReg src_ptr = freshVReg();
+        VReg dst_ptr = freshVReg();
+        emit(makeMov(MachOperand::virt(src_ptr), MachOperand::virt(ptr), 64));
+        emit(makeMov(MachOperand::virt(dst_ptr), MachOperand::virt(dst), 64));
+        for (uint32_t off = 0; off < sz; off += 8) {
+            VReg tmp = freshVReg();
+            MachInstr ld(X86Op::MovLoad);
+            ld.width = 64;
+            ld.operand_count = 2;
+            ld.inline_ops[0] = MachOperand::virt(tmp);
+            ld.inline_ops[1] = MachOperand::virt(src_ptr);
+            emit(ld);
+            MachInstr st(X86Op::MovStore);
+            st.width = 64;
+            st.operand_count = 2;
+            st.inline_ops[0] = MachOperand::virt(dst_ptr);
+            st.inline_ops[1] = MachOperand::virt(tmp);
+            emit(st);
+            if (off + 8 < sz) {
+                emit(makeAlu(X86Op::Add, MachOperand::virt(src_ptr),
+                             MachOperand::immediate(8), 64));
+                emit(makeAlu(X86Op::Add, MachOperand::virt(dst_ptr),
+                             MachOperand::immediate(8), 64));
+            }
+        }
     } else {
         MachInstr mi(X86Op::MovLoad);
         mi.width = w;
         mi.operand_count = 2;
         mi.inline_ops[0] = MachOperand::virt(dst);
         mi.inline_ops[1] = MachOperand::virt(ptr);
+        mi.is_volatile = instr.load.is_volatile;
         emit(mi);
+
+        // If loading from a var slot (stack_ptr_vreg) and the result is a
+        // pointer type, mark it as a stack address. This prevents unsafe
+        // tail calls with arguments pointing into the local stack frame.
+        if (stack_ptr_vregs_.count(ptr) && instr.type < ctx_.types.size()) {
+            auto kind = ctx_.types.get(instr.type).kind;
+            if (kind == TypeKind::Ptr || kind == TypeKind::PtrMut ||
+                kind == TypeKind::Fn) {
+                stack_ptr_vregs_.insert(dst);
+            }
+        }
     }
 }
 
@@ -807,6 +917,7 @@ void InstructionSelector::selectStore(const LIRInstr& instr) {
         mi.operand_count = 2;
         mi.inline_ops[0] = MachOperand::virt(ptr);
         mi.inline_ops[1] = MachOperand::virt(val);
+        mi.is_volatile = instr.store.is_volatile;
         emit(mi);
     } else {
         uint8_t w = widthOf(instr.type);
@@ -815,6 +926,7 @@ void InstructionSelector::selectStore(const LIRInstr& instr) {
         mi.operand_count = 2;
         mi.inline_ops[0] = MachOperand::virt(ptr);
         mi.inline_ops[1] = MachOperand::virt(val);
+        mi.is_volatile = instr.store.is_volatile;
         emit(mi);
     }
 }
@@ -833,6 +945,12 @@ void InstructionSelector::selectFieldPtr(const LIRInstr& instr) {
         emit(makeMov(MachOperand::virt(dst), MachOperand::virt(base), 64));
         emit(makeAlu(X86Op::Add, MachOperand::virt(dst),
                      MachOperand::immediate(offset), 64));
+    }
+
+    // Propagate stack pointer status: field_ptr of a stack address
+    // is still a stack address (base + offset within the same frame).
+    if (stack_ptr_vregs_.count(base)) {
+        stack_ptr_vregs_.insert(dst);
     }
 }
 
@@ -914,6 +1032,8 @@ void InstructionSelector::selectRet(const LIRInstr& instr) {
             // >16B struct return: copy struct data to [hidden_ret_ptr_] and
             // return the pointer in RAX.
             uint32_t sz = struct_vreg_sizes_[val];
+            // Round up to 8-byte aligned for safe 8-byte copy loop
+            assert(sz % 8 == 0 && "struct size must be 8-byte aligned for copy loop");
             VReg src = freshVReg();
             VReg dst = freshVReg();
             emit(makeMov(MachOperand::virt(src), MachOperand::virt(val), 64));
@@ -1071,14 +1191,47 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
         }
     }
 
-    // Build callee label: _name
+    // Build callee label with module mangling
     std::string_view callee_label;
     {
-        char buf[256];
-        int len = snprintf(buf, sizeof(buf), "_%.*s",
-                           static_cast<int>(call.callee.size()),
-                           call.callee.data());
+        char buf[512];
+        int len;
+        const char* sp = symPrefix();
+
+        // Check for @link_name override
+        auto ln_it = link_names_.find(call.callee);
+        if (ln_it != link_names_.end()) {
+            len = snprintf(buf, sizeof(buf), "%s%.*s", sp,
+                           static_cast<int>(ln_it->second.size()),
+                           ln_it->second.data());
+        } else {
+            // Determine which module to use for mangling:
+            // - cross-module call: use callee_module
+            // - same-module call: use module_name_
+            std::string_view mangle_mod = call.callee_module.empty()
+                                            ? module_name_ : call.callee_module;
+
+            // Don't mangle: main, intrinsics, extern "C" calls, or callee names
+            // that already contain "__" (already mangled by monomorphization)
+            if (call.callee == "main" || call.callee.find("__") != std::string_view::npos
+                || mangle_mod.empty()) {
+                len = snprintf(buf, sizeof(buf), "%s%.*s", sp,
+                               static_cast<int>(call.callee.size()),
+                               call.callee.data());
+            } else {
+                len = snprintf(buf, sizeof(buf), "%s%.*s__%.*s", sp,
+                               static_cast<int>(mangle_mod.size()),
+                               mangle_mod.data(),
+                               static_cast<int>(call.callee.size()),
+                               call.callee.data());
+            }
+        }
         callee_label = ctx_.strings.intern(std::string_view(buf, len));
+
+        // Track cross-module calls as extern labels
+        if (!call.callee_module.empty()) {
+            extern_labels_.push_back(callee_label);
+        }
     }
 
     // Can't tail-call if any arg is a stack pointer (struct_alloc/addr_of)
@@ -1093,6 +1246,12 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
                 break;
             }
         }
+    }
+
+    // Variadic: SysV ABI requires AL = number of XMM args used
+    if (call.is_variadic) {
+        emit(makeMov(MachOperand::precolored(PhysReg::RAX),
+                     MachOperand::immediate(static_cast<int64_t>(xmm_idx)), 8));
     }
 
     if (can_tail) {
@@ -1164,10 +1323,21 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
 
 void InstructionSelector::selectFnRef(const LIRInstr& instr) {
     // lea vreg, [_fnname]  — get address of function
-    char buf[256];
-    int len = snprintf(buf, sizeof(buf), "_%.*s",
-                       static_cast<int>(instr.fn_ref.fn_name.size()),
-                       instr.fn_ref.fn_name.data());
+    char buf[512];
+    int len;
+    auto fn_name = instr.fn_ref.fn_name;
+    std::string_view mangle_mod = instr.fn_ref.fn_module.empty()
+                                    ? module_name_ : instr.fn_ref.fn_module;
+    const char* sp = symPrefix();
+    if (fn_name == "main" || fn_name.find("__") != std::string_view::npos
+        || mangle_mod.empty()) {
+        len = snprintf(buf, sizeof(buf), "%s%.*s", sp,
+                       static_cast<int>(fn_name.size()), fn_name.data());
+    } else {
+        len = snprintf(buf, sizeof(buf), "%s%.*s__%.*s", sp,
+                       static_cast<int>(mangle_mod.size()), mangle_mod.data(),
+                       static_cast<int>(fn_name.size()), fn_name.data());
+    }
     auto callee_label = ctx_.strings.intern(std::string_view(buf, len));
     emit(makeLea(MachOperand::virt(instr.result),
                  MachOperand::lbl(callee_label), 64));
@@ -1311,7 +1481,8 @@ void InstructionSelector::selectCallIndirect(const LIRInstr& instr) {
     }
 }
 
-void InstructionSelector::selectBlockArg(const LIRInstr& instr) {
+void InstructionSelector::selectBlockArg(const LIRInstr& instr,
+                                          const LIRFunction& fn) {
     // In the entry block (block 0), block args are function parameters
     // arriving via ABI registers. Use gpr_arg_slot_ to track cumulative
     // GPR slot usage (multi-register params like 16B structs consume 2 slots).
@@ -1323,6 +1494,30 @@ void InstructionSelector::selectBlockArg(const LIRInstr& instr) {
                          MachOperand::precolored(GPR_ARG_REGS[0]), 64));
             gpr_arg_slot_ = 1;  // visible params start from RSI
         }
+
+        // Advance past any skipped (DCE'd) parameters so ABI register
+        // assignment stays correct. E.g. if block_arg $0 was eliminated,
+        // block_arg $1 must still use GPR slot 1 (RSI), not slot 0 (RDI).
+        uint32_t target_idx = instr.block_arg.index;
+        while (next_param_idx_ < target_idx && next_param_idx_ < fn.param_count) {
+            TypeId skipped_type = fn.param_types[next_param_idx_];
+            if (isFloat(skipped_type)) {
+                xmm_arg_slot_++;
+            } else if (isStructType(skipped_type)) {
+                uint32_t sz = sizeOfType(skipped_type);
+                if (sz > 16) {
+                    gpr_arg_slot_++;  // pointer in one GPR
+                } else {
+                    uint32_t num_regs = (sz <= 8) ? 1 : 2;
+                    gpr_arg_slot_ += num_regs;
+                }
+            } else {
+                gpr_arg_slot_++;
+            }
+            next_param_idx_++;
+        }
+        next_param_idx_ = target_idx + 1;
+
         bool is_float_param = isFloat(instr.type);
         bool is_struct = isStructType(instr.type);
 
@@ -1344,9 +1539,12 @@ void InstructionSelector::selectBlockArg(const LIRInstr& instr) {
                 }
 
                 // Copy data from caller's pointer to local stack
+                // Stack alloc was rounded to 8-byte alignment above; loop
+                // uses the same rounded size to avoid over-read on non-aligned structs.
+                uint32_t copy_size = (size + 7u) & ~7u;
                 VReg dst_ptr = freshVReg();
                 emit(makeLea(MachOperand::virt(dst_ptr), MachOperand::stack(base_offset)));
-                for (uint32_t off = 0; off < size; off += 8) {
+                for (uint32_t off = 0; off < copy_size; off += 8) {
                     VReg tmp = freshVReg();
                     MachInstr ld(X86Op::MovLoad);
                     ld.width = 64;
@@ -1356,7 +1554,7 @@ void InstructionSelector::selectBlockArg(const LIRInstr& instr) {
                     emit(ld);
                     emit(makeMov(MachOperand::stack(base_offset + static_cast<int32_t>(off)),
                                  MachOperand::virt(tmp), 64));
-                    if (off + 8 < size) {
+                    if (off + 8 < copy_size) {
                         emit(makeAlu(X86Op::Add, MachOperand::virt(src_ptr),
                                      MachOperand::immediate(8), 64));
                     }
@@ -1419,6 +1617,66 @@ void InstructionSelector::selectCast(const LIRInstr& instr) {
     uint8_t src_w = widthOf(src_type);
     uint8_t dst_w = widthOf(dst_type);
 
+    bool src_float = isFloat(src_type);
+    bool dst_float = isFloat(dst_type);
+
+    // Float → Integer
+    if (src_float && !dst_float) {
+        X86Op op = (src_w == 32) ? X86Op::Cvttss2si : X86Op::Cvttsd2si;
+        MachInstr mi(op);
+        mi.width = dst_w;
+        mi.operand_count = 2;
+        mi.inline_ops[0] = MachOperand::virt(dst);
+        mi.inline_ops[1] = MachOperand::virt(src);
+        emit(mi);
+        // If target is narrower than 64-bit, mask to truncate
+        if (dst_w < 64) {
+            int64_t mask = (dst_w == 8) ? 0xFF :
+                           (dst_w == 16) ? 0xFFFF :
+                           (dst_w == 32) ? (int64_t)0xFFFFFFFF : -1;
+            emit(makeAlu(X86Op::And, MachOperand::virt(dst),
+                         MachOperand::immediate(mask), 64));
+        }
+        return;
+    }
+
+    // Integer → Float
+    if (!src_float && dst_float) {
+        // Sign-extend source to 64-bit first if narrower
+        VReg ext_src = src;
+        if (src_w < 64) {
+            ext_src = freshVReg();
+            bool is_signed = ctx_.types.isSigned(src_type);
+            X86Op ext_op = is_signed ? X86Op::MovSX : X86Op::MovZX;
+            MachInstr ext(ext_op);
+            ext.width = src_w;
+            ext.operand_count = 2;
+            ext.inline_ops[0] = MachOperand::virt(ext_src);
+            ext.inline_ops[1] = MachOperand::virt(src);
+            emit(ext);
+        }
+        X86Op op = (dst_w == 32) ? X86Op::Cvtsi2ss : X86Op::Cvtsi2sd;
+        MachInstr mi(op);
+        mi.width = 64;  // source GPR width
+        mi.operand_count = 2;
+        mi.inline_ops[0] = MachOperand::virt(dst);
+        mi.inline_ops[1] = MachOperand::virt(ext_src);
+        emit(mi);
+        return;
+    }
+
+    // Float → Float (f32↔f64)
+    if (src_float && dst_float && src_w != dst_w) {
+        X86Op op = (src_w == 64) ? X86Op::Cvtsd2ss : X86Op::Cvtss2sd;
+        MachInstr mi(op);
+        mi.width = src_w;
+        mi.operand_count = 2;
+        mi.inline_ops[0] = MachOperand::virt(dst);
+        mi.inline_ops[1] = MachOperand::virt(src);
+        emit(mi);
+        return;
+    }
+
     // Ptr<->int: both are 64-bit, just mov
     auto src_kind = (src_type < ctx_.types.size()) ? ctx_.types.get(src_type).kind : TypeKind::Primitive;
     auto dst_kind = (dst_type < ctx_.types.size()) ? ctx_.types.get(dst_type).kind : TypeKind::Primitive;
@@ -1443,7 +1701,7 @@ void InstructionSelector::selectCast(const LIRInstr& instr) {
         emit(makeMov(MachOperand::virt(dst), MachOperand::virt(src), 64));
         int64_t mask = (dst_w == 8) ? 0xFF :
                        (dst_w == 16) ? 0xFFFF :
-                       (dst_w == 32) ? 0xFFFFFFFF : -1;
+                       (dst_w == 32) ? (int64_t)0xFFFFFFFF : -1;
         emit(makeAlu(X86Op::And, MachOperand::virt(dst),
                      MachOperand::immediate(mask), 64));
     } else {
@@ -1452,14 +1710,120 @@ void InstructionSelector::selectCast(const LIRInstr& instr) {
     }
 }
 
+// Map single-letter constraint to PhysReg
+static PhysReg constraintToReg(std::string_view c) {
+    // Strip leading '=' or '+'
+    if (!c.empty() && (c[0] == '=' || c[0] == '+')) c = c.substr(1);
+    if (c == "a") return PhysReg::RAX;
+    if (c == "b") return PhysReg::RBX;
+    if (c == "c") return PhysReg::RCX;
+    if (c == "d") return PhysReg::RDX;
+    if (c == "S") return PhysReg::RSI;
+    if (c == "D") return PhysReg::RDI;
+    // "r" = any register — we'll pick one based on index
+    return PhysReg::RAX; // fallback
+}
+
+// Pick a GPR for "r" constraint, avoiding already-used registers
+static PhysReg pickGPR(uint32_t idx, const PhysReg* used, uint32_t used_count) {
+    static constexpr PhysReg GPR_POOL[] = {
+        PhysReg::RAX, PhysReg::RCX, PhysReg::RDX, PhysReg::RSI,
+        PhysReg::RDI, PhysReg::R8,  PhysReg::R9,  PhysReg::R10,
+    };
+    uint32_t pick_idx = 0;
+    for (auto r : GPR_POOL) {
+        bool in_use = false;
+        for (uint32_t i = 0; i < used_count; ++i) {
+            if (used[i] == r) { in_use = true; break; }
+        }
+        if (!in_use) {
+            if (pick_idx == idx) return r;
+            ++pick_idx;
+        }
+    }
+    return GPR_POOL[idx % 8]; // fallback
+}
+
+static bool isSpecificRegConstraint(std::string_view c) {
+    if (!c.empty() && (c[0] == '=' || c[0] == '+')) c = c.substr(1);
+    return c == "a" || c == "b" || c == "c" || c == "d" || c == "S" || c == "D";
+}
+
 void InstructionSelector::selectInlineAsm(const LIRInstr& instr) {
-    // Emit raw assembly lines as InlineAsm MachInstr
+    const auto& ia = instr.inline_asm;
+
+    // If no constraints, emit raw asm (legacy path)
+    if (ia.output_count == 0 && ia.input_count == 0) {
+        MachInstr mi(X86Op::InlineAsm);
+        mi.operand_count = 0;
+        mi.asm_data.lines = ia.lines;
+        mi.asm_data.line_lengths = ia.line_lengths;
+        mi.asm_data.line_count = ia.line_count;
+        mi.asm_data.outputs = nullptr;
+        mi.asm_data.output_count = 0;
+        mi.asm_data.inputs = nullptr;
+        mi.asm_data.input_count = 0;
+        mi.asm_data.clobbers = nullptr;
+        mi.asm_data.clobber_count = 0;
+        emit(mi);
+        return;
+    }
+
+    // Extended asm with constraints
+    // 1. Resolve physical registers for each operand
+    PhysReg used_regs[16];
+    uint32_t used_count = 0;
+    uint32_t any_idx = 0; // counter for "r" constraints
+
+    auto* out_bindings = ctx_.arena.makeArray<MachAsmBinding>(ia.output_count);
+    for (uint32_t i = 0; i < ia.output_count; ++i) {
+        auto c = ia.outputs[i].constraint;
+        if (isSpecificRegConstraint(c)) {
+            out_bindings[i].phys = constraintToReg(c);
+        } else {
+            out_bindings[i].phys = pickGPR(any_idx++, used_regs, used_count);
+        }
+        out_bindings[i].constraint = c;
+        used_regs[used_count++] = out_bindings[i].phys;
+    }
+
+    auto* in_bindings = ctx_.arena.makeArray<MachAsmBinding>(ia.input_count);
+    for (uint32_t i = 0; i < ia.input_count; ++i) {
+        auto c = ia.inputs[i].constraint;
+        if (isSpecificRegConstraint(c)) {
+            in_bindings[i].phys = constraintToReg(c);
+        } else {
+            in_bindings[i].phys = pickGPR(any_idx++, used_regs, used_count);
+        }
+        in_bindings[i].constraint = c;
+        used_regs[used_count++] = in_bindings[i].phys;
+    }
+
+    // 2. Move inputs to constrained registers
+    for (uint32_t i = 0; i < ia.input_count; ++i) {
+        emit(makeMov(MachOperand::precolored(in_bindings[i].phys),
+                     MachOperand::virt(ia.inputs[i].vreg), 64));
+    }
+
+    // 3. Emit the asm block with resolved bindings
     MachInstr mi(X86Op::InlineAsm);
     mi.operand_count = 0;
-    mi.asm_data.lines = instr.inline_asm.lines;
-    mi.asm_data.line_lengths = instr.inline_asm.line_lengths;
-    mi.asm_data.line_count = instr.inline_asm.line_count;
+    mi.asm_data.lines = ia.lines;
+    mi.asm_data.line_lengths = ia.line_lengths;
+    mi.asm_data.line_count = ia.line_count;
+    mi.asm_data.outputs = out_bindings;
+    mi.asm_data.output_count = ia.output_count;
+    mi.asm_data.inputs = in_bindings;
+    mi.asm_data.input_count = ia.input_count;
+    mi.asm_data.clobbers = ia.clobbers;
+    mi.asm_data.clobber_count = ia.clobber_count;
     emit(mi);
+
+    // 4. Move output registers to output vregs
+    for (uint32_t i = 0; i < ia.output_count; ++i) {
+        emit(makeMov(MachOperand::virt(ia.outputs[i].vreg),
+                     MachOperand::precolored(out_bindings[i].phys), 64));
+    }
 }
 
 // ============================================================================
@@ -1580,8 +1944,37 @@ void InstructionSelector::selectPercpuStore(const LIRInstr& instr) {
 }
 
 void InstructionSelector::selectLoadGlobal(const LIRInstr& instr) {
-    MachInstr mi(X86Op::MovLoadGlobal);
-    mi.width = widthOf(instr.type);
+    // For aggregate-typed globals (arrays, structs), we need the address (lea)
+    // not the value (mov), because field/index access works via pointer.
+    bool is_aggregate = false;
+    bool is_float = isFloat(instr.type);
+    if (instr.type < ctx_.types.size()) {
+        const auto& ti = ctx_.types.get(instr.type);
+        is_aggregate = (ti.kind == TypeKind::Array || ti.kind == TypeKind::Struct ||
+                        ti.kind == TypeKind::DynTrait);
+    }
+
+    if (is_float) {
+        // Float globals: lea tmp, [rel label]; movsd/movss xmm, [tmp]
+        VReg tmp = freshVReg();
+        MachInstr lea(X86Op::LeaGlobal);
+        lea.width = 64;
+        lea.operand_count = 1;
+        lea.inline_ops[0] = MachOperand::virt(tmp);
+        lea.global_label = instr.load_global.label;
+        emit(lea);
+
+        MachInstr load(X86Op::FloatLoad);
+        load.width = widthOf(instr.type);
+        load.operand_count = 2;
+        load.inline_ops[0] = MachOperand::virt(instr.result);
+        load.inline_ops[1] = MachOperand::virt(tmp);
+        emit(load);
+        return;
+    }
+
+    MachInstr mi(is_aggregate ? X86Op::LeaGlobal : X86Op::MovLoadGlobal);
+    mi.width = is_aggregate ? 64 : widthOf(instr.type);
     mi.operand_count = 1;
     mi.inline_ops[0] = MachOperand::virt(instr.result);
     mi.global_label = instr.load_global.label;
@@ -1589,11 +1982,126 @@ void InstructionSelector::selectLoadGlobal(const LIRInstr& instr) {
 }
 
 void InstructionSelector::selectStoreGlobal(const LIRInstr& instr) {
+    if (isFloat(instr.type)) {
+        // Float globals: lea tmp, [rel label]; movsd/movss [tmp], xmm
+        VReg tmp = freshVReg();
+        MachInstr lea(X86Op::LeaGlobal);
+        lea.width = 64;
+        lea.operand_count = 1;
+        lea.inline_ops[0] = MachOperand::virt(tmp);
+        lea.global_label = instr.store_global.label;
+        emit(lea);
+
+        MachInstr store(X86Op::FloatStore);
+        store.width = widthOf(instr.type);
+        store.operand_count = 2;
+        store.inline_ops[0] = MachOperand::virt(tmp);
+        store.inline_ops[1] = MachOperand::virt(instr.store_global.value);
+        emit(store);
+        return;
+    }
+
     MachInstr mi(X86Op::MovStoreGlobal);
     mi.width = widthOf(instr.type);
     mi.operand_count = 1;
     mi.inline_ops[0] = MachOperand::virt(instr.store_global.value);
     mi.global_label = instr.store_global.label;
+    emit(mi);
+}
+
+// ============================================================================
+// Bit manipulation
+// ============================================================================
+
+void InstructionSelector::selectClz(const LIRInstr& instr) {
+    // clz(x) = 63 - bsr(x)  (bsr finds highest set bit index)
+    // bsr dst, src
+    MachInstr bsr(X86Op::Bsr);
+    bsr.width = 64;
+    bsr.operand_count = 2;
+    bsr.inline_ops[0] = MachOperand::virt(instr.result);
+    bsr.inline_ops[1] = MachOperand::virt(instr.unary.operand);
+    emit(bsr);
+    // xor dst, 63  (flip to get leading zeros count)
+    MachInstr xr(X86Op::Xor);
+    xr.width = 64;
+    xr.operand_count = 2;
+    xr.inline_ops[0] = MachOperand::virt(instr.result);
+    xr.inline_ops[1] = MachOperand::immediate(63);
+    emit(xr);
+}
+
+void InstructionSelector::selectCtz(const LIRInstr& instr) {
+    // ctz(x) = bsf(x)  (bsf finds lowest set bit index)
+    MachInstr mi(X86Op::Bsf);
+    mi.width = 64;
+    mi.operand_count = 2;
+    mi.inline_ops[0] = MachOperand::virt(instr.result);
+    mi.inline_ops[1] = MachOperand::virt(instr.unary.operand);
+    emit(mi);
+}
+
+void InstructionSelector::selectPopcnt(const LIRInstr& instr) {
+    MachInstr mi(X86Op::Popcnt);
+    mi.width = 64;
+    mi.operand_count = 2;
+    mi.inline_ops[0] = MachOperand::virt(instr.result);
+    mi.inline_ops[1] = MachOperand::virt(instr.unary.operand);
+    emit(mi);
+}
+
+void InstructionSelector::selectBswap(const LIRInstr& instr) {
+    // bswap operates in-place, so: mov dst, src; bswap dst
+    emit(makeMov(MachOperand::virt(instr.result),
+                 MachOperand::virt(instr.unary.operand), 64));
+    MachInstr mi(X86Op::Bswap);
+    mi.width = 64;
+    mi.operand_count = 1;
+    mi.inline_ops[0] = MachOperand::virt(instr.result);
+    emit(mi);
+}
+
+// ============================================================================
+// Port I/O
+// ============================================================================
+
+void InstructionSelector::selectPortIn(const LIRInstr& instr) {
+    // in al/ax/eax, dx
+    // Port number must be in DX, result comes in AL/AX/EAX (RAX)
+    uint8_t w = widthOf(instr.type);
+    if (w == 0) w = 8; // default to byte
+    emit(makeMov(MachOperand::precolored(PhysReg::RDX),
+                 MachOperand::virt(instr.port_in.port), 16));
+    MachInstr mi(X86Op::In);
+    mi.width = w;
+    mi.operand_count = 1;
+    mi.inline_ops[0] = MachOperand::precolored(PhysReg::RAX);
+    emit(mi);
+    emit(makeMov(MachOperand::virt(instr.result),
+                 MachOperand::precolored(PhysReg::RAX), w));
+}
+
+void InstructionSelector::selectPortOut(const LIRInstr& instr) {
+    // out dx, al/ax/eax
+    // Port in DX, value in AL/AX/EAX
+    uint8_t w = 8; // default byte for outb
+    // Determine width from the value operand — just use 8 for now
+    // The caller (outb=8, outw=16, outl=32) sets the type
+    auto it = float_vregs_.find(instr.port_out.value);
+    if (it == float_vregs_.end()) {
+        // Not a float — use the instruction width based on type
+        // For port I/O, type is Unit but we infer from the intrinsic name
+        // Just use 8 bits as default; actual width set by caller
+        w = 8;
+    }
+    emit(makeMov(MachOperand::precolored(PhysReg::RDX),
+                 MachOperand::virt(instr.port_out.port), 16));
+    emit(makeMov(MachOperand::precolored(PhysReg::RAX),
+                 MachOperand::virt(instr.port_out.value), w));
+    MachInstr mi(X86Op::Out);
+    mi.width = w;
+    mi.operand_count = 1;
+    mi.inline_ops[0] = MachOperand::precolored(PhysReg::RAX);
     emit(mi);
 }
 

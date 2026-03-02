@@ -726,7 +726,36 @@ static bool isAtomicIntrinsicName(std::string_view name) {
 }
 
 static bool isIoIntrinsicName(std::string_view name) {
-    return name == "volatile_read" || name == "volatile_write";
+    return name == "volatile_read" || name == "volatile_write" ||
+           name == "inb" || name == "inw" || name == "inl" ||
+           name == "outb" || name == "outw" || name == "outl" ||
+           name == "rdtsc" || name == "rdmsr" || name == "wrmsr" ||
+           name == "cpuid_eax" || name == "cpuid_ebx" ||
+           name == "cpuid_ecx" || name == "cpuid_edx" ||
+           name == "cpuid_sub" ||
+           name == "cli" || name == "sti" || name == "hlt" ||
+           name == "pause" || name == "swapgs" || name == "wbinvd" ||
+           name == "stac" || name == "clac" ||
+           name == "sysretq" || name == "sysenter" || name == "sysexit" ||
+           name == "read_cr0" || name == "read_cr2" ||
+           name == "read_cr3" || name == "read_cr4" ||
+           name == "write_cr0" || name == "write_cr3" || name == "write_cr4" ||
+           name == "invlpg" || name == "lgdt" || name == "lidt" || name == "ltr" ||
+           name == "memcpy" || name == "memset" ||
+           name == "fxsave" || name == "fxrstor" ||
+           name == "xsave" || name == "xrstor" ||
+           name == "read_dr0" || name == "read_dr1" ||
+           name == "read_dr2" || name == "read_dr3" ||
+           name == "read_dr6" || name == "read_dr7" ||
+           name == "write_dr0" || name == "write_dr1" ||
+           name == "write_dr2" || name == "write_dr3" ||
+           name == "write_dr6" || name == "write_dr7" ||
+           name == "rdfsbase" || name == "wrfsbase" ||
+           name == "rdgsbase" || name == "wrgsbase" ||
+           name == "clflush" || name == "clflushopt" || name == "clwb" ||
+           name == "lldt" || name == "sldt" ||
+           name == "lmsw" || name == "smsw" ||
+           name == "rdpmc";
 }
 
 static bool exprUsesAtomicIntrinsic(const HIRExpr* expr) {
@@ -903,6 +932,88 @@ static bool stmtUsesIoIntrinsic(const HIRStmt* stmt) {
     return false;
 }
 
+// Helper: check if expression contains an indirect call (HOF)
+static bool exprUsesCallIndirect(const HIRExpr* expr);
+static bool stmtUsesCallIndirect(const HIRStmt* stmt);
+
+static bool exprUsesCallIndirect(const HIRExpr* expr) {
+    if (!expr) return false;
+    switch (expr->kind) {
+        case HIRExpr::Kind::CallIndirect:
+            return true;
+        case HIRExpr::Kind::Block: {
+            auto* e = static_cast<const HIRBlockExpr*>(expr);
+            for (uint32_t i = 0; i < e->stmt_count; ++i)
+                if (stmtUsesCallIndirect(e->stmts[i])) return true;
+            return exprUsesCallIndirect(e->result);
+        }
+        case HIRExpr::Kind::If: {
+            auto* e = static_cast<const HIRIfExpr*>(expr);
+            return exprUsesCallIndirect(e->condition) ||
+                   exprUsesCallIndirect(e->then_branch) ||
+                   exprUsesCallIndirect(e->else_branch);
+        }
+        case HIRExpr::Kind::Match: {
+            auto* e = static_cast<const HIRMatchExpr*>(expr);
+            if (exprUsesCallIndirect(e->scrutinee)) return true;
+            for (uint32_t i = 0; i < e->arm_count; ++i) {
+                if (exprUsesCallIndirect(e->arms[i].body)) return true;
+            }
+            return false;
+        }
+        case HIRExpr::Kind::Return:
+            return exprUsesCallIndirect(static_cast<const HIRReturnExpr*>(expr)->value);
+        case HIRExpr::Kind::Loop: {
+            auto* e = static_cast<const HIRLoopExpr*>(expr);
+            for (uint32_t i = 0; i < e->binding_count; ++i)
+                if (exprUsesCallIndirect(e->bindings[i].init)) return true;
+            return exprUsesCallIndirect(e->body);
+        }
+        case HIRExpr::Kind::BinOp: {
+            auto* e = static_cast<const HIRBinOpExpr*>(expr);
+            return exprUsesCallIndirect(e->lhs) || exprUsesCallIndirect(e->rhs);
+        }
+        case HIRExpr::Kind::UnaryOp:
+            return exprUsesCallIndirect(static_cast<const HIRUnaryOpExpr*>(expr)->operand);
+        case HIRExpr::Kind::Call: {
+            auto* e = static_cast<const HIRCallExpr*>(expr);
+            for (uint32_t i = 0; i < e->arg_count; ++i)
+                if (exprUsesCallIndirect(e->args[i])) return true;
+            return false;
+        }
+        default:
+            return false;
+    }
+}
+
+static bool stmtUsesCallIndirect(const HIRStmt* stmt) {
+    if (!stmt) return false;
+    switch (stmt->kind) {
+        case HIRStmt::Kind::ValDecl:
+            return exprUsesCallIndirect(static_cast<const HIRValDeclStmt*>(stmt)->init);
+        case HIRStmt::Kind::VarDecl:
+            return exprUsesCallIndirect(static_cast<const HIRVarDeclStmt*>(stmt)->init);
+        case HIRStmt::Kind::ExprStmt:
+            return exprUsesCallIndirect(static_cast<const HIRExprStmt*>(stmt)->expr);
+        case HIRStmt::Kind::Assign:
+            return exprUsesCallIndirect(static_cast<const HIRAssignStmt*>(stmt)->value);
+        case HIRStmt::Kind::FieldAssign: {
+            auto* s = static_cast<const HIRFieldAssignStmt*>(stmt);
+            return exprUsesCallIndirect(s->target) || exprUsesCallIndirect(s->value);
+        }
+        case HIRStmt::Kind::DerefAssign: {
+            auto* s = static_cast<const HIRDerefAssignStmt*>(stmt);
+            return exprUsesCallIndirect(s->target) || exprUsesCallIndirect(s->value);
+        }
+        case HIRStmt::Kind::IndexAssign: {
+            auto* s = static_cast<const HIRIndexAssignStmt*>(stmt);
+            return exprUsesCallIndirect(s->array) || exprUsesCallIndirect(s->index) ||
+                   exprUsesCallIndirect(s->value);
+        }
+    }
+    return false;
+}
+
 void EffectAnalysisPass::run(HIRModule& module, CompilationContext& ctx) {
     // Build function map and call graph (same as PurityAnalysisPass)
     std::unordered_map<std::string_view, HIRFnDecl*> fn_map;
@@ -982,6 +1093,10 @@ void EffectAnalysisPass::run(HIRModule& module, CompilationContext& ctx) {
             // Local: atomic intrinsics → Atomic
             if (exprUsesAtomicIntrinsic(fn->body)) {
                 effects = addEffect(effects, Effect::Atomic);
+            }
+            // Conservative HOF: indirect calls (fn pointers) may have any effect
+            if (exprUsesCallIndirect(fn->body)) {
+                effects = unionEffects(effects, EFFECT_ALL);
             }
             // Propagate from callees (all effects propagate, unlike Purity where Mut was local)
             for (auto& callee : call_graph[name]) {
@@ -1107,16 +1222,50 @@ static void checkOwnershipExpr(const HIRExpr* expr, OwnershipState& state) {
         case HIRExpr::Kind::If: {
             auto* e = static_cast<const HIRIfExpr*>(expr);
             checkOwnershipExpr(e->condition, state);
-            checkOwnershipExpr(e->then_branch, state);
-            checkOwnershipExpr(e->else_branch, state);
+            // Fork state for each branch and merge
+            OwnershipState then_state = state;
+            OwnershipState else_state = state;
+            checkOwnershipExpr(e->then_branch, then_state);
+            checkOwnershipExpr(e->else_branch, else_state);
+            // Merge: both moved → definite, one moved → warning
+            for (auto& var : state.own_vars) {
+                bool in_then = then_state.moved_vars.count(var) > 0;
+                bool in_else = else_state.moved_vars.count(var) > 0;
+                if (in_then && in_else) {
+                    state.moved_vars.insert(var);
+                } else if (in_then || in_else) {
+                    state.ctx->diag.warning(expr->loc,
+                        std::string("value '") + std::string(var) +
+                        "' may be moved in one branch but not another");
+                    state.moved_vars.insert(var);
+                }
+            }
             break;
         }
         case HIRExpr::Kind::Match: {
             auto* e = static_cast<const HIRMatchExpr*>(expr);
             checkOwnershipExpr(e->scrutinee, state);
+            // Fork state per arm and merge
+            std::vector<OwnershipState> arm_states;
             for (uint32_t i = 0; i < e->arm_count; ++i) {
-                if (e->arms[i].guard) checkOwnershipExpr(e->arms[i].guard, state);
-                checkOwnershipExpr(e->arms[i].body, state);
+                arm_states.push_back(state);
+                if (e->arms[i].guard) checkOwnershipExpr(e->arms[i].guard, arm_states.back());
+                checkOwnershipExpr(e->arms[i].body, arm_states.back());
+            }
+            // Merge: count how many arms moved each own var
+            for (auto& var : state.own_vars) {
+                uint32_t move_count = 0;
+                for (auto& arm_st : arm_states) {
+                    if (arm_st.moved_vars.count(var)) move_count++;
+                }
+                if (move_count == arm_states.size() && move_count > 0) {
+                    state.moved_vars.insert(var);
+                } else if (move_count > 0) {
+                    state.ctx->diag.warning(expr->loc,
+                        std::string("value '") + std::string(var) +
+                        "' may be moved in some match arms but not all");
+                    state.moved_vars.insert(var);
+                }
             }
             break;
         }
@@ -1776,6 +1925,686 @@ void TailCallAnalysisPass::run(HIRModule& module, CompilationContext& /*ctx*/) {
             fn->is_tail_recursive = has_self_call && !has_non_tail;
         } else {
             fn->is_tail_recursive = false;
+        }
+    }
+}
+
+// ============================================================================
+// ConstOverflowPass
+// ============================================================================
+
+static void checkConstOverflow(const HIRExpr* expr, CompilationContext& ctx);
+
+static void checkConstOverflowStmt(const HIRStmt* stmt, CompilationContext& ctx) {
+    if (!stmt) return;
+    switch (stmt->kind) {
+    case HIRStmt::Kind::ValDecl:
+        checkConstOverflow(static_cast<const HIRValDeclStmt*>(stmt)->init, ctx);
+        break;
+    case HIRStmt::Kind::VarDecl:
+        checkConstOverflow(static_cast<const HIRVarDeclStmt*>(stmt)->init, ctx);
+        break;
+    case HIRStmt::Kind::ExprStmt:
+        checkConstOverflow(static_cast<const HIRExprStmt*>(stmt)->expr, ctx);
+        break;
+    case HIRStmt::Kind::Assign:
+        checkConstOverflow(static_cast<const HIRAssignStmt*>(stmt)->value, ctx);
+        break;
+    case HIRStmt::Kind::FieldAssign:
+        checkConstOverflow(static_cast<const HIRFieldAssignStmt*>(stmt)->value, ctx);
+        break;
+    case HIRStmt::Kind::DerefAssign:
+        checkConstOverflow(static_cast<const HIRDerefAssignStmt*>(stmt)->value, ctx);
+        break;
+    case HIRStmt::Kind::IndexAssign:
+        checkConstOverflow(static_cast<const HIRIndexAssignStmt*>(stmt)->value, ctx);
+        break;
+    }
+}
+
+static void checkConstOverflow(const HIRExpr* expr, CompilationContext& ctx) {
+    if (!expr) return;
+    switch (expr->kind) {
+    case HIRExpr::Kind::BinOp: {
+        auto* bin = static_cast<const HIRBinOpExpr*>(expr);
+        checkConstOverflow(bin->lhs, ctx);
+        checkConstOverflow(bin->rhs, ctx);
+
+        // Check if both operands are constant integers
+        if (bin->lhs->kind == HIRExpr::Kind::IntLit &&
+            bin->rhs->kind == HIRExpr::Kind::IntLit &&
+            ctx.types.isInteger(bin->type) && bin->type != TypeTable::Error) {
+            int64_t l = static_cast<const HIRIntLitExpr*>(bin->lhs)->value;
+            int64_t r = static_cast<const HIRIntLitExpr*>(bin->rhs)->value;
+            int64_t result = 0;
+            bool overflow = false;
+
+            switch (bin->op) {
+            case HIRBinOp::Add: result = l + r; break;
+            case HIRBinOp::Sub: result = l - r; break;
+            case HIRBinOp::Mul: result = l * r; break;
+            default: return; // only check arith ops
+            }
+
+            auto range = ctx.types.intRange(bin->type);
+            if (range.min == 0 && range.max == 0) return;
+
+            if (ctx.types.isSigned(bin->type)) {
+                overflow = result < range.min ||
+                           result > static_cast<int64_t>(range.max);
+            } else {
+                auto uresult = static_cast<uint64_t>(result);
+                overflow = uresult > range.max;
+            }
+
+            if (overflow) {
+                ctx.diag.error(expr->loc,
+                    std::string("constant integer overflow: result ") +
+                    std::to_string(result) + " does not fit in " +
+                    ctx.types.name(bin->type));
+            }
+        }
+        break;
+    }
+    case HIRExpr::Kind::Block: {
+        auto* blk = static_cast<const HIRBlockExpr*>(expr);
+        for (uint32_t i = 0; i < blk->stmt_count; ++i)
+            checkConstOverflowStmt(blk->stmts[i], ctx);
+        checkConstOverflow(blk->result, ctx);
+        break;
+    }
+    case HIRExpr::Kind::If: {
+        auto* if_ = static_cast<const HIRIfExpr*>(expr);
+        checkConstOverflow(if_->condition, ctx);
+        checkConstOverflow(if_->then_branch, ctx);
+        checkConstOverflow(if_->else_branch, ctx);
+        break;
+    }
+    case HIRExpr::Kind::Call: {
+        auto* call = static_cast<const HIRCallExpr*>(expr);
+        for (uint32_t i = 0; i < call->arg_count; ++i)
+            checkConstOverflow(call->args[i], ctx);
+        break;
+    }
+    case HIRExpr::Kind::Return:
+        checkConstOverflow(static_cast<const HIRReturnExpr*>(expr)->value, ctx);
+        break;
+    case HIRExpr::Kind::Match: {
+        auto* m = static_cast<const HIRMatchExpr*>(expr);
+        checkConstOverflow(m->scrutinee, ctx);
+        for (uint32_t i = 0; i < m->arm_count; ++i)
+            checkConstOverflow(m->arms[i].body, ctx);
+        break;
+    }
+    default: break;
+    }
+}
+
+void ConstOverflowPass::run(HIRModule& module, CompilationContext& ctx) {
+    for (uint32_t i = 0; i < module.fn_count; ++i) {
+        checkConstOverflow(module.functions[i]->body, ctx);
+    }
+}
+
+// ============================================================================
+// LossyCastPass
+// ============================================================================
+
+static void checkLossyCast(const HIRExpr* expr, CompilationContext& ctx);
+
+static void checkLossyCastStmt(const HIRStmt* stmt, CompilationContext& ctx) {
+    if (!stmt) return;
+    switch (stmt->kind) {
+    case HIRStmt::Kind::ValDecl:
+        checkLossyCast(static_cast<const HIRValDeclStmt*>(stmt)->init, ctx);
+        break;
+    case HIRStmt::Kind::VarDecl:
+        checkLossyCast(static_cast<const HIRVarDeclStmt*>(stmt)->init, ctx);
+        break;
+    case HIRStmt::Kind::ExprStmt:
+        checkLossyCast(static_cast<const HIRExprStmt*>(stmt)->expr, ctx);
+        break;
+    case HIRStmt::Kind::Assign:
+        checkLossyCast(static_cast<const HIRAssignStmt*>(stmt)->value, ctx);
+        break;
+    case HIRStmt::Kind::FieldAssign:
+        checkLossyCast(static_cast<const HIRFieldAssignStmt*>(stmt)->value, ctx);
+        break;
+    case HIRStmt::Kind::DerefAssign:
+        checkLossyCast(static_cast<const HIRDerefAssignStmt*>(stmt)->value, ctx);
+        break;
+    case HIRStmt::Kind::IndexAssign:
+        checkLossyCast(static_cast<const HIRIndexAssignStmt*>(stmt)->value, ctx);
+        break;
+    }
+}
+
+static void checkLossyCast(const HIRExpr* expr, CompilationContext& ctx) {
+    if (!expr) return;
+    switch (expr->kind) {
+    case HIRExpr::Kind::Cast: {
+        auto* cast = static_cast<const HIRCastExpr*>(expr);
+        checkLossyCast(cast->operand, ctx);
+
+        if (cast->is_explicit_truncate) return;
+
+        TypeId src = cast->operand->type;
+        TypeId dst = cast->target_type;
+        if (!ctx.types.isInteger(src) || !ctx.types.isInteger(dst)) return;
+
+        uint32_t src_bits = ctx.types.bitWidth(src);
+        uint32_t dst_bits = ctx.types.bitWidth(dst);
+        if (dst_bits < src_bits) {
+            ctx.diag.warning(expr->loc,
+                std::string("narrowing cast from ") + ctx.types.name(src) +
+                " to " + ctx.types.name(dst) + " may lose data; use truncate<" +
+                ctx.types.name(dst) + ">() for explicit narrowing");
+        }
+        break;
+    }
+    case HIRExpr::Kind::Block: {
+        auto* blk = static_cast<const HIRBlockExpr*>(expr);
+        for (uint32_t i = 0; i < blk->stmt_count; ++i)
+            checkLossyCastStmt(blk->stmts[i], ctx);
+        checkLossyCast(blk->result, ctx);
+        break;
+    }
+    case HIRExpr::Kind::If: {
+        auto* if_ = static_cast<const HIRIfExpr*>(expr);
+        checkLossyCast(if_->condition, ctx);
+        checkLossyCast(if_->then_branch, ctx);
+        checkLossyCast(if_->else_branch, ctx);
+        break;
+    }
+    case HIRExpr::Kind::Call: {
+        auto* call = static_cast<const HIRCallExpr*>(expr);
+        for (uint32_t i = 0; i < call->arg_count; ++i)
+            checkLossyCast(call->args[i], ctx);
+        break;
+    }
+    case HIRExpr::Kind::Return:
+        checkLossyCast(static_cast<const HIRReturnExpr*>(expr)->value, ctx);
+        break;
+    default: break;
+    }
+}
+
+void LossyCastPass::run(HIRModule& module, CompilationContext& ctx) {
+    for (uint32_t i = 0; i < module.fn_count; ++i) {
+        checkLossyCast(module.functions[i]->body, ctx);
+    }
+}
+
+// ============================================================================
+// BorrowEscapePass
+// ============================================================================
+
+static void collectLocals(const HIRFnDecl* fn,
+                          std::unordered_set<std::string_view>& locals) {
+    // Collect param names
+    for (uint32_t i = 0; i < fn->param_count; ++i)
+        locals.insert(fn->params[i].name);
+}
+
+static void collectLocalBindings(const HIRExpr* expr,
+                                  std::unordered_set<std::string_view>& locals);
+
+static void collectLocalBindingsStmt(const HIRStmt* stmt,
+                                      std::unordered_set<std::string_view>& locals) {
+    if (!stmt) return;
+    if (stmt->kind == HIRStmt::Kind::ValDecl)
+        locals.insert(static_cast<const HIRValDeclStmt*>(stmt)->name);
+    else if (stmt->kind == HIRStmt::Kind::VarDecl)
+        locals.insert(static_cast<const HIRVarDeclStmt*>(stmt)->name);
+}
+
+static void collectLocalBindings(const HIRExpr* expr,
+                                  std::unordered_set<std::string_view>& locals) {
+    if (!expr) return;
+    if (expr->kind == HIRExpr::Kind::Block) {
+        auto* blk = static_cast<const HIRBlockExpr*>(expr);
+        for (uint32_t i = 0; i < blk->stmt_count; ++i)
+            collectLocalBindingsStmt(blk->stmts[i], locals);
+        collectLocalBindings(blk->result, locals);
+    }
+}
+
+static bool isLocalAddrOf(const HIRExpr* expr,
+                           const std::unordered_set<std::string_view>& locals) {
+    if (!expr) return false;
+    if (expr->kind == HIRExpr::Kind::AddrOf) {
+        auto* ao = static_cast<const HIRAddrOfExpr*>(expr);
+        if (ao->operand && ao->operand->kind == HIRExpr::Kind::Ident) {
+            auto* id = static_cast<const HIRIdentExpr*>(ao->operand);
+            return locals.count(id->name) > 0;
+        }
+    }
+    return false;
+}
+
+static std::string_view getAddrOfName(const HIRExpr* expr) {
+    auto* ao = static_cast<const HIRAddrOfExpr*>(expr);
+    return static_cast<const HIRIdentExpr*>(ao->operand)->name;
+}
+
+static void checkBorrowEscape(const HIRExpr* expr,
+                               const std::unordered_set<std::string_view>& locals,
+                               CompilationContext& ctx);
+
+static void checkBorrowEscapeStmt(const HIRStmt* stmt,
+                                    const std::unordered_set<std::string_view>& locals,
+                                    CompilationContext& ctx) {
+    if (!stmt) return;
+    switch (stmt->kind) {
+    case HIRStmt::Kind::ValDecl:
+        checkBorrowEscape(static_cast<const HIRValDeclStmt*>(stmt)->init, locals, ctx);
+        break;
+    case HIRStmt::Kind::VarDecl:
+        checkBorrowEscape(static_cast<const HIRVarDeclStmt*>(stmt)->init, locals, ctx);
+        break;
+    case HIRStmt::Kind::ExprStmt:
+        checkBorrowEscape(static_cast<const HIRExprStmt*>(stmt)->expr, locals, ctx);
+        break;
+    case HIRStmt::Kind::Assign:
+        checkBorrowEscape(static_cast<const HIRAssignStmt*>(stmt)->value, locals, ctx);
+        break;
+    case HIRStmt::Kind::FieldAssign:
+        checkBorrowEscape(static_cast<const HIRFieldAssignStmt*>(stmt)->value, locals, ctx);
+        break;
+    case HIRStmt::Kind::DerefAssign:
+        checkBorrowEscape(static_cast<const HIRDerefAssignStmt*>(stmt)->value, locals, ctx);
+        break;
+    case HIRStmt::Kind::IndexAssign:
+        checkBorrowEscape(static_cast<const HIRIndexAssignStmt*>(stmt)->value, locals, ctx);
+        break;
+    }
+}
+
+static void checkBorrowEscape(const HIRExpr* expr,
+                               const std::unordered_set<std::string_view>& locals,
+                               CompilationContext& ctx) {
+    if (!expr) return;
+    switch (expr->kind) {
+    case HIRExpr::Kind::Return: {
+        auto* ret = static_cast<const HIRReturnExpr*>(expr);
+        if (isLocalAddrOf(ret->value, locals)) {
+            ctx.diag.error(expr->loc,
+                std::string("cannot return reference to local variable '") +
+                std::string(getAddrOfName(ret->value)) + "'");
+        }
+        checkBorrowEscape(ret->value, locals, ctx);
+        break;
+    }
+    case HIRExpr::Kind::Block: {
+        auto* blk = static_cast<const HIRBlockExpr*>(expr);
+        for (uint32_t i = 0; i < blk->stmt_count; ++i)
+            checkBorrowEscapeStmt(blk->stmts[i], locals, ctx);
+        checkBorrowEscape(blk->result, locals, ctx);
+        break;
+    }
+    case HIRExpr::Kind::If: {
+        auto* if_ = static_cast<const HIRIfExpr*>(expr);
+        checkBorrowEscape(if_->condition, locals, ctx);
+        checkBorrowEscape(if_->then_branch, locals, ctx);
+        checkBorrowEscape(if_->else_branch, locals, ctx);
+        break;
+    }
+    case HIRExpr::Kind::Call: {
+        auto* call = static_cast<const HIRCallExpr*>(expr);
+        for (uint32_t i = 0; i < call->arg_count; ++i)
+            checkBorrowEscape(call->args[i], locals, ctx);
+        break;
+    }
+    case HIRExpr::Kind::Match: {
+        auto* m = static_cast<const HIRMatchExpr*>(expr);
+        checkBorrowEscape(m->scrutinee, locals, ctx);
+        for (uint32_t i = 0; i < m->arm_count; ++i)
+            checkBorrowEscape(m->arms[i].body, locals, ctx);
+        break;
+    }
+    default: break;
+    }
+}
+
+void BorrowEscapePass::run(HIRModule& module, CompilationContext& ctx) {
+    for (uint32_t i = 0; i < module.fn_count; ++i) {
+        auto* fn = module.functions[i];
+        if (!fn->body) continue;
+
+        std::unordered_set<std::string_view> locals;
+        collectLocals(fn, locals);
+        collectLocalBindings(fn->body, locals);
+        checkBorrowEscape(fn->body, locals, ctx);
+    }
+}
+
+// ============================================================================
+// MutBorrowAliasPass
+// ============================================================================
+
+static std::string_view getIdentName(const HIRExpr* expr) {
+    if (expr && expr->kind == HIRExpr::Kind::Ident)
+        return static_cast<const HIRIdentExpr*>(expr)->name;
+    return {};
+}
+
+static void checkMutBorrowAlias(const HIRExpr* expr,
+                                 const std::unordered_map<std::string_view, const HIRFnDecl*>& fn_map,
+                                 CompilationContext& ctx);
+
+static void checkMutBorrowAliasStmt(const HIRStmt* stmt,
+                                     const std::unordered_map<std::string_view, const HIRFnDecl*>& fn_map,
+                                     CompilationContext& ctx) {
+    if (!stmt) return;
+    switch (stmt->kind) {
+    case HIRStmt::Kind::ValDecl:
+        checkMutBorrowAlias(static_cast<const HIRValDeclStmt*>(stmt)->init, fn_map, ctx);
+        break;
+    case HIRStmt::Kind::VarDecl:
+        checkMutBorrowAlias(static_cast<const HIRVarDeclStmt*>(stmt)->init, fn_map, ctx);
+        break;
+    case HIRStmt::Kind::ExprStmt:
+        checkMutBorrowAlias(static_cast<const HIRExprStmt*>(stmt)->expr, fn_map, ctx);
+        break;
+    case HIRStmt::Kind::Assign:
+        checkMutBorrowAlias(static_cast<const HIRAssignStmt*>(stmt)->value, fn_map, ctx);
+        break;
+    case HIRStmt::Kind::FieldAssign:
+        checkMutBorrowAlias(static_cast<const HIRFieldAssignStmt*>(stmt)->value, fn_map, ctx);
+        break;
+    case HIRStmt::Kind::DerefAssign:
+        checkMutBorrowAlias(static_cast<const HIRDerefAssignStmt*>(stmt)->value, fn_map, ctx);
+        break;
+    case HIRStmt::Kind::IndexAssign:
+        checkMutBorrowAlias(static_cast<const HIRIndexAssignStmt*>(stmt)->value, fn_map, ctx);
+        break;
+    }
+}
+
+static void checkMutBorrowAlias(const HIRExpr* expr,
+                                 const std::unordered_map<std::string_view, const HIRFnDecl*>& fn_map,
+                                 CompilationContext& ctx) {
+    if (!expr) return;
+    switch (expr->kind) {
+    case HIRExpr::Kind::Call: {
+        auto* call = static_cast<const HIRCallExpr*>(expr);
+        // Recurse into args
+        for (uint32_t i = 0; i < call->arg_count; ++i)
+            checkMutBorrowAlias(call->args[i], fn_map, ctx);
+
+        // Look up callee's declaration
+        auto it = fn_map.find(call->callee);
+        if (it == fn_map.end()) break;
+        auto* callee = it->second;
+
+        // Collect identifiers passed to var-mode params
+        std::unordered_map<std::string_view, uint32_t> var_args;
+        for (uint32_t i = 0; i < call->arg_count && i < callee->param_count; ++i) {
+            if (callee->params[i].passing_mode == 1) { // MutBorrow
+                auto name = getIdentName(call->args[i]);
+                if (!name.empty()) {
+                    if (var_args.count(name)) {
+                        ctx.diag.error(expr->loc,
+                            std::string("mutable borrow alias: '") +
+                            std::string(name) +
+                            "' passed to multiple var parameters");
+                        break;
+                    }
+                    var_args[name] = i;
+                }
+            }
+        }
+        break;
+    }
+    case HIRExpr::Kind::Block: {
+        auto* blk = static_cast<const HIRBlockExpr*>(expr);
+        for (uint32_t i = 0; i < blk->stmt_count; ++i)
+            checkMutBorrowAliasStmt(blk->stmts[i], fn_map, ctx);
+        checkMutBorrowAlias(blk->result, fn_map, ctx);
+        break;
+    }
+    case HIRExpr::Kind::If: {
+        auto* if_ = static_cast<const HIRIfExpr*>(expr);
+        checkMutBorrowAlias(if_->condition, fn_map, ctx);
+        checkMutBorrowAlias(if_->then_branch, fn_map, ctx);
+        checkMutBorrowAlias(if_->else_branch, fn_map, ctx);
+        break;
+    }
+    case HIRExpr::Kind::Return:
+        checkMutBorrowAlias(static_cast<const HIRReturnExpr*>(expr)->value, fn_map, ctx);
+        break;
+    case HIRExpr::Kind::Match: {
+        auto* m = static_cast<const HIRMatchExpr*>(expr);
+        checkMutBorrowAlias(m->scrutinee, fn_map, ctx);
+        for (uint32_t i = 0; i < m->arm_count; ++i)
+            checkMutBorrowAlias(m->arms[i].body, fn_map, ctx);
+        break;
+    }
+    default: break;
+    }
+}
+
+void MutBorrowAliasPass::run(HIRModule& module, CompilationContext& ctx) {
+    // Build callee lookup map
+    std::unordered_map<std::string_view, const HIRFnDecl*> fn_map;
+    for (uint32_t i = 0; i < module.fn_count; ++i)
+        fn_map[module.functions[i]->name] = module.functions[i];
+
+    for (uint32_t i = 0; i < module.fn_count; ++i) {
+        if (module.functions[i]->body)
+            checkMutBorrowAlias(module.functions[i]->body, fn_map, ctx);
+    }
+}
+
+// ============================================================================
+// UnusedBindingPass
+// ============================================================================
+
+static void countIdents(const HIRExpr* expr,
+                        std::unordered_map<std::string_view, uint32_t>& counts);
+
+static void countIdentsStmt(const HIRStmt* stmt,
+                             std::unordered_map<std::string_view, uint32_t>& counts) {
+    if (!stmt) return;
+    switch (stmt->kind) {
+    case HIRStmt::Kind::ValDecl:
+        countIdents(static_cast<const HIRValDeclStmt*>(stmt)->init, counts);
+        break;
+    case HIRStmt::Kind::VarDecl:
+        countIdents(static_cast<const HIRVarDeclStmt*>(stmt)->init, counts);
+        break;
+    case HIRStmt::Kind::ExprStmt:
+        countIdents(static_cast<const HIRExprStmt*>(stmt)->expr, counts);
+        break;
+    case HIRStmt::Kind::Assign:
+        counts[static_cast<const HIRAssignStmt*>(stmt)->name]++;
+        countIdents(static_cast<const HIRAssignStmt*>(stmt)->value, counts);
+        break;
+    case HIRStmt::Kind::FieldAssign:
+        countIdents(static_cast<const HIRFieldAssignStmt*>(stmt)->target, counts);
+        countIdents(static_cast<const HIRFieldAssignStmt*>(stmt)->value, counts);
+        break;
+    case HIRStmt::Kind::DerefAssign:
+        countIdents(static_cast<const HIRDerefAssignStmt*>(stmt)->target, counts);
+        countIdents(static_cast<const HIRDerefAssignStmt*>(stmt)->value, counts);
+        break;
+    case HIRStmt::Kind::IndexAssign:
+        countIdents(static_cast<const HIRIndexAssignStmt*>(stmt)->array, counts);
+        countIdents(static_cast<const HIRIndexAssignStmt*>(stmt)->index, counts);
+        countIdents(static_cast<const HIRIndexAssignStmt*>(stmt)->value, counts);
+        break;
+    }
+}
+
+static void countIdents(const HIRExpr* expr,
+                        std::unordered_map<std::string_view, uint32_t>& counts) {
+    if (!expr) return;
+    switch (expr->kind) {
+    case HIRExpr::Kind::Ident:
+        counts[static_cast<const HIRIdentExpr*>(expr)->name]++;
+        break;
+    case HIRExpr::Kind::BinOp: {
+        auto* bin = static_cast<const HIRBinOpExpr*>(expr);
+        countIdents(bin->lhs, counts);
+        countIdents(bin->rhs, counts);
+        break;
+    }
+    case HIRExpr::Kind::UnaryOp:
+        countIdents(static_cast<const HIRUnaryOpExpr*>(expr)->operand, counts);
+        break;
+    case HIRExpr::Kind::Call: {
+        auto* call = static_cast<const HIRCallExpr*>(expr);
+        for (uint32_t i = 0; i < call->arg_count; ++i)
+            countIdents(call->args[i], counts);
+        break;
+    }
+    case HIRExpr::Kind::CallIndirect: {
+        auto* ci = static_cast<const HIRCallIndirectExpr*>(expr);
+        countIdents(ci->callee, counts);
+        for (uint32_t i = 0; i < ci->arg_count; ++i)
+            countIdents(ci->args[i], counts);
+        break;
+    }
+    case HIRExpr::Kind::If: {
+        auto* if_ = static_cast<const HIRIfExpr*>(expr);
+        countIdents(if_->condition, counts);
+        countIdents(if_->then_branch, counts);
+        countIdents(if_->else_branch, counts);
+        break;
+    }
+    case HIRExpr::Kind::Match: {
+        auto* m = static_cast<const HIRMatchExpr*>(expr);
+        countIdents(m->scrutinee, counts);
+        for (uint32_t i = 0; i < m->arm_count; ++i)
+            countIdents(m->arms[i].body, counts);
+        break;
+    }
+    case HIRExpr::Kind::Block: {
+        auto* blk = static_cast<const HIRBlockExpr*>(expr);
+        for (uint32_t i = 0; i < blk->stmt_count; ++i)
+            countIdentsStmt(blk->stmts[i], counts);
+        countIdents(blk->result, counts);
+        break;
+    }
+    case HIRExpr::Kind::Return:
+        countIdents(static_cast<const HIRReturnExpr*>(expr)->value, counts);
+        break;
+    case HIRExpr::Kind::FieldAccess:
+        countIdents(static_cast<const HIRFieldAccessExpr*>(expr)->object, counts);
+        break;
+    case HIRExpr::Kind::StructLit: {
+        auto* sl = static_cast<const HIRStructLitExpr*>(expr);
+        for (uint32_t i = 0; i < sl->field_count; ++i)
+            countIdents(sl->fields[i].value, counts);
+        break;
+    }
+    case HIRExpr::Kind::ArrayLit: {
+        auto* al = static_cast<const HIRArrayLitExpr*>(expr);
+        for (uint32_t i = 0; i < al->element_count; ++i)
+            countIdents(al->elements[i], counts);
+        break;
+    }
+    case HIRExpr::Kind::IndexAccess: {
+        auto* ia = static_cast<const HIRIndexAccessExpr*>(expr);
+        countIdents(ia->array, counts);
+        countIdents(ia->index, counts);
+        break;
+    }
+    case HIRExpr::Kind::Cast:
+        countIdents(static_cast<const HIRCastExpr*>(expr)->operand, counts);
+        break;
+    case HIRExpr::Kind::Loop: {
+        auto* loop = static_cast<const HIRLoopExpr*>(expr);
+        for (uint32_t i = 0; i < loop->binding_count; ++i)
+            countIdents(loop->bindings[i].init, counts);
+        countIdents(loop->body, counts);
+        break;
+    }
+    case HIRExpr::Kind::Break:
+        countIdents(static_cast<const HIRBreakExpr*>(expr)->value, counts);
+        break;
+    case HIRExpr::Kind::Continue: {
+        auto* c = static_cast<const HIRContinueExpr*>(expr);
+        for (uint32_t i = 0; i < c->arg_count; ++i)
+            countIdents(c->args[i], counts);
+        break;
+    }
+    case HIRExpr::Kind::AddrOf:
+        countIdents(static_cast<const HIRAddrOfExpr*>(expr)->operand, counts);
+        break;
+    case HIRExpr::Kind::Deref:
+        countIdents(static_cast<const HIRDerefExpr*>(expr)->operand, counts);
+        break;
+    default: break;
+    }
+}
+
+struct BindingInfo {
+    std::string_view name;
+    SourceLocation loc;
+};
+
+static void collectBindings(const HIRExpr* expr, std::vector<BindingInfo>& bindings);
+
+static void collectBindingsStmt(const HIRStmt* stmt, std::vector<BindingInfo>& bindings) {
+    if (!stmt) return;
+    if (stmt->kind == HIRStmt::Kind::ValDecl) {
+        auto* vd = static_cast<const HIRValDeclStmt*>(stmt);
+        bindings.push_back({vd->name, vd->loc});
+        collectBindings(vd->init, bindings);
+    } else if (stmt->kind == HIRStmt::Kind::VarDecl) {
+        auto* vd = static_cast<const HIRVarDeclStmt*>(stmt);
+        bindings.push_back({vd->name, vd->loc});
+        collectBindings(vd->init, bindings);
+    } else if (stmt->kind == HIRStmt::Kind::ExprStmt) {
+        collectBindings(static_cast<const HIRExprStmt*>(stmt)->expr, bindings);
+    }
+}
+
+static void collectBindings(const HIRExpr* expr, std::vector<BindingInfo>& bindings) {
+    if (!expr) return;
+    if (expr->kind == HIRExpr::Kind::Block) {
+        auto* blk = static_cast<const HIRBlockExpr*>(expr);
+        for (uint32_t i = 0; i < blk->stmt_count; ++i)
+            collectBindingsStmt(blk->stmts[i], bindings);
+        collectBindings(blk->result, bindings);
+    } else if (expr->kind == HIRExpr::Kind::If) {
+        auto* if_ = static_cast<const HIRIfExpr*>(expr);
+        collectBindings(if_->then_branch, bindings);
+        collectBindings(if_->else_branch, bindings);
+    } else if (expr->kind == HIRExpr::Kind::Match) {
+        auto* m = static_cast<const HIRMatchExpr*>(expr);
+        for (uint32_t i = 0; i < m->arm_count; ++i)
+            collectBindings(m->arms[i].body, bindings);
+    } else if (expr->kind == HIRExpr::Kind::Loop) {
+        auto* loop = static_cast<const HIRLoopExpr*>(expr);
+        for (uint32_t i = 0; i < loop->binding_count; ++i)
+            bindings.push_back({loop->bindings[i].name, loop->bindings[i].loc});
+        collectBindings(loop->body, bindings);
+    }
+}
+
+void UnusedBindingPass::run(HIRModule& module, CompilationContext& ctx) {
+    for (uint32_t fi = 0; fi < module.fn_count; ++fi) {
+        auto* fn = module.functions[fi];
+        if (!fn->body) continue;
+
+        // Collect all bindings
+        std::vector<BindingInfo> bindings;
+        collectBindings(fn->body, bindings);
+
+        // Count identifier uses
+        std::unordered_map<std::string_view, uint32_t> counts;
+        countIdents(fn->body, counts);
+
+        // Report unused
+        for (auto& b : bindings) {
+            if (b.name.empty()) continue;
+            if (b.name[0] == '_') continue; // underscore-prefixed are exempt
+            if (counts.find(b.name) == counts.end() || counts[b.name] == 0) {
+                ctx.diag.warning(b.loc,
+                    std::string("unused binding '") + std::string(b.name) + "'");
+            }
         }
     }
 }

@@ -1,0 +1,28 @@
+trait FileSystem {
+    fn read(self: Ptr<u8>, offset: u64, size: u64) -> i64
+    fn write(self: Ptr<u8>, offset: u64, data: u64) -> i64
+}
+
+struct RamFS {
+    val base_addr: u64,
+    val capacity: u64
+}
+
+impl FileSystem for RamFS {
+    fn read(self: Ptr<u8>, offset: u64, size: u64) -> i64 {
+        offset as i64
+    }
+    fn write(self: Ptr<u8>, offset: u64, data: u64) -> i64 {
+        data as i64
+    }
+}
+
+fn fs_read(fs: dyn FileSystem, offset: u64, size: u64) -> i64 {
+    fs.read(offset, size)
+}
+
+fn main() -> i64 {
+    val ramfs: RamFS = RamFS { base_addr: 0x1000, capacity: 4096 }
+    val vfs: dyn FileSystem = ramfs as dyn FileSystem
+    fs_read(vfs, 42, 8)
+}

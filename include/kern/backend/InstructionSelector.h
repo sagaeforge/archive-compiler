@@ -1,5 +1,6 @@
 #pragma once
 #include "kern/backend/MachIR.h"
+#include "kern/backend/TargetBackend.h"
 #include "kern/lir/LIR.h"
 #include "kern/support/CompilationContext.h"
 #include <unordered_map>
@@ -10,6 +11,7 @@ namespace kern {
 
 class InstructionSelector {
     CompilationContext& ctx_;
+    OutputFormat format_ = OutputFormat::Macho64;
 
     // Per-function state
     std::vector<std::vector<MachInstr>> block_instrs_;  // instrs per block
@@ -23,14 +25,25 @@ class InstructionSelector {
     uint32_t global_count_ = 0;
     uint32_t gpr_arg_slot_ = 0;  // current GPR arg slot (for multi-reg params)
     uint32_t xmm_arg_slot_ = 0;  // current XMM arg slot (for float params)
+    uint32_t next_param_idx_ = 0; // next expected param index (for skipped BlockArgs)
     TypeId fn_return_type_ = INVALID_TYPE;  // current function's return type
     VReg hidden_ret_ptr_ = INVALID_VREG;    // vreg holding hidden return pointer (>16B struct)
+    std::string_view module_name_;           // current module name for mangling
+    std::vector<std::string_view> extern_labels_;  // cross-module extern symbols
+    std::unordered_map<std::string_view, std::string_view> link_names_;  // fn name → custom link name
 
     // VReg mapping: LIR VReg → MachIR VReg (1:1 for most, but some ops create new vregs)
     // We keep the same VReg numbering from LIR
 
+    // Symbol prefix: "_" for Mach-O, "" for ELF/flat binary
+    const char* symPrefix() const {
+        return format_ == OutputFormat::Macho64 ? "_" : "";
+    }
+
 public:
-    explicit InstructionSelector(CompilationContext& ctx) : ctx_(ctx) {}
+    explicit InstructionSelector(CompilationContext& ctx,
+                                  OutputFormat fmt = OutputFormat::Macho64)
+        : ctx_(ctx), format_(fmt) {}
 
     MachModule* select(const LIRModule& lir_mod);
 
@@ -85,7 +98,7 @@ private:
     void selectCondBranch(const LIRInstr& instr, const LIRFunction& fn);
     void selectRet(const LIRInstr& instr);
     void selectCall(const LIRInstr& instr);
-    void selectBlockArg(const LIRInstr& instr);
+    void selectBlockArg(const LIRInstr& instr, const LIRFunction& fn);
     void selectCast(const LIRInstr& instr);
     void selectInlineAsm(const LIRInstr& instr);
     void selectFnRef(const LIRInstr& instr);
@@ -99,6 +112,12 @@ private:
     void selectPercpuStore(const LIRInstr& instr);
     void selectLoadGlobal(const LIRInstr& instr);
     void selectStoreGlobal(const LIRInstr& instr);
+    void selectClz(const LIRInstr& instr);
+    void selectCtz(const LIRInstr& instr);
+    void selectPopcnt(const LIRInstr& instr);
+    void selectBswap(const LIRInstr& instr);
+    void selectPortIn(const LIRInstr& instr);
+    void selectPortOut(const LIRInstr& instr);
 
     // Division: special handling for idiv/div
     void selectDiv(const LIRInstr& instr, bool is_mod);
