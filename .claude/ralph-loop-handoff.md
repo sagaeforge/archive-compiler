@@ -1,12 +1,12 @@
 # Ralph Loop Handoff — Quality Improvement Iteration
 
 ## Current State
-- **603 unit tests + 232 E2E tests**, 0 failures
+- **603 unit tests + 252 E2E tests**, 0 failures
 - All v2 architecture phases (0-7) complete
 - All OS roadmap phases (A-D) complete
 - Branch: `develop`
 
-## Bugs Fixed This Session (9 total)
+## Bugs Fixed (12 total)
 
 ### 1. Closure Match Dispatch (ba72b1f)
 - **Problem**: Closures from different match arms used direct call optimization that hardcoded a single lambda name. When variable could hold different closure types at runtime, both calls went to same lambda.
@@ -48,6 +48,26 @@
 - **Fix**: Copy value→result first, then use result vreg as the xadd operand so it receives the old value.
 - **Files**: `lib/Backend/InstructionSelector.cpp` (selectAtomicFetchAdd)
 
+### 9. Float Pointer Load/Store (cf5cb4b)
+- **Problem**: Float pointer dereference (`*ptr` where ptr is `Ptr<f64>`) generated invalid x86: `mov qword [rax], xmm0` and `movsd xmm0, rax` — register forms instead of memory addressing. NASM rejected these with "invalid combination of opcode and operands".
+- **Fix**: Added `FloatLoad`/`FloatStore` x86 opcodes that emit proper `movsd xmm, [gpr]` / `movsd [gpr], xmm`. Store detection uses `float_vregs_` map since Store instruction type is Unit. RegisterAllocator updated with mixed GPR+XMM register handling.
+- **Files**: `include/kern/backend/MachIR.h`, `lib/Backend/MachIR.cpp`, `lib/Backend/InstructionSelector.cpp`, `lib/Backend/Emitter.cpp`, `lib/Backend/RegisterAllocator.cpp`
+
+### 10. XMM Parameter Counter (ffaf98a)
+- **Problem**: `selectBlockArg` used `block_arg.index` (parameter ordinal) as XMM register index. For mixed GPR+float functions like `fn f(a: i64, b: f64, c: f64)`, the second f64 would use XMM2 instead of XMM1.
+- **Fix**: Added `xmm_arg_slot_` member variable for independent XMM register tracking, matching how `selectCall` already used separate counters.
+- **Files**: `include/kern/backend/InstructionSelector.h`, `lib/Backend/InstructionSelector.cpp`
+
+### 11. Width-Correct Sign Extension for Division (ffaf98a)
+- **Problem**: Emitter always emitted `cqo` for signed division regardless of operand width. For i32 division, should use `cdq`; for i16, should use `cwd`.
+- **Fix**: Emit `cwd`/`cdq`/`cqo` based on instruction width in Emitter.
+- **Files**: `lib/Backend/Emitter.cpp`
+
+### 12. Type Widening Casts: movsx/movzx Instead of shl/sar (478cc77)
+- **Problem**: Signed widening casts (e.g., i32→i64) used 5-instruction shl+sar sequence. Unsigned widening used mov+and mask. Both are correct but suboptimal.
+- **Fix**: Replaced with single `movsx`/`movsxd`/`movzx` instructions. Special handling: 32→64 signed uses `movsxd` (NASM requirement), 32→64 unsigned uses `mov eax, eax` (implicit zero-extend). Added MovSX/MovZX spill fixup in register allocator.
+- **Files**: `lib/Backend/InstructionSelector.cpp`, `lib/Backend/Emitter.cpp`, `lib/Backend/RegisterAllocator.cpp`
+
 ## Known Limitations (Structural — Not Simple Bugs)
 
 ### 1. Generic Body Type Checking with TypeVars
@@ -55,13 +75,18 @@
 - **Root cause**: Generic bodies are type-checked once with TypeVars, then monomorphized. Arithmetic on TypeVars has no meaning.
 - **Solution**: Needs trait bounds (`T: Add`) or deferred body checking after monomorphization
 
-### 2. XMM Parameter Counter (TODO in ISel)
-- `selectBlockArg` uses `block_arg.index` for XMM args instead of a separate counter
-- Won't cause issues until a function mixes >1 float param with GPR params out of order
+### 2. Closure Coercion
+- Closures (struct with `__fn` field) can't be passed as `fn` typed parameters
+- Closures work when called directly or through `val f: fn() -> T = { => ... }; f()`
+- **Solution**: Auto-wrap closure structs when passed to fn-typed parameters
 
 ### 3. Parallel Move Cycle-Breaking (TODO in Emitter)
 - `emitParallelMoves` in Emitter.cpp doesn't handle cycles (A→B, B→A)
 - Current code uses sequential moves which can break on swap patterns
+
+### 4. >16B Struct Copy Over-Read
+- Copy loops use 8-byte chunks unconditionally; if struct size % 8 != 0, reads past struct boundary
+- Currently benign since all Kern types are 8-byte aligned, but needs fix for i32/i16 struct fields
 
 ## Suggested Next Steps (Priority Order)
 
@@ -77,15 +102,10 @@
 
 ### Low Priority
 7. **Parallel move cycle-breaking** in emitter
-8. **XMM parameter tracking** separate counter
+8. **>16B struct copy alignment** — handle non-8-byte-aligned final chunk
 9. **Debug info** — DWARF emission for gdb/lldb support
 
-### 9. Float Pointer Load/Store (cf5cb4b)
-- **Problem**: Float pointer dereference (`*ptr` where ptr is `Ptr<f64>`) generated invalid x86: `mov qword [rax], xmm0` and `movsd xmm0, rax` — register forms instead of memory addressing. NASM rejected these with "invalid combination of opcode and operands".
-- **Fix**: Added `FloatLoad`/`FloatStore` x86 opcodes that emit proper `movsd xmm, [gpr]` / `movsd [gpr], xmm`. Store detection uses `float_vregs_` map since Store instruction type is Unit. RegisterAllocator updated with mixed GPR+XMM register handling.
-- **Files**: `include/kern/backend/MachIR.h`, `lib/Backend/MachIR.cpp`, `lib/Backend/InstructionSelector.cpp`, `lib/Backend/Emitter.cpp`, `lib/Backend/RegisterAllocator.cpp`
-
-## Test Coverage Gaps (Remaining)
-- Error paths: ~30 `diag.error()` calls still without dedicated E2E tests (82 total, 53 covered)
-- Feature combos: closure+try operator inside lambda, recursive closures, array of structs
-- Backend issues found but not fixed: cqo for <64-bit div (Issue 6), sign-extend via shl/sar instead of movsx (Issue 7), XMM param counter (Issue 5)
+## Test Coverage Summary
+- **Error paths**: ~65 of 82 `diag.error()` calls covered by E2E tests (~79%)
+- **Remaining uncovered**: ~17 error paths (mostly generic type errors blocked by feature, plus a few edge cases)
+- **Feature combos tested**: closure capture, nested match, struct params, recursive structs, mixed GPR+XMM, generic+fn types
