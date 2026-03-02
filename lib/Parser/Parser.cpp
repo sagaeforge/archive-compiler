@@ -2260,6 +2260,34 @@ Expr* Parser::parsePrimary() {
         return lit;
     }
 
+    // Character literal: 'c' → IntLitExpr with u8 value
+    if (tok.kind == TokenKind::CharLit) {
+        advance();
+        auto* lit = arena_.make<IntLitExpr>();
+        lit->kind = Expr::Kind::IntLit;
+        lit->loc = tok.loc;
+        // Parse char value from token text (includes surrounding quotes)
+        auto text = tok.text;
+        if (text.size() >= 3 && text[1] == '\\') {
+            // Escape sequence
+            switch (text[2]) {
+                case 'n':  lit->value = '\n'; break;
+                case 't':  lit->value = '\t'; break;
+                case '\\': lit->value = '\\'; break;
+                case '\'': lit->value = '\''; break;
+                case '0':  lit->value = '\0'; break;
+                case 'r':  lit->value = '\r'; break;
+                default:   lit->value = text[2]; break;
+            }
+        } else if (text.size() >= 3) {
+            lit->value = static_cast<uint8_t>(text[1]);
+        } else {
+            lit->value = 0;
+        }
+        lit->suffix = "u8";
+        return lit;
+    }
+
     // Float literal
     if (tok.kind == TokenKind::FloatLit) {
         advance();

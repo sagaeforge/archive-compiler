@@ -9,6 +9,7 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::IntLit:     return "IntLit";
         case TokenKind::FloatLit:   return "FloatLit";
         case TokenKind::StringLit:  return "StringLit";
+        case TokenKind::CharLit:    return "CharLit";
         case TokenKind::Ident:      return "Ident";
         case TokenKind::KwFn:       return "fn";
         case TokenKind::KwVal:      return "val";
@@ -394,6 +395,41 @@ Token Lexer::nextToken() {
     // String literals
     if (c == '"') {
         return scanString();
+    }
+
+    // Character literals: 'c' or '\n' etc.
+    // Distinguish from labels ('outer) by lookahead: char lit is 'X' or '\X'
+    if (c == '\'') {
+        // Save position for backtrack
+        const char* saved = current_;
+        int saved_col = col_;
+        bool is_char_lit = false;
+        if (!isAtEnd()) {
+            char ch = peek();
+            if (ch == '\\') {
+                advance(); // consume backslash
+                if (!isAtEnd()) {
+                    advance(); // consume escape char
+                    if (!isAtEnd() && peek() == '\'') {
+                        advance(); // consume closing quote
+                        is_char_lit = true;
+                    }
+                }
+            } else if (ch != '\'' && ch != '\n') {
+                advance(); // consume the char
+                if (!isAtEnd() && peek() == '\'') {
+                    advance(); // consume closing quote
+                    is_char_lit = true;
+                }
+            }
+        }
+        if (is_char_lit) {
+            return makeToken(TokenKind::CharLit);
+        }
+        // Not a char literal — backtrack and treat as label prefix
+        current_ = saved;
+        col_ = saved_col;
+        // Fall through to label handling below
     }
 
     // Identifiers and keywords

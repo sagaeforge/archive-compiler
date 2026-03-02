@@ -1,0 +1,9 @@
+// Test character literals
+fn main() -> i64 {
+    val a: u8 = 'A'
+    val newline: u8 = '\n'
+    val zero: u8 = '0'
+    // 'A' = 65, '\n' = 10, '0' = 48 → 65 - 48 + 10 + 15 = 42
+    val result: i64 = (a as i64) - (zero as i64) + (newline as i64) + 15
+    result
+}
