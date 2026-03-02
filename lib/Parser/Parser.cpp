@@ -885,6 +885,8 @@ Module* Parser::parseModule() {
                 Token val = expect(TokenKind::Ident, "expected repr kind in @repr(C)");
                 if (val.text == "C") {
                     is_repr_c = true;
+                } else if (val.text == "packed") {
+                    is_packed = true;
                 } else if (val.text == "u8" || val.text == "i8") {
                     repr_backing_size = 1;
                 } else if (val.text == "u16" || val.text == "i16") {
