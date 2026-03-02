@@ -208,7 +208,11 @@ void Formatter::formatTraitDecl(const TraitDecl* t) {
 }
 
 void Formatter::formatImplDecl(const ImplDecl* imp) {
-    out_ << "impl " << imp->trait_name << " for ";
+    if (imp->trait_name.empty()) {
+        out_ << "impl ";
+    } else {
+        out_ << "impl " << imp->trait_name << " for ";
+    }
     formatTypeRef(imp->target_type);
     out_ << " {\n";
     indent();

@@ -1322,10 +1322,25 @@ TraitDecl* Parser::parseTraitDecl() {
 ImplDecl* Parser::parseImplDecl() {
     SourceLocation loc = peek().loc;
     advance(); // consume 'impl'
-    Token traitName = expect(TokenKind::Ident, "expected trait name after 'impl'");
-    // Expect 'for' keyword
-    expect(TokenKind::KwFor, "expected 'for' after trait name in impl declaration");
-    TypeRef target = parseType();
+
+    // Parse the first type/name — could be:
+    //   impl Type { ... }           (inherent impl)
+    //   impl Trait for Type { ... } (trait impl)
+    TypeRef first = parseType();
+    skipNewlines();
+
+    std::string_view trait_name;
+    TypeRef target;
+    if (check(TokenKind::KwFor)) {
+        // trait impl: "impl Trait for Type { ... }"
+        advance(); // consume 'for'
+        trait_name = first.name;
+        target = parseType();
+    } else {
+        // inherent impl: "impl Type { ... }"
+        trait_name = {};
+        target = first;
+    }
     skipNewlines();
     expect(TokenKind::LBrace, "expected '{' in impl block");
     skipNewlines();
@@ -1344,7 +1359,7 @@ ImplDecl* Parser::parseImplDecl() {
     expect(TokenKind::RBrace, "expected '}' to close impl block");
 
     auto* id = arena_.make<ImplDecl>();
-    id->trait_name = traitName.text;
+    id->trait_name = trait_name;
     id->target_type = target;
     id->method_count = static_cast<uint32_t>(methods.size());
     id->methods = arena_.makeArray<FnDecl*>(methods.size());
