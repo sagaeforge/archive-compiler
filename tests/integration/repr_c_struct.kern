@@ -1,0 +1,23 @@
+@repr(C)
+struct GDTEntry {
+    limit_low: u16,
+    base_low: u16,
+    base_mid: u8,
+    access: u8,
+    granularity: u8,
+    base_high: u8,
+}
+
+fn main() -> i64 {
+    val entry: GDTEntry = GDTEntry {
+        limit_low: 0u16,
+        base_low: 0u16,
+        base_mid: 0u8,
+        access: 0u8,
+        granularity: 0u8,
+        base_high: 0u8,
+    }
+    val s: i64 = sizeof(GDTEntry) as i64
+    val o: i64 = offsetof(GDTEntry, base_high) as i64
+    s + o
+}

@@ -135,6 +135,7 @@ struct StructData {
     uint32_t size;
     uint32_t align;
     bool is_packed;
+    bool is_repr_c;   // @repr(C) — guaranteed C ABI-compatible layout
 };
 
 struct EnumData {
@@ -237,12 +238,14 @@ public:
     TypeId makePtr(TypeId pointee, bool is_mutable);
     TypeId makeFn(std::span<const TypeId> params, TypeId ret, EffectSet effects = EFFECT_NONE);
     TypeId makeStruct(std::string_view name, std::span<const FieldInfo> fields,
-                      bool is_packed = false, uint32_t explicit_align = 0);
+                      bool is_packed = false, uint32_t explicit_align = 0,
+                      bool is_repr_c = false);
     // Create a forward-declared struct (no fields/size yet) for self-referential types
     TypeId makeOpaqueStruct(std::string_view name);
     // Fill in fields for a previously opaque struct
     void updateStruct(TypeId id, std::span<const FieldInfo> fields,
-                      bool is_packed = false, uint32_t explicit_align = 0);
+                      bool is_packed = false, uint32_t explicit_align = 0,
+                      bool is_repr_c = false);
     TypeId makeEnum(std::string_view name, std::span<const std::string_view> variant_names,
                     std::span<const int64_t> values, uint8_t backing_size = 8);
     TypeId makeUnion(std::string_view name, std::span<const VariantInfo> variants,

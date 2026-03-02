@@ -546,7 +546,8 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
             }
 
             TypeId tid = ctx_.types.makeStruct(interned_mangled, fields,
-                                                sd->is_packed, sd->explicit_align);
+                                                sd->is_packed, sd->explicit_align,
+                                                sd->is_repr_c);
             named_types_[interned_mangled] = tid;
 
             // Restore type param and const param names
@@ -680,7 +681,7 @@ void HIRBuilder::registerStructDecls(const Module* ast) {
         }
 
         TypeId tid = named_types_[sd->name];
-        ctx_.types.updateStruct(tid, fields, sd->is_packed, sd->explicit_align);
+        ctx_.types.updateStruct(tid, fields, sd->is_packed, sd->explicit_align, sd->is_repr_c);
     }
 }
 
@@ -814,7 +815,8 @@ void HIRBuilder::registerExports(const Module* ast, std::string_view module_path
                               f.bit_width, 0});
         }
         TypeId tid = ctx_.types.makeStruct(ctx_.strings.intern(sd->name), fields,
-                                            sd->is_packed, sd->explicit_align);
+                                            sd->is_packed, sd->explicit_align,
+                                            sd->is_repr_c);
         named_types_[sd->name] = tid;
     }
 

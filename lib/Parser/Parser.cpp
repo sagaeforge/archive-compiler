@@ -887,6 +887,7 @@ Module* Parser::parseModule() {
             StructDecl* sd = parseStructDecl();
             if (sd) {
                 sd->is_packed = is_packed;
+                sd->is_repr_c = is_repr_c;
                 sd->is_pub = is_pub;
                 sd->explicit_align = explicit_align;
                 structs.push_back(sd);

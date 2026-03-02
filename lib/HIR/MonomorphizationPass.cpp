@@ -427,7 +427,8 @@ TypeId MonomorphizationPass::substituteType(
                 name += ctx_.types.name(concrete);
             }
             return ctx_.types.makeStruct(ctx_.strings.intern(name), fields,
-                                         ti.struct_.is_packed);
+                                         ti.struct_.is_packed, 0,
+                                         ti.struct_.is_repr_c);
         }
         default:
             return type;

@@ -84,7 +84,8 @@ TypeId TypeTable::makeFn(std::span<const TypeId> params, TypeId ret, EffectSet e
 }
 
 TypeId TypeTable::makeStruct(std::string_view name, std::span<const FieldInfo> fields,
-                             bool is_packed, uint32_t explicit_align) {
+                             bool is_packed, uint32_t explicit_align,
+                             bool is_repr_c) {
     auto* field_copy = arena_.makeArray<FieldInfo>(fields.size());
     uint32_t offset = 0;
     uint32_t max_align = 1;
@@ -139,6 +140,7 @@ TypeId TypeTable::makeStruct(std::string_view name, std::span<const FieldInfo> f
     ti.struct_.size = total_size;
     ti.struct_.align = max_align;
     ti.struct_.is_packed = is_packed;
+    ti.struct_.is_repr_c = is_repr_c;
     return add(ti);
 }
 
@@ -151,11 +153,13 @@ TypeId TypeTable::makeOpaqueStruct(std::string_view name) {
     ti.struct_.size = 0;
     ti.struct_.align = 1;
     ti.struct_.is_packed = false;
+    ti.struct_.is_repr_c = false;
     return add(ti);
 }
 
 void TypeTable::updateStruct(TypeId id, std::span<const FieldInfo> fields,
-                             bool is_packed, uint32_t explicit_align) {
+                             bool is_packed, uint32_t explicit_align,
+                             bool is_repr_c) {
     assert(id < types_.size() && "TypeId out of range");
     auto* info = types_[id];
     assert(info->kind == TypeKind::Struct && "updateStruct on non-struct type");
@@ -205,6 +209,7 @@ void TypeTable::updateStruct(TypeId id, std::span<const FieldInfo> fields,
     info->struct_.size = total_size;
     info->struct_.align = max_align;
     info->struct_.is_packed = is_packed;
+    info->struct_.is_repr_c = is_repr_c;
 }
 
 TypeId TypeTable::makeEnum(std::string_view name,

@@ -116,6 +116,7 @@ struct StructDecl {
     uint32_t field_count;
     SourceLocation loc;
     bool is_packed = false;         // @packed
+    bool is_repr_c = false;         // @repr(C) — C ABI-compatible layout
     bool is_pub = false;            // pub struct
     uint32_t explicit_align = 0;   // @align(N), 0 = natural alignment
     TypeParam* type_params = nullptr;
