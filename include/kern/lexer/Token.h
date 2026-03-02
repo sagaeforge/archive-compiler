@@ -76,6 +76,17 @@ enum class TokenKind : uint8_t {
     Eq,          // =
     EqEq,        // ==
     NotEq,       // !=
+    // Compound assignment
+    PlusEq,      // +=
+    MinusEq,     // -=
+    StarEq,      // *=
+    SlashEq,     // /=
+    PercentEq,   // %=
+    PipeEq,      // |=
+    AmpEq,       // &=
+    CaretEq,     // ^=
+    ShlEq,       // <<=
+    ShrEq,       // >>=
     Lt,          // <
     Gt,          // >
     LtEq,        // <=

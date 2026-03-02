@@ -71,6 +71,16 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::Eq:         return "=";
         case TokenKind::EqEq:       return "==";
         case TokenKind::NotEq:      return "!=";
+        case TokenKind::PlusEq:     return "+=";
+        case TokenKind::MinusEq:    return "-=";
+        case TokenKind::StarEq:     return "*=";
+        case TokenKind::SlashEq:    return "/=";
+        case TokenKind::PercentEq:  return "%=";
+        case TokenKind::PipeEq:     return "|=";
+        case TokenKind::AmpEq:      return "&=";
+        case TokenKind::CaretEq:    return "^=";
+        case TokenKind::ShlEq:      return "<<=";
+        case TokenKind::ShrEq:      return ">>=";
         case TokenKind::Lt:         return "<";
         case TokenKind::Gt:         return ">";
         case TokenKind::LtEq:       return "<=";
@@ -406,20 +416,27 @@ Token Lexer::nextToken() {
                 return makeToken(TokenKind::DotDot);
             }
             return makeToken(TokenKind::Dot);
-        case '&': return makeToken(TokenKind::Ampersand);
+        case '&':
+            if (match('=')) return makeToken(TokenKind::AmpEq);
+            return makeToken(TokenKind::Ampersand);
         case '+':
             if (match('%')) return makeToken(TokenKind::PlusWrap);
             if (match('|')) return makeToken(TokenKind::PlusSat);
+            if (match('=')) return makeToken(TokenKind::PlusEq);
             return makeToken(TokenKind::Plus);
         case '*':
             if (match('%')) return makeToken(TokenKind::StarWrap);
+            if (match('=')) return makeToken(TokenKind::StarEq);
             return makeToken(TokenKind::Star);
-        case '/': return makeToken(TokenKind::Slash);
+        case '/':
+            if (match('=')) return makeToken(TokenKind::SlashEq);
+            return makeToken(TokenKind::Slash);
 
         case '-':
             if (match('>')) return makeToken(TokenKind::Arrow);
             if (match('%')) return makeToken(TokenKind::MinusWrap);
             if (match('|')) return makeToken(TokenKind::MinusSat);
+            if (match('=')) return makeToken(TokenKind::MinusEq);
             return makeToken(TokenKind::Minus);
 
         case '=':
@@ -427,8 +444,12 @@ Token Lexer::nextToken() {
             if (match('>')) return makeToken(TokenKind::FatArrow);
             return makeToken(TokenKind::Eq);
 
-        case '%': return makeToken(TokenKind::Percent);
-        case '^': return makeToken(TokenKind::BitXor);
+        case '%':
+            if (match('=')) return makeToken(TokenKind::PercentEq);
+            return makeToken(TokenKind::Percent);
+        case '^':
+            if (match('=')) return makeToken(TokenKind::CaretEq);
+            return makeToken(TokenKind::BitXor);
         case '~': return makeToken(TokenKind::Tilde);
         case '@': return makeToken(TokenKind::At);
         case '?': return makeToken(TokenKind::Question);
@@ -446,17 +467,24 @@ Token Lexer::nextToken() {
             return makeToken(TokenKind::Exclaim);
 
         case '<':
-            if (match('<')) return makeToken(TokenKind::Shl);
+            if (match('<')) {
+                if (match('=')) return makeToken(TokenKind::ShlEq);
+                return makeToken(TokenKind::Shl);
+            }
             if (match('=')) return makeToken(TokenKind::LtEq);
             return makeToken(TokenKind::Lt);
 
         case '>':
-            if (match('>')) return makeToken(TokenKind::Shr);
+            if (match('>')) {
+                if (match('=')) return makeToken(TokenKind::ShrEq);
+                return makeToken(TokenKind::Shr);
+            }
             if (match('=')) return makeToken(TokenKind::GtEq);
             return makeToken(TokenKind::Gt);
 
         case '|':
             if (match('>')) return makeToken(TokenKind::Pipe);
+            if (match('=')) return makeToken(TokenKind::PipeEq);
             return makeToken(TokenKind::BitOr);
 
         default:

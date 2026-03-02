@@ -3,6 +3,7 @@
 #include "kern/lexer/Lexer.h"
 #include "kern/support/Arena.h"
 #include "kern/support/Diagnostic.h"
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -11,6 +12,10 @@ namespace kern {
 class Parser {
 public:
     Parser(Lexer& lexer, Arena& arena, DiagnosticEngine& diag);
+
+    // Set a cfg key-value pair for conditional compilation
+    void setCfg(std::string_view key, std::string_view value);
+    void setCfg(std::string_view key);  // boolean flag (key exists)
 
     Module* parseModule();
 
@@ -48,6 +53,8 @@ private:
     Expr* parseStructLit(std::string_view name, SourceLocation loc);
     Expr* parseMatchExpr();
     Expr* parseLoopExpr();
+    Expr* parseForRange();
+    Expr* parseWhileLoop();
     Expr* parseLambdaExpr(SourceLocation loc);
     bool isLambdaStart();
     Pattern* parsePattern();
@@ -57,6 +64,9 @@ private:
 
     // Helpers
     static bool isDerefTarget(const Expr* expr);
+    bool isCompoundAssign();
+    BinOpKind compoundAssignOp();
+    Expr* wrapCompoundAssign(Expr* lhs, Expr* rhs, BinOpKind op, SourceLocation loc);
 
     // Operator helpers
     static uint8_t prefixBP(TokenKind kind);
@@ -75,6 +85,15 @@ private:
     std::unordered_set<std::string_view> struct_names_;
     std::unordered_set<std::string_view> enum_names_;
     std::unordered_set<std::string_view> union_names_;
+
+    // Cfg flags for conditional compilation (@cfg)
+    std::unordered_map<std::string_view, std::string_view> cfg_flags_;
+
+    // Evaluate a @cfg condition. Returns true if item should be included.
+    bool evaluateCfg();
+
+    // Skip a top-level item (fn, struct, enum, union, etc.)
+    void skipTopLevelItem();
 };
 
 } // namespace kern

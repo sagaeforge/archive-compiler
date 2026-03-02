@@ -2779,6 +2779,42 @@ bool Parser::isDerefTarget(const Expr* expr) {
     return false;
 }
 
+bool Parser::isCompoundAssign() {
+    TokenKind k = peek().kind;
+    return k == TokenKind::PlusEq || k == TokenKind::MinusEq ||
+           k == TokenKind::StarEq || k == TokenKind::SlashEq ||
+           k == TokenKind::PercentEq || k == TokenKind::PipeEq ||
+           k == TokenKind::AmpEq || k == TokenKind::CaretEq ||
+           k == TokenKind::ShlEq || k == TokenKind::ShrEq;
+}
+
+BinOpKind Parser::compoundAssignOp() {
+    TokenKind k = advance().kind; // consume compound assign token
+    switch (k) {
+        case TokenKind::PlusEq:    return BinOpKind::Add;
+        case TokenKind::MinusEq:   return BinOpKind::Sub;
+        case TokenKind::StarEq:    return BinOpKind::Mul;
+        case TokenKind::SlashEq:   return BinOpKind::Div;
+        case TokenKind::PercentEq: return BinOpKind::Mod;
+        case TokenKind::PipeEq:    return BinOpKind::BitOr;
+        case TokenKind::AmpEq:     return BinOpKind::BitAnd;
+        case TokenKind::CaretEq:   return BinOpKind::BitXor;
+        case TokenKind::ShlEq:     return BinOpKind::Shl;
+        case TokenKind::ShrEq:     return BinOpKind::Shr;
+        default:                   return BinOpKind::Add; // unreachable
+    }
+}
+
+Expr* Parser::wrapCompoundAssign(Expr* lhs, Expr* rhs, BinOpKind op, SourceLocation loc) {
+    auto* binop = arena_.make<BinOpExpr>();
+    binop->kind = Expr::Kind::BinOp;
+    binop->loc = loc;
+    binop->op = op;
+    binop->lhs = lhs;
+    binop->rhs = rhs;
+    return binop;
+}
+
 Expr* Parser::parseBlockExpr() {
     SourceLocation loc = peek().loc;
     expect(TokenKind::LBrace, "expected '{'");
@@ -3073,10 +3109,19 @@ Expr* Parser::parseBlockExpr() {
             }
             skipNewlines();
 
-            if (check(TokenKind::Eq)) {
-                advance(); // consume '='
+            if (check(TokenKind::Eq) || isCompoundAssign()) {
+                BinOpKind compound_op = BinOpKind::Add; // unused default
+                bool is_compound = isCompoundAssign();
+                if (is_compound) {
+                    compound_op = compoundAssignOp(); // consumes token
+                } else {
+                    advance(); // consume '='
+                }
                 skipNewlines();
-                Expr* value = parseExpr();
+                Expr* rhs = parseExpr();
+                Expr* value = is_compound
+                    ? wrapCompoundAssign(lhs, rhs, compound_op, identTok.loc)
+                    : rhs;
                 if (lhs->kind == Expr::Kind::IndexAccess) {
                     auto* ia_expr = static_cast<IndexAccessExpr*>(lhs);
                     auto* ias = arena_.make<IndexAssignStmt>();
@@ -3122,11 +3167,20 @@ Expr* Parser::parseBlockExpr() {
             Expr* expr = parseExpr();
             skipNewlines();
 
-            // Check for index assignment: arr[idx] = val
-            if (check(TokenKind::Eq) && expr->kind == Expr::Kind::IndexAccess) {
-                advance(); // consume '='
+            // Check for index assignment: arr[idx] = val or arr[idx] += val
+            if ((check(TokenKind::Eq) || isCompoundAssign()) && expr->kind == Expr::Kind::IndexAccess) {
+                bool is_compound = isCompoundAssign();
+                BinOpKind compound_op = BinOpKind::Add;
+                if (is_compound) {
+                    compound_op = compoundAssignOp();
+                } else {
+                    advance(); // consume '='
+                }
                 skipNewlines();
-                Expr* value = parseExpr();
+                Expr* rhs = parseExpr();
+                Expr* value = is_compound
+                    ? wrapCompoundAssign(expr, rhs, compound_op, expr->loc)
+                    : rhs;
                 auto* ia_expr = static_cast<IndexAccessExpr*>(expr);
                 auto* ias = arena_.make<IndexAssignStmt>();
                 ias->kind = Stmt::Kind::IndexAssign;
@@ -3136,11 +3190,20 @@ Expr* Parser::parseBlockExpr() {
                 ias->value = value;
                 stmts.push_back(ias);
             }
-            // Check for deref assignment: *ptr = val or (*ptr).field = val
-            else if (check(TokenKind::Eq) && isDerefTarget(expr)) {
-                advance(); // consume '='
+            // Check for deref assignment: *ptr = val or *ptr += val
+            else if ((check(TokenKind::Eq) || isCompoundAssign()) && isDerefTarget(expr)) {
+                bool is_compound = isCompoundAssign();
+                BinOpKind compound_op = BinOpKind::Add;
+                if (is_compound) {
+                    compound_op = compoundAssignOp();
+                } else {
+                    advance(); // consume '='
+                }
                 skipNewlines();
-                Expr* value = parseExpr();
+                Expr* rhs = parseExpr();
+                Expr* value = is_compound
+                    ? wrapCompoundAssign(expr, rhs, compound_op, expr->loc)
+                    : rhs;
                 auto* da = arena_.make<DerefAssignStmt>();
                 da->kind = Stmt::Kind::DerefAssign;
                 da->loc = expr->loc;
@@ -3413,10 +3476,19 @@ Expr* Parser::parseLoopExpr() {
             }
             skipNewlines();
 
-            if (check(TokenKind::Eq)) {
-                advance();
+            if (check(TokenKind::Eq) || isCompoundAssign()) {
+                bool is_compound = isCompoundAssign();
+                BinOpKind compound_op = BinOpKind::Add;
+                if (is_compound) {
+                    compound_op = compoundAssignOp();
+                } else {
+                    advance();
+                }
                 skipNewlines();
-                Expr* value = parseExpr();
+                Expr* rhs = parseExpr();
+                Expr* value = is_compound
+                    ? wrapCompoundAssign(lhs, rhs, compound_op, identTok.loc)
+                    : rhs;
                 if (lhs->kind == Expr::Kind::FieldAccess) {
                     auto* fa_stmt = arena_.make<FieldAssignStmt>();
                     fa_stmt->kind = Stmt::Kind::FieldAssign;
@@ -3557,10 +3629,19 @@ Expr* Parser::parseForRange() {
                     lhs = ia;
                 }
                 skipNewlines();
-                if (check(TokenKind::Eq)) {
-                    advance();
+                if (check(TokenKind::Eq) || isCompoundAssign()) {
+                    bool is_compound = isCompoundAssign();
+                    BinOpKind compound_op = BinOpKind::Add;
+                    if (is_compound) {
+                        compound_op = compoundAssignOp();
+                    } else {
+                        advance();
+                    }
                     skipNewlines();
-                    Expr* value = parseExpr();
+                    Expr* rhs = parseExpr();
+                    Expr* value = is_compound
+                        ? wrapCompoundAssign(lhs, rhs, compound_op, identTok.loc)
+                        : rhs;
                     if (lhs->kind == Expr::Kind::FieldAccess || lhs->kind == Expr::Kind::IndexAccess) {
                         auto* fa_stmt = arena_.make<FieldAssignStmt>();
                         fa_stmt->kind = Stmt::Kind::FieldAssign;
@@ -3663,10 +3744,19 @@ Expr* Parser::parseForRange() {
             }
             skipNewlines();
 
-            if (check(TokenKind::Eq)) {
-                advance();
+            if (check(TokenKind::Eq) || isCompoundAssign()) {
+                bool is_compound = isCompoundAssign();
+                BinOpKind compound_op = BinOpKind::Add;
+                if (is_compound) {
+                    compound_op = compoundAssignOp();
+                } else {
+                    advance();
+                }
                 skipNewlines();
-                Expr* value = parseExpr();
+                Expr* rhs = parseExpr();
+                Expr* value = is_compound
+                    ? wrapCompoundAssign(lhs, rhs, compound_op, identTok.loc)
+                    : rhs;
                 if (lhs->kind == Expr::Kind::FieldAccess) {
                     auto* fa_stmt = arena_.make<FieldAssignStmt>();
                     fa_stmt->kind = Stmt::Kind::FieldAssign;
@@ -3801,10 +3891,19 @@ Expr* Parser::parseWhileLoop() {
             }
             skipNewlines();
 
-            if (check(TokenKind::Eq)) {
-                advance();
+            if (check(TokenKind::Eq) || isCompoundAssign()) {
+                bool is_compound = isCompoundAssign();
+                BinOpKind compound_op = BinOpKind::Add;
+                if (is_compound) {
+                    compound_op = compoundAssignOp();
+                } else {
+                    advance();
+                }
                 skipNewlines();
-                Expr* value = parseExpr();
+                Expr* rhs = parseExpr();
+                Expr* value = is_compound
+                    ? wrapCompoundAssign(lhs, rhs, compound_op, identTok.loc)
+                    : rhs;
                 if (lhs->kind == Expr::Kind::FieldAccess || lhs->kind == Expr::Kind::IndexAccess) {
                     auto* fa_stmt = arena_.make<FieldAssignStmt>();
                     fa_stmt->kind = Stmt::Kind::FieldAssign;
