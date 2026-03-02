@@ -1499,6 +1499,43 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
             return buildMethodCall(expr);
         case Expr::Kind::Try:
             return buildTry(expr);
+        case Expr::Kind::ExprCall: {
+            auto* ec = static_cast<const ExprCallExpr*>(expr);
+            HIRExpr* callee = buildExpr(ec->callee);
+            // Resolve the Fn type to get return type and param types
+            TypeId fn_type = callee->type;
+            TypeId ret_type = TypeTable::I64;
+            if (fn_type < ctx_.types.size()) {
+                const auto& fti = ctx_.types.get(fn_type);
+                if (fti.kind == TypeKind::Fn) {
+                    ret_type = fti.fn.return_type;
+                }
+            }
+            auto* call = ctx_.arena.make<HIRCallIndirectExpr>();
+            call->kind = HIRExpr::Kind::CallIndirect;
+            call->loc = expr->loc;
+            call->type = ret_type;
+            call->callee = callee;
+            call->arg_count = ec->arg_count;
+            call->is_tail_call = false;
+            call->args = ctx_.arena.makeArray<HIRExpr*>(ec->arg_count);
+            if (fn_type < ctx_.types.size()) {
+                const auto& fti = ctx_.types.get(fn_type);
+                if (fti.kind == TypeKind::Fn) {
+                    for (uint32_t i = 0; i < ec->arg_count; ++i) {
+                        TypeId param_type = (i < fti.fn.param_count) ? fti.fn.params[i] : TypeTable::I64;
+                        call->args[i] = buildExpr(ec->args[i], param_type);
+                    }
+                } else {
+                    for (uint32_t i = 0; i < ec->arg_count; ++i)
+                        call->args[i] = buildExpr(ec->args[i]);
+                }
+            } else {
+                for (uint32_t i = 0; i < ec->arg_count; ++i)
+                    call->args[i] = buildExpr(ec->args[i]);
+            }
+            return call;
+        }
     }
     return errorExpr(expr->loc);
 }

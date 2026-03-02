@@ -22,6 +22,108 @@ void LIRBuilder::emit(LIRInstr instr) {
     blocks_[current_block_].instrs.push_back(instr);
 }
 
+bool LIRBuilder::isAggregate(TypeId type) const {
+    if (type >= ctx_.types.size()) return false;
+    const auto& ti = ctx_.types.get(type);
+    return ti.kind == TypeKind::Struct || ti.kind == TypeKind::Union;
+}
+
+void LIRBuilder::emitStructCopy(VReg dst_ptr, VReg src_ptr, uint32_t byte_size, SourceLocation loc) {
+    uint32_t aligned = (byte_size + 7u) & ~7u;
+    for (uint32_t off = 0; off < aligned; off += 8) {
+        // src_field = FieldPtr(src_ptr, off)
+        VReg src_field = freshVReg();
+        LIRInstr sp{};
+        sp.op = LIROp::FieldPtr;
+        sp.result = src_field;
+        sp.type = ctx_.types.makePtr(TypeTable::I64, false);
+        sp.field_ptr.base = src_ptr;
+        sp.field_ptr.offset = off;
+        sp.loc = loc;
+        emit(sp);
+
+        // tmp = Load(src_field)
+        VReg tmp = freshVReg();
+        LIRInstr ld{};
+        ld.op = LIROp::Load;
+        ld.result = tmp;
+        ld.type = TypeTable::I64;
+        ld.load.ptr = src_field;
+        ld.loc = loc;
+        emit(ld);
+
+        // dst_field = FieldPtr(dst_ptr, off)
+        VReg dst_field = freshVReg();
+        LIRInstr dp{};
+        dp.op = LIROp::FieldPtr;
+        dp.result = dst_field;
+        dp.type = ctx_.types.makePtr(TypeTable::I64, true);
+        dp.field_ptr.base = dst_ptr;
+        dp.field_ptr.offset = off;
+        dp.loc = loc;
+        emit(dp);
+
+        // Store(dst_field, tmp)
+        LIRInstr st{};
+        st.op = LIROp::Store;
+        st.result = INVALID_VREG;
+        st.type = TypeTable::Unit;
+        st.store.ptr = dst_field;
+        st.store.value = tmp;
+        st.loc = loc;
+        emit(st);
+    }
+}
+
+VReg LIRBuilder::lowerToAddress(const HIRExpr* expr) {
+    if (expr->kind == HIRExpr::Kind::Ident) {
+        auto* ident = static_cast<const HIRIdentExpr*>(expr);
+        auto va = var_addrs_.find(ident->name);
+        if (va != var_addrs_.end()) {
+            // var binding: var slot stores a pointer to struct data
+            if (isAggregate(expr->type)) {
+                // Load the data pointer from the var slot
+                VReg data_ptr = freshVReg();
+                LIRInstr ld{};
+                ld.op = LIROp::Load;
+                ld.result = data_ptr;
+                ld.type = ctx_.types.makePtr(expr->type, true);
+                ld.load.ptr = va->second;
+                ld.loc = expr->loc;
+                emit(ld);
+                return data_ptr;
+            }
+            // Primitive var: the var slot IS the address
+            return va->second;
+        }
+        auto it = locals_.find(ident->name);
+        if (it != locals_.end()) {
+            return it->second; // val struct binding: vreg holds pointer to data
+        }
+    }
+    if (expr->kind == HIRExpr::Kind::FieldAccess) {
+        auto* fa = static_cast<const HIRFieldAccessExpr*>(expr);
+        VReg base = lowerToAddress(fa->object);
+        uint32_t offset = structFieldOffset(fa->object->type, fa->field_name);
+        VReg fp = freshVReg();
+        LIRInstr fp_instr{};
+        fp_instr.op = LIROp::FieldPtr;
+        fp_instr.result = fp;
+        fp_instr.type = ctx_.types.makePtr(fa->type, true);
+        fp_instr.field_ptr.base = base;
+        fp_instr.field_ptr.offset = offset;
+        fp_instr.loc = expr->loc;
+        emit(fp_instr);
+        return fp;
+    }
+    if (expr->kind == HIRExpr::Kind::Deref) {
+        auto* deref = static_cast<const HIRDerefExpr*>(expr);
+        return lowerExpr(deref->operand);
+    }
+    // Fallback: evaluate expression (creates a temporary)
+    return lowerExpr(expr);
+}
+
 uint32_t LIRBuilder::newBlock(std::string_view label) {
     uint32_t idx = static_cast<uint32_t>(blocks_.size());
     // Make labels unique and NASM-local (dot prefix) by appending counter
@@ -3123,14 +3225,30 @@ void LIRBuilder::lowerStmt(const HIRStmt* stmt) {
             } else {
                 auto it = var_addrs_.find(s->name);
                 if (it != var_addrs_.end()) {
-                    LIRInstr store{};
-                    store.op = LIROp::Store;
-                    store.result = INVALID_VREG;
-                    store.type = TypeTable::Unit;
-                    store.store.ptr = it->second;
-                    store.store.value = val;
-                    store.loc = s->loc;
-                    emit(store);
+                    TypeId val_type = s->value->type;
+                    if (isAggregate(val_type)) {
+                        // var slot stores a pointer to the struct data area.
+                        // Load the data pointer, then copy struct data.
+                        uint32_t sz = ctx_.types.sizeOf(val_type);
+                        VReg dst_data = freshVReg();
+                        LIRInstr ld{};
+                        ld.op = LIROp::Load;
+                        ld.result = dst_data;
+                        ld.type = ctx_.types.makePtr(val_type, true);
+                        ld.load.ptr = it->second;
+                        ld.loc = s->loc;
+                        emit(ld);
+                        emitStructCopy(dst_data, val, sz, s->loc);
+                    } else {
+                        LIRInstr store{};
+                        store.op = LIROp::Store;
+                        store.result = INVALID_VREG;
+                        store.type = TypeTable::Unit;
+                        store.store.ptr = it->second;
+                        store.store.value = val;
+                        store.loc = s->loc;
+                        emit(store);
+                    }
                 }
             }
             break;
@@ -3139,7 +3257,7 @@ void LIRBuilder::lowerStmt(const HIRStmt* stmt) {
             auto* s = static_cast<const HIRFieldAssignStmt*>(stmt);
             if (s->target->kind == HIRExpr::Kind::FieldAccess) {
                 auto* fa = static_cast<const HIRFieldAccessExpr*>(s->target);
-                VReg obj = lowerExpr(fa->object);
+                VReg obj = lowerToAddress(fa->object);
                 uint32_t offset = structFieldOffset(fa->object->type, fa->field_name);
                 VReg val = lowerExpr(s->value);
 
@@ -3240,14 +3358,20 @@ void LIRBuilder::lowerStmt(const HIRStmt* stmt) {
                     fp_instr.loc = s->loc;
                     emit(fp_instr);
 
-                    LIRInstr store{};
-                    store.op = LIROp::Store;
-                    store.result = INVALID_VREG;
-                    store.type = TypeTable::Unit;
-                    store.store.ptr = fp;
-                    store.store.value = val;
-                    store.loc = s->loc;
-                    emit(store);
+                    TypeId field_type = fa->type;
+                    if (isAggregate(field_type)) {
+                        uint32_t sz = ctx_.types.sizeOf(field_type);
+                        emitStructCopy(fp, val, sz, s->loc);
+                    } else {
+                        LIRInstr store{};
+                        store.op = LIROp::Store;
+                        store.result = INVALID_VREG;
+                        store.type = TypeTable::Unit;
+                        store.store.ptr = fp;
+                        store.store.value = val;
+                        store.loc = s->loc;
+                        emit(store);
+                    }
                 }
             }
             break;
@@ -3263,14 +3387,21 @@ void LIRBuilder::lowerStmt(const HIRStmt* stmt) {
                 ptr = lowerExpr(s->target);
             }
             VReg val = lowerExpr(s->value);
-            LIRInstr store{};
-            store.op = LIROp::Store;
-            store.result = INVALID_VREG;
-            store.type = TypeTable::Unit;
-            store.store.ptr = ptr;
-            store.store.value = val;
-            store.loc = s->loc;
-            emit(store);
+            // Determine the type being stored (unwrap pointer to get pointee type)
+            TypeId val_type = s->value->type;
+            if (isAggregate(val_type)) {
+                uint32_t sz = ctx_.types.sizeOf(val_type);
+                emitStructCopy(ptr, val, sz, s->loc);
+            } else {
+                LIRInstr store{};
+                store.op = LIROp::Store;
+                store.result = INVALID_VREG;
+                store.type = TypeTable::Unit;
+                store.store.ptr = ptr;
+                store.store.value = val;
+                store.loc = s->loc;
+                emit(store);
+            }
             break;
         }
         case HIRStmt::Kind::IndexAssign: {

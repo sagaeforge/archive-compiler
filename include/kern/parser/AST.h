@@ -226,7 +226,8 @@ struct Expr {
         ArrayLit, IndexAccess, SliceExpr,
         Sizeof, Alignof, Offsetof,
         Lambda, MethodCall,
-        Try, TupleLit, Uninit
+        Try, TupleLit, Uninit,
+        ExprCall  // call through arbitrary expression: arr[i](), (*fp)(), etc.
     };
     Kind kind;
     SourceLocation loc;
@@ -288,6 +289,13 @@ struct CallExpr : Expr {
     uint32_t arg_count;
     TypeRef* type_args = nullptr;    // explicit type arguments: f<i64>(x)
     uint32_t type_arg_count = 0;
+};
+
+// Call through arbitrary expression (not just identifier)
+struct ExprCallExpr : Expr {
+    Expr* callee;       // the expression being called
+    Expr** args;
+    uint32_t arg_count;
 };
 
 struct IfExpr : Expr {

@@ -1,0 +1,14 @@
+// Test: struct deref assign (*ptr = struct) through mutable pointer
+struct S { var a: i64, var b: i64 }
+
+fn write_back(p: Ptr<var S>) -> i64 {
+    val s: S = S { a: 42, b: 99 }
+    *p = s
+    0
+}
+
+fn main() -> i64 {
+    var x: S = S { a: 0, b: 0 }
+    write_back(&var x)
+    x.a
+}

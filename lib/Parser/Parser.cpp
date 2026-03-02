@@ -498,6 +498,14 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
         case Expr::Kind::Uninit:
             out << "Uninit\n";
             break;
+        case Expr::Kind::ExprCall: {
+            auto* ec = static_cast<const ExprCallExpr*>(expr);
+            out << "ExprCall\n";
+            dumpExpr(ec->callee, out, ind + 1);
+            for (uint32_t i = 0; i < ec->arg_count; ++i)
+                dumpExpr(ec->args[i], out, ind + 1);
+            break;
+        }
     }
 }
 
@@ -2076,7 +2084,7 @@ uint8_t Parser::prefixBP(TokenKind kind) {
         case TokenKind::Tilde:     // ~x (bitwise NOT)
         case TokenKind::Star:      // *ptr (deref)
         case TokenKind::Ampersand: // &x (addr-of)
-            return 125;
+            return 135;  // above 'as' (130) so &x as T → (&x) as T
         default:
             return 0;
     }
@@ -2185,6 +2193,31 @@ Expr* Parser::parseExprInfix(Expr* lhs, uint8_t minBP) {
             ia->array = lhs;
             ia->index = idx;
             lhs = ia;
+            continue;
+        }
+        // Postfix call: expr(args...) — for calling fn pointers, array elements, etc.
+        if (op == TokenKind::LParen && !on_new_line && lhs->kind != Expr::Kind::Ident) {
+            if (200 < minBP) break;
+            advance(); // consume '('
+            std::vector<Expr*> args;
+            skipNewlines();
+            if (!check(TokenKind::RParen)) {
+                args.push_back(parseExpr());
+                while (match(TokenKind::Comma)) {
+                    skipNewlines();
+                    args.push_back(parseExpr());
+                }
+            }
+            skipNewlines();
+            expect(TokenKind::RParen, "expected ')' after call arguments");
+            auto* ec = arena_.make<ExprCallExpr>();
+            ec->kind = Expr::Kind::ExprCall;
+            ec->loc = lhs->loc;
+            ec->callee = lhs;
+            ec->arg_count = static_cast<uint32_t>(args.size());
+            ec->args = arena_.makeArray<Expr*>(args.size());
+            for (size_t i = 0; i < args.size(); ++i) ec->args[i] = args[i];
+            lhs = ec;
             continue;
         }
 

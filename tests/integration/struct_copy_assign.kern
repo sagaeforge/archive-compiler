@@ -1,0 +1,10 @@
+// Test: struct assignment copies data (not aliasing)
+struct S { var a: i64, var b: i64 }
+
+fn main() -> i64 {
+    var x: S = S { a: 1, b: 2 }
+    var y: S = S { a: 40, b: 2 }
+    x = y
+    y.a = 99
+    x.a + x.b
+}

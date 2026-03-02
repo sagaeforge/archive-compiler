@@ -1,0 +1,38 @@
+// Test: ring buffer pattern (kernel IPC)
+struct RingBuffer {
+    var data: [i64; 8],
+    var head: i64,
+    var tail: i64,
+    var count: i64
+}
+
+fn rb_push(rb: Ptr<var RingBuffer>, item: i64) -> i64 {
+    var buf: RingBuffer = *rb
+    if buf.count >= 8 { return 0 }
+    buf.data[buf.tail] = item
+    buf.tail = (buf.tail + 1) % 8
+    buf.count = buf.count + 1
+    *rb = buf
+    1
+}
+
+fn rb_pop(rb: Ptr<var RingBuffer>) -> i64 {
+    var buf: RingBuffer = *rb
+    if buf.count <= 0 { return -1 }
+    val item: i64 = buf.data[buf.head]
+    buf.head = (buf.head + 1) % 8
+    buf.count = buf.count - 1
+    *rb = buf
+    item
+}
+
+fn main() -> i64 {
+    var rb: RingBuffer = RingBuffer {
+        data: [0, 0, 0, 0, 0, 0, 0, 0],
+        head: 0, tail: 0, count: 0
+    }
+    rb_push(&var rb, 10)
+    rb_push(&var rb, 20)
+    rb_push(&var rb, 12)
+    rb_pop(&var rb) + rb_pop(&var rb) + rb_pop(&var rb)
+}

@@ -690,6 +690,17 @@ void Formatter::formatExpr(const Expr* expr) {
         case Expr::Kind::Uninit:
             out_ << "uninit";
             break;
+        case Expr::Kind::ExprCall: {
+            auto* ec = static_cast<const ExprCallExpr*>(expr);
+            formatExpr(ec->callee);
+            out_ << "(";
+            for (uint32_t i = 0; i < ec->arg_count; ++i) {
+                if (i > 0) out_ << ", ";
+                formatExpr(ec->args[i]);
+            }
+            out_ << ")";
+            break;
+        }
     }
 }
 

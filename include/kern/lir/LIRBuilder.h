@@ -80,6 +80,15 @@ private:
     int64_t enumVariantValue(TypeId enum_type, std::string_view variant_name);
     uint32_t unionVariantTag(TypeId union_type, std::string_view variant_name);
 
+    // Emit multi-word struct/union copy (8 bytes at a time)
+    void emitStructCopy(VReg dst_ptr, VReg src_ptr, uint32_t byte_size, SourceLocation loc);
+
+    // Lower an expression to its address (for lvalue contexts like field assign targets)
+    VReg lowerToAddress(const HIRExpr* expr);
+
+    // Check if a type is an aggregate (struct/union) that needs multi-word copy
+    bool isAggregate(TypeId type) const;
+
     // Finalize blocks into arena-allocated arrays
     void finalizeBlocks(LIRFunction& fn);
 
