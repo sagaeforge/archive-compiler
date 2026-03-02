@@ -1,0 +1,7 @@
+fn is_positive(x: i64) -> bool {
+    if x > 0 { true } else { false }
+}
+
+fn main() -> i64 {
+    if is_positive(1) { 42 } else { 0 }
+}
