@@ -1,0 +1,9 @@
+// Test string literal — access first byte
+fn main() -> i64 {
+    val s = "Hello"
+    val ptr: Ptr<u8> = s.data
+    val first: u8 = *ptr
+    // 'H' = 72, length = 5 → 72 - 5 - 25 = 42
+    val len: i64 = s.len as i64
+    (first as i64) - len - 25
+}
