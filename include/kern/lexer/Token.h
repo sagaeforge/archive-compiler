@@ -49,8 +49,13 @@ enum class TokenKind : uint8_t {
 
     // Operators
     Plus,        // +
+    PlusWrap,    // +%
+    PlusSat,     // +|
     Minus,       // -
+    MinusWrap,   // -%
+    MinusSat,    // -|
     Star,        // *
+    StarWrap,    // *%
     Slash,       // /
     Percent,     // %
     BitOr,       // | (bitwise OR, distinct from |> pipe)

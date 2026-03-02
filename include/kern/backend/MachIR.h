@@ -169,6 +169,7 @@ enum class X86Op : uint8_t {
     // Comparison + conditional
     Cmp, Test,
     Setcc,          // + condition code
+    Cmovcc,         // conditional move + condition code
     Jmp, Jcc,       // + condition code
     Call, Ret,
 
@@ -210,6 +211,7 @@ const char* x86OpName(X86Op op);
 enum class CondCode : uint8_t {
     E, NE, L, LE, G, GE,       // signed
     B, BE, A, AE,               // unsigned
+    O, NO,                      // overflow / no overflow
 };
 
 const char* condCodeSuffix(CondCode cc);

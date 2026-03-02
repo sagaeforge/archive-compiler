@@ -1402,10 +1402,15 @@ Parser::InfixBP Parser::infixBP(TokenKind kind) {
         case TokenKind::BitXor:    return {70, 71};
         case TokenKind::Ampersand: return {80, 81};  // bitwise AND (infix)
         case TokenKind::Plus:
-        case TokenKind::Minus:     return {90, 91};
+        case TokenKind::PlusWrap:
+        case TokenKind::PlusSat:
+        case TokenKind::Minus:
+        case TokenKind::MinusWrap:
+        case TokenKind::MinusSat:  return {90, 91};
         case TokenKind::Shl:
         case TokenKind::Shr:       return {100, 101};
         case TokenKind::Star:
+        case TokenKind::StarWrap:
         case TokenKind::Slash:
         case TokenKind::Percent:   return {110, 111};
         case TokenKind::KwAs:      return {130, 131};
@@ -1430,8 +1435,13 @@ uint8_t Parser::prefixBP(TokenKind kind) {
 BinOpKind Parser::tokenToBinOp(TokenKind kind) {
     switch (kind) {
         case TokenKind::Plus:      return BinOpKind::Add;
+        case TokenKind::PlusWrap:  return BinOpKind::AddWrap;
+        case TokenKind::PlusSat:   return BinOpKind::AddSat;
         case TokenKind::Minus:     return BinOpKind::Sub;
+        case TokenKind::MinusWrap: return BinOpKind::SubWrap;
+        case TokenKind::MinusSat:  return BinOpKind::SubSat;
         case TokenKind::Star:      return BinOpKind::Mul;
+        case TokenKind::StarWrap:  return BinOpKind::MulWrap;
         case TokenKind::Slash:     return BinOpKind::Div;
         case TokenKind::Percent:   return BinOpKind::Mod;
         case TokenKind::EqEq:      return BinOpKind::Eq;

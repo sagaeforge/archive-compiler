@@ -27,6 +27,11 @@ static const char* binOpName(HIRBinOp op) {
         case HIRBinOp::BitXor: return "^";
         case HIRBinOp::Shl:    return "<<";
         case HIRBinOp::Shr:    return ">>";
+        case HIRBinOp::AddWrap: return "+%";
+        case HIRBinOp::SubWrap: return "-%";
+        case HIRBinOp::MulWrap: return "*%";
+        case HIRBinOp::AddSat:  return "+|";
+        case HIRBinOp::SubSat:  return "-|";
     }
     return "?";
 }

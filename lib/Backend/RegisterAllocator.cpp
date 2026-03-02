@@ -144,6 +144,7 @@ static void scanOperandUses(const MachInstr& instr, uint32_t idx,
     if (instr.op == X86Op::Add || instr.op == X86Op::Sub ||
         instr.op == X86Op::IMul || instr.op == X86Op::Xor ||
         instr.op == X86Op::And || instr.op == X86Op::Or ||
+        instr.op == X86Op::Cmovcc ||
         instr.op == X86Op::Addsd || instr.op == X86Op::Subsd ||
         instr.op == X86Op::Mulsd || instr.op == X86Op::Divsd ||
         instr.op == X86Op::Addss || instr.op == X86Op::Subss ||

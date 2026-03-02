@@ -125,6 +125,8 @@ struct HIRIdentExpr : HIRExpr {
 
 enum class HIRBinOp : uint8_t {
     Add, Sub, Mul, Div, Mod,
+    AddWrap, SubWrap, MulWrap,    // wrapping: +%, -%, *%
+    AddSat, SubSat,                // saturating: +|, -|
     Eq, NotEq, Lt, LtEq, Gt, GtEq,
     And, Or,
     BitAnd, BitOr, BitXor, Shl, Shr

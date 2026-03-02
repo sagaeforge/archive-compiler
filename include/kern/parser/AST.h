@@ -234,6 +234,8 @@ struct IdentExpr : Expr {
 
 enum class BinOpKind {
     Add, Sub, Mul, Div, Mod,
+    AddWrap, SubWrap, MulWrap,    // wrapping: +%, -%, *%
+    AddSat, SubSat,                // saturating: +|, -|
     Eq, NotEq, Lt, LtEq, Gt, GtEq,
     And, Or,
     BitAnd, BitOr, BitXor, Shl, Shr

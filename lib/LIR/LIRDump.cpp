@@ -15,6 +15,11 @@ const char* lirOpName(LIROp op) {
         case LIROp::Mul:         return "mul";
         case LIROp::Div:         return "div";
         case LIROp::Mod:         return "mod";
+        case LIROp::AddWrap:     return "add_wrap";
+        case LIROp::SubWrap:     return "sub_wrap";
+        case LIROp::MulWrap:     return "mul_wrap";
+        case LIROp::AddSat:      return "add_sat";
+        case LIROp::SubSat:      return "sub_sat";
         case LIROp::BAnd:        return "band";
         case LIROp::BOr:         return "bor";
         case LIROp::BXor:        return "bxor";
@@ -91,6 +96,8 @@ void dumpLIRInstr(const LIRInstr& i, const TypeTable& types, std::ostream& out) 
             break;
         case LIROp::Add: case LIROp::Sub: case LIROp::Mul:
         case LIROp::Div: case LIROp::Mod:
+        case LIROp::AddWrap: case LIROp::SubWrap: case LIROp::MulWrap:
+        case LIROp::AddSat: case LIROp::SubSat:
         case LIROp::BAnd: case LIROp::BOr: case LIROp::BXor:
         case LIROp::Shl: case LIROp::Shr:
         case LIROp::FAdd: case LIROp::FSub: case LIROp::FMul:

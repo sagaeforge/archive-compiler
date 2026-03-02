@@ -36,6 +36,8 @@ void dumpMachInstr(const MachInstr& instr, std::ostream& out) {
         out << "set" << condCodeSuffix(instr.cc);
     } else if (instr.op == X86Op::Jcc) {
         out << "j" << condCodeSuffix(instr.cc);
+    } else if (instr.op == X86Op::Cmovcc) {
+        out << "cmov" << condCodeSuffix(instr.cc);
     } else if (instr.op == X86Op::Pseudo_ParallelMove) {
         out << "parallel_move";
         for (uint8_t i = 0; i + 1 < instr.operand_count; i += 2) {

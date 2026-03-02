@@ -95,6 +95,7 @@ const char* x86OpName(X86Op op) {
         case X86Op::Cmp:    return "cmp";
         case X86Op::Test:   return "test";
         case X86Op::Setcc:  return "set";
+        case X86Op::Cmovcc: return "cmov";
         case X86Op::Jmp:    return "jmp";
         case X86Op::Jcc:    return "j";
         case X86Op::Call:   return "call";
@@ -144,6 +145,8 @@ const char* condCodeSuffix(CondCode cc) {
         case CondCode::BE: return "be";
         case CondCode::A:  return "a";
         case CondCode::AE: return "ae";
+        case CondCode::O:  return "o";
+        case CondCode::NO: return "no";
     }
     return "?";
 }

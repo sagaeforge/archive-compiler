@@ -222,6 +222,11 @@ bool HIRBuilder::constEvalInt(HIRExpr* expr, int64_t* out,
             case HIRBinOp::Shr:   *out = lv >> rv; return true;
             case HIRBinOp::And:   *out = (lv && rv) ? 1 : 0; return true;
             case HIRBinOp::Or:    *out = (lv || rv) ? 1 : 0; return true;
+            case HIRBinOp::AddWrap: *out = lv + rv; return true;
+            case HIRBinOp::SubWrap: *out = lv - rv; return true;
+            case HIRBinOp::MulWrap: *out = lv * rv; return true;
+            case HIRBinOp::AddSat:  *out = lv + rv; return true;
+            case HIRBinOp::SubSat:  *out = lv - rv; return true;
         }
         return false;
     }
@@ -1206,6 +1211,11 @@ static HIRBinOp convertBinOp(BinOpKind op) {
         case BinOpKind::BitXor: return HIRBinOp::BitXor;
         case BinOpKind::Shl:    return HIRBinOp::Shl;
         case BinOpKind::Shr:    return HIRBinOp::Shr;
+        case BinOpKind::AddWrap: return HIRBinOp::AddWrap;
+        case BinOpKind::SubWrap: return HIRBinOp::SubWrap;
+        case BinOpKind::MulWrap: return HIRBinOp::MulWrap;
+        case BinOpKind::AddSat:  return HIRBinOp::AddSat;
+        case BinOpKind::SubSat:  return HIRBinOp::SubSat;
     }
     return HIRBinOp::Add;
 }
@@ -1224,6 +1234,9 @@ HIRExpr* HIRBuilder::buildBinOp(const Expr* expr, std::optional<TypeId> ctx_type
         case BinOpKind::Add: case BinOpKind::Sub:
         case BinOpKind::Mul: case BinOpKind::Div:
         case BinOpKind::Mod:
+        case BinOpKind::AddWrap: case BinOpKind::SubWrap:
+        case BinOpKind::MulWrap:
+        case BinOpKind::AddSat: case BinOpKind::SubSat:
         case BinOpKind::BitAnd: case BinOpKind::BitOr:
         case BinOpKind::BitXor: case BinOpKind::Shl:
         case BinOpKind::Shr:
@@ -1267,6 +1280,19 @@ HIRExpr* HIRBuilder::buildBinOp(const Expr* expr, std::optional<TypeId> ctx_type
             if (!(isIntegerType(lhs_type) || isFloatType(lhs_type)) || lhs_type != rhs_type) {
                 ctx_.diag.error(expr->loc,
                     std::string("arithmetic operators require same numeric type operands, got ") +
+                    ctx_.types.name(lhs_type) + " and " + ctx_.types.name(rhs_type));
+                e->type = TypeTable::Error;
+            } else {
+                e->type = lhs_type;
+            }
+            break;
+
+        case BinOpKind::AddWrap: case BinOpKind::SubWrap:
+        case BinOpKind::MulWrap:
+        case BinOpKind::AddSat: case BinOpKind::SubSat:
+            if (!isIntegerType(lhs_type) || lhs_type != rhs_type) {
+                ctx_.diag.error(expr->loc,
+                    std::string("wrapping/saturating operators require same integer type operands, got ") +
                     ctx_.types.name(lhs_type) + " and " + ctx_.types.name(rhs_type));
                 e->type = TypeTable::Error;
             } else {
@@ -2186,6 +2212,16 @@ HIRExpr* HIRBuilder::buildIndexAccess(const Expr* expr) {
         const auto& ti = ctx_.types.get(arr_type);
         if (ti.kind == TypeKind::Array) {
             e->type = ti.array.element;
+            // Constant bounds check: arr[N] where N >= array size
+            if (e->index->kind == HIRExpr::Kind::IntLit) {
+                auto* idx = static_cast<const HIRIntLitExpr*>(e->index);
+                if (idx->value < 0 || static_cast<uint64_t>(idx->value) >= ti.array.count) {
+                    ctx_.diag.error(expr->loc,
+                        "index " + std::to_string(idx->value) + " out of bounds for array of size " +
+                        std::to_string(ti.array.count));
+                    e->type = TypeTable::Error;
+                }
+            }
         } else {
             ctx_.diag.error(expr->loc, "index access on non-array type");
             e->type = TypeTable::Error;

@@ -25,6 +25,12 @@ enum class LIROp : uint8_t {
     // Integer arithmetic
     Add, Sub, Mul, Div, Mod,
 
+    // Wrapping arithmetic (mod 2^N, no trap)
+    AddWrap, SubWrap, MulWrap,
+
+    // Saturating arithmetic (clamp to min/max)
+    AddSat, SubSat,
+
     // Bitwise
     BAnd, BOr, BXor, Shl, Shr,
 

@@ -202,9 +202,14 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
         case LIROp::Add:
         case LIROp::Sub:
         case LIROp::Mul:
+        case LIROp::AddWrap:
+        case LIROp::SubWrap:
+        case LIROp::MulWrap:
         case LIROp::BAnd:
         case LIROp::BOr:
         case LIROp::BXor:       selectBinOp(instr); break;
+        case LIROp::AddSat:
+        case LIROp::SubSat:     selectSaturatingOp(instr); break;
         case LIROp::Shl:
         case LIROp::Shr:        selectShift(instr); break;
         case LIROp::Div:        selectDiv(instr, false); break;
@@ -353,9 +358,12 @@ void InstructionSelector::selectBinOp(const LIRInstr& instr) {
 
     X86Op op;
     switch (instr.op) {
-        case LIROp::Add:  op = X86Op::Add; break;
-        case LIROp::Sub:  op = X86Op::Sub; break;
-        case LIROp::Mul:  op = X86Op::IMul; break;
+        case LIROp::Add:     op = X86Op::Add; break;
+        case LIROp::Sub:     op = X86Op::Sub; break;
+        case LIROp::Mul:     op = X86Op::IMul; break;
+        case LIROp::AddWrap: op = X86Op::Add; break;
+        case LIROp::SubWrap: op = X86Op::Sub; break;
+        case LIROp::MulWrap: op = X86Op::IMul; break;
         case LIROp::BAnd: op = X86Op::And; break;
         case LIROp::BOr:  op = X86Op::Or; break;
         case LIROp::BXor: op = X86Op::Xor; break;
@@ -363,6 +371,94 @@ void InstructionSelector::selectBinOp(const LIRInstr& instr) {
     }
 
     emit(makeAlu(op, MachOperand::virt(dst), MachOperand::virt(rhs), w));
+}
+
+void InstructionSelector::selectSaturatingOp(const LIRInstr& instr) {
+    uint8_t w = widthOf(instr.type);
+    VReg dst = instr.result;
+    VReg lhs = instr.bin.lhs;
+    VReg rhs = instr.bin.rhs;
+
+    // Check if unsigned
+    bool is_unsigned = false;
+    if (instr.type < ctx_.types.size()) {
+        const auto& info = ctx_.types.get(instr.type);
+        if (info.kind == TypeKind::Primitive) {
+            auto p = info.primitive.prim;
+            is_unsigned = (p == PrimitiveKind::U8 || p == PrimitiveKind::U16 ||
+                           p == PrimitiveKind::U32 || p == PrimitiveKind::U64);
+        }
+    }
+
+    // mov dst, lhs
+    emit(makeMov(MachOperand::virt(dst), MachOperand::virt(lhs), w));
+
+    // add/sub dst, rhs
+    X86Op arith_op = (instr.op == LIROp::AddSat) ? X86Op::Add : X86Op::Sub;
+    emit(makeAlu(arith_op, MachOperand::virt(dst), MachOperand::virt(rhs), w));
+
+    // Compute saturated value in a temp register, then cmov on overflow
+    VReg sat_tmp = freshVReg();
+
+    if (is_unsigned) {
+        if (instr.op == LIROp::AddSat) {
+            // Unsigned add overflow: carry flag set → clamp to UINT_MAX
+            emit(makeMov(MachOperand::virt(sat_tmp), MachOperand::immediate(-1), w));
+            MachInstr cmov(X86Op::Cmovcc);
+            cmov.cc = CondCode::B;
+            cmov.width = w;
+            cmov.operand_count = 2;
+            cmov.operand(0) = MachOperand::virt(dst);
+            cmov.operand(1) = MachOperand::virt(sat_tmp);
+            emit(cmov);
+        } else {
+            // Unsigned sub underflow: borrow → clamp to 0
+            emit(makeMov(MachOperand::virt(sat_tmp), MachOperand::immediate(0), w));
+            MachInstr cmov(X86Op::Cmovcc);
+            cmov.cc = CondCode::B;
+            cmov.width = w;
+            cmov.operand_count = 2;
+            cmov.operand(0) = MachOperand::virt(dst);
+            cmov.operand(1) = MachOperand::virt(sat_tmp);
+            emit(cmov);
+        }
+    } else {
+        // Signed overflow: use sign of result to determine which limit
+        //   overflow with negative result → positive overflow → INT_MAX
+        //   overflow with positive result → negative overflow → INT_MIN
+        int64_t max_val = 0, min_val = 0;
+        switch (w) {
+            case 8:  max_val = 0x7F;        min_val = -0x80;         break;
+            case 16: max_val = 0x7FFF;      min_val = -0x8000;       break;
+            case 32: max_val = 0x7FFFFFFF;  min_val = -0x80000000LL; break;
+            default: max_val = 0x7FFFFFFFFFFFFFFFLL;
+                     min_val = static_cast<int64_t>(0x8000000000000000ULL); break;
+        }
+
+        // Load INT_MAX into sat_tmp
+        emit(makeMov(MachOperand::virt(sat_tmp), MachOperand::immediate(max_val), w));
+
+        // If result is non-negative (SF=0), we overflowed negative → want INT_MIN
+        VReg min_tmp = freshVReg();
+        emit(makeMov(MachOperand::virt(min_tmp), MachOperand::immediate(min_val), w));
+
+        MachInstr cmov_sign(X86Op::Cmovcc);
+        cmov_sign.cc = CondCode::GE;  // SF=0 → result non-negative
+        cmov_sign.width = w;
+        cmov_sign.operand_count = 2;
+        cmov_sign.operand(0) = MachOperand::virt(sat_tmp);
+        cmov_sign.operand(1) = MachOperand::virt(min_tmp);
+        emit(cmov_sign);
+
+        // cmovo dst, sat_tmp (if overflow, replace with saturated value)
+        MachInstr cmov_ov(X86Op::Cmovcc);
+        cmov_ov.cc = CondCode::O;
+        cmov_ov.width = w;
+        cmov_ov.operand_count = 2;
+        cmov_ov.operand(0) = MachOperand::virt(dst);
+        cmov_ov.operand(1) = MachOperand::virt(sat_tmp);
+        emit(cmov_ov);
+    }
 }
 
 void InstructionSelector::selectDiv(const LIRInstr& instr, bool is_mod) {

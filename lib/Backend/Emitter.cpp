@@ -220,6 +220,13 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             emitOperand(instr.dst(), 8);
             break;
 
+        case X86Op::Cmovcc:
+            out_ << "cmov" << condCodeSuffix(instr.cc) << " ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
         case X86Op::Jmp:
             out_ << "jmp ";
             emitOperand(instr.dst(), 64);

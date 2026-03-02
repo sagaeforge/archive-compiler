@@ -44,8 +44,13 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::KwWith:     return "with";
         case TokenKind::KwOwn:      return "own";
         case TokenKind::Plus:       return "+";
+        case TokenKind::PlusWrap:   return "+%";
+        case TokenKind::PlusSat:    return "+|";
         case TokenKind::Minus:      return "-";
+        case TokenKind::MinusWrap:  return "-%";
+        case TokenKind::MinusSat:   return "-|";
         case TokenKind::Star:       return "*";
+        case TokenKind::StarWrap:   return "*%";
         case TokenKind::Slash:      return "/";
         case TokenKind::Percent:    return "%";
         case TokenKind::BitOr:      return "|";
@@ -331,12 +336,19 @@ Token Lexer::nextToken() {
         case ';': return makeToken(TokenKind::Semicolon);
         case '.': return makeToken(TokenKind::Dot);
         case '&': return makeToken(TokenKind::Ampersand);
-        case '+': return makeToken(TokenKind::Plus);
-        case '*': return makeToken(TokenKind::Star);
+        case '+':
+            if (match('%')) return makeToken(TokenKind::PlusWrap);
+            if (match('|')) return makeToken(TokenKind::PlusSat);
+            return makeToken(TokenKind::Plus);
+        case '*':
+            if (match('%')) return makeToken(TokenKind::StarWrap);
+            return makeToken(TokenKind::Star);
         case '/': return makeToken(TokenKind::Slash);
 
         case '-':
             if (match('>')) return makeToken(TokenKind::Arrow);
+            if (match('%')) return makeToken(TokenKind::MinusWrap);
+            if (match('|')) return makeToken(TokenKind::MinusSat);
             return makeToken(TokenKind::Minus);
 
         case '=':

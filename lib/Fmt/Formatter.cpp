@@ -630,6 +630,11 @@ const char* Formatter::binOpStr(BinOpKind op) {
         case BinOpKind::BitXor: return "^";
         case BinOpKind::Shl: return "<<";
         case BinOpKind::Shr: return ">>";
+        case BinOpKind::AddWrap: return "+%";
+        case BinOpKind::SubWrap: return "-%";
+        case BinOpKind::MulWrap: return "*%";
+        case BinOpKind::AddSat: return "+|";
+        case BinOpKind::SubSat: return "-|";
     }
     return "??";
 }

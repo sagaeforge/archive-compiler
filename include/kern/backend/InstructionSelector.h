@@ -104,6 +104,9 @@ private:
     // Shift: special handling for shl/shr/sar (count in cl)
     void selectShift(const LIRInstr& instr);
 
+    // Saturating arithmetic: add_sat, sub_sat (clamp on overflow)
+    void selectSaturatingOp(const LIRInstr& instr);
+
     // Map LIR comparison op to x86 CondCode
     static CondCode mapICmpCC(LIROp op);
     static CondCode mapFCmpCC(LIROp op);

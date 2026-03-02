@@ -505,6 +505,11 @@ VReg LIRBuilder::lowerBinOp(const HIRBinOpExpr* expr) {
         case HIRBinOp::BitXor: lir_op = LIROp::BXor; break;
         case HIRBinOp::Shl:   lir_op = LIROp::Shl; break;
         case HIRBinOp::Shr:   lir_op = LIROp::Shr; break;
+        case HIRBinOp::AddWrap: lir_op = LIROp::AddWrap; break;
+        case HIRBinOp::SubWrap: lir_op = LIROp::SubWrap; break;
+        case HIRBinOp::MulWrap: lir_op = LIROp::MulWrap; break;
+        case HIRBinOp::AddSat:  lir_op = LIROp::AddSat; break;
+        case HIRBinOp::SubSat:  lir_op = LIROp::SubSat; break;
         case HIRBinOp::Eq:    lir_op = is_float ? LIROp::FCmpEq : LIROp::ICmpEq; break;
         case HIRBinOp::NotEq: lir_op = is_float ? LIROp::FCmpNe : LIROp::ICmpNe; break;
         case HIRBinOp::Lt:    lir_op = is_float ? LIROp::FCmpLt : LIROp::ICmpLt; break;
