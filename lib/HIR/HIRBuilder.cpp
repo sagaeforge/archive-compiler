@@ -1046,7 +1046,8 @@ HIRModule* HIRBuilder::build(const Module* ast) {
     for (uint32_t i = 0; i < ast->struct_count; ++i) {
         auto* hsd = ctx_.arena.make<HIRStructDecl>();
         hsd->name = ctx_.strings.intern(ast->structs[i]->name);
-        hsd->type_id = named_types_[ast->structs[i]->name];
+        auto nt_it = named_types_.find(ast->structs[i]->name);
+        hsd->type_id = (nt_it != named_types_.end()) ? nt_it->second : INVALID_TYPE;
         hsd->loc = ast->structs[i]->loc;
         mod->structs[i] = hsd;
     }
@@ -1068,7 +1069,8 @@ HIRModule* HIRBuilder::build(const Module* ast) {
     for (uint32_t i = 0; i < ast->union_count; ++i) {
         auto* hud = ctx_.arena.make<HIRUnionDecl>();
         hud->name = ctx_.strings.intern(ast->unions[i]->name);
-        hud->type_id = named_types_[ast->unions[i]->name];
+        auto unt_it = named_types_.find(ast->unions[i]->name);
+        hud->type_id = (unt_it != named_types_.end()) ? unt_it->second : INVALID_TYPE;
         hud->loc = ast->unions[i]->loc;
         mod->unions[i] = hud;
     }
@@ -1433,7 +1435,7 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
         case Expr::Kind::Match:       return buildMatch(expr, ctx_type);
         case Expr::Kind::Block:       return buildBlock(expr, ctx_type);
         case Expr::Kind::Return:      return buildReturn(expr);
-        case Expr::Kind::StructLit:   return buildStructLit(expr);
+        case Expr::Kind::StructLit:   return buildStructLit(expr, ctx_type);
         case Expr::Kind::FieldAccess: return buildFieldAccess(expr);
         case Expr::Kind::EnumAccess:  return buildEnumAccess(expr);
         case Expr::Kind::UnionVariant:return buildUnionVariant(expr);
@@ -2531,7 +2533,7 @@ HIRExpr* HIRBuilder::buildReturn(const Expr* expr) {
     return e;
 }
 
-HIRExpr* HIRBuilder::buildStructLit(const Expr* expr) {
+HIRExpr* HIRBuilder::buildStructLit(const Expr* expr, std::optional<TypeId> ctx_type) {
     auto* sl = static_cast<const StructLitExpr*>(expr);
     auto* e = ctx_.arena.make<HIRStructLitExpr>();
     e->kind = HIRExpr::Kind::StructLit;
@@ -2539,6 +2541,23 @@ HIRExpr* HIRBuilder::buildStructLit(const Expr* expr) {
     e->struct_name = ctx_.strings.intern(sl->struct_name);
 
     auto type_it = named_types_.find(sl->struct_name);
+
+    // Generic struct literal: "Box { ... }" where Box is generic and context provides
+    // the monomorphized type (e.g., Box_i64). Use the context type's struct name.
+    if ((type_it == named_types_.end() || type_it->second == INVALID_TYPE) &&
+        generic_structs_.count(sl->struct_name) && ctx_type.has_value()) {
+        TypeId ctx_tid = ctx_type.value();
+        if (ctx_tid < ctx_.types.size()) {
+            const auto& cti = ctx_.types.get(ctx_tid);
+            if (cti.kind == TypeKind::Struct) {
+                auto mangled = cti.struct_.name;
+                type_it = named_types_.find(mangled);
+                if (type_it != named_types_.end()) {
+                    e->struct_name = mangled;
+                }
+            }
+        }
+    }
 
     // Slice<T> struct literal: infer element type from the 'data' field
     if ((type_it == named_types_.end() || type_it->second == INVALID_TYPE) &&
@@ -2772,6 +2791,24 @@ HIRExpr* HIRBuilder::buildUnionVariant(const Expr* expr) {
     e->variant_name = ctx_.strings.intern(uv->variant_name);
 
     auto type_it = named_types_.find(uv->union_name);
+
+    // Generic union: "Result::Ok(...)" where Result is generic — resolve from
+    // current_return_type_ which should be the monomorphized variant (e.g. Result_i64)
+    if ((type_it == named_types_.end() || (type_it->second < ctx_.types.size() &&
+         ctx_.types.get(type_it->second).kind != TypeKind::Union)) &&
+        generic_unions_.count(uv->union_name) &&
+        current_return_type_ != INVALID_TYPE && current_return_type_ < ctx_.types.size()) {
+        const auto& ret_ti = ctx_.types.get(current_return_type_);
+        if (ret_ti.kind == TypeKind::Union) {
+            auto mangled = ret_ti.union_.name;
+            auto mono_it = named_types_.find(mangled);
+            if (mono_it != named_types_.end()) {
+                type_it = mono_it;
+                e->union_name = mangled;
+            }
+        }
+    }
+
     if (type_it == named_types_.end()) {
         ctx_.diag.error(expr->loc, std::string("unknown union '") +
                     std::string(uv->union_name) + "'");

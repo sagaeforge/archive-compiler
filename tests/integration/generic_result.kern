@@ -1,0 +1,26 @@
+union Result<T> {
+    Ok(T),
+    Err(i64)
+}
+
+fn try_parse(c: i64) -> Result<i64> {
+    if c >= 48 and c <= 57 {
+        Result::Ok(c - 48)
+    } else {
+        Result::Err(1)
+    }
+}
+
+fn parse_two(a: i64, b: i64) -> Result<i64> {
+    val d1: i64 = try_parse(a)?
+    val d2: i64 = try_parse(b)?
+    Result::Ok(d1 * 10 + d2)
+}
+
+fn main() -> i64 {
+    val r: Result<i64> = parse_two(52, 50)
+    match r {
+        Ok(v) => v,
+        Err(e) => e + 100
+    }
+}

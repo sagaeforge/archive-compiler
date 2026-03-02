@@ -66,7 +66,7 @@ private:
     HIRExpr* buildMatch(const Expr* expr, std::optional<TypeId> ctx_type);
     HIRExpr* buildBlock(const Expr* expr, std::optional<TypeId> ctx_type);
     HIRExpr* buildReturn(const Expr* expr);
-    HIRExpr* buildStructLit(const Expr* expr);
+    HIRExpr* buildStructLit(const Expr* expr, std::optional<TypeId> ctx_type = std::nullopt);
     HIRExpr* buildFieldAccess(const Expr* expr);
     HIRExpr* buildEnumAccess(const Expr* expr);
     HIRExpr* buildUnionVariant(const Expr* expr);

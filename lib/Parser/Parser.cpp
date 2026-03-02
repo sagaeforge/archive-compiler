@@ -3939,11 +3939,32 @@ Expr* Parser::parseForRange() {
                 }
             } else {
                 Expr* e = parseExpr();
-                auto* es = arena_.make<ExprStmt>();
-                es->kind = Stmt::Kind::ExprStmt;
-                es->loc = e->loc;
-                es->expr = e;
-                fe_stmts.push_back(es);
+                skipNewlines();
+                if ((check(TokenKind::Eq) || isCompoundAssign()) && isDerefTarget(e)) {
+                    bool is_compound = isCompoundAssign();
+                    BinOpKind compound_op = BinOpKind::Add;
+                    if (is_compound) {
+                        compound_op = compoundAssignOp();
+                    } else {
+                        advance();
+                    }
+                    skipNewlines();
+                    Expr* rhs = parseExpr();
+                    Expr* value = is_compound
+                        ? wrapCompoundAssign(e, rhs, compound_op, e->loc) : rhs;
+                    auto* da = arena_.make<DerefAssignStmt>();
+                    da->kind = Stmt::Kind::DerefAssign;
+                    da->loc = e->loc;
+                    da->target = e;
+                    da->value = value;
+                    fe_stmts.push_back(da);
+                } else {
+                    auto* es = arena_.make<ExprStmt>();
+                    es->kind = Stmt::Kind::ExprStmt;
+                    es->loc = e->loc;
+                    es->expr = e;
+                    fe_stmts.push_back(es);
+                }
             }
             while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
         }
@@ -4068,11 +4089,32 @@ Expr* Parser::parseForRange() {
             }
         } else {
             Expr* expr = parseExpr();
-            auto* es = arena_.make<ExprStmt>();
-            es->kind = Stmt::Kind::ExprStmt;
-            es->loc = expr->loc;
-            es->expr = expr;
-            stmts.push_back(es);
+            skipNewlines();
+            if ((check(TokenKind::Eq) || isCompoundAssign()) && isDerefTarget(expr)) {
+                bool is_compound = isCompoundAssign();
+                BinOpKind compound_op = BinOpKind::Add;
+                if (is_compound) {
+                    compound_op = compoundAssignOp();
+                } else {
+                    advance();
+                }
+                skipNewlines();
+                Expr* rhs = parseExpr();
+                Expr* value = is_compound
+                    ? wrapCompoundAssign(expr, rhs, compound_op, expr->loc) : rhs;
+                auto* da = arena_.make<DerefAssignStmt>();
+                da->kind = Stmt::Kind::DerefAssign;
+                da->loc = expr->loc;
+                da->target = expr;
+                da->value = value;
+                stmts.push_back(da);
+            } else {
+                auto* es = arena_.make<ExprStmt>();
+                es->kind = Stmt::Kind::ExprStmt;
+                es->loc = expr->loc;
+                es->expr = expr;
+                stmts.push_back(es);
+            }
         }
         while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
     }
@@ -4215,11 +4257,32 @@ Expr* Parser::parseWhileLoop() {
             }
         } else {
             Expr* expr = parseExpr();
-            auto* es = arena_.make<ExprStmt>();
-            es->kind = Stmt::Kind::ExprStmt;
-            es->loc = expr->loc;
-            es->expr = expr;
-            stmts.push_back(es);
+            skipNewlines();
+            if ((check(TokenKind::Eq) || isCompoundAssign()) && isDerefTarget(expr)) {
+                bool is_compound = isCompoundAssign();
+                BinOpKind compound_op = BinOpKind::Add;
+                if (is_compound) {
+                    compound_op = compoundAssignOp();
+                } else {
+                    advance();
+                }
+                skipNewlines();
+                Expr* rhs = parseExpr();
+                Expr* value = is_compound
+                    ? wrapCompoundAssign(expr, rhs, compound_op, expr->loc) : rhs;
+                auto* da = arena_.make<DerefAssignStmt>();
+                da->kind = Stmt::Kind::DerefAssign;
+                da->loc = expr->loc;
+                da->target = expr;
+                da->value = value;
+                stmts.push_back(da);
+            } else {
+                auto* es = arena_.make<ExprStmt>();
+                es->kind = Stmt::Kind::ExprStmt;
+                es->loc = expr->loc;
+                es->expr = expr;
+                stmts.push_back(es);
+            }
         }
         while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
     }
