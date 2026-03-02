@@ -1,0 +1,11 @@
+// Test defer statement — deferred code runs at end of block
+fn main() -> i64 {
+    var result: i64 = 0
+    {
+        result = 10
+        defer { result = result + 20 }
+        result = result + 12
+    }
+    // After block: result = 10, then +12 = 22, then defer {+20} = 42
+    result
+}

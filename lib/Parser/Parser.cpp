@@ -220,6 +220,12 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
                         dumpExpr(td->init, out, ind + 2);
                         break;
                     }
+                    case Stmt::Kind::Defer: {
+                        auto* ds = static_cast<const DeferStmt*>(st);
+                        out << "Defer\n";
+                        dumpExpr(ds->body, out, ind + 2);
+                        break;
+                    }
                 }
             }
             if (bl->result) {
@@ -3000,6 +3006,13 @@ Expr* Parser::parseBlockExpr() {
                 cs->args = nullptr;
             }
             stmts.push_back(cs);
+        } else if (check(TokenKind::KwDefer)) {
+            Token defer_tok = advance(); // consume 'defer'
+            auto* ds = arena_.make<DeferStmt>();
+            ds->kind = Stmt::Kind::Defer;
+            ds->loc = defer_tok.loc;
+            ds->body = parseExpr();
+            stmts.push_back(ds);
         } else if (check(TokenKind::Ident)) {
             // Could be assignment, field assignment, or an expression
             Token identTok = peek();

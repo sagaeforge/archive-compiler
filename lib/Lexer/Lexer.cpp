@@ -55,6 +55,7 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::KwFor:      return "for";
         case TokenKind::KwIn:       return "in";
         case TokenKind::KwWhile:    return "while";
+        case TokenKind::KwDefer:    return "defer";
         case TokenKind::Plus:       return "+";
         case TokenKind::PlusWrap:   return "+%";
         case TokenKind::PlusSat:    return "+|";
@@ -331,6 +332,7 @@ TokenKind Lexer::identifierKind(std::string_view text) {
     if (text == "for")      return TokenKind::KwFor;
     if (text == "in")       return TokenKind::KwIn;
     if (text == "while")    return TokenKind::KwWhile;
+    if (text == "defer")    return TokenKind::KwDefer;
     return TokenKind::Ident;
 }
 

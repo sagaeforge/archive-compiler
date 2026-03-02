@@ -779,6 +779,12 @@ void Formatter::formatStmt(const Stmt* stmt) {
             formatExpr(td->init);
             break;
         }
+        case Stmt::Kind::Defer: {
+            auto* ds = static_cast<const DeferStmt*>(stmt);
+            out_ << "defer ";
+            formatExpr(ds->body);
+            break;
+        }
     }
     out_ << "\n";
 }

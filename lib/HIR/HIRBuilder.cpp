@@ -2407,22 +2407,31 @@ HIRExpr* HIRBuilder::buildBlock(const Expr* expr, std::optional<TypeId> ctx_type
     e->kind = HIRExpr::Kind::Block;
     e->loc = expr->loc;
 
-    // Count HIR stmts needed — TupleDestruct expands to N+1 stmts
+    // Count HIR stmts needed — TupleDestruct expands, Defer stmts are appended at end
     uint32_t hir_stmt_count = 0;
+    uint32_t defer_count = 0;
     for (uint32_t i = 0; i < block->stmt_count; ++i) {
         if (block->stmts[i]->kind == Stmt::Kind::TupleDestruct) {
             auto* td = static_cast<const TupleDestructStmt*>(block->stmts[i]);
             hir_stmt_count += td->name_count + 1; // temp + N field bindings
+        } else if (block->stmts[i]->kind == Stmt::Kind::Defer) {
+            defer_count++;
+            // Defer stmts don't occupy a slot here — they're appended at end
         } else {
             hir_stmt_count++;
         }
     }
-    e->stmt_count = hir_stmt_count;
-    e->stmts = ctx_.arena.makeArray<HIRStmt*>(hir_stmt_count);
+    // Allocate space for normal stmts + deferred stmts
+    e->stmt_count = hir_stmt_count + defer_count;
+    e->stmts = ctx_.arena.makeArray<HIRStmt*>(e->stmt_count);
     uint32_t si = 0;
+    // Collect defer bodies in order (will be reversed for LIFO execution)
+    std::vector<const DeferStmt*> defers;
     for (uint32_t i = 0; i < block->stmt_count; ++i) {
         if (block->stmts[i]->kind == Stmt::Kind::TupleDestruct) {
             buildTupleDestructStmts(block->stmts[i], e->stmts, si);
+        } else if (block->stmts[i]->kind == Stmt::Kind::Defer) {
+            defers.push_back(static_cast<const DeferStmt*>(block->stmts[i]));
         } else {
             e->stmts[si++] = buildStmt(block->stmts[i]);
         }
@@ -2435,6 +2444,16 @@ HIRExpr* HIRBuilder::buildBlock(const Expr* expr, std::optional<TypeId> ctx_type
         e->result = nullptr;
         e->type = TypeTable::Unit;
     }
+
+    // Append deferred stmts in reverse order (LIFO — last defer runs first)
+    for (auto it = defers.rbegin(); it != defers.rend(); ++it) {
+        auto* ds = ctx_.arena.make<HIRExprStmt>();
+        ds->kind = HIRStmt::Kind::ExprStmt;
+        ds->loc = (*it)->loc;
+        ds->expr = buildExpr((*it)->body);
+        e->stmts[si++] = ds;
+    }
+
     return e;
 }
 
@@ -4381,6 +4400,15 @@ HIRStmt* HIRBuilder::buildStmt(const Stmt* stmt) {
             s->kind = HIRStmt::Kind::ExprStmt;
             s->loc = stmt->loc;
             s->expr = errorExpr(stmt->loc);
+            return s;
+        }
+        case Stmt::Kind::Defer: {
+            // Should be handled in buildBlock expansion, not here
+            auto* ds = static_cast<const DeferStmt*>(stmt);
+            auto* s = ctx_.arena.make<HIRExprStmt>();
+            s->kind = HIRStmt::Kind::ExprStmt;
+            s->loc = stmt->loc;
+            s->expr = buildExpr(ds->body);
             return s;
         }
     }

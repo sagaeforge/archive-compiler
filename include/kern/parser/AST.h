@@ -465,7 +465,7 @@ struct InlineAsmExpr : Expr {
 
 // --- Statements ---
 struct Stmt {
-    enum class Kind { ValDecl, VarDecl, ExprStmt, Assign, FieldAssign, DerefAssign, Break, Continue, IndexAssign, TupleDestruct };
+    enum class Kind { ValDecl, VarDecl, ExprStmt, Assign, FieldAssign, DerefAssign, Break, Continue, IndexAssign, TupleDestruct, Defer };
     Kind kind;
     SourceLocation loc;
 };
@@ -523,6 +523,10 @@ struct TupleDestructStmt : Stmt {
     uint32_t name_count;
     bool is_var;              // true = var, false = val
     Expr* init;               // the tuple expression
+};
+
+struct DeferStmt : Stmt {
+    Expr* body;  // expression/block to execute at scope exit
 };
 
 // --- Declarations ---

@@ -58,6 +58,7 @@ enum class TokenKind : uint8_t {
     KwFor,
     KwIn,
     KwWhile,
+    KwDefer,
 
     // Operators
     Plus,        // +
