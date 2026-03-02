@@ -184,7 +184,9 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             break;
 
         case X86Op::Cqo:
-            out_ << "cqo";
+            if (instr.width == 16) out_ << "cwd";
+            else if (instr.width == 32) out_ << "cdq";
+            else out_ << "cqo";
             break;
 
         case X86Op::Cmp:

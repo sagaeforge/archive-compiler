@@ -22,6 +22,7 @@ class InstructionSelector {
     const GlobalData* globals_ = nullptr;   // module globals for label lookup
     uint32_t global_count_ = 0;
     uint32_t gpr_arg_slot_ = 0;  // current GPR arg slot (for multi-reg params)
+    uint32_t xmm_arg_slot_ = 0;  // current XMM arg slot (for float params)
     TypeId fn_return_type_ = INVALID_TYPE;  // current function's return type
     VReg hidden_ret_ptr_ = INVALID_VREG;    // vreg holding hidden return pointer (>16B struct)
 

@@ -124,6 +124,7 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     struct_vreg_sizes_.clear();
     stack_ptr_vregs_.clear();
     gpr_arg_slot_ = 0;
+    xmm_arg_slot_ = 0;
     fn_return_type_ = fn.return_type;
     hidden_ret_ptr_ = INVALID_VREG;
 
@@ -1282,18 +1283,16 @@ void InstructionSelector::selectBlockArg(const LIRInstr& instr) {
                              MachOperand::stack(base_offset)));
             }
         } else if (is_float_param) {
-            // Float params use separate XMM counter (not tracked in gpr_arg_slot_)
-            // For now, use block_arg.index for XMM since we don't have mixed tracking
-            uint32_t xmm_idx = instr.block_arg.index;  // TODO: separate XMM counter
-            if (xmm_idx < MAX_XMM_ARGS) {
+            if (xmm_arg_slot_ < MAX_XMM_ARGS) {
                 uint8_t w = widthOf(instr.type);
                 X86Op mov_op = (w == 32) ? X86Op::Movss : X86Op::Movsd;
                 MachInstr mi(mov_op);
                 mi.width = w;
                 mi.operand_count = 2;
                 mi.inline_ops[0] = MachOperand::virt(instr.result);
-                mi.inline_ops[1] = MachOperand::precolored(XMM_ARG_REGS[xmm_idx]);
+                mi.inline_ops[1] = MachOperand::precolored(XMM_ARG_REGS[xmm_arg_slot_]);
                 emit(mi);
+                xmm_arg_slot_++;
             }
         } else {
             if (gpr_arg_slot_ < MAX_GPR_ARGS) {
