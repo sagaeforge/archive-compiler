@@ -1,0 +1,7 @@
+fn compute(a: i64, x: f64, b: i64, y: f64, c: i64) -> i64 {
+    a + b + c
+}
+
+fn main() -> i64 {
+    compute(10, 1.5, 20, 2.5, 12)
+}

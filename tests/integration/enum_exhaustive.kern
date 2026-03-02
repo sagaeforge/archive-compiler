@@ -1,0 +1,13 @@
+enum Color { Red, Green, Blue }
+
+fn value(c: Color) -> i64 {
+    match c {
+        Red => 10
+        Green => 20
+        Blue => 12
+    }
+}
+
+fn main() -> i64 {
+    value(Color.Red) + value(Color.Green) + value(Color.Blue)
+}

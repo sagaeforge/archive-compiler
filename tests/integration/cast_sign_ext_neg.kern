@@ -1,0 +1,9 @@
+fn negate_and_widen(x: i8) -> i64 {
+    val y: i8 = 0 - x
+    y as i64
+}
+
+fn main() -> i64 {
+    val result: i64 = negate_and_widen(1)
+    if result == -1 { 42 } else { 0 }
+}
