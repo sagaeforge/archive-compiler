@@ -2930,6 +2930,16 @@ Expr* Parser::parsePrimary() {
     if (tok.kind == TokenKind::LParen) {
         advance();
         skipNewlines();
+        // Unit literal: ()
+        if (check(TokenKind::RParen)) {
+            advance();
+            auto* tuple = arena_.make<TupleLitExpr>();
+            tuple->kind = Expr::Kind::TupleLit;
+            tuple->loc = tok.loc;
+            tuple->count = 0;
+            tuple->elements = nullptr;
+            return tuple;
+        }
         Expr* first = parseExpr();
         skipNewlines();
         // If comma follows → tuple literal

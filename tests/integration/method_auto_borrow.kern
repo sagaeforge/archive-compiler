@@ -1,0 +1,18 @@
+struct Counter {
+    value: i64
+}
+
+trait Countable {
+    fn get(self: Ptr<Counter>) -> i64
+}
+
+impl Countable for Counter {
+    fn get(self: Ptr<Counter>) -> i64 with mem {
+        (*self).value
+    }
+}
+
+fn main() -> i64 with mem {
+    val c: Counter = Counter { value: 42 }
+    c.get()
+}

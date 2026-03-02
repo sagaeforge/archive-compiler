@@ -3646,6 +3646,16 @@ HIRExpr* HIRBuilder::buildIndexAccess(const Expr* expr) {
 HIRExpr* HIRBuilder::buildTupleLit(const Expr* expr) {
     auto* tl = static_cast<const TupleLitExpr*>(expr);
 
+    // () — unit literal
+    if (tl->count == 0) {
+        auto* e = ctx_.arena.make<HIRIntLitExpr>();
+        e->kind = HIRExpr::Kind::IntLit;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->value = 0;
+        return e;
+    }
+
     // Build all element expressions first to determine types
     std::vector<HIRExpr*> elem_exprs;
     std::vector<FieldInfo> fields;
@@ -5015,6 +5025,12 @@ HIRExpr* HIRBuilder::buildMethodCall(const Expr* expr) {
     // Resolve the method
     auto method_name = ctx_.strings.intern(mc->method_name);
     auto mangled = resolveMethod(obj->type, method_name);
+    // If obj is Ptr<T>, try resolving method on T (auto-deref for method call)
+    if (mangled.empty() && obj->type < ctx_.types.size() &&
+        ctx_.types.get(obj->type).kind == TypeKind::Ptr) {
+        TypeId pointee = ctx_.types.get(obj->type).ptr.pointee;
+        mangled = resolveMethod(pointee, method_name);
+    }
     if (mangled.empty()) {
         // Fallback: check if the struct has a field with this name that is a
         // function type.  This enables the vtable pattern: obj.fn_field(args).
@@ -5087,6 +5103,19 @@ HIRExpr* HIRBuilder::buildMethodCall(const Expr* expr) {
     call->args = ctx_.arena.makeArray<HIRExpr*>(total_args);
 
     // First arg is self (the object)
+    // Auto-borrow: if self expects Ptr<T> but obj is T, wrap in AddrOf
+    if (obj->type != sig.param_types[0] && sig.param_types[0] < ctx_.types.size()) {
+        const auto& self_ti = ctx_.types.get(sig.param_types[0]);
+        if (self_ti.kind == TypeKind::Ptr && self_ti.ptr.pointee == obj->type) {
+            auto* addr = ctx_.arena.make<HIRAddrOfExpr>();
+            addr->kind = HIRExpr::Kind::AddrOf;
+            addr->loc = obj->loc;
+            addr->operand = obj;
+            addr->is_mutable = self_ti.ptr.is_mutable;
+            addr->type = sig.param_types[0];
+            obj = addr;
+        }
+    }
     call->args[0] = obj;
     if (obj->type != sig.param_types[0]) {
         ctx_.diag.error(mc->object->loc, std::string("self parameter type mismatch: expected ") +

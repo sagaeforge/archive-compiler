@@ -2992,6 +2992,27 @@ VReg LIRBuilder::lowerAddrOf(const HIRAddrOfExpr* expr) {
             // For primitive types, the var_addr IS the data address
             return var_it->second;
         }
+        // For val struct/array bindings, locals_ holds the data address directly.
+        // Emit FieldPtr +0 to get a Ptr-typed vreg (not struct-tagged).
+        auto val_it = locals_.find(ident->name);
+        if (val_it != locals_.end()) {
+            TypeId operand_type = expr->operand->type;
+            if (operand_type < ctx_.types.size()) {
+                const auto& ti = ctx_.types.get(operand_type);
+                if (ti.kind == TypeKind::Struct || ti.kind == TypeKind::Array) {
+                    VReg ptr = freshVReg();
+                    LIRInstr fp{};
+                    fp.op = LIROp::FieldPtr;
+                    fp.result = ptr;
+                    fp.type = expr->type; // Ptr type
+                    fp.field_ptr.base = val_it->second;
+                    fp.field_ptr.offset = 0;
+                    fp.loc = expr->loc;
+                    emit(fp);
+                    return ptr;
+                }
+            }
+        }
     }
 
     // For &arr[i], compute the element pointer directly without loading the value
