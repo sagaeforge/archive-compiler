@@ -1,0 +1,17 @@
+enum Dir { North, South, East, West }
+
+impl DirTrait for Dir {
+    fn value(self: Dir) -> i64 {
+        match self {
+            North => 0
+            South => 1
+            East => 2
+            West => 42
+        }
+    }
+}
+
+fn main() -> i64 {
+    val d: Dir = Dir.West
+    d.value()
+}

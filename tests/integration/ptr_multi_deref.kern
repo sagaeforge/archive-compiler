@@ -1,0 +1,7 @@
+fn main() -> i64 {
+    var a: i64 = 42
+    val p: Ptr<i64> = &a
+    val v1: i64 = *p
+    val v2: i64 = *p
+    if v1 == v2 { v1 } else { 0 }
+}
