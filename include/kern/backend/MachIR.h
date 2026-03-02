@@ -207,6 +207,25 @@ enum class X86Op : uint8_t {
     // Global variables (.data/.bss/.rodata)
     MovLoadGlobal,  // mov dst, [rel label]
     MovStoreGlobal, // mov [rel label], src
+    LeaGlobal,      // lea dst, [rel label] (address of global, e.g. arrays)
+
+    // Bit manipulation
+    Bsf,            // bit scan forward (ctz)
+    Bsr,            // bit scan reverse (63 - clz)
+    Popcnt,         // population count
+    Bswap,          // byte swap
+
+    // Float <-> Integer conversions
+    Cvttsd2si,      // cvttsd2si gpr, xmm  (f64 → i32/i64, truncate)
+    Cvttss2si,      // cvttss2si gpr, xmm  (f32 → i32/i64, truncate)
+    Cvtsi2sd,       // cvtsi2sd  xmm, gpr  (i32/i64 → f64)
+    Cvtsi2ss,       // cvtsi2ss  xmm, gpr  (i32/i64 → f32)
+    Cvtsd2ss,       // cvtsd2ss  xmm, xmm  (f64 → f32)
+    Cvtss2sd,       // cvtss2sd  xmm, xmm  (f32 → f64)
+
+    // Port I/O
+    In,             // in al/ax/eax, dx
+    Out,            // out dx, al/ax/eax
 };
 
 const char* x86OpName(X86Op op);
@@ -226,11 +245,25 @@ const char* condCodeSuffix(CondCode cc);
 
 static constexpr uint8_t MACH_INLINE_OPERANDS = 4;
 
+// Constraint binding for extended inline asm
+struct MachAsmBinding {
+    std::string_view constraint;
+    PhysReg phys = PhysReg::RAX;   // resolved physical register
+    int32_t stack_offset = 0;       // stack offset for memory operands
+    bool is_memory = false;         // true if this is a memory operand
+};
+
 // Inline assembly payload for MachInstr
 struct MachInlineAsmData {
     const char** lines;
     uint32_t* line_lengths;
     uint32_t line_count;
+    MachAsmBinding* outputs;
+    uint32_t output_count;
+    MachAsmBinding* inputs;
+    uint32_t input_count;
+    std::string_view* clobbers;
+    uint32_t clobber_count;
 };
 
 struct MachInstr {
@@ -238,6 +271,7 @@ struct MachInstr {
     CondCode cc = CondCode::E;      // for Setcc, Jcc
     uint8_t width = 64;             // 8, 16, 32, 64
     uint8_t operand_count = 0;
+    bool is_volatile = false;       // volatile load/store — must not be optimized away
 
     union {
         MachOperand inline_ops[MACH_INLINE_OPERANDS];
@@ -310,7 +344,13 @@ struct MachFunction {
     bool is_intrinsic = false;
     bool is_naked = false;
     bool is_interrupt = false;
+    bool is_inline = false;         // @inline — hint to inline
+    bool is_noinline = false;       // @noinline — prevent inlining
+    bool is_pub = false;            // pub fn — export as global symbol
+    bool is_extern = false;         // extern "C" fn — external C linkage
+    bool is_weak = false;           // @weak — weak symbol linkage
     std::string_view section_name;  // @section("name"), empty = default
+    std::string_view link_name;     // @link_name("name"), empty = auto
 };
 
 // ============================================================================
@@ -318,9 +358,14 @@ struct MachFunction {
 // ============================================================================
 
 struct MachModule {
+    std::string_view module_name;   // propagated from LIRModule
     MachFunction* functions;
     uint32_t fn_count;
     // GlobalData comes from LIRModule (shared)
+
+    // Cross-module extern labels (mangled names for imported functions)
+    std::string_view* extern_labels = nullptr;
+    uint32_t extern_label_count = 0;
 };
 
 } // namespace kern

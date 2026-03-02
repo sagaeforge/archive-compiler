@@ -1254,6 +1254,8 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
     hfn->is_const = fn->is_const;
     hfn->is_naked = fn->is_naked;
     hfn->is_interrupt = fn->is_interrupt;
+    hfn->is_inline = fn->is_inline;
+    hfn->is_noinline = fn->is_noinline;
     hfn->is_pub = fn->is_pub || fn->name == "main";  // main is always pub
     hfn->is_extern = fn->is_extern;
     hfn->is_variadic = fn->is_variadic;

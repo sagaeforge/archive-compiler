@@ -162,6 +162,8 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     mf->is_intrinsic = fn.is_intrinsic;
     mf->is_naked = fn.is_naked;
     mf->is_interrupt = fn.is_interrupt;
+    mf->is_inline = fn.is_inline;
+    mf->is_noinline = fn.is_noinline;
     mf->is_pub = fn.is_pub;
     mf->is_extern = fn.is_extern;
     mf->is_weak = fn.is_weak;

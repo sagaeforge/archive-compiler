@@ -509,6 +509,8 @@ struct FnDecl {
     bool is_const = false;           // const fn — compile-time evaluable
     bool is_naked = false;           // @naked annotation
     bool is_interrupt = false;       // @interrupt annotation
+    bool is_inline = false;          // @inline — hint to inline
+    bool is_noinline = false;        // @noinline — prevent inlining
     bool is_pub = false;             // pub fn — visible to other modules
     bool is_extern = false;          // extern "C" fn — external linkage
     bool is_variadic = false;        // fn(x: i64, ...) — C-style varargs

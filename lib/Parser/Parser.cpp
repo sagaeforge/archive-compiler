@@ -781,6 +781,8 @@ Module* Parser::parseModule() {
         bool is_packed = false;
         bool is_naked = false;
         bool is_interrupt = false;
+        bool is_inline = false;
+        bool is_noinline = false;
         bool is_const_fn = false;
         bool is_repr_c = false;
         uint8_t repr_backing_size = 0;  // @repr(u8)=1, @repr(u16)=2, etc.
@@ -805,6 +807,10 @@ Module* Parser::parseModule() {
                 is_naked = true;
             } else if (anno.text == "interrupt") {
                 is_interrupt = true;
+            } else if (anno.text == "inline") {
+                is_inline = true;
+            } else if (anno.text == "noinline") {
+                is_noinline = true;
             } else if (anno.text == "const") {
                 is_const_fn = true;
             } else if (anno.text == "cfg") {
@@ -916,6 +922,8 @@ Module* Parser::parseModule() {
             if (fn) {
                 fn->is_naked = is_naked;
                 fn->is_interrupt = is_interrupt;
+                fn->is_inline = is_inline;
+                fn->is_noinline = is_noinline;
                 fn->is_const = is_const_fn;
                 fn->is_pub = is_pub;
                 fn->is_extern = is_extern;
