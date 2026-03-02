@@ -4930,6 +4930,41 @@ HIRExpr* HIRBuilder::buildMethodCall(const Expr* expr) {
     auto method_name = ctx_.strings.intern(mc->method_name);
     auto mangled = resolveMethod(obj->type, method_name);
     if (mangled.empty()) {
+        // Fallback: check if the struct has a field with this name that is a
+        // function type.  This enables the vtable pattern: obj.fn_field(args).
+        const auto& ti = ctx_.types.get(obj->type);
+        if (ti.kind == TypeKind::Struct) {
+            for (uint32_t fi = 0; fi < ti.struct_.field_count; ++fi) {
+                if (ti.struct_.fields[fi].name == mc->method_name) {
+                    TypeId field_type = ti.struct_.fields[fi].type;
+                    const auto& fti = ctx_.types.get(field_type);
+                    if (fti.kind == TypeKind::Fn) {
+                        // Emit: field access → indirect call
+                        auto* fa = ctx_.arena.make<HIRFieldAccessExpr>();
+                        fa->kind = HIRExpr::Kind::FieldAccess;
+                        fa->loc = expr->loc;
+                        fa->object = obj;
+                        fa->field_name = mc->method_name;
+                        fa->type = field_type;
+
+                        auto* call = ctx_.arena.make<HIRCallIndirectExpr>();
+                        call->kind = HIRExpr::Kind::CallIndirect;
+                        call->loc = expr->loc;
+                        call->callee = fa;
+                        call->is_tail_call = false;
+                        call->arg_count = mc->arg_count;
+                        call->args = ctx_.arena.makeArray<HIRExpr*>(mc->arg_count);
+                        for (uint32_t i = 0; i < mc->arg_count; ++i) {
+                            TypeId param_ctx = (i < fti.fn.param_count)
+                                ? fti.fn.params[i] : TypeTable::Error;
+                            call->args[i] = buildExpr(mc->args[i], param_ctx);
+                        }
+                        call->type = fti.fn.return_type;
+                        return call;
+                    }
+                }
+            }
+        }
         ctx_.diag.error(expr->loc, std::string("type '") +
             std::string(ctx_.types.name(obj->type)) + "' has no method '" +
             std::string(mc->method_name) + "'");
