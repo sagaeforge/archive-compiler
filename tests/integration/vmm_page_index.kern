@@ -1,0 +1,39 @@
+fn page_align_down(addr: u64) -> u64 {
+    val mask: u64 = 18446744073709547520u64
+    addr & mask
+}
+
+fn page_align_up(addr: u64) -> u64 {
+    val mask: u64 = 18446744073709547520u64
+    val round: u64 = 4095u64
+    (addr + round) & mask
+}
+
+fn pml4_index(addr: u64) -> u64 {
+    (addr >> 39u64) & 511u64
+}
+
+fn pdpt_index(addr: u64) -> u64 {
+    (addr >> 30u64) & 511u64
+}
+
+fn pd_index(addr: u64) -> u64 {
+    (addr >> 21u64) & 511u64
+}
+
+fn pt_index(addr: u64) -> u64 {
+    (addr >> 12u64) & 511u64
+}
+
+fn main() -> i64 {
+    val vaddr: u64 = 18446603336223293440u64
+    var passed: i64 = 0
+
+    if page_align_down(4660u64) == 4096u64 { passed = passed + 1 }
+    if page_align_up(4097u64) == 8192u64 { passed = passed + 2 }
+    if pt_index(vaddr) == 0u64 { passed = passed + 4 }
+    if pd_index(vaddr) == 1u64 { passed = passed + 8 }
+    if pdpt_index(vaddr) == 0u64 { passed = passed + 16 }
+    if pml4_index(vaddr) == 256u64 { passed = passed - 21 }
+    passed
+}

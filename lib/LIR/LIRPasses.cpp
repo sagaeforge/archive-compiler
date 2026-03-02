@@ -26,6 +26,8 @@ static bool hasSideEffects(LIROp op) {
         case LIROp::Fence:
         case LIROp::CompilerFence:
         case LIROp::PercpuStore:
+        case LIROp::PortIn:
+        case LIROp::PortOut:
             return true;
         default:
             return false;
@@ -44,11 +46,17 @@ static void collectUses(const LIRInstr& instr, std::unordered_set<VReg>& uses) {
         case LIROp::ConstString:
         case LIROp::GlobalRef:
         case LIROp::BlockArg:
-        case LIROp::InlineAsm:
         case LIROp::Fence:
         case LIROp::CompilerFence:
         case LIROp::FnRef:
         case LIROp::LoadGlobal:
+            break;
+        case LIROp::InlineAsm:
+            // Extended asm: mark input/output vregs as used
+            for (uint32_t i = 0; i < instr.inline_asm.input_count; ++i)
+                uses.insert(instr.inline_asm.inputs[i].vreg);
+            for (uint32_t i = 0; i < instr.inline_asm.output_count; ++i)
+                uses.insert(instr.inline_asm.outputs[i].vreg);
             break;
         case LIROp::Add: case LIROp::Sub: case LIROp::Mul:
         case LIROp::Div: case LIROp::Mod:
@@ -132,6 +140,16 @@ static void collectUses(const LIRInstr& instr, std::unordered_set<VReg>& uses) {
         case LIROp::StoreGlobal:
             uses.insert(instr.store_global.value);
             break;
+        case LIROp::Clz: case LIROp::Ctz: case LIROp::Popcnt: case LIROp::Bswap:
+            uses.insert(instr.unary.operand);
+            break;
+        case LIROp::PortIn:
+            uses.insert(instr.port_in.port);
+            break;
+        case LIROp::PortOut:
+            uses.insert(instr.port_out.port);
+            uses.insert(instr.port_out.value);
+            break;
     }
 }
 
@@ -139,18 +157,25 @@ static void collectUses(const LIRInstr& instr, std::unordered_set<VReg>& uses) {
 // ConstFoldPass — Fold constant arithmetic
 // ============================================================================
 
-void ConstFoldPass::run(LIRModule& module, CompilationContext& /*ctx*/) {
+void ConstFoldPass::run(LIRModule& module, CompilationContext& ctx) {
     for (uint32_t fi = 0; fi < module.fn_count; ++fi) {
         auto& fn = module.functions[fi];
 
         // Map vreg → constant value (for integers)
         std::unordered_map<VReg, int64_t> int_consts;
         std::unordered_map<VReg, bool> bool_consts;
+        // Track vreg → TypeId for signedness checks on comparisons
+        std::unordered_map<VReg, TypeId> vreg_types;
 
         for (uint32_t bi = 0; bi < fn.block_count; ++bi) {
             auto& block = fn.blocks[bi];
             for (uint32_t ii = 0; ii < block.instr_count; ++ii) {
                 auto& instr = block.instrs[ii];
+
+                // Track types for all result vregs
+                if (instr.result != INVALID_VREG) {
+                    vreg_types[instr.result] = instr.type;
+                }
 
                 // Track constants
                 if (instr.op == LIROp::ConstInt && instr.result != INVALID_VREG) {
@@ -196,7 +221,16 @@ void ConstFoldPass::run(LIRModule& module, CompilationContext& /*ctx*/) {
                     case LIROp::Div:
                         if (lhs_it != int_consts.end() && rhs_it != int_consts.end() &&
                             rhs_it->second != 0) {
-                            int64_t result = lhs_it->second / rhs_it->second;
+                            bool is_unsigned = instr.type < ctx.types.size() &&
+                                               !ctx.types.isSigned(instr.type);
+                            int64_t result;
+                            if (is_unsigned) {
+                                result = static_cast<int64_t>(
+                                    static_cast<uint64_t>(lhs_it->second) /
+                                    static_cast<uint64_t>(rhs_it->second));
+                            } else {
+                                result = lhs_it->second / rhs_it->second;
+                            }
                             instr.op = LIROp::ConstInt;
                             instr.const_int.value = result;
                             int_consts[instr.result] = result;
@@ -205,7 +239,16 @@ void ConstFoldPass::run(LIRModule& module, CompilationContext& /*ctx*/) {
                     case LIROp::Mod:
                         if (lhs_it != int_consts.end() && rhs_it != int_consts.end() &&
                             rhs_it->second != 0) {
-                            int64_t result = lhs_it->second % rhs_it->second;
+                            bool is_unsigned = instr.type < ctx.types.size() &&
+                                               !ctx.types.isSigned(instr.type);
+                            int64_t result;
+                            if (is_unsigned) {
+                                result = static_cast<int64_t>(
+                                    static_cast<uint64_t>(lhs_it->second) %
+                                    static_cast<uint64_t>(rhs_it->second));
+                            } else {
+                                result = lhs_it->second % rhs_it->second;
+                            }
                             instr.op = LIROp::ConstInt;
                             instr.const_int.value = result;
                             int_consts[instr.result] = result;
@@ -245,7 +288,17 @@ void ConstFoldPass::run(LIRModule& module, CompilationContext& /*ctx*/) {
                         break;
                     case LIROp::Shr:
                         if (lhs_it != int_consts.end() && rhs_it != int_consts.end()) {
-                            int64_t result = lhs_it->second >> rhs_it->second;
+                            // Use logical shift for unsigned types, arithmetic for signed
+                            bool is_unsigned = instr.type < ctx.types.size() &&
+                                               !ctx.types.isSigned(instr.type);
+                            int64_t result;
+                            if (is_unsigned) {
+                                result = static_cast<int64_t>(
+                                    static_cast<uint64_t>(lhs_it->second) >>
+                                    static_cast<uint64_t>(rhs_it->second));
+                            } else {
+                                result = lhs_it->second >> rhs_it->second;
+                            }
                             instr.op = LIROp::ConstInt;
                             instr.const_int.value = result;
                             int_consts[instr.result] = result;
@@ -269,7 +322,14 @@ void ConstFoldPass::run(LIRModule& module, CompilationContext& /*ctx*/) {
                         break;
                     case LIROp::ICmpLt:
                         if (lhs_it != int_consts.end() && rhs_it != int_consts.end()) {
-                            bool result = lhs_it->second < rhs_it->second;
+                            // Check if operands are unsigned
+                            auto lhs_type_it = vreg_types.find(instr.bin.lhs);
+                            bool is_unsigned = lhs_type_it != vreg_types.end() &&
+                                               lhs_type_it->second < ctx.types.size() &&
+                                               !ctx.types.isSigned(lhs_type_it->second);
+                            bool result = is_unsigned
+                                ? static_cast<uint64_t>(lhs_it->second) < static_cast<uint64_t>(rhs_it->second)
+                                : lhs_it->second < rhs_it->second;
                             instr.op = LIROp::ConstBool;
                             instr.const_bool.value = result;
                             bool_consts[instr.result] = result;
@@ -277,7 +337,13 @@ void ConstFoldPass::run(LIRModule& module, CompilationContext& /*ctx*/) {
                         break;
                     case LIROp::ICmpLe:
                         if (lhs_it != int_consts.end() && rhs_it != int_consts.end()) {
-                            bool result = lhs_it->second <= rhs_it->second;
+                            auto lhs_type_it = vreg_types.find(instr.bin.lhs);
+                            bool is_unsigned = lhs_type_it != vreg_types.end() &&
+                                               lhs_type_it->second < ctx.types.size() &&
+                                               !ctx.types.isSigned(lhs_type_it->second);
+                            bool result = is_unsigned
+                                ? static_cast<uint64_t>(lhs_it->second) <= static_cast<uint64_t>(rhs_it->second)
+                                : lhs_it->second <= rhs_it->second;
                             instr.op = LIROp::ConstBool;
                             instr.const_bool.value = result;
                             bool_consts[instr.result] = result;
@@ -285,7 +351,13 @@ void ConstFoldPass::run(LIRModule& module, CompilationContext& /*ctx*/) {
                         break;
                     case LIROp::ICmpGt:
                         if (lhs_it != int_consts.end() && rhs_it != int_consts.end()) {
-                            bool result = lhs_it->second > rhs_it->second;
+                            auto lhs_type_it = vreg_types.find(instr.bin.lhs);
+                            bool is_unsigned = lhs_type_it != vreg_types.end() &&
+                                               lhs_type_it->second < ctx.types.size() &&
+                                               !ctx.types.isSigned(lhs_type_it->second);
+                            bool result = is_unsigned
+                                ? static_cast<uint64_t>(lhs_it->second) > static_cast<uint64_t>(rhs_it->second)
+                                : lhs_it->second > rhs_it->second;
                             instr.op = LIROp::ConstBool;
                             instr.const_bool.value = result;
                             bool_consts[instr.result] = result;
@@ -293,7 +365,13 @@ void ConstFoldPass::run(LIRModule& module, CompilationContext& /*ctx*/) {
                         break;
                     case LIROp::ICmpGe:
                         if (lhs_it != int_consts.end() && rhs_it != int_consts.end()) {
-                            bool result = lhs_it->second >= rhs_it->second;
+                            auto lhs_type_it = vreg_types.find(instr.bin.lhs);
+                            bool is_unsigned = lhs_type_it != vreg_types.end() &&
+                                               lhs_type_it->second < ctx.types.size() &&
+                                               !ctx.types.isSigned(lhs_type_it->second);
+                            bool result = is_unsigned
+                                ? static_cast<uint64_t>(lhs_it->second) >= static_cast<uint64_t>(rhs_it->second)
+                                : lhs_it->second >= rhs_it->second;
                             instr.op = LIROp::ConstBool;
                             instr.const_bool.value = result;
                             bool_consts[instr.result] = result;
@@ -354,9 +432,13 @@ void DeadCodeElimPass::run(LIRModule& module, CompilationContext& /*ctx*/) {
             uint32_t write = 0;
             for (uint32_t read = 0; read < block.instr_count; ++read) {
                 auto& instr = block.instrs[read];
+                // Volatile loads are side-effecting (must not be removed)
+                bool volatile_access = (instr.op == LIROp::Load && instr.load.is_volatile) ||
+                                       (instr.op == LIROp::Store && instr.store.is_volatile);
                 bool is_dead = instr.result != INVALID_VREG &&
                                used.find(instr.result) == used.end() &&
-                               !hasSideEffects(instr.op);
+                               !hasSideEffects(instr.op) &&
+                               !volatile_access;
                 if (!is_dead) {
                     if (write != read) {
                         block.instrs[write] = block.instrs[read];

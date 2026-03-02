@@ -1,0 +1,12 @@
+fn main() -> i64 {
+    val big: u64 = 18446744073709551615u64
+    val small: u64 = 1u64
+    var result: i64 = 0
+
+    if big > small { result = result + 1 }
+    if small < big { result = result + 2 }
+    if big >= small { result = result + 4 }
+    if small <= big { result = result + 8 }
+    if big > 0u64 { result = result + 27 }
+    result
+}

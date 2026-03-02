@@ -1722,12 +1722,19 @@ void InstructionSelector::selectCast(const LIRInstr& instr) {
         return;
     }
 
-    // Ptr<->int: both are 64-bit, just mov
+    // Ptr/Fn<->int: all are 64-bit addresses, just mov
     auto src_kind = (src_type < ctx_.types.size()) ? ctx_.types.get(src_type).kind : TypeKind::Primitive;
     auto dst_kind = (dst_type < ctx_.types.size()) ? ctx_.types.get(dst_type).kind : TypeKind::Primitive;
     if (src_kind == TypeKind::Ptr || src_kind == TypeKind::PtrMut ||
-        dst_kind == TypeKind::Ptr || dst_kind == TypeKind::PtrMut) {
+        dst_kind == TypeKind::Ptr || dst_kind == TypeKind::PtrMut ||
+        src_kind == TypeKind::Fn || dst_kind == TypeKind::Fn) {
         emit(makeMov(MachOperand::virt(dst), MachOperand::virt(src), 64));
+        // Propagate stack pointer status through Ptr/Fn↔int casts so that
+        // the tail-call safety check can suppress TCO when a stack address
+        // escapes as a u64 argument.
+        if (stack_ptr_vregs_.count(src)) {
+            stack_ptr_vregs_.insert(dst);
+        }
         return;
     }
 

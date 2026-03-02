@@ -2999,12 +2999,19 @@ HIRExpr* HIRBuilder::buildCast(const Expr* expr) {
         return slit;
     }
 
-    // Check for enum types
+    // Check for enum and fn types
     bool src_enum = false, dst_enum = false;
-    if (src_type < ctx_.types.size())
-        src_enum = (ctx_.types.get(src_type).kind == TypeKind::Enum);
-    if (target_type < ctx_.types.size())
-        dst_enum = (ctx_.types.get(target_type).kind == TypeKind::Enum);
+    bool src_fn = false, dst_fn = false;
+    if (src_type < ctx_.types.size()) {
+        auto k = ctx_.types.get(src_type).kind;
+        src_enum = (k == TypeKind::Enum);
+        src_fn = (k == TypeKind::Fn);
+    }
+    if (target_type < ctx_.types.size()) {
+        auto k = ctx_.types.get(target_type).kind;
+        dst_enum = (k == TypeKind::Enum);
+        dst_fn = (k == TypeKind::Fn);
+    }
 
     bool valid = (src_int && dst_int) ||
                  (src_int && dst_ptr) ||
@@ -3016,6 +3023,8 @@ HIRExpr* HIRBuilder::buildCast(const Expr* expr) {
                  (src_enum && dst_int) ||   // enum → int
                  (src_int && dst_enum) ||   // int → enum
                  (src_enum && dst_enum) ||  // enum → enum
+                 (src_fn && dst_int) ||     // fn → int (address extraction)
+                 (src_int && dst_fn) ||     // int → fn (address to fn pointer)
                  (src_type == target_type);
 
     if (!valid) {

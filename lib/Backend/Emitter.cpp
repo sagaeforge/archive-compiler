@@ -1,10 +1,16 @@
 #include "kern/backend/Emitter.h"
 #include <cstring>
+#include <cstdint>
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
 
 namespace kern {
+
+// Check if a 64-bit value fits in a sign-extended 32-bit immediate
+static bool fitsInSignedDword(int64_t val) {
+    return val >= INT32_MIN && val <= INT32_MAX;
+}
 
 // ============================================================================
 // Size Prefix
@@ -58,21 +64,28 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
 
     switch (instr.op) {
         case X86Op::Mov: {
-            out_ << "mov ";
             // If dst is stack, need size prefix
             if (instr.dst().isStack()) {
-                out_ << sizePrefix(instr.width) << " ";
+                // x86-64 mov [mem], imm only supports 32-bit sign-extended immediates.
+                // For 64-bit values that don't fit, use r11 as scratch.
+                if (instr.width == 64 && instr.src1().isImm() &&
+                    !fitsInSignedDword(instr.src1().imm)) {
+                    out_ << "mov r11, ";
+                    emitOperand(instr.src1(), 64);
+                    out_ << "\n    mov qword ";
+                    emitOperand(instr.dst(), 64);
+                    out_ << ", r11";
+                } else {
+                    out_ << "mov " << sizePrefix(instr.width) << " ";
+                    emitOperand(instr.dst(), instr.width);
+                    out_ << ", ";
+                    emitOperand(instr.src1(), instr.width);
+                }
+            } else {
+                out_ << "mov ";
                 emitOperand(instr.dst(), instr.width);
                 out_ << ", ";
                 emitOperand(instr.src1(), instr.width);
-            } else {
-                emitOperand(instr.dst(), instr.width);
-                out_ << ", ";
-                if (instr.src1().isStack()) {
-                    emitOperand(instr.src1(), instr.width);
-                } else {
-                    emitOperand(instr.src1(), instr.width);
-                }
             }
             break;
         }
@@ -93,17 +106,33 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
 
         case X86Op::MovStore:
             // mov [dst], src  — store to memory
-            out_ << "mov ";
-            if (instr.dst().isStack()) {
-                out_ << sizePrefix(instr.width) << " ";
-                emitOperand(instr.dst(), instr.width);
+            // If value is a large 64-bit immediate, load into r11 first
+            if (instr.width == 64 && instr.src1().isImm() &&
+                !fitsInSignedDword(instr.src1().imm)) {
+                out_ << "mov r11, ";
+                emitOperand(instr.src1(), 64);
+                out_ << "\n    mov qword ";
+                if (instr.dst().isStack()) {
+                    emitOperand(instr.dst(), 64);
+                } else {
+                    out_ << "[";
+                    emitOperand(instr.dst(), 64);
+                    out_ << "]";
+                }
+                out_ << ", r11";
             } else {
-                out_ << sizePrefix(instr.width) << " [";
-                emitOperand(instr.dst(), 64);
-                out_ << "]";
+                out_ << "mov ";
+                if (instr.dst().isStack()) {
+                    out_ << sizePrefix(instr.width) << " ";
+                    emitOperand(instr.dst(), instr.width);
+                } else {
+                    out_ << sizePrefix(instr.width) << " [";
+                    emitOperand(instr.dst(), 64);
+                    out_ << "]";
+                }
+                out_ << ", ";
+                emitOperand(instr.src1(), instr.width);
             }
-            out_ << ", ";
-            emitOperand(instr.src1(), instr.width);
             break;
 
         case X86Op::MovZX:
@@ -172,10 +201,22 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
         case X86Op::Xor:
         case X86Op::And:
         case X86Op::Or:
-            out_ << x86OpName(instr.op) << " ";
-            emitOperand(instr.dst(), instr.width);
-            out_ << ", ";
-            emitOperand(instr.src1(), instr.width);
+            // x86-64 ALU r64,imm32 sign-extends the immediate. If the
+            // 64-bit immediate doesn't fit in signed 32-bit, load it
+            // into r11 first to avoid silent truncation by NASM.
+            if (instr.width == 64 && instr.src1().isImm() &&
+                !fitsInSignedDword(instr.src1().imm)) {
+                out_ << "mov r11, ";
+                emitOperand(instr.src1(), 64);
+                out_ << "\n    " << x86OpName(instr.op) << " ";
+                emitOperand(instr.dst(), 64);
+                out_ << ", r11";
+            } else {
+                out_ << x86OpName(instr.op) << " ";
+                emitOperand(instr.dst(), instr.width);
+                out_ << ", ";
+                emitOperand(instr.src1(), instr.width);
+            }
             break;
 
         case X86Op::Shl:
@@ -205,10 +246,19 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             break;
 
         case X86Op::Cmp:
-            out_ << "cmp ";
-            emitOperand(instr.dst(), instr.width);
-            out_ << ", ";
-            emitOperand(instr.src1(), instr.width);
+            if (instr.width == 64 && instr.src1().isImm() &&
+                !fitsInSignedDword(instr.src1().imm)) {
+                out_ << "mov r11, ";
+                emitOperand(instr.src1(), 64);
+                out_ << "\n    cmp ";
+                emitOperand(instr.dst(), 64);
+                out_ << ", r11";
+            } else {
+                out_ << "cmp ";
+                emitOperand(instr.dst(), instr.width);
+                out_ << ", ";
+                emitOperand(instr.src1(), instr.width);
+            }
             break;
 
         case X86Op::Test:

@@ -1,0 +1,20 @@
+struct Node {
+    value: i64,
+    next: u64
+}
+
+fn sum_list(addr: u64) -> i64 with mem {
+    if addr == 0u64 {
+        0
+    } else {
+        val ptr: Ptr<Node> = addr as Ptr<Node>
+        val node: Node = *ptr
+        node.value + sum_list(node.next)
+    }
+}
+
+fn main() -> i64 with mem, mut {
+    var n2: Node = Node { value: 20, next: 0u64 }
+    var n1: Node = Node { value: 22, next: &var n2 as u64 }
+    sum_list(&var n1 as u64)
+}
