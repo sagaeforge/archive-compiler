@@ -1,0 +1,9 @@
+module module_chain_base
+
+pub struct Config {
+    value: i64
+}
+
+pub fn make_config(v: i64) -> Config {
+    Config { value: v }
+}

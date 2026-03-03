@@ -1021,36 +1021,20 @@ int CompilerPipeline::runModular(const CompileOptions& opts,
         // Create a fresh HIRBuilder for this module
         HIRBuilder builder(ctx_);
 
-        // Inject exports from dependency modules
-        auto imp_it = module_imports.find(mod_path);
-        if (imp_it != module_imports.end()) {
-            for (const auto& spec : imp_it->second) {
-                auto dep_it = mod_info.find(spec.from_module);
-                if (dep_it == mod_info.end()) continue;
-
-                // Register the dependency's pub exports into this builder
-                auto dep_mod_name = dep_it->second.ast->module_name;
-                if (dep_mod_name.empty()) {
-                    dep_mod_name = ctx_.strings.intern(dep_it->second.module_path);
-                }
-                builder.registerExports(dep_it->second.ast, dep_mod_name);
-
-                // Handle re-exports: if the dependency has `pub import X (a, b)`,
-                // register those symbols from X as well
-                auto* dep_ast = dep_it->second.ast;
-                for (uint32_t i = 0; i < dep_ast->import_count; ++i) {
-                    auto* imp = dep_ast->imports[i];
-                    if (!imp->is_pub) continue;
-                    // This is a pub import — re-export from the original module
-                    auto orig_it = mod_info.find(std::string(imp->module_path));
-                    if (orig_it == mod_info.end()) continue;
-                    auto orig_mod_name = orig_it->second.ast->module_name;
-                    if (orig_mod_name.empty()) {
-                        orig_mod_name = ctx_.strings.intern(orig_it->second.module_path);
-                    }
-                    builder.registerExports(orig_it->second.ast, orig_mod_name);
-                }
+        // Inject exports from ALL modules that precede this one in topo order.
+        // This ensures transitive dependencies are available (e.g. if mid imports
+        // Config from base, and main imports from mid, main needs base's types
+        // registered before mid's fn signatures can resolve Config).
+        for (const auto& dep_path : topo_order) {
+            if (dep_path == mod_path) break; // stop at ourselves
+            auto dep_it = mod_info.find(dep_path);
+            if (dep_it == mod_info.end()) continue;
+            if (!dep_it->second.ast) continue;
+            auto dep_mod_name = dep_it->second.ast->module_name;
+            if (dep_mod_name.empty()) {
+                dep_mod_name = ctx_.strings.intern(dep_it->second.module_path);
             }
+            builder.registerExports(dep_it->second.ast, dep_mod_name);
         }
 
         // Ensure module name is set (from resolver path if not declared in source)
