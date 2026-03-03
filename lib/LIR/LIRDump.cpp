@@ -9,6 +9,7 @@ const char* lirOpName(LIROp op) {
         case LIROp::ConstFloat:  return "const_float";
         case LIROp::ConstBool:   return "const_bool";
         case LIROp::ConstString: return "const_string";
+        case LIROp::ConstCString: return "const_cstring";
         case LIROp::GlobalRef:   return "global_ref";
         case LIROp::Add:         return "add";
         case LIROp::Sub:         return "sub";
@@ -102,6 +103,9 @@ void dumpLIRInstr(const LIRInstr& i, const TypeTable& types, std::ostream& out) 
             out << " " << (i.const_bool.value ? "true" : "false");
             break;
         case LIROp::ConstString:
+            out << " @g" << i.const_string.global_index;
+            break;
+        case LIROp::ConstCString:
             out << " @g" << i.const_string.global_index;
             break;
         case LIROp::GlobalRef:

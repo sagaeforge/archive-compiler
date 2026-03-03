@@ -1,0 +1,14 @@
+// Test: static array of function pointers
+fn handler0() -> i64 { 10 }
+fn handler1() -> i64 { 20 }
+fn handler2() -> i64 { 12 }
+
+static val HANDLERS: [fn() -> i64; 3] = [handler0, handler1, handler2]
+
+fn main() -> i64 {
+    // Call through fn pointer array — sum should be 42
+    val f0 = HANDLERS[0]
+    val f1 = HANDLERS[1]
+    val f2 = HANDLERS[2]
+    f0() + f1() + f2()
+}

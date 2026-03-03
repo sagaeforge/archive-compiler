@@ -254,6 +254,7 @@ void MonomorphizationPass::collectInstantiations(HIRExpr* expr) {
         case HIRExpr::Kind::FloatLit:
         case HIRExpr::Kind::BoolLit:
         case HIRExpr::Kind::StringLit:
+        case HIRExpr::Kind::CStringLit:
         case HIRExpr::Kind::Ident:
         case HIRExpr::Kind::EnumAccess:
         case HIRExpr::Kind::InlineAsm:
@@ -510,6 +511,16 @@ HIRExpr* MonomorphizationPass::cloneExpr(
         case HIRExpr::Kind::StringLit: {
             auto* src = static_cast<HIRStringLitExpr*>(expr);
             auto* dst = ctx_.arena.make<HIRStringLitExpr>();
+            dst->kind = src->kind;
+            dst->type = substituteType(src->type, subst);
+            dst->loc = src->loc;
+            dst->data = src->data;
+            dst->length = src->length;
+            return dst;
+        }
+        case HIRExpr::Kind::CStringLit: {
+            auto* src = static_cast<HIRCStringLitExpr*>(expr);
+            auto* dst = ctx_.arena.make<HIRCStringLitExpr>();
             dst->kind = src->kind;
             dst->type = substituteType(src->type, subst);
             dst->loc = src->loc;
@@ -1046,6 +1057,7 @@ void MonomorphizationPass::patchCallSites(HIRExpr* expr) {
         case HIRExpr::Kind::FloatLit:
         case HIRExpr::Kind::BoolLit:
         case HIRExpr::Kind::StringLit:
+        case HIRExpr::Kind::CStringLit:
         case HIRExpr::Kind::Ident:
         case HIRExpr::Kind::EnumAccess:
         case HIRExpr::Kind::InlineAsm:

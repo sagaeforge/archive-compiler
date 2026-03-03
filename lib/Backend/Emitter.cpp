@@ -1044,6 +1044,8 @@ void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
             }
         } else if (g.kind == GlobalData::Variable) {
             // Immutable global variable → .rodata
+            uint32_t align = g.variable.size >= 8 ? 8 : (g.variable.size >= 4 ? 4 : 1);
+            if (align > 1) out_ << "align " << align << "\n";
             out_ << symPrefix() << g.label << ":\n";
             emitGlobalVarDirective(g.variable);
         } else if (g.kind == GlobalData::VTable) {
@@ -1086,6 +1088,8 @@ void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
                         g.variable.init_byte_count > 0;
         if (!has_init) continue;  // zero-init goes to .bss
         if (!has_data) { out_ << "section .data\n"; has_data = true; }
+        uint32_t align = g.variable.size >= 8 ? 8 : (g.variable.size >= 4 ? 4 : 1);
+        if (align > 1) out_ << "align " << align << "\n";
         out_ << symPrefix() << g.label << ":\n";
         emitGlobalVarDirective(g.variable);
     }
@@ -1143,6 +1147,11 @@ void NASMEmitter::emitGlobalVarDirective(const GlobalVariable& var) {
     if (var.array_values && var.array_count > 0) {
         // Array initializer: emit one directive per element
         for (uint32_t i = 0; i < var.array_count; ++i) {
+            // If this element has a label reference (fn pointer), emit dq <label>
+            if (var.array_labels && !var.array_labels[i].empty()) {
+                out_ << "    dq " << symPrefix() << var.array_labels[i] << "\n";
+                continue;
+            }
             int64_t v = var.array_values[i];
             switch (var.size) {
                 case 1: out_ << "    db " << (v & 0xFF) << "\n"; break;

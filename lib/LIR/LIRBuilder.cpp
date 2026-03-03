@@ -327,6 +327,7 @@ LIRModule* LIRBuilder::build(const HIRModule* hir) {
         gd.variable.section_name = hgd->section_name;
         gd.variable.link_name = hgd->link_name;
         gd.variable.array_values = nullptr;
+        gd.variable.array_labels = nullptr;
         gd.variable.array_count = 0;
         gd.variable.init_bytes = nullptr;
         gd.variable.init_byte_count = 0;
@@ -379,16 +380,36 @@ LIRModule* LIRBuilder::build(const HIRModule* hir) {
                         }
                     }
                 } else {
-                    // Array of scalars: use array_values path
+                    // Array of scalars (or fn pointers): use array_values path
                     gd.variable.array_count = n;
                     gd.variable.array_values = ctx_.arena.makeArray<int64_t>(n);
+                    gd.variable.array_labels = nullptr;
                     gd.variable.size = static_cast<uint8_t>(elem_sz > 0 ? elem_sz : 8);
+                    // Check if any element is a FnRef — if so, allocate labels array
+                    bool has_fn_refs = false;
+                    for (uint32_t j = 0; j < n; ++j) {
+                        if (arr->elements[j]->kind == HIRExpr::Kind::FnRef) {
+                            has_fn_refs = true;
+                            break;
+                        }
+                    }
+                    if (has_fn_refs) {
+                        gd.variable.array_labels = ctx_.arena.makeArray<std::string_view>(n);
+                        for (uint32_t j = 0; j < n; ++j) {
+                            gd.variable.array_labels[j] = std::string_view{};
+                        }
+                    }
                     for (uint32_t j = 0; j < n; ++j) {
                         int64_t v = 0;
                         if (arr->elements[j]->kind == HIRExpr::Kind::IntLit) {
                             v = static_cast<const HIRIntLitExpr*>(arr->elements[j])->value;
                         } else if (arr->elements[j]->kind == HIRExpr::Kind::BoolLit) {
                             v = static_cast<const HIRBoolLitExpr*>(arr->elements[j])->value ? 1 : 0;
+                        } else if (arr->elements[j]->kind == HIRExpr::Kind::FnRef) {
+                            auto* fnref = static_cast<const HIRFnRefExpr*>(arr->elements[j]);
+                            if (gd.variable.array_labels) {
+                                gd.variable.array_labels[j] = fnref->fn_name;
+                            }
                         }
                         gd.variable.array_values[j] = v;
                     }
@@ -651,6 +672,8 @@ VReg LIRBuilder::lowerExpr(const HIRExpr* expr) {
             return lowerBoolLit(static_cast<const HIRBoolLitExpr*>(expr));
         case HIRExpr::Kind::StringLit:
             return lowerStringLit(static_cast<const HIRStringLitExpr*>(expr));
+        case HIRExpr::Kind::CStringLit:
+            return lowerCStringLit(static_cast<const HIRCStringLitExpr*>(expr));
         case HIRExpr::Kind::Ident:
             return lowerIdent(static_cast<const HIRIdentExpr*>(expr));
         case HIRExpr::Kind::BinOp:
@@ -748,6 +771,21 @@ VReg LIRBuilder::lowerStringLit(const HIRStringLitExpr* expr) {
     i.op = LIROp::ConstString;
     i.result = r;
     i.type = expr->type;
+    i.const_string.global_index = gi;
+    i.loc = expr->loc;
+    emit(i);
+    return r;
+}
+
+VReg LIRBuilder::lowerCStringLit(const HIRCStringLitExpr* expr) {
+    // Add NUL-terminated string to globals (length + 1 bytes with \0)
+    uint32_t gi = addStringGlobal(expr->data, expr->length + 1);
+
+    VReg r = freshVReg();
+    LIRInstr i{};
+    i.op = LIROp::ConstCString;
+    i.result = r;
+    i.type = expr->type; // Ptr<u8>
     i.const_string.global_index = gi;
     i.loc = expr->loc;
     emit(i);

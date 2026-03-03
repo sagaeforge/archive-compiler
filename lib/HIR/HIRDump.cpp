@@ -129,6 +129,24 @@ void dumpHIRExpr(const HIRExpr* expr, const TypeTable& types, std::ostream& out,
             break;
         }
 
+        case HIRExpr::Kind::CStringLit: {
+            auto* s = static_cast<const HIRCStringLitExpr*>(expr);
+            out << "cstring_lit c\"";
+            for (uint32_t i = 0; i < s->length; ++i) {
+                char c = s->data[i];
+                switch (c) {
+                    case '\n': out << "\\n"; break;
+                    case '\t': out << "\\t"; break;
+                    case '\\': out << "\\\\"; break;
+                    case '"':  out << "\\\""; break;
+                    case '\0': out << "\\0"; break;
+                    default:   out << c; break;
+                }
+            }
+            out << "\"";
+            break;
+        }
+
         case HIRExpr::Kind::Ident:
             out << "ident " << static_cast<const HIRIdentExpr*>(expr)->name;
             break;

@@ -1483,6 +1483,7 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
             return e;
         }
         case Expr::Kind::StringLit:   return buildStringLit(expr);
+        case Expr::Kind::CStringLit:  return buildCStringLit(expr);
         case Expr::Kind::Ident:       return buildIdent(expr);
         case Expr::Kind::BinOp:       return buildBinOp(expr, ctx_type);
         case Expr::Kind::UnaryOp:     return buildUnaryOp(expr);
@@ -1686,6 +1687,18 @@ HIRExpr* HIRBuilder::buildStringLit(const Expr* expr) {
         ref.loc = expr->loc;
         e->type = resolveType(ref);
     }
+    return e;
+}
+
+HIRExpr* HIRBuilder::buildCStringLit(const Expr* expr) {
+    auto* sl = static_cast<const CStringLitExpr*>(expr);
+    auto* e = ctx_.arena.make<HIRCStringLitExpr>();
+    e->kind = HIRExpr::Kind::CStringLit;
+    e->loc = expr->loc;
+    e->data = sl->data;
+    e->length = sl->length;
+    // CString type is Ptr<u8> (raw pointer to NUL-terminated bytes)
+    e->type = ctx_.types.makePtr(TypeTable::U8, false);
     return e;
 }
 

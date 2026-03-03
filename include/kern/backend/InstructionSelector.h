@@ -83,6 +83,7 @@ private:
     void selectConstFloat(const LIRInstr& instr);
     void selectConstBool(const LIRInstr& instr);
     void selectConstString(const LIRInstr& instr);
+    void selectConstCString(const LIRInstr& instr);
     void selectGlobalRef(const LIRInstr& instr);
     void selectBinOp(const LIRInstr& instr);
     void selectFloatBinOp(const LIRInstr& instr);

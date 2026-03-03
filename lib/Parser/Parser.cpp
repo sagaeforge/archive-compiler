@@ -144,6 +144,21 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             out << "\")\n";
             break;
         }
+        case Expr::Kind::CStringLit: {
+            auto* csl = static_cast<const CStringLitExpr*>(expr);
+            out << "CStringLit(c\"";
+            for (uint32_t i = 0; i < csl->length; ++i) {
+                char c = csl->data[i];
+                if (c == '\n') out << "\\n";
+                else if (c == '\t') out << "\\t";
+                else if (c == '\\') out << "\\\\";
+                else if (c == '"') out << "\\\"";
+                else if (c == '\0') out << "\\0";
+                else out << c;
+            }
+            out << "\")\n";
+            break;
+        }
         case Expr::Kind::Ident:
             out << "Ident(" << static_cast<const IdentExpr*>(expr)->name << ")\n";
             break;
@@ -1009,6 +1024,13 @@ Module* Parser::parseModule() {
             skipTopLevelItem();
             skipNewlines();
             continue;
+        }
+
+        // Parse pub modifier after annotations (e.g., @section("...") pub static val)
+        if (!is_pub && check(TokenKind::KwPub)) {
+            is_pub = true;
+            advance();
+            skipNewlines();
         }
 
         // Parse extern modifier after annotations (e.g., @link_name("x") extern static val)
@@ -2494,6 +2516,36 @@ Expr* Parser::parsePrimary() {
                 buf[len++] = raw[i];
             }
         }
+        lit->data = buf;
+        lit->length = len;
+        return lit;
+    }
+
+    // C string literal: c"..." → Ptr<u8>, NUL-terminated
+    if (tok.kind == TokenKind::CStringLit) {
+        advance();
+        auto* lit = arena_.make<CStringLitExpr>();
+        lit->kind = Expr::Kind::CStringLit;
+        lit->loc = tok.loc;
+        std::string_view raw = tok.text;
+        // raw is c"..." — skip 'c' prefix and quotes
+        // Allocate buffer +1 for NUL terminator
+        auto* buf = static_cast<char*>(arena_.allocate(raw.size(), 1));
+        uint32_t len = 0;
+        for (size_t i = 2; i + 1 < raw.size(); ++i) {
+            if (raw[i] == '\\' && i + 2 < raw.size()) {
+                char esc = raw[i + 1];
+                if (esc == 'n')       { buf[len++] = '\n'; ++i; }
+                else if (esc == 't')  { buf[len++] = '\t'; ++i; }
+                else if (esc == '\\') { buf[len++] = '\\'; ++i; }
+                else if (esc == '"')  { buf[len++] = '"'; ++i; }
+                else if (esc == '0')  { buf[len++] = '\0'; ++i; }
+                else                  { buf[len++] = raw[i]; }
+            } else {
+                buf[len++] = raw[i];
+            }
+        }
+        buf[len] = '\0'; // NUL terminator
         lit->data = buf;
         lit->length = len;
         return lit;

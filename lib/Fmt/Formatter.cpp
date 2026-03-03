@@ -340,6 +340,24 @@ void Formatter::formatExpr(const Expr* expr) {
             break;
         }
 
+        case Expr::Kind::CStringLit: {
+            auto* s = static_cast<const CStringLitExpr*>(expr);
+            out_ << "c\"";
+            for (uint32_t i = 0; i < s->length; ++i) {
+                char c = s->data[i];
+                switch (c) {
+                    case '\n': out_ << "\\n"; break;
+                    case '\t': out_ << "\\t"; break;
+                    case '\\': out_ << "\\\\"; break;
+                    case '"': out_ << "\\\""; break;
+                    case '\0': out_ << "\\0"; break;
+                    default: out_ << c;
+                }
+            }
+            out_ << '"';
+            break;
+        }
+
         case Expr::Kind::Ident:
             out_ << static_cast<const IdentExpr*>(expr)->name;
             break;

@@ -271,6 +271,7 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
         case LIROp::ConstFloat:  selectConstFloat(instr); break;
         case LIROp::ConstBool:   selectConstBool(instr); break;
         case LIROp::ConstString: selectConstString(instr); break;
+        case LIROp::ConstCString: selectConstCString(instr); break;
         case LIROp::GlobalRef:   selectGlobalRef(instr); break;
 
         case LIROp::Add:
@@ -425,6 +426,20 @@ void InstructionSelector::selectConstString(const LIRInstr& instr) {
 
     // dst = pointer to the base of the fat pointer
     emit(makeLea(MachOperand::virt(dst), MachOperand::stack(base_offset)));
+}
+
+void InstructionSelector::selectConstCString(const LIRInstr& instr) {
+    // C string = raw pointer to NUL-terminated data (just a lea)
+    VReg dst = instr.result;
+    uint32_t idx = instr.const_string.global_index;
+
+    std::string_view label;
+    if (idx < global_count_) {
+        label = globals_[idx].label;
+    }
+
+    // lea dst, [rel _str_N]
+    emit(makeLea(MachOperand::virt(dst), MachOperand::lbl(label)));
 }
 
 void InstructionSelector::selectGlobalRef(const LIRInstr& instr) {

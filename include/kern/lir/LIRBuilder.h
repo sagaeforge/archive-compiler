@@ -27,6 +27,7 @@ private:
     VReg lowerFloatLit(const HIRFloatLitExpr* expr);
     VReg lowerBoolLit(const HIRBoolLitExpr* expr);
     VReg lowerStringLit(const HIRStringLitExpr* expr);
+    VReg lowerCStringLit(const HIRCStringLitExpr* expr);
     VReg lowerIdent(const HIRIdentExpr* expr);
     VReg lowerBinOp(const HIRBinOpExpr* expr);
     VReg lowerUnaryOp(const HIRUnaryOpExpr* expr);

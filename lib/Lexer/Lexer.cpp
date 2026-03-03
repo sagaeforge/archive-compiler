@@ -9,6 +9,7 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::IntLit:     return "IntLit";
         case TokenKind::FloatLit:   return "FloatLit";
         case TokenKind::StringLit:  return "StringLit";
+        case TokenKind::CStringLit: return "CStringLit";
         case TokenKind::CharLit:    return "CharLit";
         case TokenKind::Ident:      return "Ident";
         case TokenKind::KwFn:       return "fn";
@@ -362,6 +363,32 @@ Token Lexer::scanString() {
     return errorToken("unterminated string literal");
 }
 
+Token Lexer::scanCString() {
+    while (!isAtEnd()) {
+        char c = peek();
+        if (c == '"') {
+            advance();
+            return makeToken(TokenKind::CStringLit);
+        }
+        if (c == '\\') {
+            advance();
+            if (isAtEnd()) return errorToken("unterminated C string literal");
+            char esc = peek();
+            if (esc != 'n' && esc != 't' && esc != '\\' && esc != '"' && esc != '0') {
+                advance();
+                return errorToken("invalid escape sequence in C string");
+            }
+            advance();
+            continue;
+        }
+        if (c == '\n') {
+            return errorToken("unterminated C string literal");
+        }
+        advance();
+    }
+    return errorToken("unterminated C string literal");
+}
+
 Token Lexer::scanIdentifierOrKeyword() {
     while (!isAtEnd() && (std::isalnum(static_cast<unsigned char>(peek())) || peek() == '_')) {
         advance();
@@ -432,6 +459,12 @@ Token Lexer::nextToken() {
         current_ = saved;
         col_ = saved_col;
         // Fall through to label handling below
+    }
+
+    // C string literal: c"..."
+    if (c == 'c' && !isAtEnd() && peek() == '"') {
+        advance(); // consume the opening '"'
+        return scanCString();
     }
 
     // Identifiers and keywords

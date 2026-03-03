@@ -10,6 +10,7 @@ enum class TokenKind : uint8_t {
     IntLit,
     FloatLit,
     StringLit,
+    CStringLit,  // c"..." NUL-terminated C string literal → Ptr<u8>
     CharLit,
 
     // Identifiers & Keywords

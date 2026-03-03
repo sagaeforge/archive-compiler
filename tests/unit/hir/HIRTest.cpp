@@ -912,8 +912,8 @@ TEST_F(HIRTest, BlockWithAllStmtKinds) {
 TEST_F(HIRTest, ExprKindCoverage) {
     // Verify all expr kinds can be created
     EXPECT_EQ(static_cast<uint8_t>(HIRExpr::Kind::IntLit), 0);
-    EXPECT_EQ(static_cast<uint8_t>(HIRExpr::Kind::Deref), 17);
-    // 18 total kinds
+    EXPECT_EQ(static_cast<uint8_t>(HIRExpr::Kind::Deref), 18);
+    // 19 total kinds (CStringLit added after StringLit)
 }
 
 TEST_F(HIRTest, StmtKindCoverage) {

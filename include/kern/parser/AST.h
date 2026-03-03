@@ -217,7 +217,7 @@ struct ImplDecl {
 // --- Expressions ---
 struct Expr {
     enum class Kind {
-        IntLit, FloatLit, BoolLit, StringLit, NullLit, Ident,
+        IntLit, FloatLit, BoolLit, StringLit, CStringLit, NullLit, Ident,
         BinOp, UnaryOp, Call, Cast,
         If, Block, Return, Match,
         StructLit, FieldAccess,
@@ -252,6 +252,11 @@ struct NullLitExpr : Expr {};
 struct StringLitExpr : Expr {
     const char* data;    // processed bytes (escape sequences resolved)
     uint32_t length;     // byte length of processed data
+};
+
+struct CStringLitExpr : Expr {
+    const char* data;    // processed bytes (escape sequences resolved, NUL-terminated)
+    uint32_t length;     // byte length WITHOUT the NUL terminator
 };
 
 struct IdentExpr : Expr {

@@ -78,7 +78,7 @@ struct HIRMatchArm {
 
 struct HIRExpr {
     enum class Kind : uint8_t {
-        IntLit, FloatLit, BoolLit, StringLit,
+        IntLit, FloatLit, BoolLit, StringLit, CStringLit,
         Ident,
         BinOp, UnaryOp,
         Call,
@@ -123,6 +123,11 @@ struct HIRBoolLitExpr : HIRExpr {
 struct HIRStringLitExpr : HIRExpr {
     const char* data;
     uint32_t length;
+};
+
+struct HIRCStringLitExpr : HIRExpr {
+    const char* data;      // NUL-terminated string data
+    uint32_t length;       // byte length WITHOUT the NUL terminator
 };
 
 struct HIRIdentExpr : HIRExpr {

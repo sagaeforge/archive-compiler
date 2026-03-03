@@ -49,6 +49,7 @@ static void collectUses(const LIRInstr& instr, std::unordered_set<VReg>& uses) {
         case LIROp::ConstFloat:
         case LIROp::ConstBool:
         case LIROp::ConstString:
+        case LIROp::ConstCString:
         case LIROp::GlobalRef:
         case LIROp::BlockArg:
         case LIROp::Fence:

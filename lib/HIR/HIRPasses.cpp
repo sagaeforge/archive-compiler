@@ -24,6 +24,7 @@ static void collectCallees(const HIRExpr* expr,
         case HIRExpr::Kind::FloatLit:
         case HIRExpr::Kind::BoolLit:
         case HIRExpr::Kind::StringLit:
+        case HIRExpr::Kind::CStringLit:
         case HIRExpr::Kind::Ident:
         case HIRExpr::Kind::EnumAccess:
             break;
@@ -200,6 +201,7 @@ static bool exprUsesVar(const HIRExpr* expr) {
         case HIRExpr::Kind::FloatLit:
         case HIRExpr::Kind::BoolLit:
         case HIRExpr::Kind::StringLit:
+        case HIRExpr::Kind::CStringLit:
         case HIRExpr::Kind::Ident:
         case HIRExpr::Kind::EnumAccess:
             return false;
@@ -343,6 +345,7 @@ static bool exprUsesPtrWrite(const HIRExpr* expr) {
         case HIRExpr::Kind::FloatLit:
         case HIRExpr::Kind::BoolLit:
         case HIRExpr::Kind::StringLit:
+        case HIRExpr::Kind::CStringLit:
         case HIRExpr::Kind::Ident:
         case HIRExpr::Kind::EnumAccess:
             return false;
@@ -493,6 +496,7 @@ static bool exprUsesInlineAsm(const HIRExpr* expr) {
         case HIRExpr::Kind::FloatLit:
         case HIRExpr::Kind::BoolLit:
         case HIRExpr::Kind::StringLit:
+        case HIRExpr::Kind::CStringLit:
         case HIRExpr::Kind::Ident:
         case HIRExpr::Kind::EnumAccess:
             return false;
@@ -1421,6 +1425,7 @@ static void markTailCalls(HIRExpr* expr, bool in_tail_pos,
         case HIRExpr::Kind::FloatLit:
         case HIRExpr::Kind::BoolLit:
         case HIRExpr::Kind::StringLit:
+        case HIRExpr::Kind::CStringLit:
         case HIRExpr::Kind::Ident:
         case HIRExpr::Kind::EnumAccess:
             break;
@@ -1596,6 +1601,7 @@ static bool hasCallTo(const HIRExpr* expr, std::string_view fn_name) {
         case HIRExpr::Kind::FloatLit:
         case HIRExpr::Kind::BoolLit:
         case HIRExpr::Kind::StringLit:
+        case HIRExpr::Kind::CStringLit:
         case HIRExpr::Kind::Ident:
         case HIRExpr::Kind::EnumAccess:
             return false;
@@ -1733,6 +1739,7 @@ static bool hasNonTailCall(const HIRExpr* expr, std::string_view fn_name, bool i
         case HIRExpr::Kind::FloatLit:
         case HIRExpr::Kind::BoolLit:
         case HIRExpr::Kind::StringLit:
+        case HIRExpr::Kind::CStringLit:
         case HIRExpr::Kind::Ident:
         case HIRExpr::Kind::EnumAccess:
             return false;

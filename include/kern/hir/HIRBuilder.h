@@ -58,6 +58,7 @@ private:
     HIRExpr* buildFloatLit(const Expr* expr, std::optional<TypeId> ctx_type);
     HIRExpr* buildBoolLit(const Expr* expr);
     HIRExpr* buildStringLit(const Expr* expr);
+    HIRExpr* buildCStringLit(const Expr* expr);
     HIRExpr* buildIdent(const Expr* expr);
     HIRExpr* buildBinOp(const Expr* expr, std::optional<TypeId> ctx_type);
     HIRExpr* buildUnaryOp(const Expr* expr);

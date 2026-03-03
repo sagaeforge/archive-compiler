@@ -19,7 +19,8 @@ enum class LIROp : uint8_t {
     ConstInt,       // result = immediate integer
     ConstFloat,     // result = immediate float
     ConstBool,      // result = immediate bool
-    ConstString,    // result = GlobalData index (string literal)
+    ConstString,    // result = GlobalData index (string literal, fat ptr)
+    ConstCString,   // result = GlobalData index (NUL-terminated C string, raw ptr)
     GlobalRef,      // result = GlobalData index (float constant)
 
     // Integer arithmetic
@@ -293,6 +294,7 @@ struct GlobalVariable {
     bool is_pub = false;      // pub static — export as global symbol
     bool is_extern;           // extern static — linker-defined symbol (no storage)
     int64_t* array_values;    // array initializer values (nullptr if scalar)
+    std::string_view* array_labels; // fn-pointer array: label per element (nullptr if not fn ptrs)
     uint32_t array_count;     // number of elements (0 if scalar)
     uint8_t* init_bytes;      // raw byte initializer (struct/float literals)
     uint32_t init_byte_count; // byte count for init_bytes (0 if unused)
