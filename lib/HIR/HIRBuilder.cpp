@@ -894,8 +894,14 @@ void HIRBuilder::registerExports(const Module* ast, std::string_view module_path
         auto type_name = ctx_.strings.intern(imp->target_type.name);
         for (uint32_t j = 0; j < imp->method_count; ++j) {
             auto* m = imp->methods[j];
-            // Build mangled name
-            std::string mangled_str = std::string(imp->target_type.name) + "_" + std::string(m->name);
+            // Build mangled name with module prefix (so vtable labels resolve correctly)
+            std::string mangled_str;
+            if (!mod_name.empty()) {
+                mangled_str = std::string(mod_name) + "__" +
+                    std::string(imp->target_type.name) + "_" + std::string(m->name);
+            } else {
+                mangled_str = std::string(imp->target_type.name) + "_" + std::string(m->name);
+            }
             auto mangled = ctx_.strings.intern(mangled_str);
             impl_table_[type_name].methods[ctx_.strings.intern(m->name)] = mangled;
 
@@ -907,6 +913,11 @@ void HIRBuilder::registerExports(const Module* ast, std::string_view module_path
                 sig.param_types.push_back(resolveType(m->params[k].type));
             }
             fn_table_[mangled] = sig;
+
+            // Track module origin for cross-module symbol resolution
+            if (!mod_name.empty()) {
+                fn_module_map_[mangled] = mod_name;
+            }
         }
     }
 

@@ -1,0 +1,41 @@
+module module_trait_lib
+
+pub trait Driver {
+    fn init(self: Self) -> i64
+    fn read(self: Self) -> i64
+}
+
+pub struct UartDriver {
+    port: i64,
+    baud: i64
+}
+
+pub struct NullDriver {
+    id: i64
+}
+
+impl Driver for UartDriver {
+    fn init(self: UartDriver) -> i64 {
+        self.port + self.baud
+    }
+    fn read(self: UartDriver) -> i64 {
+        self.port
+    }
+}
+
+impl Driver for NullDriver {
+    fn init(self: NullDriver) -> i64 {
+        0
+    }
+    fn read(self: NullDriver) -> i64 {
+        self.id
+    }
+}
+
+pub fn init_driver(d: dyn Driver) -> i64 {
+    d.init()
+}
+
+pub fn read_driver(d: dyn Driver) -> i64 {
+    d.read()
+}

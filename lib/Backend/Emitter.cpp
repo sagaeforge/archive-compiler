@@ -929,6 +929,20 @@ void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
         out_ << "extern " << sym << "\n";
     }
 
+    // Emit extern declarations for cross-module vtable method labels
+    for (uint32_t i = 0; i < global_count; ++i) {
+        const auto& g = globals[i];
+        if (g.kind != GlobalData::VTable) continue;
+        for (uint32_t j = 0; j < g.vtable.method_count; ++j) {
+            auto fn_label = g.vtable.fn_labels[j];
+            // Cross-module labels already contain "__" (e.g. "modname__Type_method")
+            if (fn_label.find("__") != std::string_view::npos) {
+                std::string mangled = std::string(symPrefix()) + std::string(fn_label);
+                out_ << "extern " << mangled << "\n";
+            }
+        }
+    }
+
     // .rodata: string literals, float constants, immutable globals (without custom section)
     bool has_rodata = false;
     for (uint32_t i = 0; i < global_count; ++i) {
