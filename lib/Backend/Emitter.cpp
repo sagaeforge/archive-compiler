@@ -470,18 +470,35 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             }
             emitOperand(instr.src2(), 64);
             break;
-        case X86Op::Xchg:
+        case X86Op::Xchg: {
             // xchg [ptr], value — implicitly locked
-            if (instr.dst().isStack()) {
+            // Both operands can't be memory; load spilled values into temps.
+            bool dst_spill = instr.dst().isStack();
+            bool src_spill = instr.src1().isStack();
+            if (src_spill) {
+                // Load the spilled value into r11 first
                 out_ << "mov r11, ";
+                emitOperand(instr.src1(), 64);
+                out_ << "\n    ";
+            }
+            if (dst_spill) {
+                // Load spilled ptr into rcx (r11 may hold value)
+                std::string_view tmp = src_spill ? "rcx" : "r11";
+                out_ << "mov " << tmp << ", ";
                 emitOperand(instr.dst(), 64);
-                out_ << "\n    xchg [r11], ";
+                out_ << "\n    xchg [" << tmp << "], ";
             } else {
                 out_ << "xchg [";
                 emitOperand(instr.dst(), 64);
                 out_ << "], ";
             }
-            emitOperand(instr.src1(), 64);
+            out_ << (src_spill ? "r11" : "");
+            if (!src_spill) emitOperand(instr.src1(), 64);
+            // Note: do NOT write r11 back to the spill slot — xchg returns
+            // the old memory value in r11, which would clobber the original
+            // spilled variable. For atomic_store the old value is discarded.
+            break;
+        }
             break;
         case X86Op::Mfence:
             out_ << "mfence";

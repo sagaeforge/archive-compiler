@@ -472,6 +472,14 @@ LIRModule* LIRBuilder::build(const HIRModule* hir) {
                     init_val = static_cast<const HIRIntLitExpr*>(hgd->init)->value;
                 } else if (hgd->init->kind == HIRExpr::Kind::BoolLit) {
                     init_val = static_cast<const HIRBoolLitExpr*>(hgd->init)->value ? 1 : 0;
+                } else if (hgd->init->kind == HIRExpr::Kind::UnaryOp) {
+                    // Handle negation/bitnot of integer literal (e.g., -1)
+                    auto* unary = static_cast<const HIRUnaryOpExpr*>(hgd->init);
+                    if (unary->operand->kind == HIRExpr::Kind::IntLit) {
+                        int64_t val = static_cast<const HIRIntLitExpr*>(unary->operand)->value;
+                        if (unary->op == HIRUnaryOp::Neg) init_val = -val;
+                        else if (unary->op == HIRUnaryOp::BitNot) init_val = ~val;
+                    }
                 }
                 uint32_t sz = ctx_.types.sizeOf(hgd->type_id);
                 gd.variable.size = static_cast<uint8_t>(sz > 0 ? sz : 8);
@@ -3019,6 +3027,27 @@ VReg LIRBuilder::lowerAddrOf(const HIRAddrOfExpr* expr) {
     if (expr->operand->kind == HIRExpr::Kind::IndexAccess) {
         auto* idx_expr = static_cast<const HIRIndexAccessExpr*>(expr->operand);
         return lowerIndexElementPtr(idx_expr);
+    }
+
+    // For &var global_name, emit LeaGlobal to get address of the global
+    // (rather than loading the value and wrapping it in AddrOf)
+    if (expr->operand->kind == HIRExpr::Kind::Ident) {
+        auto* ident = static_cast<const HIRIdentExpr*>(expr->operand);
+        auto gv_it = global_label_map_.find(ident->name);
+        if (gv_it != global_label_map_.end()) {
+            VReg r = freshVReg();
+            LIRInstr i{};
+            i.op = LIROp::LoadGlobal;
+            i.result = r;
+            // Use an array type to force the backend to emit LeaGlobal
+            // (address) instead of MovLoadGlobal (value).
+            i.type = ctx_.types.makeArrayType(TypeTable::U8, 1);
+            auto nasm_it = global_nasm_label_.find(ident->name);
+            i.load_global.label = (nasm_it != global_nasm_label_.end()) ? nasm_it->second : ident->name;
+            i.loc = expr->loc;
+            emit(i);
+            return r;
+        }
     }
 
     // For non-variable expressions, lower normally and wrap in addr_of

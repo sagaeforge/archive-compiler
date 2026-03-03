@@ -1976,7 +1976,16 @@ HIRExpr* HIRBuilder::buildUnaryOp(const Expr* expr) {
                 return errorExpr(expr->loc);
             }
             auto* ident = static_cast<const IdentExpr*>(unary->operand);
-            if (mutable_vars_.find(ident->name) == mutable_vars_.end()) {
+            // Check local var OR static var global
+            bool is_mut_local = mutable_vars_.find(ident->name) != mutable_vars_.end();
+            bool is_mut_global = false;
+            {
+                auto gv_it = global_vars_.find(ident->name);
+                if (gv_it != global_vars_.end() && gv_it->second->is_mutable) {
+                    is_mut_global = true;
+                }
+            }
+            if (!is_mut_local && !is_mut_global) {
                 ctx_.diag.error(expr->loc,
                     std::string("'&var' requires a 'var' binding, but '") +
                     std::string(ident->name) + "' is immutable");
