@@ -201,8 +201,9 @@ HIRModule* CompilerPipeline::buildHIR(Module* ast) {
     return hir;
 }
 
-LIRModule* CompilerPipeline::buildLIR(HIRModule* hir) {
+LIRModule* CompilerPipeline::buildLIR(HIRModule* hir, const CompileOptions& opts) {
     LIRBuilder builder(ctx_);
+    builder.setBoundsCheck(opts.bounds_check);
     return builder.build(hir);
 }
 
@@ -410,7 +411,7 @@ int CompilerPipeline::run(const std::string& source, const CompileOptions& opts,
     }
 
     // --- LIR ---
-    LIRModule* lir = buildLIR(hir);
+    LIRModule* lir = buildLIR(hir, opts);
 
     // --- LIR Optimization ---
     optimizeLIR(lir);
@@ -683,7 +684,7 @@ int CompilerPipeline::compileToObject(const std::string& source,
     if (ctx_.diag.hasErrors()) { ctx_.diag.printAll(err); return 1; }
 
     // LIR
-    LIRModule* lir = buildLIR(hir);
+    LIRModule* lir = buildLIR(hir, opts);
     optimizeLIR(lir);
 
     // MachIR
@@ -812,7 +813,7 @@ int CompilerPipeline::runMultiFile(const CompileOptions& opts,
         HIRModule* hir = file_pipeline.buildHIR(ast);
         if (!hir || file_ctx.diag.hasErrors()) { file_ctx.diag.printAll(err); return 1; }
 
-        LIRModule* lir = file_pipeline.buildLIR(hir);
+        LIRModule* lir = file_pipeline.buildLIR(hir, opts);
         file_pipeline.optimizeLIR(lir);
         MachModule* mach = file_pipeline.buildMachIR(lir);
 
@@ -1077,6 +1078,7 @@ int CompilerPipeline::runModular(const CompileOptions& opts,
 
         // LIR
         LIRBuilder lir_builder(ctx_);
+        lir_builder.setBoundsCheck(opts.bounds_check);
         LIRModule* lir = lir_builder.build(hir);
 
         // LIR optimization

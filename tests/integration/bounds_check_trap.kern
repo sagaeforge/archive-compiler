@@ -1,0 +1,10 @@
+fn get_index() -> i64 {
+    5
+}
+
+fn main() -> i64 {
+    val arr: [i64; 3] = [10, 20, 30]
+    val idx: i64 = get_index()
+    val v: i64 = arr[idx]
+    v
+}

@@ -15,6 +15,8 @@ public:
 
     LIRModule* build(const HIRModule* hir);
 
+    void setBoundsCheck(bool v) { bounds_check_ = v; }
+
 private:
     // Function lowering
     LIRFunction buildFunction(const HIRFnDecl* fn);
@@ -140,6 +142,9 @@ private:
         uint32_t exit_bb;
     };
     std::unordered_map<std::string_view, LoopTarget> labeled_loops_;
+
+    // Runtime bounds checking (--bounds-check flag)
+    bool bounds_check_ = false;
 };
 
 } // namespace kern

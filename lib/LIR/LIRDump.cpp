@@ -69,6 +69,13 @@ const char* lirOpName(LIROp op) {
         case LIROp::PercpuStore:    return "percpu_store";
         case LIROp::LoadGlobal:     return "load_global";
         case LIROp::StoreGlobal:    return "store_global";
+        case LIROp::Clz:            return "clz";
+        case LIROp::Ctz:            return "ctz";
+        case LIROp::Popcnt:         return "popcnt";
+        case LIROp::Bswap:          return "bswap";
+        case LIROp::PortIn:         return "port_in";
+        case LIROp::PortOut:        return "port_out";
+        case LIROp::Trap:           return "trap";
     }
     return "?";
 }
@@ -218,6 +225,17 @@ void dumpLIRInstr(const LIRInstr& i, const TypeTable& types, std::ostream& out) 
         case LIROp::StoreGlobal:
             out << " @" << i.store_global.label << ", %v" << i.store_global.value;
             break;
+        case LIROp::Clz: case LIROp::Ctz: case LIROp::Popcnt: case LIROp::Bswap:
+            out << " %v" << i.unary.operand;
+            break;
+        case LIROp::PortIn:
+            out << " %v" << i.port_in.port;
+            break;
+        case LIROp::PortOut:
+            out << " %v" << i.port_out.port << ", %v" << i.port_out.value;
+            break;
+        case LIROp::Trap:
+            break; // no operands
     }
 
     out << " : " << types.name(i.type);

@@ -131,6 +131,20 @@ const char* x86OpName(X86Op op) {
         case X86Op::GsStore:     return "gs_store";
         case X86Op::MovLoadGlobal:  return "mov_load_global";
         case X86Op::MovStoreGlobal: return "mov_store_global";
+        case X86Op::LeaGlobal:      return "lea_global";
+        case X86Op::Bsf:           return "bsf";
+        case X86Op::Bsr:           return "bsr";
+        case X86Op::Popcnt:        return "popcnt";
+        case X86Op::Bswap:         return "bswap";
+        case X86Op::Cvttsd2si:     return "cvttsd2si";
+        case X86Op::Cvttss2si:     return "cvttss2si";
+        case X86Op::Cvtsi2sd:      return "cvtsi2sd";
+        case X86Op::Cvtsi2ss:      return "cvtsi2ss";
+        case X86Op::Cvtsd2ss:      return "cvtsd2ss";
+        case X86Op::Cvtss2sd:      return "cvtss2sd";
+        case X86Op::In:            return "in";
+        case X86Op::Out:           return "out";
+        case X86Op::Ud2:           return "ud2";
     }
     return "?";
 }

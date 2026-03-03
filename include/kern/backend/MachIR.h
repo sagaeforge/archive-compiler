@@ -226,6 +226,9 @@ enum class X86Op : uint8_t {
     // Port I/O
     In,             // in al/ax/eax, dx
     Out,            // out dx, al/ax/eax
+
+    // Trap
+    Ud2,            // ud2 — illegal instruction trap
 };
 
 const char* x86OpName(X86Op op);

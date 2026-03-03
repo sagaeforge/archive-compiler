@@ -337,6 +337,12 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
         case LIROp::Bswap:          selectBswap(instr); break;
         case LIROp::PortIn:         selectPortIn(instr); break;
         case LIROp::PortOut:        selectPortOut(instr); break;
+        case LIROp::Trap: {
+            MachInstr mi(X86Op::Ud2);
+            mi.operand_count = 0;
+            emit(mi);
+            break;
+        }
     }
 }
 

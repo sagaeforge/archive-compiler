@@ -622,6 +622,10 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             out_ << "out dx, ";
             emitOperand(instr.src1(), instr.width);
             break;
+
+        case X86Op::Ud2:
+            out_ << "ud2";
+            break;
     }
 
     out_ << "\n";

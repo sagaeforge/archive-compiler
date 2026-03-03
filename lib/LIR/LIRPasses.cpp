@@ -28,6 +28,7 @@ static bool hasSideEffects(LIROp op) {
         case LIROp::PercpuStore:
         case LIROp::PortIn:
         case LIROp::PortOut:
+        case LIROp::Trap:
             return true;
         default:
             return false;
@@ -50,6 +51,7 @@ static void collectUses(const LIRInstr& instr, std::unordered_set<VReg>& uses) {
         case LIROp::CompilerFence:
         case LIROp::FnRef:
         case LIROp::LoadGlobal:
+        case LIROp::Trap:
             break;
         case LIROp::InlineAsm:
             // Extended asm: mark input/output vregs as used

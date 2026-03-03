@@ -99,6 +99,9 @@ enum class LIROp : uint8_t {
     // Port I/O (x86 in/out)
     PortIn,         // inb/inw/inl: read from I/O port
     PortOut,        // outb/outw/outl: write to I/O port
+
+    // Trap (unreachable / bounds check failure)
+    Trap,           // ud2 — illegal instruction, used for bounds check failure
 };
 
 const char* lirOpName(LIROp op);

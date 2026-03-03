@@ -7,6 +7,7 @@
 #include "kern/parser/AST.h"
 #include <ostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace kern {
@@ -14,9 +15,13 @@ namespace kern {
 struct CompileOptions {
     std::string input_file;
     std::vector<std::string> input_files;  // multi-file compilation
+    std::vector<std::string> module_paths; // --module-path search dirs
     std::string output_file = "a.out";
     TargetArch target = TargetArch::X86_64;
+    OutputFormat format = OutputFormat::Macho64;
     bool asm_only = false;
+    bool compile_only = false;             // -c: produce .o, no linking
+    bool link_only = false;                // --link: link .o files only
     bool dump_tokens = false;
     bool dump_ast = false;
     bool dump_hir = false;
@@ -25,6 +30,12 @@ struct CompileOptions {
     bool dump_purity = false;
     bool freestanding = false;
     std::string linker_script;   // --linker-script <file>
+    std::vector<std::pair<std::string, std::string>> cfg_flags; // --cfg key=value
+    std::vector<std::string> lib_paths;    // -L<path>
+    std::vector<std::string> lib_names;    // -l<name>
+    std::vector<std::string> object_files; // pre-compiled .o files to link
+    std::vector<std::string> include_paths; // -I<path> for @include search
+    bool bounds_check = false;             // --bounds-check: runtime array bounds checking
 };
 
 // Orchestrates the full compilation pipeline:
@@ -39,11 +50,13 @@ public:
 
 private:
     CompilationContext& ctx_;
+    OutputFormat format_ = OutputFormat::Macho64;
 
     // Individual stages
-    Module* parse(const std::string& source, const std::string& filename);
+    Module* parse(const std::string& source, const std::string& filename,
+                  const CompileOptions& opts);
     HIRModule* buildHIR(Module* ast);
-    LIRModule* buildLIR(HIRModule* hir);
+    LIRModule* buildLIR(HIRModule* hir, const CompileOptions& opts);
     void optimizeLIR(LIRModule* lir);
     MachModule* buildMachIR(LIRModule* lir);
     void emitASM(MachModule* mach, LIRModule* lir, std::ostream& asm_out,
@@ -52,17 +65,36 @@ private:
     int assemble(const std::string& asm_file, const std::string& obj_file,
                  std::ostream& err);
     int link(const std::string& obj_file, const std::string& output_file,
-             std::ostream& err, const std::string& linker_script = "");
+             std::ostream& err, const CompileOptions& opts);
     int linkMultiple(const std::vector<std::string>& obj_files,
                      const std::string& output_file,
-                     std::ostream& err, const std::string& linker_script = "");
+                     std::ostream& err, const CompileOptions& opts);
     int linkFreestanding(const std::string& obj_file, const std::string& output_file,
-                         std::ostream& err, const std::string& linker_script = "");
+                         std::ostream& err, const CompileOptions& opts);
 
 public:
+    // Compile source to object file only (no linking). -c flag.
+    int compileToObject(const std::string& source, const CompileOptions& opts,
+                        std::ostream& out, std::ostream& err);
+
+    // Link pre-compiled object files only. --link flag.
+    int linkObjects(const CompileOptions& opts,
+                    std::ostream& out, std::ostream& err);
+
     // Multi-file compilation: compile each file to .o, then link
     int runMultiFile(const CompileOptions& opts,
                      std::ostream& out, std::ostream& err);
+
+    // Modular compilation: resolve imports, topo sort, shared context
+    int runModular(const CompileOptions& opts,
+                   std::ostream& out, std::ostream& err);
+
+    // Preprocess @include("path") directives (textual inclusion).
+    // Returns expanded source. Reports errors to err. Sets ok=false on failure.
+    static std::string preprocessIncludes(const std::string& source,
+                                          const std::string& base_dir,
+                                          const std::vector<std::string>& include_paths,
+                                          std::ostream& err, bool& ok);
 };
 
 } // namespace kern

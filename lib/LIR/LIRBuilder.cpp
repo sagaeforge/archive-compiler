@@ -11,7 +11,7 @@ LIRBuilder::LIRBuilder(CompilationContext& ctx) : ctx_(ctx) {}
 static bool blockTerminated(const std::vector<LIRInstr>& instrs) {
     if (instrs.empty()) return false;
     auto op = instrs.back().op;
-    return op == LIROp::Ret || op == LIROp::Branch || op == LIROp::CondBranch;
+    return op == LIROp::Ret || op == LIROp::Branch || op == LIROp::CondBranch || op == LIROp::Trap;
 }
 
 VReg LIRBuilder::freshVReg() {
@@ -3641,13 +3641,61 @@ VReg LIRBuilder::lowerIndexElementPtr(const HIRIndexAccessExpr* expr) {
     // Get element type and size from array or pointer type
     TypeId arr_type = expr->array->type;
     uint32_t elem_size = 8; // default
+    uint32_t array_size = 0; // known array size (0 = unknown/pointer)
     if (arr_type < ctx_.types.size()) {
         const auto& ti = ctx_.types.get(arr_type);
         if (ti.kind == TypeKind::Array) {
             elem_size = ctx_.types.sizeOf(ti.array.element);
+            array_size = ti.array.count;
         } else if (ti.kind == TypeKind::Ptr || ti.kind == TypeKind::PtrMut) {
             elem_size = ctx_.types.sizeOf(ti.ptr.pointee);
         }
+    }
+
+    // Runtime bounds check for fixed-size arrays (when index is not compile-time constant)
+    if (array_size > 0 && bounds_check_) {
+        // Emit: if (idx >= array_size) { ud2 }
+        VReg sz = freshVReg();
+        LIRInstr sz_instr{};
+        sz_instr.op = LIROp::ConstInt;
+        sz_instr.result = sz;
+        sz_instr.type = TypeTable::I64;
+        sz_instr.const_int.value = static_cast<int64_t>(array_size);
+        emit(sz_instr);
+
+        // cmp = (idx >= array_size) — unsigned comparison
+        VReg cmp = freshVReg();
+        LIRInstr cmp_instr{};
+        cmp_instr.op = LIROp::ICmpGe;
+        cmp_instr.result = cmp;
+        cmp_instr.type = TypeTable::Bool;
+        cmp_instr.bin.lhs = idx;
+        cmp_instr.bin.rhs = sz;
+        cmp_instr.loc = expr->loc;
+        emit(cmp_instr);
+
+        uint32_t trap_bb = newBlock("bounds_trap");
+        uint32_t ok_bb = newBlock("bounds_ok");
+
+        LIRInstr cbr{};
+        cbr.op = LIROp::CondBranch;
+        cbr.type = TypeTable::Unit;
+        cbr.cond_branch.cond = cmp;
+        cbr.cond_branch.true_target = trap_bb;
+        cbr.cond_branch.false_target = ok_bb;
+        cbr.loc = expr->loc;
+        emit(cbr);
+
+        // Trap block: ud2
+        switchToBlock(trap_bb);
+        LIRInstr trap{};
+        trap.op = LIROp::Trap;
+        trap.type = TypeTable::Unit;
+        trap.loc = expr->loc;
+        emit(trap);
+
+        // Continue in ok block
+        switchToBlock(ok_bb);
     }
 
     // offset = idx * elem_size
