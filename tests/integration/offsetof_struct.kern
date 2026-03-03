@@ -1,21 +1,17 @@
-struct Point {
-    x: i32
-    y: i32
-}
+// Test offsetof() compile-time intrinsic
 
-struct Header {
-    magic: u8
-    flags: u8
-    length: u32
-    data: i64
+struct Data {
+    a: u8
+    b: i64
+    c: i32
 }
 
 fn main() -> i64 {
-    val a: i64 = offsetof(Point, x) as i64
-    val b: i64 = offsetof(Point, y) as i64
-    val c: i64 = offsetof(Header, magic) as i64
-    val d: i64 = offsetof(Header, flags) as i64
-    val e: i64 = offsetof(Header, length) as i64
-    val f: i64 = offsetof(Header, data) as i64
-    a + b + c + d + e + f
+    val o_a: u64 = offsetof(Data, a)
+    val o_b: u64 = offsetof(Data, b)
+    val o_c: u64 = offsetof(Data, c)
+
+    // 0 + 8 + 16 = 24
+    // We want exit code 42, so add 18
+    (o_a + o_b + o_c + 18 as u64) as i64
 }

@@ -212,6 +212,7 @@ void CompilerPipeline::optimizeLIR(LIRModule* lir) {
     pm.add<ConstFoldPass>();
     pm.add<ConstPropPass>();
     pm.add<ConstFoldPass>();   // second pass catches propagated constants
+    pm.add<CSEPass>();         // eliminate redundant computations
     pm.add<DeadCodeElimPass>();
     pm.run(*lir, ctx_);
 }
@@ -1093,6 +1094,7 @@ int CompilerPipeline::runModular(const CompileOptions& opts,
         lir_pm.add<ConstFoldPass>();
         lir_pm.add<ConstPropPass>();
         lir_pm.add<ConstFoldPass>();
+        lir_pm.add<CSEPass>();
         lir_pm.add<DeadCodeElimPass>();
         lir_pm.run(*lir, ctx_);
 

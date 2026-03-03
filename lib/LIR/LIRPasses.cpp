@@ -535,6 +535,205 @@ void ConstPropPass::run(LIRModule& module, CompilationContext& /*ctx*/) {
 }
 
 // ============================================================================
+// CSEPass — Local Common Subexpression Elimination
+// ============================================================================
+
+// CSE key: encodes opcode + operands for equality testing
+struct CSEKey {
+    LIROp op;
+    TypeId type;
+    VReg op1, op2;        // binary operands or single unary operand
+    int64_t imm;          // for FieldPtr offset
+    std::string_view name; // for FnRef, GlobalRef, LoadGlobal
+
+    bool operator==(const CSEKey& o) const {
+        return op == o.op && type == o.type && op1 == o.op1 &&
+               op2 == o.op2 && imm == o.imm && name == o.name;
+    }
+};
+
+struct CSEKeyHash {
+    size_t operator()(const CSEKey& k) const {
+        size_t h = std::hash<uint32_t>{}(static_cast<uint32_t>(k.op));
+        h ^= std::hash<uint32_t>{}(k.type) * 2654435761u;
+        h ^= std::hash<uint32_t>{}(k.op1) * 40503u;
+        h ^= std::hash<uint32_t>{}(k.op2) * 65537u;
+        h ^= std::hash<int64_t>{}(k.imm) * 16777619u;
+        if (!k.name.empty())
+            h ^= std::hash<std::string_view>{}(k.name);
+        return h;
+    }
+};
+
+// Returns true if the instruction is a pure computation eligible for CSE
+static bool isCSECandidate(LIROp op) {
+    switch (op) {
+        // Arithmetic / comparison — pure
+        case LIROp::Add: case LIROp::Sub: case LIROp::Mul:
+        case LIROp::Div: case LIROp::Mod:
+        case LIROp::BAnd: case LIROp::BOr: case LIROp::BXor:
+        case LIROp::Shl: case LIROp::Shr:
+        case LIROp::FAdd: case LIROp::FSub: case LIROp::FMul: case LIROp::FDiv:
+        case LIROp::ICmpEq: case LIROp::ICmpNe:
+        case LIROp::ICmpLt: case LIROp::ICmpLe:
+        case LIROp::ICmpGt: case LIROp::ICmpGe:
+        case LIROp::FCmpEq: case LIROp::FCmpNe:
+        case LIROp::FCmpLt: case LIROp::FCmpLe:
+        case LIROp::FCmpGt: case LIROp::FCmpGe:
+        // Unary
+        case LIROp::Neg: case LIROp::FNeg: case LIROp::BNot: case LIROp::Not:
+        case LIROp::Cast:
+        // Bit intrinsics
+        case LIROp::Clz: case LIROp::Ctz: case LIROp::Popcnt: case LIROp::Bswap:
+        // Struct field offset (pure — address computation)
+        case LIROp::FieldPtr:
+        // Function ref (constant)
+        case LIROp::FnRef:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static CSEKey makeCSEKey(const LIRInstr& i) {
+    CSEKey k{};
+    k.op = i.op;
+    k.type = i.type;
+    k.op1 = INVALID_VREG;
+    k.op2 = INVALID_VREG;
+    k.imm = 0;
+
+    switch (i.op) {
+        // Binary ops
+        case LIROp::Add: case LIROp::Sub: case LIROp::Mul:
+        case LIROp::Div: case LIROp::Mod:
+        case LIROp::BAnd: case LIROp::BOr: case LIROp::BXor:
+        case LIROp::Shl: case LIROp::Shr:
+        case LIROp::FAdd: case LIROp::FSub: case LIROp::FMul: case LIROp::FDiv:
+        case LIROp::ICmpEq: case LIROp::ICmpNe:
+        case LIROp::ICmpLt: case LIROp::ICmpLe:
+        case LIROp::ICmpGt: case LIROp::ICmpGe:
+        case LIROp::FCmpEq: case LIROp::FCmpNe:
+        case LIROp::FCmpLt: case LIROp::FCmpLe:
+        case LIROp::FCmpGt: case LIROp::FCmpGe:
+            k.op1 = i.bin.lhs;
+            k.op2 = i.bin.rhs;
+            break;
+        // Unary ops
+        case LIROp::Neg: case LIROp::FNeg: case LIROp::BNot: case LIROp::Not:
+        case LIROp::Clz: case LIROp::Ctz: case LIROp::Popcnt: case LIROp::Bswap:
+            k.op1 = i.unary.operand;
+            break;
+        case LIROp::Cast:
+            k.op1 = i.cast.operand;
+            break;
+        case LIROp::FieldPtr:
+            k.op1 = i.field_ptr.base;
+            k.imm = i.field_ptr.offset;
+            break;
+        case LIROp::FnRef:
+            k.name = i.fn_ref.fn_name;
+            break;
+        default:
+            break;
+    }
+    return k;
+}
+
+void CSEPass::run(LIRModule& module, CompilationContext& /*ctx*/) {
+    for (uint32_t fi = 0; fi < module.fn_count; ++fi) {
+        auto& fn = module.functions[fi];
+        if (fn.is_intrinsic || fn.is_extern) continue;
+
+        for (uint32_t bi = 0; bi < fn.block_count; ++bi) {
+            auto& block = fn.blocks[bi];
+            // Map: CSEKey → first vreg that computed this expression
+            std::unordered_map<CSEKey, VReg, CSEKeyHash> expr_map;
+            // Map: vregs to replace (old → new)
+            std::unordered_map<VReg, VReg> replacements;
+
+            // First pass: find CSE opportunities
+            for (uint32_t ii = 0; ii < block.instr_count; ++ii) {
+                auto& instr = block.instrs[ii];
+                if (!isCSECandidate(instr.op)) continue;
+                if (instr.result == INVALID_VREG) continue;
+
+                CSEKey key = makeCSEKey(instr);
+                auto it = expr_map.find(key);
+                if (it != expr_map.end()) {
+                    // Duplicate! Map this result to the earlier one
+                    replacements[instr.result] = it->second;
+                    // Convert to dead ConstInt (DCE will remove it)
+                    instr.op = LIROp::ConstInt;
+                    instr.const_int.value = 0;
+                } else {
+                    expr_map[key] = instr.result;
+                }
+            }
+
+            // Second pass: apply replacements to all operands in this block
+            if (replacements.empty()) continue;
+            auto repl = [&](VReg v) -> VReg {
+                auto it = replacements.find(v);
+                return it != replacements.end() ? it->second : v;
+            };
+            for (uint32_t ii = 0; ii < block.instr_count; ++ii) {
+                auto& instr = block.instrs[ii];
+                switch (instr.op) {
+                    case LIROp::Add: case LIROp::Sub: case LIROp::Mul:
+                    case LIROp::Div: case LIROp::Mod:
+                    case LIROp::BAnd: case LIROp::BOr: case LIROp::BXor:
+                    case LIROp::Shl: case LIROp::Shr:
+                    case LIROp::FAdd: case LIROp::FSub: case LIROp::FMul: case LIROp::FDiv:
+                    case LIROp::ICmpEq: case LIROp::ICmpNe:
+                    case LIROp::ICmpLt: case LIROp::ICmpLe:
+                    case LIROp::ICmpGt: case LIROp::ICmpGe:
+                    case LIROp::FCmpEq: case LIROp::FCmpNe:
+                    case LIROp::FCmpLt: case LIROp::FCmpLe:
+                    case LIROp::FCmpGt: case LIROp::FCmpGe:
+                        instr.bin.lhs = repl(instr.bin.lhs);
+                        instr.bin.rhs = repl(instr.bin.rhs);
+                        break;
+                    case LIROp::Neg: case LIROp::FNeg:
+                    case LIROp::BNot: case LIROp::Not:
+                    case LIROp::Clz: case LIROp::Ctz:
+                    case LIROp::Popcnt: case LIROp::Bswap:
+                        instr.unary.operand = repl(instr.unary.operand);
+                        break;
+                    case LIROp::Cast:
+                        instr.cast.operand = repl(instr.cast.operand);
+                        break;
+                    case LIROp::Store:
+                        instr.store.ptr = repl(instr.store.ptr);
+                        instr.store.value = repl(instr.store.value);
+                        break;
+                    case LIROp::Load:
+                        instr.load.ptr = repl(instr.load.ptr);
+                        break;
+                    case LIROp::FieldPtr:
+                        instr.field_ptr.base = repl(instr.field_ptr.base);
+                        break;
+                    case LIROp::Ret:
+                        instr.ret.value = repl(instr.ret.value);
+                        break;
+                    case LIROp::CondBranch:
+                        instr.cond_branch.cond = repl(instr.cond_branch.cond);
+                        break;
+                    case LIROp::AddrOf:
+                        instr.addr_of.source = repl(instr.addr_of.source);
+                        break;
+                    case LIROp::StoreGlobal:
+                        instr.store_global.value = repl(instr.store_global.value);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
 // InliningPass — Inline small functions
 // ============================================================================
 

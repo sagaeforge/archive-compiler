@@ -24,6 +24,14 @@ public:
     void run(LIRModule& module, CompilationContext& ctx) override;
 };
 
+// Local common subexpression elimination: within a basic block,
+// if the same pure computation appears twice, reuse the first result.
+class CSEPass : public LIRPass {
+public:
+    std::string_view name() const override { return "cse"; }
+    void run(LIRModule& module, CompilationContext& ctx) override;
+};
+
 // Inline small functions at their call sites.
 class InliningPass : public LIRPass {
 public:
