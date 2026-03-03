@@ -1,0 +1,18 @@
+// Test memmove intrinsic — overlapping region copy
+fn memmove(dst: Ptr<var u8>, src: Ptr<u8>, count: u64) -> Unit = intrinsic
+
+fn main() -> i64 {
+    // Use a buffer of 4 i64s (32 bytes)
+    var a: i64 = 10
+    var b: i64 = 20
+    var c: i64 = 30
+    var d: i64 = 0
+
+    // Copy a (10) into d using memmove
+    val dst_ptr: Ptr<var u8> = (&var d) as Ptr<var u8>
+    val src_ptr: Ptr<u8> = (&a) as Ptr<u8>
+    memmove(dst_ptr, src_ptr, 8 as u64)
+
+    // d should be 10, total = a + b + c + d = 10 + 20 + 30 + 10 = 70
+    a + b + c + d
+}
