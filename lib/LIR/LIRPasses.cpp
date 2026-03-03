@@ -737,18 +737,192 @@ void CSEPass::run(LIRModule& module, CompilationContext& /*ctx*/) {
 // InliningPass — Inline small functions
 // ============================================================================
 
-void InliningPass::run(LIRModule& module, CompilationContext& /*ctx*/) {
+// Remap a VReg through a mapping table
+static VReg remapVReg(VReg v, const std::unordered_map<VReg, VReg>& m) {
+    if (v == INVALID_VREG) return v;
+    auto it = m.find(v);
+    return it != m.end() ? it->second : v;
+}
+
+// Remap all operand vregs in an instruction
+static void remapInstrOperands(LIRInstr& i, const std::unordered_map<VReg, VReg>& m) {
+    switch (i.op) {
+        case LIROp::Add: case LIROp::Sub: case LIROp::Mul:
+        case LIROp::Div: case LIROp::Mod:
+        case LIROp::AddWrap: case LIROp::SubWrap: case LIROp::MulWrap:
+        case LIROp::AddSat: case LIROp::SubSat:
+        case LIROp::BAnd: case LIROp::BOr: case LIROp::BXor:
+        case LIROp::Shl: case LIROp::Shr:
+        case LIROp::FAdd: case LIROp::FSub: case LIROp::FMul: case LIROp::FDiv:
+        case LIROp::ICmpEq: case LIROp::ICmpNe:
+        case LIROp::ICmpLt: case LIROp::ICmpLe:
+        case LIROp::ICmpGt: case LIROp::ICmpGe:
+        case LIROp::FCmpEq: case LIROp::FCmpNe:
+        case LIROp::FCmpLt: case LIROp::FCmpLe:
+        case LIROp::FCmpGt: case LIROp::FCmpGe:
+            i.bin.lhs = remapVReg(i.bin.lhs, m);
+            i.bin.rhs = remapVReg(i.bin.rhs, m);
+            break;
+        case LIROp::Neg: case LIROp::FNeg:
+        case LIROp::BNot: case LIROp::Not:
+        case LIROp::Clz: case LIROp::Ctz:
+        case LIROp::Popcnt: case LIROp::Bswap:
+            i.unary.operand = remapVReg(i.unary.operand, m);
+            break;
+        case LIROp::Cast:
+            i.cast.operand = remapVReg(i.cast.operand, m);
+            break;
+        case LIROp::Store:
+            i.store.ptr = remapVReg(i.store.ptr, m);
+            i.store.value = remapVReg(i.store.value, m);
+            break;
+        case LIROp::Load:
+            i.load.ptr = remapVReg(i.load.ptr, m);
+            break;
+        case LIROp::FieldPtr:
+            i.field_ptr.base = remapVReg(i.field_ptr.base, m);
+            break;
+        case LIROp::Ret:
+            i.ret.value = remapVReg(i.ret.value, m);
+            break;
+        case LIROp::CondBranch:
+            i.cond_branch.cond = remapVReg(i.cond_branch.cond, m);
+            break;
+        case LIROp::AddrOf:
+            i.addr_of.source = remapVReg(i.addr_of.source, m);
+            break;
+        case LIROp::StoreGlobal:
+            i.store_global.value = remapVReg(i.store_global.value, m);
+            break;
+        case LIROp::StructAlloc:
+            break; // StructAlloc has no vreg operands (only size/align)
+        default:
+            break;
+    }
+}
+
+void InliningPass::run(LIRModule& module, CompilationContext& ctx) {
     // Build function map for callee lookup
     std::unordered_map<std::string_view, const LIRFunction*> fn_map;
     for (uint32_t fi = 0; fi < module.fn_count; ++fi) {
         fn_map[module.functions[fi].name] = &module.functions[fi];
     }
 
-    // For now, identify inlining candidates but don't inline yet.
-    // Inlining in a fixed-array LIR requires rebuilding blocks, which needs
-    // arena allocation. Mark as a future extension point.
-    // The ConstFold + DCE passes handle the most impactful optimizations.
-    (void)fn_map;
+    constexpr uint32_t AUTO_INLINE_LIMIT = 10;
+
+    for (uint32_t fi = 0; fi < module.fn_count; ++fi) {
+        auto& caller = module.functions[fi];
+        if (caller.is_intrinsic || caller.is_extern) continue;
+
+        // Iterate blocks; inline at most once per pass to keep things simple
+        for (uint32_t bi = 0; bi < caller.block_count; ++bi) {
+            auto& block = caller.blocks[bi];
+
+            for (uint32_t ii = 0; ii < block.instr_count; ++ii) {
+                auto& call_instr = block.instrs[ii];
+                if (call_instr.op != LIROp::Call) continue;
+                if (call_instr.call.is_tail) continue; // skip tail calls
+
+                auto it = fn_map.find(call_instr.call.callee);
+                if (it == fn_map.end()) continue;
+                const auto* callee = it->second;
+
+                // Eligibility checks
+                if (callee->block_count != 1) continue;         // single-block only
+                if (callee->is_noinline) continue;
+                if (callee->is_recursive) continue;
+                if (callee->is_naked || callee->is_interrupt) continue;
+                if (callee->is_variadic) continue;
+                uint32_t body_count = callee->blocks[0].instr_count;
+                if (!callee->is_inline && body_count > AUTO_INLINE_LIMIT) continue;
+
+                const auto& cb = callee->blocks[0]; // callee block
+
+                // Build vreg mapping: callee vregs → caller vregs
+                std::unordered_map<VReg, VReg> vmap;
+
+                // Phase 1: map BlockArg vregs to call argument vregs
+                for (uint32_t ci = 0; ci < cb.instr_count; ++ci) {
+                    if (cb.instrs[ci].op == LIROp::BlockArg) {
+                        uint32_t idx = cb.instrs[ci].block_arg.index;
+                        if (idx < call_instr.call.arg_count) {
+                            vmap[cb.instrs[ci].result] = call_instr.call.args[idx];
+                        }
+                    }
+                }
+
+                // Phase 2: find ret vreg and allocate fresh vregs for computations
+                VReg callee_ret_vreg = INVALID_VREG;
+                for (uint32_t ci = 0; ci < cb.instr_count; ++ci) {
+                    auto& ci_instr = cb.instrs[ci];
+                    if (ci_instr.op == LIROp::BlockArg) continue;
+                    if (ci_instr.op == LIROp::Ret) {
+                        callee_ret_vreg = ci_instr.ret.value;
+                        continue;
+                    }
+                    if (ci_instr.result != INVALID_VREG) {
+                        vmap[ci_instr.result] = caller.next_vreg++;
+                    }
+                }
+
+                // Determine the remapped return vreg
+                VReg mapped_ret = remapVReg(callee_ret_vreg, vmap);
+
+                // Count instructions to inline (skip BlockArg and Ret)
+                uint32_t inline_count = 0;
+                for (uint32_t ci = 0; ci < cb.instr_count; ++ci) {
+                    auto op = cb.instrs[ci].op;
+                    if (op != LIROp::BlockArg && op != LIROp::Ret) inline_count++;
+                }
+
+                // Build new instruction array:
+                // [before call] + [inlined body] + [after call]
+                uint32_t new_count = block.instr_count - 1 + inline_count;
+                auto* new_instrs = ctx.arena.makeArray<LIRInstr>(new_count);
+                uint32_t ni = 0;
+
+                // Copy instructions before the call
+                for (uint32_t k = 0; k < ii; ++k) {
+                    new_instrs[ni++] = block.instrs[k];
+                }
+
+                // Clone and remap callee instructions
+                for (uint32_t ci = 0; ci < cb.instr_count; ++ci) {
+                    auto& ci_instr = cb.instrs[ci];
+                    if (ci_instr.op == LIROp::BlockArg) continue;
+                    if (ci_instr.op == LIROp::Ret) continue;
+
+                    LIRInstr cloned = ci_instr;
+                    if (cloned.result != INVALID_VREG) {
+                        cloned.result = remapVReg(cloned.result, vmap);
+                    }
+                    remapInstrOperands(cloned, vmap);
+                    new_instrs[ni++] = cloned;
+                }
+
+                // Copy instructions after the call, remapping call result uses
+                VReg call_result = call_instr.result;
+                std::unordered_map<VReg, VReg> result_map;
+                if (call_result != INVALID_VREG && mapped_ret != INVALID_VREG) {
+                    result_map[call_result] = mapped_ret;
+                }
+                for (uint32_t k = ii + 1; k < block.instr_count; ++k) {
+                    LIRInstr copied = block.instrs[k];
+                    if (!result_map.empty()) {
+                        remapInstrOperands(copied, result_map);
+                    }
+                    new_instrs[ni++] = copied;
+                }
+
+                // Replace block's instruction array
+                block.instrs = new_instrs;
+                block.instr_count = new_count;
+
+                // Restart scanning this block (indices changed)
+                break;
+            }
+        }
+    }
 }
 
 } // namespace kern
