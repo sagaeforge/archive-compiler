@@ -1039,6 +1039,82 @@ VReg LIRBuilder::lowerCall(const HIRCallExpr* expr) {
         return r;
     }
 
+    // atomic_xchg(ptr, val) -> old value — uses xchg (implicitly locked)
+    if (callee == "atomic_xchg" && expr->arg_count == 2) {
+        VReg ptr = lowerExpr(expr->args[0]);
+        VReg val = lowerExpr(expr->args[1]);
+        VReg r = freshVReg();
+        // xchg [$0], rax → old value in rax, uses generic "r" for ptr
+        LIRInstr i{};
+        i.op = LIROp::InlineAsm;
+        i.result = r;
+        i.type = expr->type;
+        i.loc = expr->loc;
+        auto* lines = ctx_.arena.makeArray<const char*>(1);
+        auto* lens = ctx_.arena.makeArray<uint32_t>(1);
+        lines[0] = "xchg [$1], rax"; lens[0] = 14;
+        i.inline_asm.lines = lines;
+        i.inline_asm.line_lengths = lens;
+        i.inline_asm.line_count = 1;
+        auto* outs = ctx_.arena.makeArray<LIRAsmOperand>(1);
+        outs[0].constraint = "=a"; outs[0].vreg = r;
+        i.inline_asm.outputs = outs;
+        i.inline_asm.output_count = 1;
+        auto* ins = ctx_.arena.makeArray<LIRAsmOperand>(2);
+        ins[0].constraint = "r"; ins[0].vreg = ptr;
+        ins[1].constraint = "a"; ins[1].vreg = val;
+        i.inline_asm.inputs = ins;
+        i.inline_asm.input_count = 2;
+        auto* clobs = ctx_.arena.makeArray<std::string_view>(1);
+        clobs[0] = "memory";
+        i.inline_asm.clobbers = clobs;
+        i.inline_asm.clobber_count = 1;
+        emit(i);
+        return r;
+    }
+
+    // Bit test intrinsics: bt/bts/btr/btc(ptr, bit_index) -> bool (previous bit value)
+    if ((callee == "bt" || callee == "bts" || callee == "btr" || callee == "btc") &&
+        expr->arg_count == 2) {
+        VReg base = lowerExpr(expr->args[0]);
+        VReg bit_idx = lowerExpr(expr->args[1]);
+        VReg r = freshVReg();
+        const char* asm_str = nullptr;
+        uint32_t asm_len = 0;
+        if (callee == "bt")  { asm_str = "bt [rcx], rdx";  asm_len = 13; }
+        if (callee == "bts") { asm_str = "bts [rcx], rdx"; asm_len = 14; }
+        if (callee == "btr") { asm_str = "btr [rcx], rdx"; asm_len = 14; }
+        if (callee == "btc") { asm_str = "btc [rcx], rdx"; asm_len = 14; }
+        LIRInstr i{};
+        i.op = LIROp::InlineAsm;
+        i.result = r;
+        i.type = TypeTable::Bool;
+        i.loc = expr->loc;
+        auto* lines = ctx_.arena.makeArray<const char*>(3);
+        auto* lens = ctx_.arena.makeArray<uint32_t>(3);
+        lines[0] = asm_str; lens[0] = asm_len;
+        lines[1] = "setc al"; lens[1] = 7;
+        lines[2] = "movzx rax, al"; lens[2] = 13;
+        i.inline_asm.lines = lines;
+        i.inline_asm.line_lengths = lens;
+        i.inline_asm.line_count = 3;
+        auto* outs = ctx_.arena.makeArray<LIRAsmOperand>(1);
+        outs[0].constraint = "=a"; outs[0].vreg = r;
+        i.inline_asm.outputs = outs;
+        i.inline_asm.output_count = 1;
+        auto* ins = ctx_.arena.makeArray<LIRAsmOperand>(2);
+        ins[0].constraint = "c"; ins[0].vreg = base;     // rcx = ptr
+        ins[1].constraint = "d"; ins[1].vreg = bit_idx;  // rdx = bit index
+        i.inline_asm.inputs = ins;
+        i.inline_asm.input_count = 2;
+        auto* clobs = ctx_.arena.makeArray<std::string_view>(2);
+        clobs[0] = "rcx"; clobs[1] = "rdx";
+        i.inline_asm.clobbers = clobs;
+        i.inline_asm.clobber_count = 2;
+        emit(i);
+        return r;
+    }
+
     // mfence() / sfence() / lfence() / compiler_barrier()
     if (callee == "mfence" && expr->arg_count == 0) {
         LIRInstr i{};
@@ -1437,6 +1513,28 @@ VReg LIRBuilder::lowerCall(const HIRCallExpr* expr) {
         if (callee == "sysretq")  { asm_str = "sysretq";  asm_len = 7; }
         if (callee == "sysenter") { asm_str = "sysenter"; asm_len = 8; }
         if (callee == "sysexit")  { asm_str = "sysexit";  asm_len = 7; }
+        if (callee == "io_wait") {
+            // I/O wait: out 0x80, al — writes to port 0x80 for ~1μs delay
+            LIRInstr i{};
+            i.op = LIROp::InlineAsm;
+            i.result = INVALID_VREG;
+            i.type = TypeTable::Unit;
+            i.loc = expr->loc;
+            auto* lines2 = ctx_.arena.makeArray<const char*>(1);
+            auto* lens2 = ctx_.arena.makeArray<uint32_t>(1);
+            lines2[0] = "out 0x80, al"; lens2[0] = 12;
+            i.inline_asm.lines = lines2;
+            i.inline_asm.line_lengths = lens2;
+            i.inline_asm.line_count = 1;
+            i.inline_asm.outputs = nullptr;
+            i.inline_asm.output_count = 0;
+            i.inline_asm.inputs = nullptr;
+            i.inline_asm.input_count = 0;
+            i.inline_asm.clobbers = nullptr;
+            i.inline_asm.clobber_count = 0;
+            emit(i);
+            return INVALID_VREG;
+        }
         if (asm_str) {
             LIRInstr i{};
             i.op = LIROp::InlineAsm;

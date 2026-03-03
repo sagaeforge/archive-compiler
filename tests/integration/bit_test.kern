@@ -1,0 +1,25 @@
+// Test bit test intrinsics: bt, bts
+fn bt(base: Ptr<u8>, bit: u64) -> bool = intrinsic
+fn bts(base: Ptr<var u8>, bit: u64) -> bool = intrinsic
+
+fn bool_to_i64(b: bool) -> i64 {
+    match b {
+        true => 1
+        false => 0
+    }
+}
+
+fn main() -> i64 with mut, mem, io {
+    var x: u64 = 10
+    val p: Ptr<var u8> = (&var x) as Ptr<var u8>
+    val pr: Ptr<u8> = (&x) as Ptr<u8>
+
+    // bt: test bit 1 (true, 10 = 0b1010)
+    val b1: bool = bt(pr, 1 as u64)
+
+    // bts: set bit 0 → x becomes 11
+    val prev: bool = bts(p, 0 as u64)
+
+    // b1=1, prev=0, x=11
+    bool_to_i64(b1) + bool_to_i64(prev) + (x as i64) + 30
+}
