@@ -1,4 +1,5 @@
 #pragma once
+#include "kern/support/SourceLocation.h"
 #include "kern/support/TypeSystem.h"
 #include <cstdint>
 #include <cstring>
@@ -287,6 +288,9 @@ struct MachInstr {
     // For global variable access (MovLoadGlobal/MovStoreGlobal)
     std::string_view global_label;
 
+    // Source location for debug info (DWARF)
+    SourceLocation loc;
+
     MachInstr() : op(X86Op::Nop) {
         std::memset(inline_ops, 0, sizeof(inline_ops));
     }
@@ -357,6 +361,7 @@ struct MachFunction {
     bool is_hot = false;            // @hot — frequently executed
     std::string_view section_name;  // @section("name"), empty = default
     std::string_view link_name;     // @link_name("name"), empty = auto
+    SourceLocation loc;             // function declaration source location
 };
 
 // ============================================================================

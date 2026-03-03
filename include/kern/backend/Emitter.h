@@ -13,6 +13,8 @@ class NASMEmitter {
     std::string_view module_name_;  // set by emitModule, used for mangling
     OutputFormat format_;           // output format (macho64/elf64/bin)
     bool stack_protector_ = false;  // emit stack canary checks
+    bool emit_source_locs_ = false; // emit source location comments in asm
+    uint32_t last_emitted_line_ = 0;  // for deduplicating source loc comments
 
     // dyn dispatch thunks: generated during emitRodata, emitted in .text
     struct DynThunk {
@@ -27,6 +29,7 @@ public:
         : out_(out), format_(fmt) {}
 
     void setStackProtector(bool v) { stack_protector_ = v; }
+    void setEmitSourceLocs(bool v) { emit_source_locs_ = v; }
 
     // Symbol prefix: "_" for Mach-O, "" for ELF/flat binary
     const char* symPrefix() const {

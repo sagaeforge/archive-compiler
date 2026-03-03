@@ -554,6 +554,7 @@ LIRFunction LIRBuilder::buildFunction(const HIRFnDecl* fn) {
     lir_fn.is_hot = fn->is_hot;
     lir_fn.section_name = fn->section_name;
     lir_fn.link_name = fn->link_name;
+    lir_fn.loc = fn->loc;
 
     if (fn->param_count > 0) {
         lir_fn.param_types = ctx_.arena.makeArray<TypeId>(fn->param_count);

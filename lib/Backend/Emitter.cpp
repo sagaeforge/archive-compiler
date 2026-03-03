@@ -845,6 +845,7 @@ void NASMEmitter::emitEpilogue(const MachFunction& fn) {
 void NASMEmitter::emitFunction(const MachFunction& fn) {
     if (fn.is_intrinsic || fn.is_extern) return;
 
+    last_emitted_line_ = 0;  // reset for each function
     bool has_canary = stack_protector_ && !fn.is_naked && !fn.is_interrupt && fn.stack_size > 0;
 
     // Emit custom section directive if specified
@@ -890,6 +891,13 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
 
         for (uint32_t i = 0; i < block.instr_count; ++i) {
             const auto& instr = block.instrs[i];
+
+            // Emit source location comment when line changes
+            if (emit_source_locs_ && instr.loc.line > 0 &&
+                instr.loc.line != last_emitted_line_) {
+                last_emitted_line_ = instr.loc.line;
+                out_ << "    ; " << instr.loc.filename << ":" << instr.loc.line << "\n";
+            }
 
             // For naked functions, skip all frame-related pseudo-instructions
             if (fn.is_naked) {

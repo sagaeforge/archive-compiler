@@ -33,6 +33,7 @@ class InstructionSelector {
     std::vector<std::string_view> extern_labels_;  // cross-module extern symbols
     std::unordered_map<std::string_view, std::string_view> link_names_;  // fn name → custom link name
     uint32_t next_temp_label_ = 0;  // for generating unique CAS loop labels
+    SourceLocation current_loc_;    // source location for emitted instructions
 
     // VReg mapping: LIR VReg → MachIR VReg (1:1 for most, but some ops create new vregs)
     // We keep the same VReg numbering from LIR

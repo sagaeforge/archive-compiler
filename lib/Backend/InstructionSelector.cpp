@@ -8,6 +8,7 @@ namespace kern {
 // ============================================================================
 
 void InstructionSelector::emit(MachInstr mi) {
+    mi.loc = current_loc_;
     block_instrs_[current_block_].push_back(mi);
 }
 
@@ -172,6 +173,7 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     mf->is_hot = fn.is_hot;
     mf->section_name = fn.section_name;
     mf->link_name = fn.link_name;
+    mf->loc = fn.loc;
     mf->next_vreg = fn.next_vreg;
     next_vreg_ = fn.next_vreg;
     struct_alloc_bytes_ = 0;
@@ -251,6 +253,9 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
 
 void InstructionSelector::selectInstr(const LIRInstr& instr,
                                        const LIRFunction& fn) {
+    // Set current source location for all emitted MachInstrs
+    current_loc_ = instr.loc;
+
     // Track float vregs for call arg classification
     if (instr.result != INVALID_VREG && isFloat(instr.type)) {
         float_vregs_[instr.result] = widthOf(instr.type);

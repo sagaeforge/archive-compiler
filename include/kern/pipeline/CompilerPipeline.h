@@ -37,6 +37,7 @@ struct CompileOptions {
     std::vector<std::string> include_paths; // -I<path> for @include search
     bool bounds_check = false;             // --bounds-check: runtime array bounds checking
     bool stack_protector = false;          // --stack-protector: stack canary checks
+    bool debug_locs = false;               // --debug-locs: emit source location comments in asm
 };
 
 // Orchestrates the full compilation pipeline:
@@ -53,6 +54,7 @@ private:
     CompilationContext& ctx_;
     OutputFormat format_ = OutputFormat::Macho64;
     bool stack_protector_ = false;
+    bool debug_locs_ = false;
 
     // Individual stages
     Module* parse(const std::string& source, const std::string& filename,

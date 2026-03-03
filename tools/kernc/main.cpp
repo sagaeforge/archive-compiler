@@ -31,6 +31,7 @@ static void printUsage(const char* prog) {
               << "  --cfg <key[=value]>  Set cfg flag for conditional compilation\n"
               << "  --bounds-check  Enable runtime array bounds checking\n"
               << "  --stack-protector  Enable stack canary protection\n"
+              << "  --debug-locs    Emit source locations as comments in asm output\n"
               << "  --help          Show this help\n";
 }
 
@@ -131,6 +132,8 @@ int main(int argc, char** argv) {
             opts.bounds_check = true;
         } else if (arg == "--stack-protector") {
             opts.stack_protector = true;
+        } else if (arg == "--debug-locs") {
+            opts.debug_locs = true;
         } else if (arg == "--cfg" && i + 1 < argc) {
             std::string cfg = argv[++i];
             auto eq_pos = cfg.find('=');

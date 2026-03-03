@@ -277,6 +277,7 @@ struct LIRFunction {
     bool is_hot = false;        // @hot — frequently executed
     std::string_view section_name;  // @section("name"), empty = default
     std::string_view link_name;     // @link_name("name"), empty = auto
+    SourceLocation loc;             // function declaration source location
 };
 
 // ============================================================================
