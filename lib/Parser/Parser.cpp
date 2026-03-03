@@ -911,6 +911,8 @@ Module* Parser::parseModule() {
         bool is_repr_c = false;
         uint8_t repr_backing_size = 0;  // @repr(u8)=1, @repr(u16)=2, etc.
         bool is_weak = false;
+        bool is_cold = false;
+        bool is_hot = false;
         bool is_no_mangle = false;
         bool cfg_excluded = false;
         uint32_t explicit_align = 0;
@@ -981,6 +983,10 @@ Module* Parser::parseModule() {
                 expect(TokenKind::RParen, "expected ')' after @repr(C)");
             } else if (anno.text == "weak") {
                 is_weak = true;
+            } else if (anno.text == "cold") {
+                is_cold = true;
+            } else if (anno.text == "hot") {
+                is_hot = true;
             } else if (anno.text == "no_mangle") {
                 is_no_mangle = true;
             } else if (anno.text == "link_name") {
@@ -1059,6 +1065,8 @@ Module* Parser::parseModule() {
                 fn->is_pub = is_pub;
                 fn->is_extern = is_extern;
                 fn->is_weak = is_weak;
+                fn->is_cold = is_cold;
+                fn->is_hot = is_hot;
                 fn->is_no_mangle = is_no_mangle;
                 fn->extern_abi = extern_abi;
                 fn->section_name = section_name;

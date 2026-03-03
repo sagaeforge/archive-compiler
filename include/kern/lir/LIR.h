@@ -265,6 +265,8 @@ struct LIRFunction {
     bool is_extern = false;     // extern "C" fn — external C linkage
     bool is_variadic = false;   // fn(x: T, ...) — C-style varargs
     bool is_weak = false;       // @weak — weak symbol linkage
+    bool is_cold = false;       // @cold — unlikely code path
+    bool is_hot = false;        // @hot — frequently executed
     std::string_view section_name;  // @section("name"), empty = default
     std::string_view link_name;     // @link_name("name"), empty = auto
 };

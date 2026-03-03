@@ -168,6 +168,8 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     mf->is_pub = fn.is_pub;
     mf->is_extern = fn.is_extern;
     mf->is_weak = fn.is_weak;
+    mf->is_cold = fn.is_cold;
+    mf->is_hot = fn.is_hot;
     mf->section_name = fn.section_name;
     mf->link_name = fn.link_name;
     mf->next_vreg = fn.next_vreg;

@@ -549,6 +549,8 @@ LIRFunction LIRBuilder::buildFunction(const HIRFnDecl* fn) {
     lir_fn.is_extern = fn->is_extern;
     lir_fn.is_variadic = fn->is_variadic;
     lir_fn.is_weak = fn->is_weak;
+    lir_fn.is_cold = fn->is_cold;
+    lir_fn.is_hot = fn->is_hot;
     lir_fn.section_name = fn->section_name;
     lir_fn.link_name = fn->link_name;
 

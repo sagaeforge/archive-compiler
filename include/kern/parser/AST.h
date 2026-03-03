@@ -563,6 +563,8 @@ struct FnDecl {
     std::string_view link_name;       // @link_name("name"), empty = auto
     std::string_view extern_abi;      // "C" for extern "C", empty otherwise
     bool is_weak = false;             // @weak — weak symbol linkage
+    bool is_cold = false;             // @cold — unlikely code path, placed in .text.cold
+    bool is_hot = false;              // @hot — frequently executed, placed in .text.hot
     bool is_no_mangle = false;       // @no_mangle — suppress module name mangling
     // Effect clause: "with io, atomic" → effect_names = {"io", "atomic"}
     std::string_view* effect_names = nullptr;

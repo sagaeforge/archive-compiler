@@ -1,0 +1,15 @@
+@cold
+fn error_handler(code: i64) -> i64 {
+    code
+}
+
+@hot
+fn fast_path(x: i64) -> i64 {
+    x + 2
+}
+
+fn main() -> i64 {
+    val a: i64 = fast_path(20)
+    val b: i64 = error_handler(20)
+    a + b
+}

@@ -1310,6 +1310,8 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
     hfn->is_extern = fn->is_extern;
     hfn->is_variadic = fn->is_variadic;
     hfn->is_weak = fn->is_weak;
+    hfn->is_cold = fn->is_cold;
+    hfn->is_hot = fn->is_hot;
     hfn->link_name = fn->link_name;
     hfn->section_name = fn->section_name;
 

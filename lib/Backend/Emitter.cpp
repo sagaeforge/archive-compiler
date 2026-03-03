@@ -848,6 +848,15 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
     // Emit custom section directive if specified
     if (!fn.section_name.empty()) {
         out_ << "section " << fn.section_name << "\n";
+    } else if (fn.is_cold) {
+        if (format_ == OutputFormat::Elf64) {
+            out_ << "section .text.cold\n";
+        }
+        // Mach-O doesn't support arbitrary text subsections, emit in normal .text
+    } else if (fn.is_hot) {
+        if (format_ == OutputFormat::Elf64) {
+            out_ << "section .text.hot\n";
+        }
     }
 
     // Function label: @link_name overrides, otherwise mangled if module context exists
@@ -908,6 +917,13 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
 
             emitInstr(instr);
         }
+    }
+
+    // Switch back to .text if we emitted a custom section
+    if (!fn.section_name.empty()) {
+        out_ << "section .text\n";
+    } else if (format_ == OutputFormat::Elf64 && (fn.is_cold || fn.is_hot)) {
+        out_ << "section .text\n";
     }
 
     out_ << "\n";
