@@ -845,6 +845,8 @@ void NASMEmitter::emitEpilogue(const MachFunction& fn) {
 void NASMEmitter::emitFunction(const MachFunction& fn) {
     if (fn.is_intrinsic || fn.is_extern) return;
 
+    bool has_canary = stack_protector_ && !fn.is_naked && !fn.is_interrupt && fn.stack_size > 0;
+
     // Emit custom section directive if specified
     if (!fn.section_name.empty()) {
         out_ << "section " << fn.section_name << "\n";
@@ -872,6 +874,13 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
         emitPrologue(fn);
     }
 
+    // Stack canary: store guard value after frame allocation
+    if (has_canary) {
+        out_ << "    sub rsp, 8\n"; // extra 8 bytes for canary
+        out_ << "    mov r11, [rel " << symPrefix() << "__stack_chk_guard]\n";
+        out_ << "    mov [rsp], r11\n";
+    }
+
     for (uint32_t b = 0; b < fn.block_count; ++b) {
         const auto& block = fn.blocks[b];
         // Emit block label (skip first block, it's the entry)
@@ -897,12 +906,26 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
 
             // Replace ret with epilogue
             if (instr.op == X86Op::Ret) {
+                // Stack canary check before return
+                if (has_canary) {
+                    out_ << "    mov r11, [rsp]\n";
+                    out_ << "    cmp r11, [rel " << symPrefix() << "__stack_chk_guard]\n";
+                    out_ << "    jne .canary_fail_" << fn.name << "\n";
+                    out_ << "    add rsp, 8\n"; // remove canary slot
+                }
                 emitEpilogue(fn);
                 continue;
             }
 
             // Emit frame teardown for tail calls (epilogue without ret)
             if (instr.op == X86Op::Pseudo_FrameDestroy) {
+                // Stack canary check before tail call
+                if (has_canary) {
+                    out_ << "    mov r11, [rsp]\n";
+                    out_ << "    cmp r11, [rel " << symPrefix() << "__stack_chk_guard]\n";
+                    out_ << "    jne .canary_fail_" << fn.name << "\n";
+                    out_ << "    add rsp, 8\n"; // remove canary slot
+                }
                 if (fn.stack_size > 0) {
                     out_ << "    add rsp, " << fn.stack_size << "\n";
                 }
@@ -917,6 +940,12 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
 
             emitInstr(instr);
         }
+    }
+
+    // Emit canary fail trap if stack protector is enabled
+    if (has_canary) {
+        out_ << ".canary_fail_" << fn.name << ":\n";
+        out_ << "    ud2\n";
     }
 
     // Switch back to .text if we emitted a custom section
@@ -1181,6 +1210,20 @@ void NASMEmitter::emitModule(const MachModule& mod, const LIRModule& lir_mod,
     // These labels already include the correct prefix from ISel
     for (uint32_t i = 0; i < mod.extern_label_count; ++i) {
         out_ << "extern " << mod.extern_labels[i] << "\n";
+    }
+
+    // Stack protector: define __stack_chk_guard in .data (weak, overridable by kernel)
+    if (stack_protector_) {
+        out_ << "\nsection .data\n";
+        if (format_ == OutputFormat::Elf64) {
+            out_ << "global __stack_chk_guard:data\n";
+            out_ << "weak __stack_chk_guard\n";
+        } else {
+            out_ << "global " << sp << "__stack_chk_guard\n";
+        }
+        out_ << sp << "__stack_chk_guard:\n";
+        out_ << "    dq 0xDEADBEEFDEADBEEF\n";
+        out_ << "section .text\n\n";
     }
     // Export functions as global symbols
     for (uint32_t i = 0; i < mod.fn_count; ++i) {

@@ -1,0 +1,9 @@
+fn compute(x: i64) -> i64 with mut {
+    var buf: [i64; 4] = [x, x + 1, x + 2, x + 3]
+    buf[0] = x * 2
+    buf[0] + buf[3]
+}
+
+fn main() -> i64 {
+    compute(10)
+}

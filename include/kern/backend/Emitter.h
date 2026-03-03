@@ -12,6 +12,7 @@ class NASMEmitter {
     std::ostream& out_;
     std::string_view module_name_;  // set by emitModule, used for mangling
     OutputFormat format_;           // output format (macho64/elf64/bin)
+    bool stack_protector_ = false;  // emit stack canary checks
 
     // dyn dispatch thunks: generated during emitRodata, emitted in .text
     struct DynThunk {
@@ -24,6 +25,8 @@ class NASMEmitter {
 public:
     explicit NASMEmitter(std::ostream& out, OutputFormat fmt = OutputFormat::Macho64)
         : out_(out), format_(fmt) {}
+
+    void setStackProtector(bool v) { stack_protector_ = v; }
 
     // Symbol prefix: "_" for Mach-O, "" for ELF/flat binary
     const char* symPrefix() const {

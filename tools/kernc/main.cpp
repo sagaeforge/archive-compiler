@@ -30,6 +30,7 @@ static void printUsage(const char* prog) {
               << "  --format <fmt>  Output format (macho64, elf64, bin)\n"
               << "  --cfg <key[=value]>  Set cfg flag for conditional compilation\n"
               << "  --bounds-check  Enable runtime array bounds checking\n"
+              << "  --stack-protector  Enable stack canary protection\n"
               << "  --help          Show this help\n";
 }
 
@@ -128,6 +129,8 @@ int main(int argc, char** argv) {
             }
         } else if (arg == "--bounds-check") {
             opts.bounds_check = true;
+        } else if (arg == "--stack-protector") {
+            opts.stack_protector = true;
         } else if (arg == "--cfg" && i + 1 < argc) {
             std::string cfg = argv[++i];
             auto eq_pos = cfg.find('=');

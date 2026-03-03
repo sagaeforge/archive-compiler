@@ -36,6 +36,7 @@ struct CompileOptions {
     std::vector<std::string> object_files; // pre-compiled .o files to link
     std::vector<std::string> include_paths; // -I<path> for @include search
     bool bounds_check = false;             // --bounds-check: runtime array bounds checking
+    bool stack_protector = false;          // --stack-protector: stack canary checks
 };
 
 // Orchestrates the full compilation pipeline:
@@ -51,6 +52,7 @@ public:
 private:
     CompilationContext& ctx_;
     OutputFormat format_ = OutputFormat::Macho64;
+    bool stack_protector_ = false;
 
     // Individual stages
     Module* parse(const std::string& source, const std::string& filename,

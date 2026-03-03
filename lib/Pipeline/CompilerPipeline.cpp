@@ -226,6 +226,7 @@ MachModule* CompilerPipeline::buildMachIR(LIRModule* lir) {
 void CompilerPipeline::emitASM(MachModule* mach, LIRModule* lir,
                                 std::ostream& asm_out, bool freestanding) {
     NASMEmitter emitter(asm_out, format_);
+    emitter.setStackProtector(stack_protector_);
     emitter.emitModule(*mach, *lir, freestanding);
 }
 
@@ -338,6 +339,7 @@ int CompilerPipeline::linkFreestanding(const std::string& obj_file,
 int CompilerPipeline::run(const std::string& source, const CompileOptions& opts,
                            std::ostream& out, std::ostream& err) {
     format_ = opts.format;
+    stack_protector_ = opts.stack_protector;
 
     // Preprocess @include directives
     std::string base_dir = std::filesystem::path(opts.input_file).parent_path().string();
@@ -537,6 +539,7 @@ int CompilerPipeline::compileToObject(const std::string& source,
                                        const CompileOptions& opts,
                                        std::ostream& /*out*/, std::ostream& err) {
     format_ = opts.format;
+    stack_protector_ = opts.stack_protector;
 
     // Preprocess @include directives
     std::string base_dir = std::filesystem::path(opts.input_file).parent_path().string();
@@ -709,6 +712,7 @@ int CompilerPipeline::compileToObject(const std::string& source,
         }
         // compile-only: always freestanding (no _start wrapper)
         NASMEmitter emitter(asm_out, format_);
+        emitter.setStackProtector(stack_protector_);
         emitter.emitModule(*mach, *lir, true);
     }
 
@@ -783,11 +787,13 @@ int CompilerPipeline::runMultiFile(const CompileOptions& opts,
     std::vector<std::string> asm_files;
 
     format_ = opts.format;
+    stack_protector_ = opts.stack_protector;
     for (const auto& input_file : opts.input_files) {
         // Fresh context for each file
         CompilationContext file_ctx;
         CompilerPipeline file_pipeline(file_ctx);
         file_pipeline.format_ = opts.format;
+        file_pipeline.stack_protector_ = opts.stack_protector;
 
         std::ifstream ifs(input_file);
         if (!ifs) {
@@ -847,6 +853,7 @@ int CompilerPipeline::runMultiFile(const CompileOptions& opts,
 int CompilerPipeline::runModular(const CompileOptions& opts,
                                   std::ostream& /*out*/, std::ostream& err) {
     format_ = opts.format;
+    stack_protector_ = opts.stack_protector;
     namespace fs = std::filesystem;
 
     // Phase 0: Build dependency graph
@@ -1106,6 +1113,7 @@ int CompilerPipeline::runModular(const CompileOptions& opts,
                 return 1;
             }
             NASMEmitter emitter(asm_out, format_);
+            emitter.setStackProtector(stack_protector_);
             // Only emit _start wrapper for the entry module (the one with main)
             bool has_main = false;
             for (uint32_t i = 0; i < mi.ast->fn_count; ++i) {
