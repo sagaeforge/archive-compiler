@@ -547,13 +547,140 @@ int CompilerPipeline::compileToObject(const std::string& source,
 
     ctx_.diag.setSource(src);
 
-    // Parse
-    Module* ast = parse(src, opts.input_file, opts);
-    if (ctx_.diag.hasErrors()) { ctx_.diag.printAll(err); return 1; }
+    // Check for import statements — if present, resolve dependencies for type info
+    ModuleResolver resolver(ctx_.diag);
+    resolver.addSearchPath(base_dir);
+    for (const auto& p : opts.include_paths) resolver.addSearchPath(p);
+    resolver.buildDependencyGraph({opts.input_file});
+    std::vector<std::string> topo_order;
+    resolver.topologicalOrder(topo_order);
 
-    // HIR
-    HIRModule* hir = buildHIR(ast);
+    // Parse and register dependency modules (for type info only, not codegen)
+    std::unordered_map<std::string, std::vector<std::string_view>> mod_struct_names;
+    std::unordered_map<std::string, std::vector<std::string_view>> mod_enum_names;
+    std::unordered_map<std::string, std::vector<std::string_view>> mod_union_names;
+    std::unordered_map<std::string, Module*> dep_asts;
+    std::vector<std::string> dep_sources; // keep alive for string_view lifetime
+
+    for (const auto& mod_path : topo_order) {
+        auto* rm = resolver.getModule(mod_path);
+        if (!rm) continue;
+        // Skip the target file itself
+        namespace fs = std::filesystem;
+        if (fs::canonical(rm->file_path) == fs::canonical(opts.input_file)) continue;
+
+        // Read and parse dependency module
+        std::ifstream dep_ifs(rm->file_path);
+        if (!dep_ifs) continue;
+        std::stringstream dep_ss;
+        dep_ss << dep_ifs.rdbuf();
+        dep_sources.push_back(dep_ss.str());
+        const std::string& dep_src = dep_sources.back();
+
+        ctx_.diag.setSource(dep_src);
+        Lexer dep_lexer(dep_src, rm->file_path, ctx_.diag);
+        Parser dep_parser(dep_lexer, ctx_.arena, ctx_.diag);
+
+        // Inject known type names from already-parsed deps
+        for (const auto& dep_dep : rm->imports) {
+            auto sn_it = mod_struct_names.find(dep_dep);
+            if (sn_it != mod_struct_names.end())
+                for (auto n : sn_it->second) dep_parser.addKnownStruct(n);
+            auto en_it = mod_enum_names.find(dep_dep);
+            if (en_it != mod_enum_names.end())
+                for (auto n : en_it->second) dep_parser.addKnownEnum(n);
+            auto un_it = mod_union_names.find(dep_dep);
+            if (un_it != mod_union_names.end())
+                for (auto n : un_it->second) dep_parser.addKnownUnion(n);
+        }
+
+        Module* dep_ast = dep_parser.parseModule();
+        if (!dep_ast || ctx_.diag.hasErrors()) continue;
+
+        // Set module name
+        if (dep_ast->module_name.empty()) {
+            dep_ast->module_name = ctx_.strings.intern(mod_path);
+        }
+        dep_asts[mod_path] = dep_ast;
+
+        // Collect pub type names for downstream deps
+        std::vector<std::string_view> snames, enames, unames;
+        for (uint32_t i = 0; i < dep_ast->struct_count; ++i)
+            if (dep_ast->structs[i]->is_pub) snames.push_back(dep_ast->structs[i]->name);
+        for (uint32_t i = 0; i < dep_ast->enum_count; ++i)
+            if (dep_ast->enums[i]->is_pub) enames.push_back(dep_ast->enums[i]->name);
+        for (uint32_t i = 0; i < dep_ast->union_count; ++i)
+            if (dep_ast->unions[i]->is_pub) unames.push_back(dep_ast->unions[i]->name);
+        if (!snames.empty()) mod_struct_names[mod_path] = std::move(snames);
+        if (!enames.empty()) mod_enum_names[mod_path] = std::move(enames);
+        if (!unames.empty()) mod_union_names[mod_path] = std::move(unames);
+    }
+
+    // Parse the target module with known types from deps
+    ctx_.diag.setSource(src);
+    Lexer lexer(src, opts.input_file, ctx_.diag);
+    Parser parser(lexer, ctx_.arena, ctx_.diag);
+
+    // Inject known type names from all dependencies
+    for (const auto& [mod_path, _ast] : dep_asts) {
+        auto sn_it = mod_struct_names.find(mod_path);
+        if (sn_it != mod_struct_names.end())
+            for (auto n : sn_it->second) parser.addKnownStruct(n);
+        auto en_it = mod_enum_names.find(mod_path);
+        if (en_it != mod_enum_names.end())
+            for (auto n : en_it->second) parser.addKnownEnum(n);
+        auto un_it = mod_union_names.find(mod_path);
+        if (un_it != mod_union_names.end())
+            for (auto n : un_it->second) parser.addKnownUnion(n);
+    }
+
+    // Apply cfg flags
+    if (opts.target == TargetArch::X86_64) parser.setCfg("target_arch", "x86_64");
+    else if (opts.target == TargetArch::AArch64) parser.setCfg("target_arch", "aarch64");
+    if (opts.format == OutputFormat::Macho64) parser.setCfg("target_os", "macos");
+    else if (opts.format == OutputFormat::Elf64) parser.setCfg("target_os", "linux");
+    if (opts.freestanding) parser.setCfg("freestanding");
+    for (const auto& [key, value] : opts.cfg_flags) {
+        if (value.empty()) parser.setCfg(key);
+        else parser.setCfg(key, value);
+    }
+
+    Module* ast = parser.parseModule();
+    if (!ast || ctx_.diag.hasErrors()) { ctx_.diag.printAll(err); return 1; }
+
+    // Set module name from file path if not declared
+    if (ast->module_name.empty()) {
+        std::string stem = std::filesystem::path(opts.input_file).stem().string();
+        ast->module_name = ctx_.strings.intern(stem);
+    }
+
+    // Build HIR with dependency exports registered
+    HIRBuilder builder(ctx_);
+    for (const auto& [mod_path, dep_ast] : dep_asts) {
+        auto dep_mod_name = dep_ast->module_name;
+        builder.registerExports(dep_ast, dep_mod_name);
+    }
+    HIRModule* hir = builder.build(ast);
     if (!hir || ctx_.diag.hasErrors()) { ctx_.diag.printAll(err); return 1; }
+
+    // Monomorphization
+    MonomorphizationPass mono(ctx_);
+    hir = mono.run(hir);
+    if (!hir || ctx_.diag.hasErrors()) { ctx_.diag.printAll(err); return 1; }
+
+    // HIR passes
+    HIRPassManager pm;
+    pm.add<PurityAnalysisPass>();
+    pm.add<EffectAnalysisPass>();
+    pm.add<OwnershipCheckPass>();
+    pm.add<TailCallAnalysisPass>();
+    pm.add<ConstOverflowPass>();
+    pm.add<LossyCastPass>();
+    pm.add<BorrowEscapePass>();
+    pm.add<MutBorrowAliasPass>();
+    pm.add<UnusedBindingPass>();
+    pm.run(*hir, ctx_);
+    if (ctx_.diag.hasErrors()) { ctx_.diag.printAll(err); return 1; }
 
     // LIR
     LIRModule* lir = buildLIR(hir);
@@ -580,7 +707,8 @@ int CompilerPipeline::compileToObject(const std::string& source,
             return 1;
         }
         // compile-only: always freestanding (no _start wrapper)
-        emitASM(mach, lir, asm_out, true);
+        NASMEmitter emitter(asm_out, format_);
+        emitter.emitModule(*mach, *lir, true);
     }
 
     // Assemble to .o
