@@ -2229,6 +2229,45 @@ VReg LIRBuilder::lowerCall(const HIRCallExpr* expr) {
         return r;
     }
 
+    // memzero(dst, count) — zero-fill using rep stosb with al=0
+    if (callee == "memzero" && expr->arg_count == 2) {
+        VReg dst = lowerExpr(expr->args[0]);
+        VReg cnt = lowerExpr(expr->args[1]);
+        // Synthesize zero byte value
+        VReg zero = freshVReg();
+        LIRInstr zero_i{};
+        zero_i.op = LIROp::ConstInt; zero_i.result = zero;
+        zero_i.type = TypeTable::U8; zero_i.const_int.value = 0;
+        emit(zero_i);
+        // rep stosb: [rdi] = al, rdi++, rcx--
+        LIRInstr i{};
+        i.op = LIROp::InlineAsm;
+        i.result = INVALID_VREG;
+        i.type = TypeTable::Unit;
+        i.loc = expr->loc;
+        auto* lines = ctx_.arena.makeArray<const char*>(2);
+        auto* lens = ctx_.arena.makeArray<uint32_t>(2);
+        lines[0] = "cld"; lens[0] = 3;
+        lines[1] = "rep stosb"; lens[1] = 9;
+        i.inline_asm.lines = lines;
+        i.inline_asm.line_lengths = lens;
+        i.inline_asm.line_count = 2;
+        i.inline_asm.outputs = nullptr;
+        i.inline_asm.output_count = 0;
+        auto* ins = ctx_.arena.makeArray<LIRAsmOperand>(3);
+        ins[0].constraint = "D"; ins[0].vreg = dst;    // rdi = dst
+        ins[1].constraint = "a"; ins[1].vreg = zero;   // al = 0
+        ins[2].constraint = "c"; ins[2].vreg = cnt;    // rcx = count
+        i.inline_asm.inputs = ins;
+        i.inline_asm.input_count = 3;
+        auto* clobs = ctx_.arena.makeArray<std::string_view>(3);
+        clobs[0] = "rdi"; clobs[1] = "rax"; clobs[2] = "rcx";
+        i.inline_asm.clobbers = clobs;
+        i.inline_asm.clobber_count = 3;
+        emit(i);
+        return INVALID_VREG;
+    }
+
     // Regular call
     VReg* args = nullptr;
     if (expr->arg_count > 0) {

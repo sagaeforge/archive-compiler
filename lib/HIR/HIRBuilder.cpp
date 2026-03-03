@@ -2091,6 +2091,13 @@ HIRExpr* HIRBuilder::buildUnaryOp(const Expr* expr) {
 HIRExpr* HIRBuilder::buildCall(const Expr* expr) {
     auto* call = static_cast<const CallExpr*>(expr);
 
+    // Branch hint builtins: likely(cond) / unlikely(cond) → identity (pass-through)
+    // These serve as documentation + future PGO hint infrastructure.
+    if ((call->callee == "likely" || call->callee == "unlikely") &&
+        call->arg_count == 1 && call->type_arg_count == 0) {
+        return buildExpr(call->args[0]);
+    }
+
     // Builtin cast functions: truncate<T>(x), clamp<T>(x)
     if ((call->callee == "truncate" || call->callee == "clamp") &&
         call->type_arg_count == 1 && call->arg_count == 1) {

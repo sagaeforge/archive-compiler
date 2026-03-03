@@ -1,0 +1,10 @@
+// Test memzero intrinsic
+fn memzero(dst: Ptr<var u8>, count: u64) -> Unit = intrinsic
+
+fn main() -> i64 with mut, mem, io {
+    var x: i64 = 99
+    val p: Ptr<var u8> = (&var x) as Ptr<var u8>
+    memzero(p, 8 as u64)
+    // x should be 0 after memzero
+    x + 42
+}
