@@ -1450,7 +1450,7 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
         case Expr::Kind::StructLit:   return buildStructLit(expr, ctx_type);
         case Expr::Kind::FieldAccess: return buildFieldAccess(expr);
         case Expr::Kind::EnumAccess:  return buildEnumAccess(expr);
-        case Expr::Kind::UnionVariant:return buildUnionVariant(expr);
+        case Expr::Kind::UnionVariant:return buildUnionVariant(expr, ctx_type);
         case Expr::Kind::Cast:     return buildCast(expr);
         case Expr::Kind::Loop:       return buildLoop(expr, ctx_type);
         case Expr::Kind::ForRange:   return buildForRange(expr);
@@ -2803,7 +2803,8 @@ HIRExpr* HIRBuilder::buildEnumAccess(const Expr* expr) {
     return e;
 }
 
-HIRExpr* HIRBuilder::buildUnionVariant(const Expr* expr) {
+HIRExpr* HIRBuilder::buildUnionVariant(const Expr* expr,
+                                       std::optional<TypeId> ctx_type) {
     auto* uv = static_cast<const UnionVariantExpr*>(expr);
     auto* e = ctx_.arena.make<HIRUnionVariantExpr>();
     e->kind = HIRExpr::Kind::UnionVariant;
@@ -2813,19 +2814,26 @@ HIRExpr* HIRBuilder::buildUnionVariant(const Expr* expr) {
 
     auto type_it = named_types_.find(uv->union_name);
 
-    // Generic union: "Result::Ok(...)" where Result is generic — resolve from
-    // current_return_type_ which should be the monomorphized variant (e.g. Result_i64)
+    // Generic union: try to resolve from context type or current_return_type_
     if ((type_it == named_types_.end() || (type_it->second < ctx_.types.size() &&
          ctx_.types.get(type_it->second).kind != TypeKind::Union)) &&
-        generic_unions_.count(uv->union_name) &&
-        current_return_type_ != INVALID_TYPE && current_return_type_ < ctx_.types.size()) {
-        const auto& ret_ti = ctx_.types.get(current_return_type_);
-        if (ret_ti.kind == TypeKind::Union) {
-            auto mangled = ret_ti.union_.name;
-            auto mono_it = named_types_.find(mangled);
-            if (mono_it != named_types_.end()) {
-                type_it = mono_it;
-                e->union_name = mangled;
+        generic_unions_.count(uv->union_name)) {
+        // Try context type first (e.g. from val decl annotation)
+        TypeId hint = INVALID_TYPE;
+        if (ctx_type.has_value() && *ctx_type != INVALID_TYPE && *ctx_type < ctx_.types.size()) {
+            hint = *ctx_type;
+        } else if (current_return_type_ != INVALID_TYPE && current_return_type_ < ctx_.types.size()) {
+            hint = current_return_type_;
+        }
+        if (hint != INVALID_TYPE) {
+            const auto& hint_ti = ctx_.types.get(hint);
+            if (hint_ti.kind == TypeKind::Union) {
+                auto mangled = hint_ti.union_.name;
+                auto mono_it = named_types_.find(mangled);
+                if (mono_it != named_types_.end()) {
+                    type_it = mono_it;
+                    e->union_name = mangled;
+                }
             }
         }
     }
