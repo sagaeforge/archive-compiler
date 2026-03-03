@@ -503,6 +503,7 @@ LIRModule* LIRBuilder::build(const HIRModule* hir) {
         gd.index = static_cast<uint32_t>(globals_.size());
         gd.label = vt.label;
         gd.vtable.method_count = vt.method_count;
+        gd.vtable.self_size = vt.self_size;
         gd.vtable.fn_labels = ctx_.arena.makeArray<std::string_view>(vt.method_count);
         for (uint32_t j = 0; j < vt.method_count; ++j) {
             gd.vtable.fn_labels[j] = vt.fn_labels[j];

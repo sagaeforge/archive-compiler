@@ -481,6 +481,7 @@ struct HIRModule {
         std::string_view label;      // vtable global label (interned)
         std::string_view* fn_labels; // ordered fn labels for vtable slots
         uint32_t method_count;
+        uint32_t self_size;          // byte size of concrete implementing type (for dyn thunks)
     };
     VTableEntry* vtables;
     uint32_t vtable_count;

@@ -2152,8 +2152,9 @@ void InstructionSelector::selectPortOut(const LIRInstr& instr) {
                  MachOperand::virt(instr.port_out.value), w));
     MachInstr mi(X86Op::Out);
     mi.width = w;
-    mi.operand_count = 1;
-    mi.inline_ops[0] = MachOperand::precolored(PhysReg::RAX);
+    mi.operand_count = 2;
+    mi.inline_ops[0] = MachOperand::precolored(PhysReg::RDX);  // port (implicit)
+    mi.inline_ops[1] = MachOperand::precolored(PhysReg::RAX);  // value
     emit(mi);
 }
 

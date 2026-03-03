@@ -1,0 +1,62 @@
+trait Driver {
+    fn init(self: Self) -> i64
+    fn read(self: Self) -> i64
+}
+
+struct UartDriver {
+    port: i64,
+    baud: i64
+}
+
+impl Driver for UartDriver {
+    fn init(self: UartDriver) -> i64 {
+        self.port + self.baud
+    }
+
+    fn read(self: UartDriver) -> i64 {
+        self.port * 2
+    }
+}
+
+struct NullDriver {
+    id: i64
+}
+
+impl Driver for NullDriver {
+    fn init(self: NullDriver) -> i64 {
+        0
+    }
+
+    fn read(self: NullDriver) -> i64 {
+        self.id
+    }
+}
+
+fn init_driver(d: dyn Driver) -> i64 with io, atomic, mut, mem {
+    d.init()
+}
+
+fn read_driver(d: dyn Driver) -> i64 with io, atomic, mut, mem {
+    d.read()
+}
+
+fn main() -> i64 with io, atomic, mut, mem {
+    val uart: UartDriver = UartDriver { port: 3, baud: 10 }
+    val null_dev: NullDriver = NullDriver { id: 7 }
+
+    var result: i64 = 0
+
+    val init_r: i64 = init_driver(uart as dyn Driver)
+    if init_r == 13 { result = result + 1 }
+
+    val read_r: i64 = read_driver(uart as dyn Driver)
+    if read_r == 6 { result = result + 2 }
+
+    val null_init: i64 = init_driver(null_dev as dyn Driver)
+    if null_init == 0 { result = result + 4 }
+
+    val null_read: i64 = read_driver(null_dev as dyn Driver)
+    if null_read == 7 { result = result + 8 }
+
+    result + 27
+}

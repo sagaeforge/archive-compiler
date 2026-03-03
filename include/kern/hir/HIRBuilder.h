@@ -185,6 +185,7 @@ private:
         std::string_view trait_name;    // trait name
         std::string_view type_name;     // concrete type name
         std::vector<std::string_view> fn_labels;  // ordered function labels for vtable slots
+        uint32_t self_size = 0;         // byte size of concrete implementing type
     };
     std::vector<VTableInfo> vtable_globals_;
 

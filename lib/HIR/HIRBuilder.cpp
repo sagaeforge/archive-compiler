@@ -1178,6 +1178,7 @@ HIRModule* HIRBuilder::build(const Module* ast) {
             auto& vt = vtable_globals_[i];
             mod->vtables[i].label = vt.label;
             mod->vtables[i].method_count = static_cast<uint32_t>(vt.fn_labels.size());
+            mod->vtables[i].self_size = vt.self_size;
             mod->vtables[i].fn_labels = ctx_.arena.makeArray<std::string_view>(vt.fn_labels.size());
             for (uint32_t j = 0; j < vt.fn_labels.size(); ++j) {
                 mod->vtables[i].fn_labels[j] = vt.fn_labels[j];
@@ -2950,6 +2951,12 @@ HIRExpr* HIRBuilder::buildCast(const Expr* expr) {
             vt.label = vtbl_label;
             vt.trait_name = trait_name;
             vt.type_name = type_name;
+            // Compute self_size from the concrete implementing type.
+            // If methods already take self as a pointer, self_size stays 0 (no thunk).
+            auto nt_it = named_types_.find(type_name);
+            if (nt_it != named_types_.end()) {
+                vt.self_size = ctx_.types.sizeOf(nt_it->second);
+            }
             // Fill fn_labels in trait method order
             auto trait_it = trait_table_.find(trait_name);
             if (trait_it != trait_table_.end()) {
@@ -2962,6 +2969,20 @@ HIRExpr* HIRBuilder::buildCast(const Expr* expr) {
                             std::string(mname) + "' in impl " + std::string(trait_name) +
                             " for " + std::string(type_name));
                         return errorExpr(expr->loc);
+                    }
+                }
+            }
+            // Check if the first method's first param is already a pointer type.
+            // If so, the methods expect a pointer self → no thunk needed.
+            if (!vt.fn_labels.empty()) {
+                auto fn_it = fn_table_.find(vt.fn_labels[0]);
+                if (fn_it != fn_table_.end() && !fn_it->second.param_types.empty()) {
+                    TypeId self_tid = fn_it->second.param_types[0];
+                    if (self_tid < ctx_.types.size()) {
+                        auto k = ctx_.types.get(self_tid).kind;
+                        if (k == TypeKind::Ptr || k == TypeKind::PtrMut) {
+                            vt.self_size = 0;  // self is already a pointer, no thunk
+                        }
                     }
                 }
             }

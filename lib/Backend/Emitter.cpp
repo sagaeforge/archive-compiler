@@ -968,12 +968,22 @@ void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
             for (uint32_t j = 0; j < g.vtable.method_count; ++j) {
                 auto fn_label = g.vtable.fn_labels[j];
                 // Mangle: symPrefix + module__fn_name (or just symPrefix + fn_name)
+                std::string mangled;
                 if (!module_name_.empty() &&
                     fn_label.find("__") == std::string_view::npos &&
                     fn_label != "main") {
-                    out_ << "    dq " << symPrefix() << module_name_ << "__" << fn_label << "\n";
+                    mangled = std::string(symPrefix()) + std::string(module_name_) + "__" + std::string(fn_label);
                 } else {
-                    out_ << "    dq " << symPrefix() << fn_label << "\n";
+                    mangled = std::string(symPrefix()) + std::string(fn_label);
+                }
+
+                // Generate dyn dispatch thunk if self is passed by value (≤16B struct)
+                if (g.vtable.self_size > 0 && g.vtable.self_size <= 16) {
+                    std::string thunk = std::string(symPrefix()) + "__dyn_thunk_" + std::string(fn_label);
+                    dyn_thunks_.push_back({thunk, mangled, g.vtable.self_size});
+                    out_ << "    dq " << thunk << "\n";
+                } else {
+                    out_ << "    dq " << mangled << "\n";
                 }
             }
         }
@@ -1086,6 +1096,30 @@ void NASMEmitter::emitStartWrapper() {
 }
 
 // ============================================================================
+// Dyn Dispatch Thunks
+// ============================================================================
+
+void NASMEmitter::emitDynThunks() {
+    for (auto& thunk : dyn_thunks_) {
+        out_ << thunk.thunk_label << ":\n";
+        if (thunk.self_size <= 8) {
+            // 1-GPR self: just dereference the data pointer
+            out_ << "    mov rdi, [rdi]\n";
+        } else {
+            // 2-GPR self (9-16 bytes): shift explicit args right by 1 reg, load self
+            out_ << "    mov r9, r8\n";
+            out_ << "    mov r8, rcx\n";
+            out_ << "    mov rcx, rdx\n";
+            out_ << "    mov rdx, rsi\n";
+            out_ << "    mov rsi, [rdi+8]\n";
+            out_ << "    mov rdi, [rdi]\n";
+        }
+        out_ << "    jmp " << thunk.target_label << "\n\n";
+    }
+    dyn_thunks_.clear();
+}
+
+// ============================================================================
 // Module Emission
 // ============================================================================
 
@@ -1143,6 +1177,9 @@ void NASMEmitter::emitModule(const MachModule& mod, const LIRModule& lir_mod,
         emitFunction(mod.functions[i]);
         if (mod.functions[i].name == "main") has_main = true;
     }
+
+    // Emit dyn dispatch thunks (collected during emitRodata)
+    emitDynThunks();
 
     // _start wrapper (omitted in freestanding mode)
     if (has_main && !freestanding) {

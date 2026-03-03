@@ -288,6 +288,7 @@ struct GlobalVariable {
 struct GlobalVTable {
     std::string_view* fn_labels;  // ordered function labels for vtable slots
     uint32_t method_count;
+    uint32_t self_size;           // byte size of concrete self type (for dyn thunks)
 };
 
 struct GlobalData {
