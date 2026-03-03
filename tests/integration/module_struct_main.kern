@@ -1,0 +1,8 @@
+import module_struct_lib (manhattan, add_points, Point)
+
+fn main() -> i64 with io, atomic, mut, mem {
+    val a: Point = Point { x: 10, y: -20 }
+    val b: Point = Point { x: 2, y: 10 }
+    val c: Point = add_points(a, b)
+    manhattan(c)
+}

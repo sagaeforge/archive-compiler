@@ -17,6 +17,11 @@ public:
     void setCfg(std::string_view key, std::string_view value);
     void setCfg(std::string_view key);  // boolean flag (key exists)
 
+    // Pre-register type names from imported modules (needed for struct literal parsing)
+    void addKnownStruct(std::string_view name) { struct_names_.insert(name); }
+    void addKnownEnum(std::string_view name) { enum_names_.insert(name); }
+    void addKnownUnion(std::string_view name) { union_names_.insert(name); }
+
     Module* parseModule();
 
 private:

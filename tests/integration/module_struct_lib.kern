@@ -1,0 +1,18 @@
+module module_struct_lib
+
+pub struct Point {
+    x: i64,
+    y: i64
+}
+
+pub fn manhattan(p: Point) -> i64 {
+    var dx: i64 = p.x
+    var dy: i64 = p.y
+    if dx < 0 { dx = 0 - dx }
+    if dy < 0 { dy = 0 - dy }
+    dx + dy
+}
+
+pub fn add_points(a: Point, b: Point) -> Point {
+    Point { x: a.x + b.x, y: a.y + b.y }
+}
