@@ -5160,6 +5160,12 @@ HIRExpr* HIRBuilder::buildMethodCall(const Expr* expr) {
     call->arg_count = total_args;
     call->args = ctx_.arena.makeArray<HIRExpr*>(total_args);
 
+    // Set cross-module callee_module if this method was imported
+    auto mod_it = fn_module_map_.find(mangled);
+    if (mod_it != fn_module_map_.end()) {
+        call->callee_module = mod_it->second;
+    }
+
     // First arg is self (the object)
     // Auto-borrow: if self expects Ptr<T> but obj is T, wrap in AddrOf
     if (obj->type != sig.param_types[0] && sig.param_types[0] < ctx_.types.size()) {

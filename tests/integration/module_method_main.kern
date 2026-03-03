@@ -1,0 +1,9 @@
+import module_method_lib (Counter)
+
+fn main() -> i64 with io, atomic, mut, mem {
+    val c: Counter = Counter { count: 39 }
+    val c2: Counter = c.inc()
+    val c3: Counter = c2.inc()
+    val c4: Counter = c3.inc()
+    c4.value()
+}
