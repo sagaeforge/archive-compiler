@@ -1,0 +1,15 @@
+// Test prefetch intrinsics — they are hints, don't affect correctness
+fn prefetcht0(addr: Ptr<u8>) -> Unit = intrinsic
+fn prefetcht1(addr: Ptr<u8>) -> Unit = intrinsic
+fn prefetcht2(addr: Ptr<u8>) -> Unit = intrinsic
+fn prefetchnta(addr: Ptr<u8>) -> Unit = intrinsic
+
+fn main() -> i64 {
+    var x: i64 = 42
+    val p: Ptr<u8> = (&x) as Ptr<u8>
+    prefetcht0(p)
+    prefetcht1(p)
+    prefetcht2(p)
+    prefetchnta(p)
+    x
+}
