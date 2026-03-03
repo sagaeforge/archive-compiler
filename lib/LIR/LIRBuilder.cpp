@@ -1040,6 +1040,74 @@ VReg LIRBuilder::lowerCall(const HIRCallExpr* expr) {
         return r;
     }
 
+    // atomic_fetch_sub(ptr, value) -> old value (lock xadd with negated value)
+    if (callee == "atomic_fetch_sub" && expr->arg_count >= 2) {
+        VReg ptr = lowerExpr(expr->args[0]);
+        VReg val = lowerExpr(expr->args[1]);
+        VReg r = freshVReg();
+        LIRInstr i{};
+        i.op = LIROp::AtomicFetchSub;
+        i.result = r;
+        i.type = expr->type;
+        i.atomic_fetch_sub.ptr = ptr;
+        i.atomic_fetch_sub.value = val;
+        i.atomic_fetch_sub.order = MemOrder::SeqCst;
+        i.loc = expr->loc;
+        emit(i);
+        return r;
+    }
+
+    // atomic_fetch_and(ptr, value) -> old value (CAS loop)
+    if (callee == "atomic_fetch_and" && expr->arg_count >= 2) {
+        VReg ptr = lowerExpr(expr->args[0]);
+        VReg val = lowerExpr(expr->args[1]);
+        VReg r = freshVReg();
+        LIRInstr i{};
+        i.op = LIROp::AtomicFetchAnd;
+        i.result = r;
+        i.type = expr->type;
+        i.atomic_rmw.ptr = ptr;
+        i.atomic_rmw.value = val;
+        i.atomic_rmw.order = MemOrder::SeqCst;
+        i.loc = expr->loc;
+        emit(i);
+        return r;
+    }
+
+    // atomic_fetch_or(ptr, value) -> old value (CAS loop)
+    if (callee == "atomic_fetch_or" && expr->arg_count >= 2) {
+        VReg ptr = lowerExpr(expr->args[0]);
+        VReg val = lowerExpr(expr->args[1]);
+        VReg r = freshVReg();
+        LIRInstr i{};
+        i.op = LIROp::AtomicFetchOr;
+        i.result = r;
+        i.type = expr->type;
+        i.atomic_rmw.ptr = ptr;
+        i.atomic_rmw.value = val;
+        i.atomic_rmw.order = MemOrder::SeqCst;
+        i.loc = expr->loc;
+        emit(i);
+        return r;
+    }
+
+    // atomic_fetch_xor(ptr, value) -> old value (CAS loop)
+    if (callee == "atomic_fetch_xor" && expr->arg_count >= 2) {
+        VReg ptr = lowerExpr(expr->args[0]);
+        VReg val = lowerExpr(expr->args[1]);
+        VReg r = freshVReg();
+        LIRInstr i{};
+        i.op = LIROp::AtomicFetchXor;
+        i.result = r;
+        i.type = expr->type;
+        i.atomic_rmw.ptr = ptr;
+        i.atomic_rmw.value = val;
+        i.atomic_rmw.order = MemOrder::SeqCst;
+        i.loc = expr->loc;
+        emit(i);
+        return r;
+    }
+
     // atomic_xchg(ptr, val) -> old value — uses xchg (implicitly locked)
     if (callee == "atomic_xchg" && expr->arg_count == 2) {
         VReg ptr = lowerExpr(expr->args[0]);

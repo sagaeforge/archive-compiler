@@ -327,6 +327,10 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
         case LIROp::AtomicStore:    selectAtomicStore(instr); break;
         case LIROp::AtomicCas:      selectAtomicCas(instr); break;
         case LIROp::AtomicFetchAdd: selectAtomicFetchAdd(instr); break;
+        case LIROp::AtomicFetchSub: selectAtomicFetchSub(instr); break;
+        case LIROp::AtomicFetchAnd: selectAtomicRMW(instr, X86Op::And); break;
+        case LIROp::AtomicFetchOr:  selectAtomicRMW(instr, X86Op::Or); break;
+        case LIROp::AtomicFetchXor: selectAtomicRMW(instr, X86Op::Xor); break;
         case LIROp::Fence:          selectFence(instr); break;
         case LIROp::CompilerFence:  break;  // no instruction emitted
         case LIROp::PercpuLoad:     selectPercpuLoad(instr); break;
@@ -1962,6 +1966,107 @@ void InstructionSelector::selectAtomicFetchAdd(const LIRInstr& instr) {
     mi.inline_ops[1] = MachOperand::virt(instr.atomic_fetch_add.ptr);
     mi.inline_ops[2] = MachOperand::virt(instr.result);  // result vreg used as xadd operand
     emit(mi);
+}
+
+void InstructionSelector::selectAtomicFetchSub(const LIRInstr& instr) {
+    // lock xadd with negated value: neg val, then lock xadd [ptr], val
+    // neg result_vreg
+    emit(makeMov(MachOperand::virt(instr.result),
+                 MachOperand::virt(instr.atomic_fetch_sub.value), 64));
+
+    MachInstr neg(X86Op::Neg);
+    neg.width = 64;
+    neg.operand_count = 1;
+    neg.inline_ops[0] = MachOperand::virt(instr.result);
+    emit(neg);
+
+    MachInstr mi(X86Op::LockXadd);
+    mi.width = 64;
+    mi.operand_count = 3;
+    mi.inline_ops[0] = MachOperand::virt(instr.result);
+    mi.inline_ops[1] = MachOperand::virt(instr.atomic_fetch_sub.ptr);
+    mi.inline_ops[2] = MachOperand::virt(instr.result);
+    emit(mi);
+}
+
+void InstructionSelector::selectAtomicRMW(const LIRInstr& instr, X86Op alu_op) {
+    // CAS loop for atomic fetch_and/or/xor using inline asm:
+    //   mov rax, [ptr]           ; load current value
+    // .retry_N:
+    //   mov tmp, rax             ; copy old to tmp
+    //   <alu_op> tmp, value      ; compute new value
+    //   lock cmpxchg [ptr], tmp  ; if [ptr]==rax: [ptr]=tmp, else rax=[ptr]
+    //   jne .retry_N
+    //   ; result = rax (old value)
+    auto ptr = instr.atomic_rmw.ptr;
+    auto value = instr.atomic_rmw.value;
+    auto result = instr.result;
+
+    // Build inline asm for the CAS loop
+    const char* alu_name = nullptr;
+    switch (alu_op) {
+        case X86Op::And: alu_name = "and"; break;
+        case X86Op::Or:  alu_name = "or"; break;
+        case X86Op::Xor: alu_name = "xor"; break;
+        default: alu_name = "and"; break;
+    }
+
+    uint32_t label_id = next_temp_label_++;
+
+    // Build assembly lines
+    char line0[64], line1[64], line2[64], line3[64], line4[64], line5[64];
+    int l0 = snprintf(line0, sizeof(line0), "mov rax, [$1]");
+    int l1 = snprintf(line1, sizeof(line1), ".atomic_rmw_%u:", label_id);
+    int l2 = snprintf(line2, sizeof(line2), "mov r11, rax");
+    int l3 = snprintf(line3, sizeof(line3), "%s r11, $2", alu_name);
+    int l4 = snprintf(line4, sizeof(line4), "lock cmpxchg [$1], r11");
+    int l5 = snprintf(line5, sizeof(line5), "jne .atomic_rmw_%u", label_id);
+
+    auto* lines = ctx_.arena.makeArray<const char*>(6);
+    auto* lens = ctx_.arena.makeArray<uint32_t>(6);
+    for (int li = 0; li < 6; ++li) {
+        const char* src = nullptr; int slen = 0;
+        switch (li) {
+            case 0: src = line0; slen = l0; break;
+            case 1: src = line1; slen = l1; break;
+            case 2: src = line2; slen = l2; break;
+            case 3: src = line3; slen = l3; break;
+            case 4: src = line4; slen = l4; break;
+            case 5: src = line5; slen = l5; break;
+        }
+        char* buf = ctx_.arena.makeArray<char>(slen + 1);
+        std::memcpy(buf, src, slen);
+        buf[slen] = '\0';
+        lines[li] = buf;
+        lens[li] = static_cast<uint32_t>(slen);
+    }
+
+    LIRInstr fake{};
+    fake.op = LIROp::InlineAsm;
+    fake.result = result;
+    fake.type = instr.type;
+    fake.inline_asm.lines = lines;
+    fake.inline_asm.line_lengths = lens;
+    fake.inline_asm.line_count = 6;
+
+    auto* outs = ctx_.arena.makeArray<LIRAsmOperand>(1);
+    outs[0].constraint = "=a"; outs[0].vreg = result;
+    fake.inline_asm.outputs = outs;
+    fake.inline_asm.output_count = 1;
+
+    auto* ins = ctx_.arena.makeArray<LIRAsmOperand>(2);
+    ins[0].constraint = "r"; ins[0].vreg = ptr;
+    ins[1].constraint = "r"; ins[1].vreg = value;
+    fake.inline_asm.inputs = ins;
+    fake.inline_asm.input_count = 2;
+
+    auto* clobs = ctx_.arena.makeArray<std::string_view>(2);
+    clobs[0] = "r11";
+    clobs[1] = "memory";
+    fake.inline_asm.clobbers = clobs;
+    fake.inline_asm.clobber_count = 2;
+
+    selectInlineAsm(fake);
 }
 
 void InstructionSelector::selectFence(const LIRInstr& instr) {

@@ -1,0 +1,8 @@
+fn atomic_fetch_sub(ptr: Ptr<var i64>, value: i64) -> i64 = intrinsic
+
+fn main() -> i64 {
+    var x: i64 = 100
+    val old: i64 = atomic_fetch_sub(&var x, 58)
+    // old = 100, x = 42 now
+    x
+}

@@ -1,0 +1,28 @@
+fn atomic_fetch_and(ptr: Ptr<var i64>, value: i64) -> i64 = intrinsic
+fn atomic_fetch_or(ptr: Ptr<var i64>, value: i64) -> i64 = intrinsic
+fn atomic_fetch_xor(ptr: Ptr<var i64>, value: i64) -> i64 = intrinsic
+
+fn main() -> i64 {
+    // Test atomic_fetch_and: 0xFF AND 0x2A = 0x2A = 42
+    var x: i64 = 255
+    val old_and: i64 = atomic_fetch_and(&var x, 42)
+    val r1: i64 = x
+
+    // Test atomic_fetch_or: 0x20 OR 0x0A = 0x2A = 42
+    var y: i64 = 32
+    val old_or: i64 = atomic_fetch_or(&var y, 10)
+    val r2: i64 = y
+
+    // Test atomic_fetch_xor: 63 XOR 21 = 42
+    var z: i64 = 63
+    val old_xor: i64 = atomic_fetch_xor(&var z, 21)
+    val r3: i64 = z
+
+    // Verify old values and new values
+    if old_and == 255 and old_or == 32 and old_xor == 63
+        and r1 == 42 and r2 == 42 and r3 == 42 {
+        42
+    } else {
+        1
+    }
+}

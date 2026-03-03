@@ -63,6 +63,10 @@ const char* lirOpName(LIROp op) {
         case LIROp::AtomicStore:    return "atomic_store";
         case LIROp::AtomicCas:      return "atomic_cas";
         case LIROp::AtomicFetchAdd: return "atomic_fetch_add";
+        case LIROp::AtomicFetchSub: return "atomic_fetch_sub";
+        case LIROp::AtomicFetchAnd: return "atomic_fetch_and";
+        case LIROp::AtomicFetchOr:  return "atomic_fetch_or";
+        case LIROp::AtomicFetchXor: return "atomic_fetch_xor";
         case LIROp::Fence:          return "fence";
         case LIROp::CompilerFence:  return "compiler_fence";
         case LIROp::PercpuLoad:     return "percpu_load";
@@ -207,6 +211,16 @@ void dumpLIRInstr(const LIRInstr& i, const TypeTable& types, std::ostream& out) 
         case LIROp::AtomicFetchAdd:
             out << " %v" << i.atomic_fetch_add.ptr << ", %v" << i.atomic_fetch_add.value
                 << " order=" << static_cast<int>(i.atomic_fetch_add.order);
+            break;
+        case LIROp::AtomicFetchSub:
+            out << " %v" << i.atomic_fetch_sub.ptr << ", %v" << i.atomic_fetch_sub.value
+                << " order=" << static_cast<int>(i.atomic_fetch_sub.order);
+            break;
+        case LIROp::AtomicFetchAnd:
+        case LIROp::AtomicFetchOr:
+        case LIROp::AtomicFetchXor:
+            out << " %v" << i.atomic_rmw.ptr << ", %v" << i.atomic_rmw.value
+                << " order=" << static_cast<int>(i.atomic_rmw.order);
             break;
         case LIROp::Fence:
             out << " order=" << static_cast<int>(i.fence.order);

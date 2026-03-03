@@ -32,6 +32,7 @@ class InstructionSelector {
     std::string_view module_name_;           // current module name for mangling
     std::vector<std::string_view> extern_labels_;  // cross-module extern symbols
     std::unordered_map<std::string_view, std::string_view> link_names_;  // fn name → custom link name
+    uint32_t next_temp_label_ = 0;  // for generating unique CAS loop labels
 
     // VReg mapping: LIR VReg → MachIR VReg (1:1 for most, but some ops create new vregs)
     // We keep the same VReg numbering from LIR
@@ -108,6 +109,8 @@ private:
     void selectAtomicStore(const LIRInstr& instr);
     void selectAtomicCas(const LIRInstr& instr);
     void selectAtomicFetchAdd(const LIRInstr& instr);
+    void selectAtomicFetchSub(const LIRInstr& instr);
+    void selectAtomicRMW(const LIRInstr& instr, X86Op alu_op);
     void selectFence(const LIRInstr& instr);
     void selectPercpuLoad(const LIRInstr& instr);
     void selectPercpuStore(const LIRInstr& instr);

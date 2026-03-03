@@ -77,6 +77,10 @@ enum class LIROp : uint8_t {
     AtomicStore,    // atomic store with memory ordering
     AtomicCas,      // compare-and-swap (returns old value)
     AtomicFetchAdd, // atomic fetch-and-add (returns old value)
+    AtomicFetchSub, // atomic fetch-and-subtract (returns old value)
+    AtomicFetchAnd, // atomic fetch-and-and (returns old value, CAS loop)
+    AtomicFetchOr,  // atomic fetch-and-or (returns old value, CAS loop)
+    AtomicFetchXor, // atomic fetch-and-xor (returns old value, CAS loop)
 
     // Fences
     Fence,          // hardware memory fence (mfence/sfence/lfence)
@@ -170,6 +174,8 @@ struct LIRAtomicLoadPayload  { VReg ptr; MemOrder order; };
 struct LIRAtomicStorePayload { VReg ptr; VReg value; MemOrder order; };
 struct LIRAtomicCasPayload   { VReg ptr; VReg expected; VReg desired; MemOrder order; };
 struct LIRAtomicFetchAddPayload { VReg ptr; VReg value; MemOrder order; };
+struct LIRAtomicFetchSubPayload { VReg ptr; VReg value; MemOrder order; };
+struct LIRAtomicRMWPayload   { VReg ptr; VReg value; MemOrder order; }; // for and/or/xor (CAS-based)
 struct LIRFencePayload       { MemOrder order; };
 struct LIRPercpuPayload      { VReg offset; };
 struct LIRPercpuStorePayload { VReg offset; VReg value; };
@@ -214,6 +220,8 @@ struct LIRInstr {
         LIRAtomicStorePayload atomic_store;
         LIRAtomicCasPayload  atomic_cas;
         LIRAtomicFetchAddPayload atomic_fetch_add;
+        LIRAtomicFetchSubPayload atomic_fetch_sub;
+        LIRAtomicRMWPayload  atomic_rmw;  // fetch_and, fetch_or, fetch_xor
         LIRFencePayload      fence;
         LIRPercpuPayload     percpu_load;
         LIRPercpuStorePayload percpu_store;

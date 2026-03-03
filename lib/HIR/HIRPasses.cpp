@@ -721,6 +721,9 @@ static bool stmtUsesAtomicIntrinsic(const HIRStmt* stmt);
 static bool isAtomicIntrinsicName(std::string_view name) {
     return name == "atomic_load" || name == "atomic_store" ||
            name == "atomic_cas" || name == "atomic_fetch_add" ||
+           name == "atomic_fetch_sub" || name == "atomic_fetch_and" ||
+           name == "atomic_fetch_or" || name == "atomic_fetch_xor" ||
+           name == "atomic_xchg" ||
            name == "mfence" || name == "sfence" || name == "lfence" ||
            name == "compiler_barrier";
 }

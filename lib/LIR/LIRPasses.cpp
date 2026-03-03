@@ -23,6 +23,10 @@ static bool hasSideEffects(LIROp op) {
         case LIROp::AtomicStore:
         case LIROp::AtomicCas:
         case LIROp::AtomicFetchAdd:
+        case LIROp::AtomicFetchSub:
+        case LIROp::AtomicFetchAnd:
+        case LIROp::AtomicFetchOr:
+        case LIROp::AtomicFetchXor:
         case LIROp::Fence:
         case LIROp::CompilerFence:
         case LIROp::PercpuStore:
@@ -131,6 +135,16 @@ static void collectUses(const LIRInstr& instr, std::unordered_set<VReg>& uses) {
         case LIROp::AtomicFetchAdd:
             uses.insert(instr.atomic_fetch_add.ptr);
             uses.insert(instr.atomic_fetch_add.value);
+            break;
+        case LIROp::AtomicFetchSub:
+            uses.insert(instr.atomic_fetch_sub.ptr);
+            uses.insert(instr.atomic_fetch_sub.value);
+            break;
+        case LIROp::AtomicFetchAnd:
+        case LIROp::AtomicFetchOr:
+        case LIROp::AtomicFetchXor:
+            uses.insert(instr.atomic_rmw.ptr);
+            uses.insert(instr.atomic_rmw.value);
             break;
         case LIROp::PercpuLoad:
             uses.insert(instr.percpu_load.offset);
