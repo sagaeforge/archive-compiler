@@ -450,6 +450,7 @@ struct HIRGlobalDecl {
     TypeId type_id;
     HIRExpr* init;          // initializer expression (must be constant)
     bool is_mutable;        // static var vs static val
+    bool is_pub = false;    // pub static — export as global symbol
     bool is_extern = false; // extern static — linker-defined symbol
     std::string_view section_name;  // @section("name"), empty = default
     std::string_view link_name;     // @link_name("name"), empty = use name

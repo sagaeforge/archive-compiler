@@ -322,6 +322,7 @@ LIRModule* LIRBuilder::build(const HIRModule* hir) {
         // Use link_name as NASM label for extern globals (matches extern declaration)
         gd.label = (!hgd->link_name.empty()) ? hgd->link_name : hgd->name;
         gd.variable.is_mutable = hgd->is_mutable;
+        gd.variable.is_pub = hgd->is_pub;
         gd.variable.is_extern = hgd->is_extern;
         gd.variable.section_name = hgd->section_name;
         gd.variable.link_name = hgd->link_name;

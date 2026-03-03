@@ -281,6 +281,7 @@ struct GlobalVariable {
     int64_t init_value;       // integer init value (0 for .bss)
     uint8_t size;             // 1/2/4/8 bytes (element size for arrays)
     bool is_mutable;          // static var → .data/.bss, static val → .rodata
+    bool is_pub = false;      // pub static — export as global symbol
     bool is_extern;           // extern static — linker-defined symbol (no storage)
     int64_t* array_values;    // array initializer values (nullptr if scalar)
     uint32_t array_count;     // number of elements (0 if scalar)

@@ -965,6 +965,20 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
 void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
     if (global_count == 0) return;
 
+    // Export pub globals as global symbols
+    for (uint32_t i = 0; i < global_count; ++i) {
+        const auto& g = globals[i];
+        if (g.kind != GlobalData::Variable || !g.variable.is_pub) continue;
+        if (g.variable.is_extern) continue;  // extern globals are imported, not exported
+        std::string sym;
+        if (!g.variable.link_name.empty()) {
+            sym = std::string(symPrefix()) + std::string(g.variable.link_name);
+        } else {
+            sym = std::string(symPrefix()) + std::string(g.label);
+        }
+        out_ << "global " << sym << "\n";
+    }
+
     // Emit extern declarations for extern globals
     for (uint32_t i = 0; i < global_count; ++i) {
         const auto& g = globals[i];
@@ -1225,10 +1239,12 @@ void NASMEmitter::emitModule(const MachModule& mod, const LIRModule& lir_mod,
         out_ << "    dq 0xDEADBEEFDEADBEEF\n";
         out_ << "section .text\n\n";
     }
-    // Export functions as global symbols
+    // Export only pub functions as global symbols
     for (uint32_t i = 0; i < mod.fn_count; ++i) {
         auto& fn = mod.functions[i];
         if (fn.is_intrinsic || fn.is_extern) continue;
+        // Only export: pub functions, main, weak symbols, or explicitly named symbols
+        if (!fn.is_pub && !fn.is_weak && fn.link_name.empty()) continue;
         std::string sym;
         if (!fn.link_name.empty()) {
             sym = std::string(sp) + std::string(fn.link_name);

@@ -1095,6 +1095,7 @@ HIRModule* HIRBuilder::build(const Module* ast) {
         hgd->name = ctx_.strings.intern(gd->name);
         hgd->type_id = resolveType(gd->type);
         hgd->is_mutable = gd->is_mutable;
+        hgd->is_pub = gd->is_pub;
         hgd->is_extern = gd->is_extern;
         hgd->section_name = gd->section_name;
         hgd->link_name = gd->link_name;
@@ -1143,11 +1144,47 @@ HIRModule* HIRBuilder::build(const Module* ast) {
     }
 
     // Build impl methods as mangled functions
+    // Impl methods of pub structs/traits are automatically pub (needed for cross-module calls)
     std::vector<HIRFnDecl*> impl_fns;
     for (uint32_t i = 0; i < ast->impl_count; ++i) {
         auto* id = ast->impls[i];
         TypeId target_type = resolveType(id->target_type);
         std::string_view type_name = actualTypeName(target_type, ctx_.types);
+
+        // Check if the target type is pub (struct, enum, union, or trait impl)
+        bool target_is_pub = false;
+        for (uint32_t s = 0; s < ast->struct_count; ++s) {
+            if (ast->structs[s]->name == id->target_type.name && ast->structs[s]->is_pub) {
+                target_is_pub = true;
+                break;
+            }
+        }
+        if (!target_is_pub) {
+            for (uint32_t e = 0; e < ast->enum_count; ++e) {
+                if (ast->enums[e]->name == id->target_type.name && ast->enums[e]->is_pub) {
+                    target_is_pub = true;
+                    break;
+                }
+            }
+        }
+        if (!target_is_pub) {
+            for (uint32_t u = 0; u < ast->union_count; ++u) {
+                if (ast->unions[u]->name == id->target_type.name && ast->unions[u]->is_pub) {
+                    target_is_pub = true;
+                    break;
+                }
+            }
+        }
+        // Trait impls: if the trait is pub, methods should be pub
+        if (!target_is_pub && !id->trait_name.empty()) {
+            for (uint32_t t = 0; t < ast->trait_count; ++t) {
+                if (ast->traits[t]->name == id->trait_name && ast->traits[t]->is_pub) {
+                    target_is_pub = true;
+                    break;
+                }
+            }
+        }
+
         for (uint32_t j = 0; j < id->method_count; ++j) {
             auto* fn = id->methods[j];
             auto method_name = ctx_.strings.intern(fn->name);
@@ -1156,10 +1193,15 @@ HIRModule* HIRBuilder::build(const Module* ast) {
             std::memcpy(buf, mangled.data(), mangled.size());
             auto interned_mangled = ctx_.strings.intern(std::string_view(buf, mangled.size()));
 
+            // Temporarily set pub if target type is pub
+            bool original_pub = fn->is_pub;
+            if (target_is_pub) fn->is_pub = true;
+
             auto original_name = fn->name;
             fn->name = interned_mangled;
             HIRFnDecl* hfn = buildFn(fn);
             fn->name = original_name;
+            fn->is_pub = original_pub;
             impl_fns.push_back(hfn);
         }
     }
