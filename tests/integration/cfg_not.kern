@@ -1,0 +1,11 @@
+// Test @cfg(not(...)) conditional compilation
+
+@cfg(not(freestanding))
+fn get_value() -> i64 { 42 }
+
+@cfg(freestanding)
+fn get_value() -> i64 { 0 }
+
+fn main() -> i64 {
+    get_value()
+}

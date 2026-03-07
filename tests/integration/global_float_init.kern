@@ -1,0 +1,12 @@
+static val A: f64 = 3.14
+static val B: f64 = 2.86
+
+fn main() -> i64 {
+    // Verify global floats are properly initialized and usable
+    val sum: f64 = A + B  // 3.14 + 2.86 = 6.0
+    val ok1: i64 = if sum > 5.99 { 1 } else { 0 }
+    val ok2: i64 = if sum < 6.01 { 1 } else { 0 }
+    val ok3: i64 = if A > 3.0 { 1 } else { 0 }
+    // 3 checks ok → 3 * 14 = 42
+    (ok1 + ok2 + ok3) * 14
+}

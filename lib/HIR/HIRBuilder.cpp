@@ -227,6 +227,11 @@ bool HIRBuilder::constEvalInt(HIRExpr* expr, int64_t* out,
             auto it = env->find(id->name);
             if (it != env->end()) { *out = it->second; return true; }
         }
+        // Look up previously resolved immutable global constants
+        auto gv_it = global_vars_.find(id->name);
+        if (gv_it != global_vars_.end() && !gv_it->second->is_mutable && gv_it->second->init) {
+            return constEvalInt(gv_it->second->init, out, env);
+        }
         return false;
     }
     if (expr->kind == HIRExpr::Kind::BinOp) {
@@ -336,6 +341,136 @@ bool HIRBuilder::constEvalInt(HIRExpr* expr, int64_t* out,
         return constEvalInt(fn->body, out, &call_env);
     }
     return false;
+}
+
+bool HIRBuilder::constEvalFloat(HIRExpr* expr, double* out,
+                                const std::unordered_map<std::string_view, int64_t>* env) {
+    if (expr->kind == HIRExpr::Kind::FloatLit) {
+        *out = static_cast<HIRFloatLitExpr*>(expr)->value;
+        return true;
+    }
+    if (expr->kind == HIRExpr::Kind::IntLit) {
+        *out = static_cast<double>(static_cast<HIRIntLitExpr*>(expr)->value);
+        return true;
+    }
+    if (expr->kind == HIRExpr::Kind::Ident) {
+        auto* id = static_cast<HIRIdentExpr*>(expr);
+        // Look up previously resolved immutable global constants
+        auto gv_it = global_vars_.find(id->name);
+        if (gv_it != global_vars_.end() && !gv_it->second->is_mutable && gv_it->second->init) {
+            return constEvalFloat(gv_it->second->init, out, env);
+        }
+        return false;
+    }
+    if (expr->kind == HIRExpr::Kind::BinOp) {
+        auto* bin = static_cast<HIRBinOpExpr*>(expr);
+        double lv, rv;
+        if (!constEvalFloat(bin->lhs, &lv, env) || !constEvalFloat(bin->rhs, &rv, env))
+            return false;
+        switch (bin->op) {
+            case HIRBinOp::Add: *out = lv + rv; return true;
+            case HIRBinOp::Sub: *out = lv - rv; return true;
+            case HIRBinOp::Mul: *out = lv * rv; return true;
+            case HIRBinOp::Div: if (rv == 0.0) return false; *out = lv / rv; return true;
+            default: return false;
+        }
+    }
+    if (expr->kind == HIRExpr::Kind::UnaryOp) {
+        auto* un = static_cast<HIRUnaryOpExpr*>(expr);
+        double v;
+        if (!constEvalFloat(un->operand, &v, env)) return false;
+        if (un->op == HIRUnaryOp::Neg) { *out = -v; return true; }
+        return false;
+    }
+    if (expr->kind == HIRExpr::Kind::Cast) {
+        auto* cast = static_cast<HIRCastExpr*>(expr);
+        // int → float cast
+        int64_t iv;
+        if (constEvalInt(cast->operand, &iv, env)) {
+            *out = static_cast<double>(iv);
+            return true;
+        }
+        return constEvalFloat(cast->operand, out, env);
+    }
+    return false;
+}
+
+HIRExpr* HIRBuilder::constFoldExpr(HIRExpr* expr) {
+    if (!expr) return expr;
+
+    // Already a literal — nothing to fold
+    if (expr->kind == HIRExpr::Kind::IntLit ||
+        expr->kind == HIRExpr::Kind::FloatLit ||
+        expr->kind == HIRExpr::Kind::BoolLit ||
+        expr->kind == HIRExpr::Kind::StringLit ||
+        expr->kind == HIRExpr::Kind::CStringLit ||
+        expr->kind == HIRExpr::Kind::FnRef ||
+        expr->kind == HIRExpr::Kind::EnumAccess) {
+        return expr;
+    }
+
+    // Try to fold to integer literal
+    int64_t iv;
+    if (isIntegerType(expr->type) || expr->type == TypeTable::Bool) {
+        if (constEvalInt(expr, &iv)) {
+            if (expr->type == TypeTable::Bool) {
+                auto* lit = ctx_.arena.make<HIRBoolLitExpr>();
+                lit->kind = HIRExpr::Kind::BoolLit;
+                lit->loc = expr->loc;
+                lit->type = TypeTable::Bool;
+                lit->value = (iv != 0);
+                return lit;
+            }
+            auto* lit = ctx_.arena.make<HIRIntLitExpr>();
+            lit->kind = HIRExpr::Kind::IntLit;
+            lit->loc = expr->loc;
+            lit->type = expr->type;
+            lit->value = iv;
+            return lit;
+        }
+    }
+
+    // Try to fold to float literal
+    if (expr->type == TypeTable::F32 || expr->type == TypeTable::F64) {
+        double fv;
+        if (constEvalFloat(expr, &fv)) {
+            auto* lit = ctx_.arena.make<HIRFloatLitExpr>();
+            lit->kind = HIRExpr::Kind::FloatLit;
+            lit->loc = expr->loc;
+            lit->type = expr->type;
+            lit->value = fv;
+            return lit;
+        }
+    }
+
+    // Recursively fold struct literal fields
+    if (expr->kind == HIRExpr::Kind::StructLit) {
+        auto* slit = static_cast<HIRStructLitExpr*>(expr);
+        for (uint32_t i = 0; i < slit->field_count; ++i) {
+            slit->fields[i].value = constFoldExpr(slit->fields[i].value);
+        }
+        return expr;
+    }
+
+    // Recursively fold array literal elements
+    if (expr->kind == HIRExpr::Kind::ArrayLit) {
+        auto* arr = static_cast<HIRArrayLitExpr*>(expr);
+        for (uint32_t i = 0; i < arr->element_count; ++i) {
+            arr->elements[i] = constFoldExpr(arr->elements[i]);
+        }
+        return expr;
+    }
+
+    // Fold union variant payload
+    if (expr->kind == HIRExpr::Kind::UnionVariant) {
+        auto* uv = static_cast<HIRUnionVariantExpr*>(expr);
+        if (uv->payload) {
+            uv->payload = constFoldExpr(uv->payload);
+        }
+        return expr;
+    }
+
+    return expr;
 }
 
 bool HIRBuilder::intFitsInType(int64_t value, TypeId type) const {
@@ -458,8 +593,10 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
     if (ref.name == "u32")  return TypeTable::U32;
     if (ref.name == "u64")  return TypeTable::U64;
     if (ref.name == "f32")  return TypeTable::F32;
-    if (ref.name == "f64")  return TypeTable::F64;
-    if (ref.name == "bool") return TypeTable::Bool;
+    if (ref.name == "f64")   return TypeTable::F64;
+    if (ref.name == "bool")  return TypeTable::Bool;
+    if (ref.name == "isize") return TypeTable::Isize;
+    if (ref.name == "usize") return TypeTable::Usize;
     if (ref.name == "Unit") return TypeTable::Unit;
     if (ref.name == "String") {
         // String is a builtin struct-like type. Look up or register.
@@ -631,7 +768,7 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
                 variants.push_back({ctx_.strings.intern(ud->variants[j].name), payload});
             }
 
-            TypeId tid = ctx_.types.makeUnion(interned_mangled, variants, ud->is_repr_c);
+            TypeId tid = ctx_.types.makeUnion(interned_mangled, variants, ud->is_repr_c, ud->tag_size);
             named_types_[interned_mangled] = tid;
 
             // Restore type param and const param names
@@ -652,13 +789,98 @@ TypeId HIRBuilder::resolveType(const TypeRef& ref) {
             return tid;
         }
 
+        // Look up generic type alias template
+        auto gta = generic_type_aliases_.find(ref.name);
+        if (gta != generic_type_aliases_.end()) {
+            auto* ta = gta->second;
+            if (ref.type_arg_count != ta->type_param_count) {
+                ctx_.diag.error(ref.loc, std::string("generic type alias '") +
+                    std::string(ref.name) + "' expects " +
+                    std::to_string(ta->type_param_count) + " type arguments, got " +
+                    std::to_string(ref.type_arg_count));
+                return TypeTable::Error;
+            }
+
+            // Temporarily register type param substitutions
+            std::vector<std::pair<std::string_view, TypeId>> saved;
+            std::vector<std::pair<std::string_view, int64_t>> saved_const;
+            for (uint32_t i = 0; i < ta->type_param_count; ++i) {
+                auto param_name = ta->type_params[i].name;
+                if (ta->type_params[i].is_const) {
+                    int64_t cv = 0;
+                    for (auto& [idx, val] : const_arg_values) {
+                        if (idx == i) { cv = val; break; }
+                    }
+                    if (const_values_.count(param_name)) {
+                        saved_const.push_back({param_name, const_values_[param_name]});
+                    }
+                    const_values_[param_name] = cv;
+                } else {
+                    if (named_types_.count(param_name)) {
+                        saved.push_back({param_name, named_types_[param_name]});
+                    }
+                    named_types_[param_name] = type_args[i];
+                }
+            }
+
+            // Resolve the target type with substitutions applied
+            TypeId tid = resolveType(ta->target);
+
+            // Cache the mangled name for this instantiation
+            named_types_[interned_mangled] = tid;
+
+            // Restore type param and const param names
+            for (uint32_t i = 0; i < ta->type_param_count; ++i) {
+                if (ta->type_params[i].is_const) {
+                    const_values_.erase(ta->type_params[i].name);
+                } else {
+                    named_types_.erase(ta->type_params[i].name);
+                }
+            }
+            for (auto& [name, old_tid] : saved) {
+                named_types_[name] = old_tid;
+            }
+            for (auto& [name, old_val] : saved_const) {
+                const_values_[name] = old_val;
+            }
+
+            return tid;
+        }
+
         ctx_.diag.error(ref.loc, std::string("unknown generic type '") +
             std::string(ref.name) + "'");
         return TypeTable::Error;
     }
 
+    // Resolve Self to the current impl target type
+    if (ref.name == "Self" && !current_impl_type_name_.empty()) {
+        auto self_it = named_types_.find(current_impl_type_name_);
+        if (self_it != named_types_.end()) return self_it->second;
+    }
+
     auto it = named_types_.find(ref.name);
     if (it != named_types_.end()) return it->second;
+
+    // Check associated type map for qualified names like "TypeName::AssocName"
+    if (ref.name.find("::") != std::string_view::npos) {
+        // Handle Self::AssocName by substituting Self with current impl type
+        std::string_view lookup_name = ref.name;
+        std::string substituted;
+        if (ref.name.substr(0, 6) == "Self::" && !current_impl_type_name_.empty()) {
+            substituted = std::string(current_impl_type_name_) + "::" +
+                          std::string(ref.name.substr(6));
+            lookup_name = substituted;
+        }
+        auto at_it = assoc_type_map_.find(lookup_name);
+        if (at_it != assoc_type_map_.end()) return at_it->second;
+        // Try interning the key in case string pool comparison is needed
+        if (!substituted.empty()) {
+            auto interned = ctx_.strings.intern(substituted);
+            at_it = assoc_type_map_.find(interned);
+            if (at_it != assoc_type_map_.end()) return at_it->second;
+        }
+    }
+
     ctx_.diag.error(ref.loc, std::string("unknown type '") + std::string(ref.name) + "'");
     return TypeTable::Error;
 }
@@ -740,7 +962,7 @@ void HIRBuilder::registerUnionDecls(const Module* ast) {
             variants.push_back({ctx_.strings.intern(ud->variants[j].name), payload});
         }
         TypeId tid = ctx_.types.makeUnion(ctx_.strings.intern(ud->name), variants,
-                                          ud->is_repr_c);
+                                          ud->is_repr_c, ud->tag_size);
         named_types_[ud->name] = tid;
     }
 }
@@ -779,15 +1001,8 @@ void HIRBuilder::registerFnSigs(const Module* ast) {
         }
     }
 
-    // Validate parameter count limit (System V ABI: 6 integer regs)
-    for (uint32_t i = 0; i < ast->fn_count; ++i) {
-        if (ast->functions[i]->param_count > 6) {
-            ctx_.diag.error(ast->functions[i]->loc,
-                std::string("function '") + std::string(ast->functions[i]->name) +
-                "' has " + std::to_string(ast->functions[i]->param_count) +
-                " parameters, maximum is 6 (System V ABI register limit)");
-        }
-    }
+    // No parameter count limit — System V ABI passes first 6 integer args in
+    // registers (rdi, rsi, rdx, rcx, r8, r9), remaining args on the stack.
 }
 
 // ============================================================================
@@ -804,8 +1019,12 @@ void HIRBuilder::registerExports(const Module* ast, std::string_view module_path
     for (uint32_t i = 0; i < ast->type_alias_count; ++i) {
         auto* ta = ast->type_aliases[i];
         if (!ta->is_pub) continue;
-        TypeId target = resolveType(ta->target);
-        named_types_[ta->name] = target;
+        if (ta->type_param_count > 0) {
+            generic_type_aliases_[ta->name] = ta;
+        } else {
+            TypeId target = resolveType(ta->target);
+            named_types_[ta->name] = target;
+        }
     }
 
     // Register newtypes
@@ -871,7 +1090,7 @@ void HIRBuilder::registerExports(const Module* ast, std::string_view module_path
             variants.push_back({ctx_.strings.intern(ud->variants[j].name), payload});
         }
         TypeId tid = ctx_.types.makeUnion(ctx_.strings.intern(ud->name), variants,
-                                          ud->is_repr_c);
+                                          ud->is_repr_c, ud->tag_size);
         named_types_[ud->name] = tid;
     }
 
@@ -952,6 +1171,11 @@ void HIRBuilder::registerExports(const Module* ast, std::string_view module_path
             fn_module_map_[fn->name] = mod_name;
         }
 
+        // Store generic function AST body for cross-module monomorphization
+        if (fn->type_param_count > 0 && fn->body) {
+            generic_extern_fns_[fn->name] = fn;
+        }
+
         // Restore shadowed types
         for (uint32_t t = 0; t < fn->type_param_count; ++t) {
             named_types_.erase(ctx_.strings.intern(fn->type_params[t].name));
@@ -1008,8 +1232,13 @@ HIRModule* HIRBuilder::build(const Module* ast) {
     // Register type aliases first (they may be used by other types)
     for (uint32_t i = 0; i < ast->type_alias_count; ++i) {
         auto* ta = ast->type_aliases[i];
-        TypeId target = resolveType(ta->target);
-        named_types_[ta->name] = target;
+        if (ta->type_param_count > 0) {
+            // Generic type alias — store as template for on-demand instantiation
+            generic_type_aliases_[ta->name] = ta;
+        } else {
+            TypeId target = resolveType(ta->target);
+            named_types_[ta->name] = target;
+        }
     }
 
     // Register newtypes as single-field structs
@@ -1038,6 +1267,22 @@ HIRModule* HIRBuilder::build(const Module* ast) {
     registerUnionDecls(ast);
     registerTraits(ast);
     registerImpls(ast);
+
+    // Detect Copy trait impls and enforce Copy+Drop conflict
+    for (uint32_t i = 0; i < ast->impl_count; ++i) {
+        auto* id = ast->impls[i];
+        if (id->trait_name.data() && std::string_view(id->trait_name) == "Copy") {
+            TypeId target_type = resolveType(id->target_type);
+            std::string_view type_name = actualTypeName(target_type, ctx_.types);
+            if (drop_fns_.count(type_name)) {
+                ctx_.diag.error(id->loc, std::string("type '") + std::string(type_name) +
+                    "' cannot implement both Copy and Drop");
+            } else {
+                copy_types_.insert(type_name);
+            }
+        }
+    }
+
     registerFnSigs(ast);
 
     // Pre-register global variable types (so they're visible during fn building)
@@ -1097,8 +1342,15 @@ HIRModule* HIRBuilder::build(const Module* ast) {
         hgd->is_mutable = gd->is_mutable;
         hgd->is_pub = gd->is_pub;
         hgd->is_extern = gd->is_extern;
+        hgd->is_global_allocator = gd->is_global_allocator;
+        hgd->is_used = gd->is_used;
+        hgd->explicit_align = gd->explicit_align;
         hgd->section_name = gd->section_name;
+        hgd->section_flags = gd->section_flags;
         hgd->link_name = gd->link_name;
+        hgd->is_weak = gd->is_weak;
+        hgd->is_hidden = gd->is_hidden;
+        hgd->is_protected = gd->is_protected;
         hgd->loc = gd->loc;
         if (gd->is_extern && gd->init) {
             ctx_.diag.error(gd->loc, "extern global '" + std::string(gd->name) +
@@ -1110,6 +1362,9 @@ HIRModule* HIRBuilder::build(const Module* ast) {
         }
         if (gd->init) {
             hgd->init = buildExpr(gd->init);
+            // Fold constant expressions in global initializers
+            // (e.g., const fn calls, arithmetic on constants)
+            hgd->init = constFoldExpr(hgd->init);
         } else {
             hgd->init = nullptr;
         }
@@ -1185,6 +1440,10 @@ HIRModule* HIRBuilder::build(const Module* ast) {
             }
         }
 
+        // Set current impl type for Self:: associated type resolution
+        auto saved_impl_type = current_impl_type_name_;
+        current_impl_type_name_ = type_name;
+
         for (uint32_t j = 0; j < id->method_count; ++j) {
             auto* fn = id->methods[j];
             auto method_name = ctx_.strings.intern(fn->name);
@@ -1204,12 +1463,27 @@ HIRModule* HIRBuilder::build(const Module* ast) {
             fn->is_pub = original_pub;
             impl_fns.push_back(hfn);
         }
+
+        current_impl_type_name_ = saved_impl_type;
     }
 
-    // Merge original functions + impl methods + lifted lambdas
+    // Build HIR for cross-module generic functions (for monomorphization)
+    std::vector<HIRFnDecl*> extern_generic_fns;
+    for (auto& [name, fn_ast] : generic_extern_fns_) {
+        // Skip if already defined locally
+        if (hir_fns_.count(name)) continue;
+        auto* hir_fn = buildFn(fn_ast);
+        if (hir_fn) {
+            hir_fns_[hir_fn->name] = hir_fn;
+            extern_generic_fns.push_back(hir_fn);
+        }
+    }
+
+    // Merge original functions + impl methods + lifted lambdas + extern generics
     uint32_t total_fns = ast->fn_count +
         static_cast<uint32_t>(impl_fns.size()) +
-        static_cast<uint32_t>(lifted_lambdas_.size());
+        static_cast<uint32_t>(lifted_lambdas_.size()) +
+        static_cast<uint32_t>(extern_generic_fns.size());
     mod->fn_count = total_fns;
     mod->functions = ctx_.arena.makeArray<HIRFnDecl*>(total_fns);
     uint32_t idx = 0;
@@ -1221,6 +1495,9 @@ HIRModule* HIRBuilder::build(const Module* ast) {
     }
     for (uint32_t i = 0; i < lifted_lambdas_.size(); ++i) {
         mod->functions[idx++] = lifted_lambdas_[i];
+    }
+    for (uint32_t i = 0; i < extern_generic_fns.size(); ++i) {
+        mod->functions[idx++] = extern_generic_fns[i];
     }
 
     // Populate vtable entries from accumulated vtable_globals_
@@ -1251,6 +1528,7 @@ HIRModule* HIRBuilder::build(const Module* ast) {
 HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
     local_vars_.clear();
     mutable_vars_.clear();
+    scope_stack_.clear();  // Reset scope tracking for new function
 
     // Save and register type parameters for this function
     std::vector<std::pair<std::string_view, TypeId>> saved_type_params;
@@ -1322,7 +1600,8 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
                     ti.type_var.name = interned;
                     tv_id = ctx_.types.add(ti);
                 }
-                hfn->type_params[i] = {interned, tv_id, false, INVALID_TYPE};
+                hfn->type_params[i] = {interned, tv_id, false, INVALID_TYPE,
+                                       fn->type_params[i].bounds, fn->type_params[i].bound_count};
                 if (named_types_.count(interned)) {
                     saved_type_params.push_back({interned, named_types_[interned]});
                 }
@@ -1331,10 +1610,31 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
         }
     }
 
+    // Merge where clause bounds into type param bounds
+    for (uint32_t w = 0; w < fn->where_clause_count; ++w) {
+        auto& wc = fn->where_clauses[w];
+        for (uint32_t i = 0; i < hfn->type_param_count; ++i) {
+            if (hfn->type_params[i].name == wc.type_name) {
+                // Merge: append where clause bounds to existing bounds
+                uint32_t old_count = hfn->type_params[i].bound_count;
+                uint32_t new_count = old_count + wc.bound_count;
+                auto* merged = ctx_.arena.makeArray<std::string_view>(new_count);
+                for (uint32_t b = 0; b < old_count; ++b)
+                    merged[b] = hfn->type_params[i].bounds[b];
+                for (uint32_t b = 0; b < wc.bound_count; ++b)
+                    merged[old_count + b] = wc.bounds[b];
+                hfn->type_params[i].bounds = merged;
+                hfn->type_params[i].bound_count = new_count;
+                break;
+            }
+        }
+    }
+
     current_return_type_ = resolveType(fn->return_type);
     bool infer_return = (current_return_type_ == INVALID_TYPE);
 
     hfn->name = ctx_.strings.intern(fn->name);
+    current_fn_name_ = hfn->name;
     hfn->param_count = fn->param_count;
     hfn->params = ctx_.arena.makeArray<HIRParam>(fn->param_count);
     hfn->return_type = infer_return ? TypeTable::Unit : current_return_type_;
@@ -1344,7 +1644,10 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
     hfn->is_intrinsic = fn->is_intrinsic;
     hfn->is_const = fn->is_const;
     hfn->is_naked = fn->is_naked;
+    hfn->is_no_red_zone = fn->is_no_red_zone;
     hfn->is_interrupt = fn->is_interrupt;
+    hfn->is_interrupt_error = fn->is_interrupt_error;
+    hfn->is_interrupt_nofp = fn->is_interrupt_nofp;
     hfn->is_inline = fn->is_inline;
     hfn->is_noinline = fn->is_noinline;
     hfn->is_noreturn = fn->is_noreturn;
@@ -1354,8 +1657,19 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
     hfn->is_weak = fn->is_weak;
     hfn->is_cold = fn->is_cold;
     hfn->is_hot = fn->is_hot;
+    hfn->is_panic_handler = fn->is_panic_handler;
+    hfn->is_hidden = fn->is_hidden;
+    hfn->is_protected = fn->is_protected;
+    hfn->is_constructor = fn->is_constructor;
+    hfn->is_destructor = fn->is_destructor;
+    hfn->constructor_priority = fn->constructor_priority;
+    hfn->destructor_priority = fn->destructor_priority;
+    hfn->is_must_use = fn->is_must_use;
+    hfn->is_used = fn->is_used;
+    hfn->fn_align = fn->fn_align;
     hfn->link_name = fn->link_name;
     hfn->section_name = fn->section_name;
+    hfn->section_flags = fn->section_flags;
 
     // Process effect annotations from "with io, atomic" clause
     EffectSet declared = EFFECT_NONE;
@@ -1380,7 +1694,8 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
         TypeId pt = resolveType(fn->params[i].type);
         auto interned_name = ctx_.strings.intern(fn->params[i].name);
         hfn->params[i] = {interned_name, pt, fn->params[i].loc,
-                          static_cast<uint8_t>(fn->params[i].mode)};
+                          static_cast<uint8_t>(fn->params[i].mode),
+                          fn->params[i].is_restrict};
         local_vars_[interned_name] = pt;
     }
 
@@ -1403,6 +1718,20 @@ HIRFnDecl* HIRBuilder::buildFn(const FnDecl* fn) {
         hfn->body = nullptr;
         cleanup_type_params();
         return hfn;
+    }
+
+    // Register trait bounds for generic function type params
+    if (fn->type_param_count > 0) {
+        std::vector<GenericBound> bounds;
+        for (uint32_t i = 0; i < hfn->type_param_count; ++i) {
+            auto& tp = hfn->type_params[i];
+            if (tp.bound_count > 0 && !tp.is_const) {
+                bounds.push_back({tp.type_var_id, tp.name, tp.bounds, tp.bound_count});
+            }
+        }
+        if (!bounds.empty()) {
+            generic_bounds_[hfn->name] = std::move(bounds);
+        }
     }
 
     // Skip body building for generic functions — they'll be monomorphized later
@@ -1484,11 +1813,38 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
         }
         case Expr::Kind::StringLit:   return buildStringLit(expr);
         case Expr::Kind::CStringLit:  return buildCStringLit(expr);
+        case Expr::Kind::StringInterp: return buildStringInterp(expr);
         case Expr::Kind::Ident:       return buildIdent(expr);
         case Expr::Kind::BinOp:       return buildBinOp(expr, ctx_type);
         case Expr::Kind::UnaryOp:     return buildUnaryOp(expr);
         case Expr::Kind::Call:        return buildCall(expr);
         case Expr::Kind::If:          return buildIf(expr, ctx_type);
+        case Expr::Kind::ConstIf: {
+            // Compile-time branch elimination: evaluate condition, only build taken branch
+            auto* ifE = static_cast<const IfExpr*>(expr);
+            // Build and const-eval the condition
+            HIRExpr* cond_hir = buildExpr(ifE->condition);
+            int64_t cond_val = 0;
+            if (!constEvalInt(cond_hir, &cond_val)) {
+                ctx_.diag.error(expr->loc, "const if condition must be evaluable at compile time");
+                return errorExpr(expr->loc);
+            }
+            if (cond_val != 0) {
+                return buildExpr(ifE->then_branch, ctx_type);
+            } else if (ifE->else_branch) {
+                return buildExpr(ifE->else_branch, ctx_type);
+            } else {
+                // No else branch, result is Unit
+                auto* unit = ctx_.arena.make<HIRBlockExpr>();
+                unit->kind = HIRExpr::Kind::Block;
+                unit->loc = expr->loc;
+                unit->type = TypeTable::Unit;
+                unit->stmt_count = 0;
+                unit->stmts = nullptr;
+                unit->result = nullptr;
+                return unit;
+            }
+        }
         case Expr::Kind::Match:       return buildMatch(expr, ctx_type);
         case Expr::Kind::Block:       return buildBlock(expr, ctx_type);
         case Expr::Kind::Return:      return buildReturn(expr);
@@ -1503,6 +1859,7 @@ HIRExpr* HIRBuilder::buildExpr(const Expr* expr, std::optional<TypeId> ctx_type)
         case Expr::Kind::WhileLoop:  return buildWhileLoop(expr);
         case Expr::Kind::InlineAsm:  return buildInlineAsm(expr);
         case Expr::Kind::ArrayLit:   return buildArrayLit(expr);
+        case Expr::Kind::ArrayRepeat: return buildArrayRepeat(expr);
         case Expr::Kind::IndexAccess:return buildIndexAccess(expr);
         case Expr::Kind::SliceExpr:  return buildSliceExpr(expr);
         case Expr::Kind::TupleLit:   return buildTupleLit(expr);
@@ -1617,6 +1974,8 @@ HIRExpr* HIRBuilder::buildIntLit(const Expr* expr, std::optional<TypeId> ctx_typ
         else if (lit->suffix == "i16") suffix_type = TypeTable::I16;
         else if (lit->suffix == "i32") suffix_type = TypeTable::I32;
         else if (lit->suffix == "i64") suffix_type = TypeTable::I64;
+        else if (lit->suffix == "isize") suffix_type = TypeTable::Isize;
+        else if (lit->suffix == "usize") suffix_type = TypeTable::Usize;
         if (intFitsInType(lit->value, suffix_type)) {
             e->type = suffix_type;
         } else {
@@ -1700,6 +2059,63 @@ HIRExpr* HIRBuilder::buildCStringLit(const Expr* expr) {
     // CString type is Ptr<u8> (raw pointer to NUL-terminated bytes)
     e->type = ctx_.types.makePtr(TypeTable::U8, false);
     return e;
+}
+
+HIRExpr* HIRBuilder::buildStringInterp(const Expr* expr) {
+    auto* si = static_cast<const StringInterpExpr*>(expr);
+    // Desugar f"...{e1}...{e2}..." to a call to format_interp(parts...)
+    // Build all parts as HIR expressions: string lits + sub-expressions
+    std::vector<HIRExpr*> args;
+    for (uint32_t i = 0; i < si->part_count; ++i) {
+        auto& part = si->parts[i];
+        if (part.is_expr) {
+            HIRExpr* sub = buildExpr(part.expr, std::nullopt);
+            args.push_back(sub);
+        } else {
+            // Build as c-string literal (Ptr<u8>) for kernel convenience
+            auto* e = ctx_.arena.make<HIRCStringLitExpr>();
+            e->kind = HIRExpr::Kind::CStringLit;
+            e->loc = expr->loc;
+            // Copy the already-processed data and NUL-terminate
+            auto* buf = static_cast<char*>(ctx_.arena.allocate(part.str_length + 1, 1));
+            for (uint32_t j = 0; j < part.str_length; ++j)
+                buf[j] = part.str_data[j];
+            buf[part.str_length] = '\0';
+            e->data = buf;
+            e->length = part.str_length;
+            e->type = ctx_.types.makePtr(TypeTable::U8, false);
+            args.push_back(e);
+        }
+    }
+
+    // Check if format_interp function exists
+    auto interned_name = ctx_.strings.intern("format_interp");
+    auto sig_it = fn_table_.find(interned_name);
+
+    if (sig_it == fn_table_.end()) {
+        ctx_.diag.error(expr->loc, "string interpolation requires 'format_interp' function to be defined");
+        // Return a unit value as fallback
+        auto* e = ctx_.arena.make<HIRIntLitExpr>();
+        e->kind = HIRExpr::Kind::IntLit;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->value = 0;
+        return e;
+    }
+
+    // Build call to format_interp(part1, part2, ...)
+    auto* call = ctx_.arena.make<HIRCallExpr>();
+    call->kind = HIRExpr::Kind::Call;
+    call->loc = expr->loc;
+    call->callee = interned_name;
+    call->callee_module = {};
+    call->arg_count = static_cast<uint32_t>(args.size());
+    call->args = ctx_.arena.makeArray<HIRExpr*>(args.size());
+    for (size_t i = 0; i < args.size(); ++i)
+        call->args[i] = args[i];
+    call->is_tail_call = false;
+    call->type = sig_it->second.return_type;
+    return call;
 }
 
 HIRExpr* HIRBuilder::buildIdent(const Expr* expr) {
@@ -2146,11 +2562,1619 @@ HIRExpr* HIRBuilder::buildUnaryOp(const Expr* expr) {
 HIRExpr* HIRBuilder::buildCall(const Expr* expr) {
     auto* call = static_cast<const CallExpr*>(expr);
 
-    // Branch hint builtins: likely(cond) / unlikely(cond) → identity (pass-through)
-    // These serve as documentation + future PGO hint infrastructure.
+    // Branch hint builtins: likely(cond) / unlikely(cond) → emit as HIR call
+    // so LIRBuilder can detect and propagate branch_hint to CondBranch.
     if ((call->callee == "likely" || call->callee == "unlikely") &&
         call->arg_count == 1 && call->type_arg_count == 0) {
-        return buildExpr(call->args[0]);
+        HIRExpr* inner = buildExpr(call->args[0]);
+        if (inner->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Bool;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = inner;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // strlen(ptr: *u8) -> u64
+    if (call->callee == "strlen" && call->arg_count == 1) {
+        HIRExpr* str = buildExpr(call->args[0]);
+        if (str->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = str;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // strcmp(a: *u8, b: *u8) -> i64
+    if (call->callee == "strcmp" && call->arg_count == 2) {
+        HIRExpr* a = buildExpr(call->args[0]);
+        HIRExpr* b = buildExpr(call->args[1]);
+        if (a->type == TypeTable::Error || b->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::I64;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = a;
+        e->args[1] = b;
+        e->arg_count = 2;
+        return e;
+    }
+
+    // alloca(size: u64) -> *u8  (dynamic stack allocation)
+    if (call->callee == "alloca" && call->arg_count == 1) {
+        TypeId ptr_u8 = ctx_.types.makePtr(TypeTable::U8, true);
+        HIRExpr* size_arg = buildExpr(call->args[0]);
+        if (size_arg->type == TypeTable::Error) return errorExpr(expr->loc);
+
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = ptr_u8;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = size_arg;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // extract_bits(val: u64, start: u64, width: u64) -> u64
+    // Extracts a bitfield: (val >> start) & ((1 << width) - 1)
+    if (call->callee == "extract_bits" && call->arg_count == 3) {
+        HIRExpr* val_arg = buildExpr(call->args[0]);
+        HIRExpr* start_arg = buildExpr(call->args[1]);
+        HIRExpr* width_arg = buildExpr(call->args[2]);
+        if (val_arg->type == TypeTable::Error || start_arg->type == TypeTable::Error ||
+            width_arg->type == TypeTable::Error) return errorExpr(expr->loc);
+        // Lower to: (val >> start) & ((1 << width) - 1)
+        // For const start/width, emit constant mask+shift
+        int64_t start_val = 0, width_val = 0;
+        if (constEvalInt(start_arg, &start_val) && constEvalInt(width_arg, &width_val)) {
+            uint64_t mask = (width_val >= 64) ? ~0ULL : ((1ULL << width_val) - 1);
+            // val >> start
+            auto* shr = ctx_.arena.make<HIRBinOpExpr>();
+            shr->kind = HIRExpr::Kind::BinOp;
+            shr->loc = expr->loc;
+            shr->op = HIRBinOp::Shr;
+            shr->lhs = val_arg;
+            shr->rhs = start_arg;
+            shr->type = TypeTable::U64;
+            // (val >> start) & mask
+            auto* mask_lit = ctx_.arena.make<HIRIntLitExpr>();
+            mask_lit->kind = HIRExpr::Kind::IntLit;
+            mask_lit->loc = expr->loc;
+            mask_lit->value = static_cast<int64_t>(mask);
+            mask_lit->type = TypeTable::U64;
+            auto* and_op = ctx_.arena.make<HIRBinOpExpr>();
+            and_op->kind = HIRExpr::Kind::BinOp;
+            and_op->loc = expr->loc;
+            and_op->op = HIRBinOp::BitAnd;
+            and_op->lhs = shr;
+            and_op->rhs = mask_lit;
+            and_op->type = TypeTable::U64;
+            return and_op;
+        }
+        // Non-const: emit as call (runtime path)
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->arg_count = 3;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(3);
+        e->args[0] = val_arg; e->args[1] = start_arg; e->args[2] = width_arg;
+        return e;
+    }
+
+    // insert_bits(val: u64, start: u64, width: u64, field_val: u64) -> u64
+    // Inserts a bitfield: (val & ~(mask << start)) | ((field_val & mask) << start)
+    if (call->callee == "insert_bits" && call->arg_count == 4) {
+        HIRExpr* val_arg = buildExpr(call->args[0]);
+        HIRExpr* start_arg = buildExpr(call->args[1]);
+        HIRExpr* width_arg = buildExpr(call->args[2]);
+        HIRExpr* field_arg = buildExpr(call->args[3]);
+        if (val_arg->type == TypeTable::Error || start_arg->type == TypeTable::Error ||
+            width_arg->type == TypeTable::Error || field_arg->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        int64_t start_val = 0, width_val = 0;
+        if (constEvalInt(start_arg, &start_val) && constEvalInt(width_arg, &width_val)) {
+            uint64_t mask = (width_val >= 64) ? ~0ULL : ((1ULL << width_val) - 1);
+            uint64_t clear_mask = ~(mask << start_val);
+            // val & clear_mask
+            auto* cm_lit = ctx_.arena.make<HIRIntLitExpr>();
+            cm_lit->kind = HIRExpr::Kind::IntLit;
+            cm_lit->loc = expr->loc;
+            cm_lit->value = static_cast<int64_t>(clear_mask);
+            cm_lit->type = TypeTable::U64;
+            auto* cleared = ctx_.arena.make<HIRBinOpExpr>();
+            cleared->kind = HIRExpr::Kind::BinOp;
+            cleared->loc = expr->loc;
+            cleared->op = HIRBinOp::BitAnd;
+            cleared->lhs = val_arg;
+            cleared->rhs = cm_lit;
+            cleared->type = TypeTable::U64;
+            // field_val & mask
+            auto* m_lit = ctx_.arena.make<HIRIntLitExpr>();
+            m_lit->kind = HIRExpr::Kind::IntLit;
+            m_lit->loc = expr->loc;
+            m_lit->value = static_cast<int64_t>(mask);
+            m_lit->type = TypeTable::U64;
+            auto* masked_field = ctx_.arena.make<HIRBinOpExpr>();
+            masked_field->kind = HIRExpr::Kind::BinOp;
+            masked_field->loc = expr->loc;
+            masked_field->op = HIRBinOp::BitAnd;
+            masked_field->lhs = field_arg;
+            masked_field->rhs = m_lit;
+            masked_field->type = TypeTable::U64;
+            // (field_val & mask) << start
+            auto* shifted = ctx_.arena.make<HIRBinOpExpr>();
+            shifted->kind = HIRExpr::Kind::BinOp;
+            shifted->loc = expr->loc;
+            shifted->op = HIRBinOp::Shl;
+            shifted->lhs = masked_field;
+            shifted->rhs = start_arg;
+            shifted->type = TypeTable::U64;
+            // (val & clear_mask) | shifted
+            auto* result = ctx_.arena.make<HIRBinOpExpr>();
+            result->kind = HIRExpr::Kind::BinOp;
+            result->loc = expr->loc;
+            result->op = HIRBinOp::BitOr;
+            result->lhs = cleared;
+            result->rhs = shifted;
+            result->type = TypeTable::U64;
+            return result;
+        }
+        // Non-const: emit as call
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->arg_count = 4;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(4);
+        e->args[0] = val_arg; e->args[1] = start_arg;
+        e->args[2] = width_arg; e->args[3] = field_arg;
+        return e;
+    }
+
+    // memcpy(dst: *var u8, src: *u8, len: u64) -> *var u8
+    if (call->callee == "memcpy" && call->arg_count == 3) {
+        TypeId ptr_u8_mut = ctx_.types.makePtr(TypeTable::U8, true);
+        HIRExpr* dst = buildExpr(call->args[0]);
+        HIRExpr* src = buildExpr(call->args[1]);
+        HIRExpr* len = buildExpr(call->args[2]);
+        if (dst->type == TypeTable::Error || src->type == TypeTable::Error ||
+            len->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = ptr_u8_mut;
+        e->callee = call->callee;
+        e->arg_count = 3;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(3);
+        e->args[0] = dst; e->args[1] = src; e->args[2] = len;
+        return e;
+    }
+
+    // memmove(dst: *var u8, src: *u8, len: u64) -> *var u8
+    if (call->callee == "memmove" && call->arg_count == 3) {
+        TypeId ptr_u8_mut = ctx_.types.makePtr(TypeTable::U8, true);
+        HIRExpr* dst = buildExpr(call->args[0]);
+        HIRExpr* src = buildExpr(call->args[1]);
+        HIRExpr* len = buildExpr(call->args[2]);
+        if (dst->type == TypeTable::Error || src->type == TypeTable::Error ||
+            len->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = ptr_u8_mut;
+        e->callee = call->callee;
+        e->arg_count = 3;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(3);
+        e->args[0] = dst; e->args[1] = src; e->args[2] = len;
+        return e;
+    }
+
+    // memset(dst: *var u8, val: u8, len: u64) -> *var u8
+    if (call->callee == "memset" && call->arg_count == 3) {
+        TypeId ptr_u8_mut = ctx_.types.makePtr(TypeTable::U8, true);
+        HIRExpr* dst = buildExpr(call->args[0]);
+        HIRExpr* val = buildExpr(call->args[1]);
+        HIRExpr* len = buildExpr(call->args[2]);
+        if (dst->type == TypeTable::Error || val->type == TypeTable::Error ||
+            len->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = ptr_u8_mut;
+        e->callee = call->callee;
+        e->arg_count = 3;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(3);
+        e->args[0] = dst; e->args[1] = val; e->args[2] = len;
+        return e;
+    }
+
+    // memcmp(a: *u8, b: *u8, len: u64) -> i32
+    if (call->callee == "memcmp" && call->arg_count == 3) {
+        HIRExpr* a = buildExpr(call->args[0]);
+        HIRExpr* b = buildExpr(call->args[1]);
+        HIRExpr* len = buildExpr(call->args[2]);
+        if (a->type == TypeTable::Error || b->type == TypeTable::Error ||
+            len->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::I32;
+        e->callee = call->callee;
+        e->arg_count = 3;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(3);
+        e->args[0] = a; e->args[1] = b; e->args[2] = len;
+        return e;
+    }
+
+    // Varargs builtins: va_start() -> *u8, va_arg<T>(ap: *u8) -> T
+    if (call->callee == "va_start" && call->arg_count == 0) {
+        // Returns a pointer to the first variadic argument
+        TypeId ptr_u8 = ctx_.types.makePtr(TypeTable::U8, false);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = ptr_u8;
+        e->callee = call->callee;
+        e->args = nullptr;
+        e->arg_count = 0;
+        return e;
+    }
+
+    if (call->callee == "va_arg" && call->arg_count == 1 && call->type_arg_count == 1) {
+        // va_arg<T>(ap) — read T from variadic arg pointer
+        TypeId target = resolveType(call->type_args[0]);
+        if (target == TypeTable::Error) return errorExpr(expr->loc);
+        HIRExpr* ap = buildExpr(call->args[0]);
+        if (ap->type == TypeTable::Error) return errorExpr(expr->loc);
+
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = target;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = ap;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // syscall(nr, ...) -> i64  (0-6 args after syscall number)
+    if (call->callee == "syscall" && call->arg_count >= 1 && call->arg_count <= 7) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::I64;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(call->arg_count);
+        e->arg_count = call->arg_count;
+        for (uint32_t i = 0; i < call->arg_count; ++i) {
+            e->args[i] = buildExpr(call->args[i]);
+            if (e->args[i]->type == TypeTable::Error) return errorExpr(expr->loc);
+        }
+        return e;
+    }
+
+    // save_flags() -> u64  (pushfq; pop rax)
+    if (call->callee == "save_flags" && call->arg_count == 0) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->args = nullptr;
+        e->arg_count = 0;
+        return e;
+    }
+
+    // restore_flags(flags: u64) -> unit  (push flags; popfq)
+    if (call->callee == "restore_flags" && call->arg_count == 1) {
+        HIRExpr* flags = buildExpr(call->args[0]);
+        if (flags->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = flags;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // sidt(ptr)/sgdt(ptr) -> unit
+    if ((call->callee == "sidt" || call->callee == "sgdt") && call->arg_count == 1) {
+        HIRExpr* ptr = buildExpr(call->args[0]);
+        if (ptr->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = ptr;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // xgetbv(xcr: u32) -> u64
+    if (call->callee == "xgetbv" && call->arg_count == 1) {
+        HIRExpr* xcr = buildExpr(call->args[0]);
+        if (xcr->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = xcr;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // xsetbv(xcr: u32, val: u64) -> unit
+    if (call->callee == "xsetbv" && call->arg_count == 2) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        e->arg_count = 2;
+        if (e->args[0]->type == TypeTable::Error || e->args[1]->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        return e;
+    }
+
+    // monitor(addr, extensions, hints) -> unit
+    if (call->callee == "monitor" && call->arg_count == 3) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(3);
+        for (uint32_t i = 0; i < 3; ++i) {
+            e->args[i] = buildExpr(call->args[i]);
+            if (e->args[i]->type == TypeTable::Error) return errorExpr(expr->loc);
+        }
+        e->arg_count = 3;
+        return e;
+    }
+
+    // mwait(extensions, hints) -> unit
+    if (call->callee == "mwait" && call->arg_count == 2) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        e->arg_count = 2;
+        if (e->args[0]->type == TypeTable::Error || e->args[1]->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        return e;
+    }
+
+    // nt_store(ptr, val: u64) -> unit  (non-temporal store: movnti)
+    if (call->callee == "nt_store" && call->arg_count == 2) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        e->arg_count = 2;
+        if (e->args[0]->type == TypeTable::Error || e->args[1]->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        return e;
+    }
+
+    // bit_cast<T>(val) -> T  (type-safe reinterpret — zero-cost, same-size types)
+    if (call->callee == "bit_cast" && call->arg_count == 1 && call->type_arg_count == 1) {
+        TypeId target = resolveType(call->type_args[0]);
+        if (target == TypeTable::Error) return errorExpr(expr->loc);
+        HIRExpr* operand = buildExpr(call->args[0]);
+        if (operand->type == TypeTable::Error) return errorExpr(expr->loc);
+        // Verify same size
+        uint32_t src_size = ctx_.types.sizeOf(operand->type);
+        uint32_t dst_size = ctx_.types.sizeOf(target);
+        if (src_size != dst_size) {
+            ctx_.diag.error(expr->loc, std::string("bit_cast requires same-size types: source is ") +
+                std::to_string(src_size) + " bytes, target is " + std::to_string(dst_size) + " bytes");
+            return errorExpr(expr->loc);
+        }
+        // Emit as a cast (the backend will just reinterpret the bits)
+        auto* e = ctx_.arena.make<HIRCastExpr>();
+        e->kind = HIRExpr::Kind::Cast;
+        e->loc = expr->loc;
+        e->type = target;
+        e->operand = operand;
+        e->target_type = target;
+        return e;
+    }
+
+    // transmute<T>(val) -> T  (unsafe reinterpret — any source/target size)
+    if (call->callee == "transmute" && call->arg_count == 1 && call->type_arg_count == 1) {
+        TypeId target = resolveType(call->type_args[0]);
+        if (target == TypeTable::Error) return errorExpr(expr->loc);
+        HIRExpr* operand = buildExpr(call->args[0]);
+        if (operand->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCastExpr>();
+        e->kind = HIRExpr::Kind::Cast;
+        e->loc = expr->loc;
+        e->type = target;
+        e->operand = operand;
+        e->target_type = target;
+        return e;
+    }
+
+    // rotate_left(val, count) / rotate_right(val, count)
+    if ((call->callee == "rotate_left" || call->callee == "rotate_right") && call->arg_count == 2) {
+        HIRExpr* val = buildExpr(call->args[0]);
+        HIRExpr* count = buildExpr(call->args[1]);
+        if (val->type == TypeTable::Error || count->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = val->type;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = val;
+        e->args[1] = count;
+        e->arg_count = 2;
+        return e;
+    }
+
+    // byte_swap_16(val: u16) -> u16
+    if (call->callee == "byte_swap_16" && call->arg_count == 1) {
+        HIRExpr* val = buildExpr(call->args[0]);
+        if (val->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U16;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = val;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // rdmsr(ecx: u32) -> u64  (read model-specific register)
+    if (call->callee == "rdmsr" && call->arg_count == 1) {
+        HIRExpr* ecx_val = buildExpr(call->args[0]);
+        if (ecx_val->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = ecx_val;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // wrmsr(ecx: u32, val: u64) -> unit  (write model-specific register)
+    if (call->callee == "wrmsr" && call->arg_count == 2) {
+        HIRExpr* ecx_val = buildExpr(call->args[0]);
+        HIRExpr* val = buildExpr(call->args[1]);
+        if (ecx_val->type == TypeTable::Error || val->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = ecx_val;
+        e->args[1] = val;
+        e->arg_count = 2;
+        return e;
+    }
+
+    // Control register access: read_cr0/2/3/4/8() -> u64, read_efer() -> u64
+    if ((call->callee == "read_cr0" || call->callee == "read_cr2" ||
+         call->callee == "read_cr3" || call->callee == "read_cr4" ||
+         call->callee == "read_cr8" || call->callee == "read_efer") && call->arg_count == 0) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->args = nullptr;
+        e->arg_count = 0;
+        return e;
+    }
+
+    // Control register write: write_cr0/3/4/8(val: u64) -> unit, write_efer(val: u64) -> unit
+    if ((call->callee == "write_cr0" || call->callee == "write_cr3" ||
+         call->callee == "write_cr4" || call->callee == "write_cr8" ||
+         call->callee == "write_efer") && call->arg_count == 1) {
+        HIRExpr* val = buildExpr(call->args[0]);
+        if (val->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = val;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // Debug register read: read_dr0/1/2/3/6/7() -> u64
+    if ((call->callee == "read_dr0" || call->callee == "read_dr1" ||
+         call->callee == "read_dr2" || call->callee == "read_dr3" ||
+         call->callee == "read_dr6" || call->callee == "read_dr7") && call->arg_count == 0) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->args = nullptr;
+        e->arg_count = 0;
+        return e;
+    }
+
+    // Debug register write: write_dr0/1/2/3/6/7(v: u64) -> Unit
+    if ((call->callee == "write_dr0" || call->callee == "write_dr1" ||
+         call->callee == "write_dr2" || call->callee == "write_dr3" ||
+         call->callee == "write_dr6" || call->callee == "write_dr7") && call->arg_count == 1) {
+        HIRExpr* val = buildExpr(call->args[0]);
+        if (val->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = val;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // TLB/descriptor table: invlpg/lgdt/lidt(ptr) -> Unit
+    if ((call->callee == "invlpg" || call->callee == "lgdt" ||
+         call->callee == "lidt") && call->arg_count == 1) {
+        HIRExpr* arg = buildExpr(call->args[0]);
+        if (arg->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = arg;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // ltr(sel: u16) -> Unit
+    if (call->callee == "ltr" && call->arg_count == 1) {
+        HIRExpr* sel = buildExpr(call->args[0]);
+        if (sel->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = sel;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // rdpmc(counter: u32) -> u64
+    if (call->callee == "rdpmc" && call->arg_count == 1) {
+        HIRExpr* ctr = buildExpr(call->args[0]);
+        if (ctr->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = ctr;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // VMX: vmxon(addr: Ptr<u8>) -> Unit
+    if (call->callee == "vmxon" && call->arg_count == 1) {
+        HIRExpr* addr = buildExpr(call->args[0]);
+        if (addr->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = addr;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // VMX: vmxoff/vmcall/vmlaunch/vmresume() -> Unit
+    if ((call->callee == "vmxoff" || call->callee == "vmcall" ||
+         call->callee == "vmlaunch" || call->callee == "vmresume") && call->arg_count == 0) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = nullptr;
+        e->arg_count = 0;
+        return e;
+    }
+
+    // CET shadow stack: rdssp() -> u64
+    if (call->callee == "rdssp" && call->arg_count == 0) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->args = nullptr;
+        e->arg_count = 0;
+        return e;
+    }
+
+    // CET shadow stack write: wrssp/rstorssp/setssbsy(val: u64) -> Unit
+    if ((call->callee == "wrssp" || call->callee == "rstorssp" ||
+         call->callee == "setssbsy") && call->arg_count == 1) {
+        HIRExpr* val = buildExpr(call->args[0]);
+        if (val->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = val;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // Memory protection keys: rdpkru() -> u32
+    if (call->callee == "rdpkru" && call->arg_count == 0) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U32;
+        e->callee = call->callee;
+        e->args = nullptr;
+        e->arg_count = 0;
+        return e;
+    }
+
+    // wrpkru(val: u32) -> Unit
+    if (call->callee == "wrpkru" && call->arg_count == 1) {
+        HIRExpr* val = buildExpr(call->args[0]);
+        if (val->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = val;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // Half-width atomics: atomic_load_u32(ptr) -> u32
+    if (call->callee == "atomic_load_u32" && call->arg_count == 1) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U32;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = buildExpr(call->args[0]);
+        e->arg_count = 1;
+        if (e->args[0]->type == TypeTable::Error) return errorExpr(expr->loc);
+        return e;
+    }
+
+    // atomic_store_u32(ptr, val) -> Unit
+    if (call->callee == "atomic_store_u32" && call->arg_count == 2) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        e->arg_count = 2;
+        if (e->args[0]->type == TypeTable::Error || e->args[1]->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        return e;
+    }
+
+    // atomic_cas_u32(ptr, expected, desired) -> u32
+    if (call->callee == "atomic_cas_u32" && call->arg_count == 3) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U32;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(3);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        e->args[2] = buildExpr(call->args[2]);
+        e->arg_count = 3;
+        for (int j = 0; j < 3; ++j)
+            if (e->args[j]->type == TypeTable::Error) return errorExpr(expr->loc);
+        return e;
+    }
+
+    // atomic_fetch_add_u32(ptr, val) -> u32
+    if (call->callee == "atomic_fetch_add_u32" && call->arg_count == 2) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U32;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        e->arg_count = 2;
+        if (e->args[0]->type == TypeTable::Error || e->args[1]->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        return e;
+    }
+
+    // test_and_set(ptr, bit_num) -> bool, test_and_clear(ptr, bit_num) -> bool
+    if ((call->callee == "test_and_set" || call->callee == "test_and_clear") &&
+        call->arg_count == 2) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Bool;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        e->arg_count = 2;
+        if (e->args[0]->type == TypeTable::Error || e->args[1]->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        return e;
+    }
+
+    // strnlen(s, max_len) -> u64
+    if (call->callee == "strnlen" && call->arg_count == 2) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        e->arg_count = 2;
+        if (e->args[0]->type == TypeTable::Error || e->args[1]->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        return e;
+    }
+
+    // hlt() -> unit, cli() -> unit, sti() -> unit, pause(), swapgs(), wbinvd()
+    if ((call->callee == "hlt" || call->callee == "cli" || call->callee == "sti" ||
+         call->callee == "debug_break" || call->callee == "pause" ||
+         call->callee == "swapgs" || call->callee == "wbinvd") &&
+        call->arg_count == 0) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = nullptr;
+        e->arg_count = 0;
+        return e;
+    }
+
+    // Port I/O: inb/inw/ind(port: u16) -> u8/u16/u32
+    if ((call->callee == "inb" || call->callee == "inw" || call->callee == "ind") &&
+        call->arg_count == 1) {
+        HIRExpr* port = buildExpr(call->args[0]);
+        if (port->type == TypeTable::Error) return errorExpr(expr->loc);
+        TypeId ret_type = TypeTable::U8;
+        if (call->callee == "inw") ret_type = TypeTable::U16;
+        else if (call->callee == "ind") ret_type = TypeTable::U32;
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = ret_type;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = port;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // Port I/O: outb/outw/outd(port: u16, val: u8/u16/u32) -> unit
+    if ((call->callee == "outb" || call->callee == "outw" || call->callee == "outd") &&
+        call->arg_count == 2) {
+        HIRExpr* port = buildExpr(call->args[0]);
+        HIRExpr* val = buildExpr(call->args[1]);
+        if (port->type == TypeTable::Error || val->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = port;
+        e->args[1] = val;
+        e->arg_count = 2;
+        return e;
+    }
+
+    // cpuid(eax: u32, ecx: u32) -> u64  (returns eax:ebx packed as u64; edx:ecx in second call)
+    // For simplicity: cpuid(leaf) returns eax result, cpuid_ebx/ecx/edx for other regs
+    if (call->callee == "cpuid_eax" && call->arg_count == 1) {
+        HIRExpr* leaf = buildExpr(call->args[0]);
+        if (leaf->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U32;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = leaf;
+        e->arg_count = 1;
+        return e;
+    }
+    if (call->callee == "cpuid_ebx" && call->arg_count == 1) {
+        HIRExpr* leaf = buildExpr(call->args[0]);
+        if (leaf->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U32;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = leaf;
+        e->arg_count = 1;
+        return e;
+    }
+    if (call->callee == "cpuid_ecx" && call->arg_count == 1) {
+        HIRExpr* leaf = buildExpr(call->args[0]);
+        if (leaf->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U32;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = leaf;
+        e->arg_count = 1;
+        return e;
+    }
+    if (call->callee == "cpuid_edx" && call->arg_count == 1) {
+        HIRExpr* leaf = buildExpr(call->args[0]);
+        if (leaf->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U32;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = leaf;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // container_of<T>(ptr, "field") -> *mut T
+    // Given a pointer to a struct field, returns a pointer to the containing struct.
+    if (call->callee == "container_of" && call->arg_count == 2 && call->type_arg_count == 1) {
+        TypeId struct_type = resolveType(call->type_args[0]);
+        if (struct_type == TypeTable::Error) return errorExpr(expr->loc);
+        HIRExpr* ptr = buildExpr(call->args[0]);
+        HIRExpr* field_expr = buildExpr(call->args[1]);
+        if (ptr->type == TypeTable::Error) return errorExpr(expr->loc);
+        // Get the field name from the string literal
+        if (field_expr->kind != HIRExpr::Kind::StringLit) {
+            ctx_.diag.error(expr->loc, "container_of requires a string literal field name");
+            return errorExpr(expr->loc);
+        }
+        auto* sl = static_cast<HIRStringLitExpr*>(field_expr);
+        std::string_view field_name(sl->data, sl->length);
+        auto& ti = ctx_.types.get(struct_type);
+        if (ti.kind != TypeKind::Struct) {
+            ctx_.diag.error(expr->loc, "container_of requires a struct type");
+            return errorExpr(expr->loc);
+        }
+        uint32_t offset = 0;
+        bool found = false;
+        for (uint32_t f = 0; f < ti.struct_.field_count; ++f) {
+            if (ti.struct_.fields[f].name == field_name) {
+                offset = ti.struct_.fields[f].offset;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            ctx_.diag.error(expr->loc, std::string("field '") + std::string(field_name) +
+                "' not found in struct '" + std::string(ctx_.types.name(struct_type)) + "'");
+            return errorExpr(expr->loc);
+        }
+        // container_of = (ptr as u64) - offset, cast back to *mut T
+        // Emit as: cast(cast(ptr, u64) - offset, *mut T)
+        TypeId ptr_mut_t = ctx_.types.makePtr(struct_type, true);
+        // Build: cast(ptr, u64)
+        auto* cast_to_int = ctx_.arena.make<HIRCastExpr>();
+        cast_to_int->kind = HIRExpr::Kind::Cast;
+        cast_to_int->loc = expr->loc;
+        cast_to_int->type = TypeTable::U64;
+        cast_to_int->operand = ptr;
+        cast_to_int->target_type = TypeTable::U64;
+        // Build: offset literal
+        auto* offset_lit = ctx_.arena.make<HIRIntLitExpr>();
+        offset_lit->kind = HIRExpr::Kind::IntLit;
+        offset_lit->loc = expr->loc;
+        offset_lit->type = TypeTable::U64;
+        offset_lit->value = offset;
+        // Build: sub
+        auto* sub = ctx_.arena.make<HIRBinOpExpr>();
+        sub->kind = HIRExpr::Kind::BinOp;
+        sub->loc = expr->loc;
+        sub->type = TypeTable::U64;
+        sub->op = HIRBinOp::Sub;
+        sub->lhs = cast_to_int;
+        sub->rhs = offset_lit;
+        // Build: cast back to *mut T
+        auto* cast_to_ptr = ctx_.arena.make<HIRCastExpr>();
+        cast_to_ptr->kind = HIRExpr::Kind::Cast;
+        cast_to_ptr->loc = expr->loc;
+        cast_to_ptr->type = ptr_mut_t;
+        cast_to_ptr->operand = sub;
+        cast_to_ptr->target_type = ptr_mut_t;
+        return cast_to_ptr;
+    }
+
+    // volatile_load<T>(ptr: *T) -> T  (cannot be optimized/reordered)
+    if (call->callee == "volatile_load" && call->arg_count == 1) {
+        HIRExpr* ptr = buildExpr(call->args[0]);
+        if (ptr->type == TypeTable::Error) return errorExpr(expr->loc);
+        // Determine pointee type
+        auto& pti = ctx_.types.get(ptr->type);
+        TypeId elem_type = TypeTable::U64; // default
+        if (pti.kind == TypeKind::Ptr || pti.kind == TypeKind::PtrMut) {
+            elem_type = pti.ptr.pointee;
+        }
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = elem_type;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = ptr;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // volatile_store(ptr: *T, val: T) -> unit  (cannot be optimized/reordered)
+    if (call->callee == "volatile_store" && call->arg_count == 2) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        e->arg_count = 2;
+        if (e->args[0]->type == TypeTable::Error || e->args[1]->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        return e;
+    }
+
+    // min/max(a, b) -> T  (branchless integer min/max)
+    if ((call->callee == "min" || call->callee == "max") && call->arg_count == 2) {
+        HIRExpr* a = buildExpr(call->args[0]);
+        HIRExpr* b = buildExpr(call->args[1]);
+        if (a->type == TypeTable::Error || b->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = a->type;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = a;
+        e->args[1] = b;
+        e->arg_count = 2;
+        return e;
+    }
+
+    // abs(x) -> T  (branchless absolute value for signed integers)
+    if (call->callee == "abs" && call->arg_count == 1) {
+        HIRExpr* x = buildExpr(call->args[0]);
+        if (x->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = x->type;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = x;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // static_assert(condition, "message") — compile-time assertion
+    if (call->callee == "static_assert" && call->arg_count == 2) {
+        HIRExpr* cond = buildExpr(call->args[0]);
+        HIRExpr* msg_expr = buildExpr(call->args[1]);
+        if (cond->type == TypeTable::Error) return errorExpr(expr->loc);
+        // Try to evaluate the condition to a compile-time constant
+        std::optional<int64_t> val;
+        if (cond->kind == HIRExpr::Kind::BoolLit) {
+            val = static_cast<HIRBoolLitExpr*>(cond)->value ? 1 : 0;
+        } else if (cond->kind == HIRExpr::Kind::IntLit) {
+            val = static_cast<HIRIntLitExpr*>(cond)->value;
+        } else if (cond->kind == HIRExpr::Kind::BinOp) {
+            // Try folding simple comparisons of integer literals
+            auto* bin = static_cast<HIRBinOpExpr*>(cond);
+            std::optional<int64_t> lv, rv;
+            if (bin->lhs->kind == HIRExpr::Kind::IntLit)
+                lv = static_cast<HIRIntLitExpr*>(bin->lhs)->value;
+            if (bin->rhs->kind == HIRExpr::Kind::IntLit)
+                rv = static_cast<HIRIntLitExpr*>(bin->rhs)->value;
+            if (lv && rv) {
+                switch (bin->op) {
+                    case HIRBinOp::Eq:    val = (*lv == *rv) ? 1 : 0; break;
+                    case HIRBinOp::NotEq: val = (*lv != *rv) ? 1 : 0; break;
+                    case HIRBinOp::Lt:    val = (*lv <  *rv) ? 1 : 0; break;
+                    case HIRBinOp::LtEq:  val = (*lv <= *rv) ? 1 : 0; break;
+                    case HIRBinOp::Gt:    val = (*lv >  *rv) ? 1 : 0; break;
+                    case HIRBinOp::GtEq:  val = (*lv >= *rv) ? 1 : 0; break;
+                    default: break;
+                }
+            }
+        }
+        if (!val.has_value()) {
+            ctx_.diag.error(expr->loc, "static_assert condition must be a compile-time constant");
+            return errorExpr(expr->loc);
+        }
+        if (*val == 0) {
+            std::string msg = "static assertion failed";
+            if (msg_expr->kind == HIRExpr::Kind::StringLit) {
+                auto* sl = static_cast<HIRStringLitExpr*>(msg_expr);
+                msg = std::string("static assertion failed: ") + std::string(sl->data, sl->length);
+            }
+            ctx_.diag.error(expr->loc, msg);
+            return errorExpr(expr->loc);
+        }
+        // Assertion passed — return unit (no-op at runtime)
+        auto* e = ctx_.arena.make<HIRBoolLitExpr>();
+        e->kind = HIRExpr::Kind::BoolLit;
+        e->loc = expr->loc;
+        e->type = TypeTable::Bool;
+        e->value = true;
+        return e;
+    }
+
+    // size_of<T>() -> u64  (compile-time size of type in bytes)
+    if (call->callee == "size_of" && call->arg_count == 0 && call->type_arg_count == 1) {
+        TypeId target = resolveType(call->type_args[0]);
+        if (target == TypeTable::Error) return errorExpr(expr->loc);
+        uint32_t size = ctx_.types.sizeOf(target);
+        auto* e = ctx_.arena.make<HIRIntLitExpr>();
+        e->kind = HIRExpr::Kind::IntLit;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->value = size;
+        return e;
+    }
+
+    // align_of<T>() -> u64  (compile-time alignment of type in bytes)
+    if (call->callee == "align_of" && call->arg_count == 0 && call->type_arg_count == 1) {
+        TypeId target = resolveType(call->type_args[0]);
+        if (target == TypeTable::Error) return errorExpr(expr->loc);
+        uint32_t align = ctx_.types.alignOf(target);
+        auto* e = ctx_.arena.make<HIRIntLitExpr>();
+        e->kind = HIRExpr::Kind::IntLit;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->value = align;
+        return e;
+    }
+
+    // default<T>() -> T  (call Default trait implementation)
+    if (call->callee == "default" && call->arg_count == 0 && call->type_arg_count == 1) {
+        TypeId target = resolveType(call->type_args[0]);
+        if (target == TypeTable::Error) return errorExpr(expr->loc);
+        // Look up TypeName_default in fn_table_ (from impl Default for T)
+        auto default_fn = resolveMethod(target, ctx_.strings.intern("default"));
+        if (default_fn.empty()) {
+            ctx_.diag.error(expr->loc, std::string("type '") +
+                std::string(ctx_.types.name(target)) +
+                "' does not implement Default trait");
+            return errorExpr(expr->loc);
+        }
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->callee = default_fn;
+        e->arg_count = 0;
+        e->args = nullptr;
+        e->is_tail_call = false;
+        e->type = target;
+        return e;
+    }
+
+    // zeroed<T>() -> T  (zero-initialized value of type T)
+    if (call->callee == "zeroed" && call->arg_count == 0 && call->type_arg_count == 1) {
+        TypeId target = resolveType(call->type_args[0]);
+        if (target == TypeTable::Error) return errorExpr(expr->loc);
+        const auto& ti = ctx_.types.get(target);
+        if (ti.kind == TypeKind::Primitive || ti.kind == TypeKind::Ptr ||
+            ti.kind == TypeKind::PtrMut || ti.kind == TypeKind::Enum) {
+            auto* e = ctx_.arena.make<HIRIntLitExpr>();
+            e->kind = HIRExpr::Kind::IntLit;
+            e->loc = expr->loc;
+            e->value = 0;
+            e->type = target;
+            return e;
+        } else if (ti.kind == TypeKind::Struct) {
+            auto* sl = ctx_.arena.make<HIRStructLitExpr>();
+            sl->kind = HIRExpr::Kind::StructLit;
+            sl->loc = expr->loc;
+            sl->type = target;
+            sl->struct_name = ti.struct_.name;
+            sl->field_count = ti.struct_.field_count;
+            sl->fields = ctx_.arena.makeArray<HIRFieldInit>(ti.struct_.field_count);
+            for (uint32_t i = 0; i < ti.struct_.field_count; ++i) {
+                sl->fields[i].name = ti.struct_.fields[i].name;
+                sl->fields[i].loc = expr->loc;
+                auto* zero = ctx_.arena.make<HIRIntLitExpr>();
+                zero->kind = HIRExpr::Kind::IntLit;
+                zero->loc = expr->loc;
+                zero->value = 0;
+                zero->type = ti.struct_.fields[i].type;
+                sl->fields[i].value = zero;
+            }
+            return sl;
+        } else if (ti.kind == TypeKind::Array) {
+            auto* arr = ctx_.arena.make<HIRArrayLitExpr>();
+            arr->kind = HIRExpr::Kind::ArrayLit;
+            arr->loc = expr->loc;
+            arr->type = target;
+            arr->element_count = ti.array.count;
+            arr->elements = ctx_.arena.makeArray<HIRExpr*>(ti.array.count);
+            for (uint32_t i = 0; i < ti.array.count; ++i) {
+                auto* zero = ctx_.arena.make<HIRIntLitExpr>();
+                zero->kind = HIRExpr::Kind::IntLit;
+                zero->loc = expr->loc;
+                zero->value = 0;
+                zero->type = ti.array.element;
+                arr->elements[i] = zero;
+            }
+            return arr;
+        }
+        ctx_.diag.error(expr->loc, "zeroed<T>() not supported for this type");
+        return errorExpr(expr->loc);
+    }
+
+    // offset_of<T>("field") -> u64  (compile-time field offset)
+    if (call->callee == "offset_of" && call->arg_count == 1 && call->type_arg_count == 1) {
+        TypeId target = resolveType(call->type_args[0]);
+        if (target == TypeTable::Error) return errorExpr(expr->loc);
+        // The argument must be a string literal (field name)
+        HIRExpr* field_expr = buildExpr(call->args[0]);
+        if (field_expr->kind != HIRExpr::Kind::StringLit) {
+            ctx_.diag.error(expr->loc, "offset_of requires a string literal field name");
+            return errorExpr(expr->loc);
+        }
+        auto* str_lit = static_cast<HIRStringLitExpr*>(field_expr);
+        std::string_view field_name(str_lit->data, str_lit->length);
+        auto& ti = ctx_.types.get(target);
+        if (ti.kind != TypeKind::Struct) {
+            ctx_.diag.error(expr->loc, "offset_of requires a struct type");
+            return errorExpr(expr->loc);
+        }
+        // Find the field offset
+        uint32_t offset = 0;
+        bool found = false;
+        for (uint32_t f = 0; f < ti.struct_.field_count; ++f) {
+            if (ti.struct_.fields[f].name == field_name) {
+                offset = ti.struct_.fields[f].offset;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            ctx_.diag.error(expr->loc, std::string("field '") + std::string(field_name) +
+                "' not found in struct '" + std::string(ctx_.types.name(target)) + "'");
+            return errorExpr(expr->loc);
+        }
+        auto* e = ctx_.arena.make<HIRIntLitExpr>();
+        e->kind = HIRExpr::Kind::IntLit;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->value = offset;
+        return e;
+    }
+
+    // Hardware RNG: rdrand()/rdseed() -> u64
+    if ((call->callee == "rdrand" || call->callee == "rdseed") && call->arg_count == 0) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->args = nullptr;
+        e->arg_count = 0;
+        return e;
+    }
+
+    // SSE intrinsics: sse_storeu_128(ptr, lo, hi), sse_loadu_lo64(ptr), sse_loadu_hi64(ptr),
+    // sse_zero_128(ptr), sse_copy_128(dst, src)
+    if (call->callee == "sse_storeu_128" && call->arg_count == 3) {
+        // sse_storeu_128(ptr, lo: u64, hi: u64) — store 128 bits to unaligned address
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->arg_count = 3;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(3);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        e->args[2] = buildExpr(call->args[2]);
+        return e;
+    }
+    if (call->callee == "sse_loadu_lo64" && call->arg_count == 1) {
+        // sse_loadu_lo64(ptr) -> u64 — load low 64 bits from unaligned 128-bit address
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->arg_count = 1;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = buildExpr(call->args[0]);
+        return e;
+    }
+    if (call->callee == "sse_loadu_hi64" && call->arg_count == 1) {
+        // sse_loadu_hi64(ptr) -> u64 — load high 64 bits from unaligned 128-bit address
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->arg_count = 1;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = buildExpr(call->args[0]);
+        return e;
+    }
+    if (call->callee == "sse_zero_128" && call->arg_count == 1) {
+        // sse_zero_128(ptr) — write 128 zero bits to address
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->arg_count = 1;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = buildExpr(call->args[0]);
+        return e;
+    }
+    if (call->callee == "sse_copy_128" && call->arg_count == 2) {
+        // sse_copy_128(dst, src) — copy 128 bits from src to dst using movdqu
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->arg_count = 2;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        return e;
+    }
+
+    // AES-NI intrinsics: aesenc, aesenclast, aesdec, aesdeclast, aesimc
+    // All take (state: Ptr<u8>, key: Ptr<u8>) and operate in-place on state
+    if ((call->callee == "aesenc" || call->callee == "aesenclast" ||
+         call->callee == "aesdec" || call->callee == "aesdeclast" ||
+         call->callee == "aesimc") && call->arg_count == 2) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->arg_count = 2;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        return e;
+    }
+    // aeskeygenassist(dst, src, rcon: u8)
+    if (call->callee == "aeskeygenassist" && call->arg_count == 3) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->arg_count = 3;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(3);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        e->args[2] = buildExpr(call->args[2]);
+        return e;
+    }
+    // pclmulqdq(dst, a, b, imm: u8) — carry-less multiplication
+    if (call->callee == "pclmulqdq" && call->arg_count == 4) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->arg_count = 4;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(4);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        e->args[2] = buildExpr(call->args[2]);
+        e->args[3] = buildExpr(call->args[3]);
+        return e;
+    }
+    // SHA-NI intrinsics: sha256rnds2(state, msg, extra), sha1rnds4(state, msg, fn_idx)
+    if ((call->callee == "sha256rnds2" || call->callee == "sha1rnds4") &&
+        call->arg_count == 3) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->arg_count = 3;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(3);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        e->args[2] = buildExpr(call->args[2]);
+        return e;
+    }
+    // sha256msg1/sha256msg2(state, msg)
+    if ((call->callee == "sha256msg1" || call->callee == "sha256msg2") &&
+        call->arg_count == 2) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->arg_count = 2;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        return e;
+    }
+    // crc32c(acc: u32, data: u32) -> u32 — CRC32C instruction (SSE4.2)
+    if (call->callee == "crc32c" && call->arg_count == 2) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U32;
+        e->callee = call->callee;
+        e->arg_count = 2;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        return e;
+    }
+
+    // Cache prefetch: prefetch_t0/t1/t2/nta(ptr)
+    if ((call->callee == "prefetch_t0" || call->callee == "prefetch_t1" ||
+         call->callee == "prefetch_t2" || call->callee == "prefetch_nta") &&
+        call->arg_count == 1) {
+        HIRExpr* ptr = buildExpr(call->args[0]);
+        if (ptr->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = ptr;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // Cache line flush: clflush/clflushopt/clwb(addr)
+    if ((call->callee == "clflush" || call->callee == "clflushopt" ||
+         call->callee == "clwb") && call->arg_count == 1) {
+        HIRExpr* addr = buildExpr(call->args[0]);
+        if (addr->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = addr;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // rdpid() -> u64, rdfsbase() -> u64, rdgsbase() -> u64
+    if ((call->callee == "rdpid" || call->callee == "rdfsbase" ||
+         call->callee == "rdgsbase") && call->arg_count == 0) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->args = nullptr;
+        e->arg_count = 0;
+        return e;
+    }
+
+    // wrfsbase(val: u64)/wrgsbase(val: u64) -> unit
+    if ((call->callee == "wrfsbase" || call->callee == "wrgsbase") && call->arg_count == 1) {
+        HIRExpr* val = buildExpr(call->args[0]);
+        if (val->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = val;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // setjmp(buf: *u8) -> i32  (save context, returns 0; longjmp returns nonzero)
+    if (call->callee == "setjmp" && call->arg_count == 1) {
+        HIRExpr* buf = buildExpr(call->args[0]);
+        if (buf->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::I32;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = buf;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // longjmp(buf: *u8, val: i32) -> never  (restore context, returns val via setjmp)
+    if (call->callee == "longjmp" && call->arg_count == 2) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Never;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        e->arg_count = 2;
+        if (e->args[0]->type == TypeTable::Error || e->args[1]->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        return e;
+    }
+
+    // indirect_branch(target: *u8) -> never  (bare jmp, no call frame)
+    if (call->callee == "indirect_branch" && call->arg_count == 1) {
+        HIRExpr* target = buildExpr(call->args[0]);
+        if (target->type == TypeTable::Error) return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Never;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = target;
+        e->arg_count = 1;
+        return e;
+    }
+
+    // ldmxcsr(val: u32) -> Unit
+    if (call->callee == "ldmxcsr" && call->arg_count == 1) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = buildExpr(call->args[0]);
+        e->arg_count = 1;
+        if (e->args[0]->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        return e;
+    }
+
+    // stmxcsr(buf: Ptr<var u32>) -> Unit
+    if (call->callee == "stmxcsr" && call->arg_count == 1) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = buildExpr(call->args[0]);
+        e->arg_count = 1;
+        if (e->args[0]->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        return e;
+    }
+
+    // invpcid(type: u64, descriptor: *u8) -> unit
+    if (call->callee == "invpcid" && call->arg_count == 2) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::Unit;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = buildExpr(call->args[0]);
+        e->args[1] = buildExpr(call->args[1]);
+        e->arg_count = 2;
+        if (e->args[0]->type == TypeTable::Error || e->args[1]->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        return e;
+    }
+
+    // tag_of(union_value) -> u64  (read union discriminant)
+    if (call->callee == "tag_of" && call->arg_count == 1) {
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = TypeTable::U64;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        e->args[0] = buildExpr(call->args[0]);
+        e->arg_count = 1;
+        if (e->args[0]->type == TypeTable::Error) return errorExpr(expr->loc);
+        return e;
+    }
+
+    // checked_add/checked_sub/checked_mul(a, b) -> T  (traps on overflow)
+    if ((call->callee == "checked_add" || call->callee == "checked_sub" ||
+         call->callee == "checked_mul") && call->arg_count == 2) {
+        HIRExpr* lhs = buildExpr(call->args[0]);
+        HIRExpr* rhs = buildExpr(call->args[1]);
+        if (lhs->type == TypeTable::Error || rhs->type == TypeTable::Error)
+            return errorExpr(expr->loc);
+        auto* e = ctx_.arena.make<HIRCallExpr>();
+        e->kind = HIRExpr::Kind::Call;
+        e->loc = expr->loc;
+        e->type = lhs->type;
+        e->callee = call->callee;
+        e->args = ctx_.arena.makeArray<HIRExpr*>(2);
+        e->args[0] = lhs;
+        e->args[1] = rhs;
+        e->arg_count = 2;
+        return e;
     }
 
     // Builtin cast functions: truncate<T>(x), clamp<T>(x)
@@ -2191,6 +4215,177 @@ HIRExpr* HIRBuilder::buildCall(const Expr* expr) {
             e->is_explicit_truncate = true;
             return e;
         }
+    }
+
+    // Builtin print/println: desugar format string + args into write calls
+    if ((call->callee == "print" || call->callee == "println") && call->arg_count >= 1) {
+        // First arg must be a string literal (format string)
+        auto* fmt_arg = call->args[0];
+        if (fmt_arg->kind != Expr::Kind::StringLit) {
+            ctx_.diag.error(expr->loc, std::string(call->callee) +
+                " requires a string literal as first argument");
+            return errorExpr(expr->loc);
+        }
+        auto* str_expr = static_cast<const StringLitExpr*>(fmt_arg);
+        std::string_view fmt(str_expr->data, str_expr->length);
+
+        // Parse format string: split on {} placeholders
+        std::vector<HIRExpr*> write_calls;
+        uint32_t arg_idx = 1;  // start after format string
+        size_t pos = 0;
+        while (pos < fmt.size()) {
+            size_t brace = fmt.find('{', pos);
+            if (brace == std::string_view::npos) {
+                // Remaining literal text
+                if (pos < fmt.size()) {
+                    std::string_view seg = fmt.substr(pos);
+                    char* buf = ctx_.arena.makeArray<char>(seg.size());
+                    std::memcpy(buf, seg.data(), seg.size());
+                    auto interned = ctx_.strings.intern(std::string_view(buf, seg.size()));
+                    auto* cstr = ctx_.arena.make<HIRCStringLitExpr>();
+                    cstr->kind = HIRExpr::Kind::CStringLit;
+                    cstr->loc = expr->loc;
+                    cstr->type = ctx_.types.makePtr(TypeTable::U8, false);
+                    cstr->data = interned.data();
+                    cstr->length = static_cast<uint32_t>(interned.size());
+
+                    // __kern_write_str(ptr, len)
+                    auto* wc = ctx_.arena.make<HIRCallExpr>();
+                    wc->kind = HIRExpr::Kind::Call;
+                    wc->loc = expr->loc;
+                    wc->type = TypeTable::Unit;
+                    wc->callee = ctx_.strings.intern("__kern_write_str");
+                    wc->arg_count = 2;
+                    wc->args = ctx_.arena.makeArray<HIRExpr*>(2);
+                    wc->args[0] = cstr;
+                    auto* len = ctx_.arena.make<HIRIntLitExpr>();
+                    len->kind = HIRExpr::Kind::IntLit;
+                    len->loc = expr->loc;
+                    len->type = TypeTable::U64;
+                    len->value = static_cast<int64_t>(seg.size());
+                    wc->args[1] = len;
+                    write_calls.push_back(wc);
+                }
+                break;
+            }
+            // Literal text before {}
+            if (brace > pos) {
+                std::string_view seg = fmt.substr(pos, brace - pos);
+                char* buf = ctx_.arena.makeArray<char>(seg.size());
+                std::memcpy(buf, seg.data(), seg.size());
+                auto interned = ctx_.strings.intern(std::string_view(buf, seg.size()));
+                auto* cstr = ctx_.arena.make<HIRCStringLitExpr>();
+                cstr->kind = HIRExpr::Kind::CStringLit;
+                cstr->loc = expr->loc;
+                cstr->type = ctx_.types.makePtr(TypeTable::U8, false);
+                cstr->data = interned.data();
+                cstr->length = static_cast<uint32_t>(interned.size());
+
+                auto* wc = ctx_.arena.make<HIRCallExpr>();
+                wc->kind = HIRExpr::Kind::Call;
+                wc->loc = expr->loc;
+                wc->type = TypeTable::Unit;
+                wc->callee = ctx_.strings.intern("__kern_write_str");
+                wc->arg_count = 2;
+                wc->args = ctx_.arena.makeArray<HIRExpr*>(2);
+                wc->args[0] = cstr;
+                auto* len = ctx_.arena.make<HIRIntLitExpr>();
+                len->kind = HIRExpr::Kind::IntLit;
+                len->loc = expr->loc;
+                len->type = TypeTable::U64;
+                len->value = static_cast<int64_t>(seg.size());
+                wc->args[1] = len;
+                write_calls.push_back(wc);
+            }
+            // Expect closing }
+            if (brace + 1 >= fmt.size() || fmt[brace + 1] != '}') {
+                ctx_.diag.error(expr->loc, "unclosed '{' in format string");
+                return errorExpr(expr->loc);
+            }
+            pos = brace + 2;  // skip {}
+            // Emit write call for the corresponding argument
+            if (arg_idx >= call->arg_count) {
+                ctx_.diag.error(expr->loc, "not enough arguments for format string");
+                return errorExpr(expr->loc);
+            }
+            HIRExpr* arg = buildExpr(call->args[arg_idx++]);
+            if (arg->type == TypeTable::Error) return errorExpr(expr->loc);
+
+            // Dispatch based on arg type
+            auto* wc = ctx_.arena.make<HIRCallExpr>();
+            wc->kind = HIRExpr::Kind::Call;
+            wc->loc = expr->loc;
+            wc->type = TypeTable::Unit;
+            wc->arg_count = 1;
+            wc->args = ctx_.arena.makeArray<HIRExpr*>(1);
+            wc->args[0] = arg;
+
+            if (isIntegerType(arg->type)) {
+                if (isSignedType(arg->type))
+                    wc->callee = ctx_.strings.intern("__kern_write_i64");
+                else
+                    wc->callee = ctx_.strings.intern("__kern_write_u64");
+            } else if (isFloatType(arg->type)) {
+                wc->callee = ctx_.strings.intern("__kern_write_f64");
+            } else if (arg->type == TypeTable::Bool) {
+                wc->callee = ctx_.strings.intern("__kern_write_bool");
+            } else if (arg->type == TypeTable::U8) {
+                wc->callee = ctx_.strings.intern("__kern_write_char");
+            } else {
+                // Check if type implements Display trait → call TypeName_display
+                auto display_fn = resolveMethod(arg->type, ctx_.strings.intern("display"));
+                if (!display_fn.empty()) {
+                    wc->callee = display_fn;
+                } else {
+                    // Pointer types or string → write as pointer
+                    wc->callee = ctx_.strings.intern("__kern_write_ptr");
+                }
+            }
+            write_calls.push_back(wc);
+        }
+
+        // println appends newline
+        if (call->callee == "println") {
+            auto* nl_str = ctx_.arena.make<HIRCStringLitExpr>();
+            nl_str->kind = HIRExpr::Kind::CStringLit;
+            nl_str->loc = expr->loc;
+            nl_str->type = ctx_.types.makePtr(TypeTable::U8, false);
+            nl_str->data = "\n";
+            nl_str->length = 1;
+
+            auto* wc = ctx_.arena.make<HIRCallExpr>();
+            wc->kind = HIRExpr::Kind::Call;
+            wc->loc = expr->loc;
+            wc->type = TypeTable::Unit;
+            wc->callee = ctx_.strings.intern("__kern_write_str");
+            wc->arg_count = 2;
+            wc->args = ctx_.arena.makeArray<HIRExpr*>(2);
+            wc->args[0] = nl_str;
+            auto* one = ctx_.arena.make<HIRIntLitExpr>();
+            one->kind = HIRExpr::Kind::IntLit;
+            one->loc = expr->loc;
+            one->type = TypeTable::U64;
+            one->value = 1;
+            wc->args[1] = one;
+            write_calls.push_back(wc);
+        }
+
+        // Wrap all write calls in a block expression
+        auto* blk = ctx_.arena.make<HIRBlockExpr>();
+        blk->kind = HIRExpr::Kind::Block;
+        blk->loc = expr->loc;
+        blk->type = TypeTable::Unit;
+        blk->stmt_count = static_cast<uint32_t>(write_calls.size());
+        blk->stmts = ctx_.arena.makeArray<HIRStmt*>(blk->stmt_count);
+        for (uint32_t i = 0; i < blk->stmt_count; ++i) {
+            auto* es = ctx_.arena.make<HIRExprStmt>();
+            es->kind = HIRStmt::Kind::ExprStmt;
+            es->loc = expr->loc;
+            es->expr = write_calls[i];
+            blk->stmts[i] = es;
+        }
+        blk->result = nullptr;
+        return blk;
     }
 
     // Check if callee is a local variable (indirect call through function pointer)
@@ -2496,6 +4691,27 @@ HIRExpr* HIRBuilder::buildCall(const Expr* expr) {
         }
     }
 
+    // Check trait bounds on type parameters
+    if (is_generic_call && !type_subst.empty()) {
+        auto gb_it = generic_bounds_.find(e->callee);
+        if (gb_it != generic_bounds_.end()) {
+            for (auto& gb : gb_it->second) {
+                auto sub_it = type_subst.find(gb.type_var_id);
+                if (sub_it == type_subst.end()) continue;
+                TypeId concrete = sub_it->second;
+                std::string_view type_name = actualTypeName(concrete, ctx_.types);
+                for (uint32_t b = 0; b < gb.bound_count; ++b) {
+                    if (!typeImplementsTrait(type_name, gb.bounds[b])) {
+                        ctx_.diag.error(call->loc,
+                            std::string("type '") + std::string(type_name) +
+                            "' does not implement trait '" + std::string(gb.bounds[b]) +
+                            "' required by type parameter '" + std::string(gb.param_name) + "'");
+                    }
+                }
+            }
+        }
+    }
+
     // For generic calls, substitute TypeVars in return type
     TypeId ret_type = sig.return_type;
     if (is_generic_call) {
@@ -2543,33 +4759,27 @@ HIRExpr* HIRBuilder::buildBlock(const Expr* expr, std::optional<TypeId> ctx_type
     e->kind = HIRExpr::Kind::Block;
     e->loc = expr->loc;
 
-    // Count HIR stmts needed — TupleDestruct expands, Defer stmts are appended at end
-    uint32_t hir_stmt_count = 0;
-    uint32_t defer_count = 0;
-    for (uint32_t i = 0; i < block->stmt_count; ++i) {
-        if (block->stmts[i]->kind == Stmt::Kind::TupleDestruct) {
-            auto* td = static_cast<const TupleDestructStmt*>(block->stmts[i]);
-            hir_stmt_count += td->name_count + 1; // temp + N field bindings
-        } else if (block->stmts[i]->kind == Stmt::Kind::Defer) {
-            defer_count++;
-            // Defer stmts don't occupy a slot here — they're appended at end
-        } else {
-            hir_stmt_count++;
-        }
-    }
-    // Allocate space for normal stmts + deferred stmts
-    e->stmt_count = hir_stmt_count + defer_count;
-    e->stmts = ctx_.arena.makeArray<HIRStmt*>(e->stmt_count);
-    uint32_t si = 0;
-    // Collect defer bodies in order (will be reversed for LIFO execution)
+    // Push scope frame for this block
+    pushScope();
+
+    // Build stmts into a vector (may expand due to drop calls)
+    std::vector<HIRStmt*> built_stmts;
     std::vector<const DeferStmt*> defers;
     for (uint32_t i = 0; i < block->stmt_count; ++i) {
         if (block->stmts[i]->kind == Stmt::Kind::TupleDestruct) {
-            buildTupleDestructStmts(block->stmts[i], e->stmts, si);
+            // TupleDestruct expands to temp + N field bindings
+            auto* td = static_cast<const TupleDestructStmt*>(block->stmts[i]);
+            uint32_t count = td->name_count + 1;
+            auto** tmp = ctx_.arena.makeArray<HIRStmt*>(count);
+            uint32_t idx = 0;
+            buildTupleDestructStmts(block->stmts[i], tmp, idx);
+            for (uint32_t j = 0; j < idx; ++j) {
+                built_stmts.push_back(tmp[j]);
+            }
         } else if (block->stmts[i]->kind == Stmt::Kind::Defer) {
             defers.push_back(static_cast<const DeferStmt*>(block->stmts[i]));
         } else {
-            e->stmts[si++] = buildStmt(block->stmts[i]);
+            built_stmts.push_back(buildStmt(block->stmts[i]));
         }
     }
 
@@ -2581,15 +4791,44 @@ HIRExpr* HIRBuilder::buildBlock(const Expr* expr, std::optional<TypeId> ctx_type
         e->type = TypeTable::Unit;
     }
 
-    // Append deferred stmts in reverse order (LIFO — last defer runs first)
+    // Generate drop calls for scope-local variables (reverse declaration order)
+    std::vector<HIRStmt*> drop_stmts;
+    if (!scope_stack_.empty()) {
+        auto& scope_vars = scope_stack_.back();
+        for (auto it = scope_vars.rbegin(); it != scope_vars.rend(); ++it) {
+            if (needsDrop(it->type)) {
+                HIRExpr* drop_expr = makeDropCall(it->name, it->type, expr->loc);
+                if (drop_expr) {
+                    auto* ds = ctx_.arena.make<HIRExprStmt>();
+                    ds->kind = HIRStmt::Kind::ExprStmt;
+                    ds->loc = expr->loc;
+                    ds->expr = drop_expr;
+                    drop_stmts.push_back(ds);
+                }
+            }
+        }
+    }
+
+    // Build deferred stmts in reverse order (LIFO)
+    std::vector<HIRStmt*> defer_stmts;
     for (auto it = defers.rbegin(); it != defers.rend(); ++it) {
         auto* ds = ctx_.arena.make<HIRExprStmt>();
         ds->kind = HIRStmt::Kind::ExprStmt;
         ds->loc = (*it)->loc;
         ds->expr = buildExpr((*it)->body);
-        e->stmts[si++] = ds;
+        defer_stmts.push_back(ds);
     }
 
+    // Final layout: built_stmts + drop_stmts + defer_stmts
+    uint32_t total = static_cast<uint32_t>(built_stmts.size() + drop_stmts.size() + defer_stmts.size());
+    e->stmt_count = total;
+    e->stmts = ctx_.arena.makeArray<HIRStmt*>(total);
+    uint32_t si = 0;
+    for (auto* s : built_stmts) e->stmts[si++] = s;
+    for (auto* s : drop_stmts) e->stmts[si++] = s;
+    for (auto* s : defer_stmts) e->stmts[si++] = s;
+
+    popScope();
     return e;
 }
 
@@ -2693,8 +4932,28 @@ HIRExpr* HIRBuilder::buildStructLit(const Expr* expr, std::optional<TypeId> ctx_
         return e;
     }
 
-    // Check field count
-    if (sl->field_count != type_info.struct_.field_count) {
+    // Struct update syntax: { ..base, field: value }
+    // Desugar by building base expr and filling missing fields from it
+    HIRExpr* base_hir = nullptr;
+    if (sl->base) {
+        base_hir = buildExpr(sl->base, struct_tid);
+        if (base_hir->type != TypeTable::Error && base_hir->type != struct_tid) {
+            ctx_.diag.error(sl->base->loc,
+                std::string("struct update base type mismatch: expected '") +
+                std::string(e->struct_name) + "', got " +
+                ctx_.types.name(base_hir->type));
+            base_hir = nullptr;
+        }
+    }
+
+    // Collect explicitly provided field names
+    std::unordered_set<std::string_view> provided_fields;
+    for (uint32_t i = 0; i < sl->field_count; ++i) {
+        provided_fields.insert(sl->fields[i].name);
+    }
+
+    // When base is provided, field_count can be less than struct field count
+    if (!base_hir && sl->field_count != type_info.struct_.field_count) {
         ctx_.diag.error(expr->loc, std::string("struct '") + std::string(sl->struct_name) +
                     "' expects " + std::to_string(type_info.struct_.field_count) +
                     " fields, got " + std::to_string(sl->field_count));
@@ -2704,8 +4963,10 @@ HIRExpr* HIRBuilder::buildStructLit(const Expr* expr, std::optional<TypeId> ctx_
         return e;
     }
 
-    e->field_count = sl->field_count;
-    e->fields = ctx_.arena.makeArray<HIRFieldInit>(sl->field_count);
+    // Total fields = struct field count (we fill missing from base)
+    uint32_t total_fields = type_info.struct_.field_count;
+    e->field_count = total_fields;
+    e->fields = ctx_.arena.makeArray<HIRFieldInit>(total_fields);
     bool has_error = false;
 
     // Check if constructing a struct from another module with priv fields
@@ -2713,13 +4974,16 @@ HIRExpr* HIRBuilder::buildStructLit(const Expr* expr, std::optional<TypeId> ctx_
     bool is_foreign_struct = struct_mod_it != struct_module_map_.end() &&
                              struct_mod_it->second != current_module_;
 
-    for (uint32_t i = 0; i < sl->field_count; ++i) {
-        bool found = false;
-        for (uint32_t j = 0; j < type_info.struct_.field_count; ++j) {
-            const auto& fd = type_info.struct_.fields[j];
-            if (fd.name == sl->fields[i].name) {
-                found = true;
-                // Check priv field access in struct literal
+    // Build all struct fields in order
+    for (uint32_t j = 0; j < total_fields; ++j) {
+        const auto& fd = type_info.struct_.fields[j];
+        auto field_name_interned = ctx_.strings.intern(fd.name);
+
+        // Check if this field was explicitly provided
+        bool found_in_literal = false;
+        for (uint32_t i = 0; i < sl->field_count; ++i) {
+            if (sl->fields[i].name == fd.name) {
+                found_in_literal = true;
                 if (!fd.is_pub && is_foreign_struct) {
                     ctx_.diag.error(sl->fields[i].loc,
                         std::string("field '") + std::string(fd.name) +
@@ -2728,7 +4992,7 @@ HIRExpr* HIRBuilder::buildStructLit(const Expr* expr, std::optional<TypeId> ctx_
                     has_error = true;
                 }
                 auto* val = buildExpr(sl->fields[i].value, fd.type);
-                e->fields[i] = {ctx_.strings.intern(sl->fields[i].name), val, sl->fields[i].loc};
+                e->fields[j] = {field_name_interned, val, sl->fields[i].loc};
                 if (val->type != TypeTable::Error && val->type != fd.type) {
                     ctx_.diag.error(sl->fields[i].loc,
                         std::string("field '") + std::string(fd.name) +
@@ -2739,12 +5003,45 @@ HIRExpr* HIRBuilder::buildStructLit(const Expr* expr, std::optional<TypeId> ctx_
                 break;
             }
         }
-        if (!found) {
+
+        if (!found_in_literal) {
+            if (base_hir) {
+                // Fill from base: base.field_name
+                auto* fa = ctx_.arena.make<HIRFieldAccessExpr>();
+                fa->kind = HIRExpr::Kind::FieldAccess;
+                fa->loc = expr->loc;
+                fa->object = base_hir;
+                fa->field_name = field_name_interned;
+                fa->type = fd.type;
+                e->fields[j] = {field_name_interned, fa, expr->loc};
+            } else {
+                ctx_.diag.error(expr->loc,
+                    std::string("missing field '") + std::string(fd.name) +
+                    "' in struct '" + std::string(sl->struct_name) + "'");
+                has_error = true;
+                // Create an error placeholder
+                auto* err = ctx_.arena.make<HIRExpr>();
+                err->kind = HIRExpr::Kind::IntLit;
+                err->type = TypeTable::Error;
+                err->loc = expr->loc;
+                e->fields[j] = {field_name_interned, err, expr->loc};
+            }
+        }
+    }
+
+    // Check for unknown field names in the literal
+    for (uint32_t i = 0; i < sl->field_count; ++i) {
+        bool known = false;
+        for (uint32_t j = 0; j < total_fields; ++j) {
+            if (type_info.struct_.fields[j].name == sl->fields[i].name) {
+                known = true;
+                break;
+            }
+        }
+        if (!known) {
             ctx_.diag.error(sl->fields[i].loc,
                 std::string("struct '") + std::string(sl->struct_name) +
                 "' has no field named '" + std::string(sl->fields[i].name) + "'");
-            e->fields[i] = {ctx_.strings.intern(sl->fields[i].name),
-                            buildExpr(sl->fields[i].value), sl->fields[i].loc};
             has_error = true;
         }
     }
@@ -2816,6 +5113,36 @@ HIRExpr* HIRBuilder::buildFieldAccess(const Expr* expr) {
             }
             e->type = obj_info.struct_.fields[i].type;
             return e;
+        }
+    }
+
+    // Auto-deref via Deref trait: if struct implements Deref, deref and try target's fields
+    std::string_view struct_name = obj_info.struct_.name;
+    auto deref_it = deref_targets_.find(struct_name);
+    if (deref_it != deref_targets_.end()) {
+        TypeId target = deref_it->second;
+        const auto& target_info = ctx_.types.get(target);
+        if (target_info.kind == TypeKind::Struct) {
+            for (uint32_t i = 0; i < target_info.struct_.field_count; ++i) {
+                if (target_info.struct_.fields[i].name == lookup_name) {
+                    // Insert deref call: obj = Type_deref(obj)
+                    auto deref_fn = resolveMethod(obj_type, ctx_.strings.intern("deref"));
+                    if (!deref_fn.empty()) {
+                        auto* dc = ctx_.arena.make<HIRCallExpr>();
+                        dc->kind = HIRExpr::Kind::Call;
+                        dc->loc = expr->loc;
+                        dc->callee = deref_fn;
+                        dc->is_tail_call = false;
+                        dc->arg_count = 1;
+                        dc->args = ctx_.arena.makeArray<HIRExpr*>(1);
+                        dc->args[0] = e->object;
+                        dc->type = target;
+                        e->object = dc;
+                        e->type = target_info.struct_.fields[i].type;
+                        return e;
+                    }
+                }
+            }
         }
     }
 
@@ -3397,13 +5724,126 @@ HIRExpr* HIRBuilder::buildForEach(const Expr* expr) {
     }
 
     if (!is_array && !is_slice) {
-        ctx_.diag.error(expr->loc, "for-each requires an array or slice");
-        auto* unit = ctx_.arena.make<HIRIntLitExpr>();
-        unit->kind = HIRExpr::Kind::IntLit;
-        unit->loc = expr->loc;
-        unit->value = 0;
-        unit->type = TypeTable::Unit;
-        return unit;
+        // Try Iterator protocol: type must have a `next` method returning a union with None variant
+        std::string_view next_fn = resolveMethod(col_type, ctx_.strings.intern("next"));
+        if (next_fn.empty()) {
+            ctx_.diag.error(expr->loc, "for-each requires an array, slice, or type with next() method");
+            return errorExpr(expr->loc);
+        }
+        // Get the return type of next() to determine element type
+        auto next_it = fn_table_.find(next_fn);
+        if (next_it == fn_table_.end()) {
+            ctx_.diag.error(expr->loc, "Iterator next() function not found");
+            return errorExpr(expr->loc);
+        }
+        TypeId next_ret = next_it->second.return_type;
+        const auto& ret_info = ctx_.types.get(next_ret);
+        // next() should return a union (Option<T>) with a None variant and a value variant
+        if (ret_info.kind != TypeKind::Union) {
+            ctx_.diag.error(expr->loc, "Iterator next() must return a union type (e.g. Option<T>)");
+            return errorExpr(expr->loc);
+        }
+        // Find the payload type (non-None variant)
+        TypeId payload_type = TypeTable::Unit;
+        std::string_view some_variant;
+        std::string_view none_variant;
+        for (uint32_t v = 0; v < ret_info.union_.variant_count; ++v) {
+            if (ret_info.union_.variants[v].payload_type != INVALID_TYPE) {
+                payload_type = ret_info.union_.variants[v].payload_type;
+                some_variant = ret_info.union_.variants[v].name;
+            } else {
+                none_variant = ret_info.union_.variants[v].name;
+            }
+        }
+        if (some_variant.empty() || none_variant.empty()) {
+            ctx_.diag.error(expr->loc, "Iterator next() return type must have Some(T) and None variants");
+            return errorExpr(expr->loc);
+        }
+
+        // Desugar: loop { match col.next() { Some(x) => body, None => break } }
+        auto binding_name = ctx_.strings.intern(fe->var_name);
+        local_vars_[binding_name] = payload_type;
+
+        // Build: col_expr.next() — call the mangled next function with &mut col_expr
+        auto* next_call = ctx_.arena.make<HIRCallExpr>();
+        next_call->kind = HIRExpr::Kind::Call;
+        next_call->loc = expr->loc;
+        next_call->type = next_ret;
+        next_call->callee = next_fn;
+        next_call->arg_count = 1;
+        next_call->args = ctx_.arena.makeArray<HIRExpr*>(1);
+        // Pass &mut col as self parameter
+        auto* col_addr = ctx_.arena.make<HIRAddrOfExpr>();
+        col_addr->kind = HIRExpr::Kind::AddrOf;
+        col_addr->loc = expr->loc;
+        col_addr->type = ctx_.types.makePtr(col_type, true);
+        col_addr->operand = col_expr;
+        col_addr->is_mutable = true;
+        next_call->args[0] = col_addr;
+
+        // Build match arms: Some(x) => body, None => break
+        auto* match_expr = ctx_.arena.make<HIRMatchExpr>();
+        match_expr->kind = HIRExpr::Kind::Match;
+        match_expr->loc = expr->loc;
+        match_expr->type = TypeTable::Unit;
+        match_expr->scrutinee = next_call;
+        match_expr->arm_count = 2;
+        match_expr->arms = ctx_.arena.makeArray<HIRMatchArm>(2);
+
+        // Arm 0: Some(x) => body
+        auto* some_pat = ctx_.arena.make<HIRUnionPattern>();
+        some_pat->kind = HIRPattern::Kind::Union;
+        some_pat->type = next_ret;
+        some_pat->variant_name = some_variant;
+        auto* inner_var_pat = ctx_.arena.make<HIRVariablePattern>();
+        inner_var_pat->kind = HIRPattern::Kind::Variable;
+        inner_var_pat->type = payload_type;
+        inner_var_pat->name = binding_name;
+        some_pat->inner = inner_var_pat;
+        match_expr->arms[0].pattern = some_pat;
+        match_expr->arms[0].guard = nullptr;
+        // Build the loop body stmts as a block
+        auto* body_block = ctx_.arena.make<HIRBlockExpr>();
+        body_block->kind = HIRExpr::Kind::Block;
+        body_block->loc = expr->loc;
+        body_block->type = TypeTable::Unit;
+        body_block->stmt_count = fe->stmt_count;
+        body_block->stmts = ctx_.arena.makeArray<HIRStmt*>(fe->stmt_count);
+        for (uint32_t s = 0; s < fe->stmt_count; ++s) {
+            body_block->stmts[s] = buildStmt(fe->stmts[s]);
+        }
+        body_block->result = nullptr;
+        match_expr->arms[0].body = body_block;
+        match_expr->arms[0].loc = expr->loc;
+
+        // Arm 1: None => break
+        auto* none_pat = ctx_.arena.make<HIRUnionPattern>();
+        none_pat->kind = HIRPattern::Kind::Union;
+        none_pat->type = next_ret;
+        none_pat->variant_name = none_variant;
+        none_pat->inner = nullptr;
+        auto* brk = ctx_.arena.make<HIRBreakExpr>();
+        brk->kind = HIRExpr::Kind::Break;
+        brk->loc = expr->loc;
+        brk->type = TypeTable::Unit;
+        brk->value = nullptr;
+        brk->label = {};
+        match_expr->arms[1].pattern = none_pat;
+        match_expr->arms[1].guard = nullptr;
+        match_expr->arms[1].body = brk;
+        match_expr->arms[1].loc = expr->loc;
+
+        // Wrap in a loop
+        auto* loop = ctx_.arena.make<HIRLoopExpr>();
+        loop->kind = HIRExpr::Kind::Loop;
+        loop->loc = expr->loc;
+        loop->type = TypeTable::Unit;
+        loop->label = fe->label;
+        loop->binding_count = 0;
+        loop->bindings = nullptr;
+        loop->body = match_expr;
+
+        return loop;
     }
 
     auto* loop = ctx_.arena.make<HIRLoopExpr>();
@@ -3700,6 +6140,33 @@ HIRExpr* HIRBuilder::buildArrayLit(const Expr* expr) {
     // Create array type [ElemType; N]
     if (elem_type != TypeTable::Error) {
         e->type = ctx_.types.makeArrayType(elem_type, arr->count);
+    } else {
+        e->type = TypeTable::Error;
+    }
+    return e;
+}
+
+HIRExpr* HIRBuilder::buildArrayRepeat(const Expr* expr) {
+    auto* arr = static_cast<const ArrayRepeatExpr*>(expr);
+    auto* e = ctx_.arena.make<HIRArrayLitExpr>();
+    e->kind = HIRExpr::Kind::ArrayLit;
+    e->loc = expr->loc;
+    e->element_count = arr->repeat_count;
+    e->elements = ctx_.arena.makeArray<HIRExpr*>(arr->repeat_count);
+
+    // Build the value expression once, then duplicate for each element
+    HIRExpr* value = buildExpr(arr->value);
+    TypeId elem_type = value->type;
+
+    e->elements[0] = value;
+    for (uint32_t i = 1; i < arr->repeat_count; ++i) {
+        // For repeat expressions, re-build the same AST expr for each element
+        // so each gets its own HIR node (important for correct LIR lowering)
+        e->elements[i] = buildExpr(arr->value);
+    }
+
+    if (elem_type != TypeTable::Error) {
+        e->type = ctx_.types.makeArrayType(elem_type, arr->repeat_count);
     } else {
         e->type = TypeTable::Error;
     }
@@ -4383,6 +6850,9 @@ HIRStmt* HIRBuilder::buildStmt(const Stmt* stmt) {
                     local_lambda_map_[s->name] = fnref->fn_name;
                 }
             }
+            s->explicit_align = decl->explicit_align;
+            // Record in scope for Drop trait destructor insertion
+            recordScopeVar(s->name, s->type);
             return s;
         }
         case Stmt::Kind::VarDecl: {
@@ -4411,6 +6881,9 @@ HIRStmt* HIRBuilder::buildStmt(const Stmt* stmt) {
             }
             local_vars_[decl->name] = expected;
             mutable_vars_.insert(decl->name);
+            s->explicit_align = decl->explicit_align;
+            // Record in scope for Drop trait destructor insertion
+            recordScopeVar(s->name, s->type);
             return s;
         }
         case Stmt::Kind::Assign: {
@@ -4974,6 +7447,7 @@ void HIRBuilder::registerTraits(const Module* ast) {
         auto* td = ast->traits[i];
         TraitInfo info;
         info.name = ctx_.strings.intern(td->name);
+        info.ast = td;
         for (uint32_t j = 0; j < td->method_count; ++j) {
             info.method_names.push_back(ctx_.strings.intern(td->methods[j].name));
             // Parse effect annotations on trait methods
@@ -4986,6 +7460,10 @@ void HIRBuilder::registerTraits(const Module* ast) {
             }
             info.method_effects.push_back(effects);
         }
+        // Record associated type names
+        for (uint32_t j = 0; j < td->assoc_type_count; ++j) {
+            info.assoc_type_names.push_back(ctx_.strings.intern(td->assoc_types[j].name));
+        }
         trait_table_[info.name] = info;
     }
 }
@@ -4997,6 +7475,30 @@ void HIRBuilder::registerImpls(const Module* ast) {
 
         // Get the type name for mangling
         std::string_view type_name = actualTypeName(target_type, ctx_.types);
+
+        // Set current impl type for Self resolution in method signatures
+        auto saved_impl = current_impl_type_name_;
+        current_impl_type_name_ = type_name;
+
+        // Register associated type definitions FIRST (needed for method return types)
+        for (uint32_t j = 0; j < id->assoc_type_count; ++j) {
+            auto assoc_name = ctx_.strings.intern(id->assoc_types[j].name);
+            TypeId assoc_tid = resolveType(id->assoc_types[j].type);
+            std::string key = std::string(type_name) + "::" + std::string(assoc_name);
+            char* kbuf = ctx_.arena.makeArray<char>(key.size());
+            std::memcpy(kbuf, key.data(), key.size());
+            auto interned_key = ctx_.strings.intern(std::string_view(kbuf, key.size()));
+            assoc_type_map_[interned_key] = assoc_tid;
+
+            // Detect Deref/DerefMut trait: record Target type for auto-deref
+            if (id->trait_name.data() && assoc_name == ctx_.strings.intern("Target")) {
+                if (std::string_view(id->trait_name) == "Deref") {
+                    deref_targets_[type_name] = assoc_tid;
+                } else if (std::string_view(id->trait_name) == "DerefMut") {
+                    deref_mut_targets_[type_name] = assoc_tid;
+                }
+            }
+        }
 
         // Register each impl method as a mangled free function
         for (uint32_t j = 0; j < id->method_count; ++j) {
@@ -5020,8 +7522,44 @@ void HIRBuilder::registerImpls(const Module* ast) {
 
             // Store in impl_table_ for method resolution
             impl_table_[type_name].methods[method_name] = interned_mangled;
+
+            // Detect Drop trait impl: register the drop fn for automatic destructor insertion
+            if (id->trait_name.data() && std::string_view(id->trait_name) == "Drop" &&
+                std::string_view(fn->name) == "drop") {
+                drop_fns_[type_name] = interned_mangled;
+            }
+            // Detect Clone trait impl
+            if (id->trait_name.data() && std::string_view(id->trait_name) == "Clone" &&
+                std::string_view(fn->name) == "clone") {
+                clone_types_.insert(type_name);
+            }
+        }
+
+        // Detect Send/Sync marker trait impls
+        if (id->trait_name.data()) {
+            if (std::string_view(id->trait_name) == "Send") {
+                send_types_.insert(type_name);
+            } else if (std::string_view(id->trait_name) == "Sync") {
+                sync_types_.insert(type_name);
+            }
+        }
+
+        current_impl_type_name_ = saved_impl;
+    }
+}
+
+bool HIRBuilder::typeImplementsTrait(std::string_view type_name, std::string_view trait_name) {
+    auto trait_it = trait_table_.find(trait_name);
+    if (trait_it == trait_table_.end()) return false;
+    auto impl_it = impl_table_.find(type_name);
+    if (impl_it == impl_table_.end()) return false;
+    // Check that the type implements all methods of the trait
+    for (auto& mname : trait_it->second.method_names) {
+        if (impl_it->second.methods.find(mname) == impl_it->second.methods.end()) {
+            return false;
         }
     }
+    return true;
 }
 
 std::string_view HIRBuilder::resolveMethod(TypeId type, std::string_view method) const {
@@ -5153,6 +7691,31 @@ HIRExpr* HIRBuilder::buildMethodCall(const Expr* expr) {
         TypeId pointee = ctx_.types.get(obj->type).ptr.pointee;
         mangled = resolveMethod(pointee, method_name);
     }
+    // Deref trait auto-deref: if type implements Deref, try method on Target
+    if (mangled.empty()) {
+        std::string_view obj_type_name = actualTypeName(obj->type, ctx_.types);
+        auto deref_it = deref_targets_.find(obj_type_name);
+        if (deref_it != deref_targets_.end()) {
+            TypeId target = deref_it->second;
+            mangled = resolveMethod(target, method_name);
+            if (!mangled.empty()) {
+                // Insert auto-deref: obj = obj.deref()
+                auto deref_fn = resolveMethod(obj->type, ctx_.strings.intern("deref"));
+                if (!deref_fn.empty()) {
+                    auto* deref_call = ctx_.arena.make<HIRCallExpr>();
+                    deref_call->kind = HIRExpr::Kind::Call;
+                    deref_call->loc = expr->loc;
+                    deref_call->callee = deref_fn;
+                    deref_call->is_tail_call = false;
+                    deref_call->arg_count = 1;
+                    deref_call->args = ctx_.arena.makeArray<HIRExpr*>(1);
+                    deref_call->args[0] = obj;
+                    deref_call->type = target;
+                    obj = deref_call;
+                }
+            }
+        }
+    }
     if (mangled.empty()) {
         // Fallback: check if the struct has a field with this name that is a
         // function type.  This enables the vtable pattern: obj.fn_field(args).
@@ -5185,6 +7748,50 @@ HIRExpr* HIRBuilder::buildMethodCall(const Expr* expr) {
                         }
                         call->type = fti.fn.return_type;
                         return call;
+                    }
+                }
+            }
+        }
+        // TypeVar method dispatch: look up method via trait bounds
+        if (obj->type < ctx_.types.size() &&
+            ctx_.types.get(obj->type).kind == TypeKind::TypeVar) {
+            auto gb_it = generic_bounds_.find(current_fn_name_);
+            if (gb_it != generic_bounds_.end()) {
+                for (auto& gb : gb_it->second) {
+                    if (gb.type_var_id != obj->type) continue;
+                    for (uint32_t b = 0; b < gb.bound_count; ++b) {
+                        auto trait_it = trait_table_.find(gb.bounds[b]);
+                        if (trait_it == trait_table_.end() || !trait_it->second.ast) continue;
+                        auto* td = trait_it->second.ast;
+                        for (uint32_t m = 0; m < td->method_count; ++m) {
+                            if (td->methods[m].name != mc->method_name) continue;
+                            // Found the trait method — resolve return type
+                            auto saved_impl = current_impl_type_name_;
+                            // Self in trait context maps to the TypeVar
+                            const auto& tvi = ctx_.types.get(obj->type);
+                            current_impl_type_name_ = tvi.type_var.name;
+                            named_types_[tvi.type_var.name] = obj->type;
+                            TypeId ret_type = resolveType(td->methods[m].return_type);
+                            current_impl_type_name_ = saved_impl;
+                            // Build args (skip type checking against concrete sig)
+                            uint32_t total = 1 + mc->arg_count;
+                            auto* call = ctx_.arena.make<HIRCallExpr>();
+                            call->kind = HIRExpr::Kind::Call;
+                            call->loc = expr->loc;
+                            // Placeholder callee — resolved during monomorphization
+                            std::string placeholder = "__typevar_" +
+                                std::string(gb.bounds[b]) + "_" +
+                                std::string(mc->method_name);
+                            call->callee = ctx_.strings.intern(placeholder);
+                            call->is_tail_call = false;
+                            call->arg_count = total;
+                            call->args = ctx_.arena.makeArray<HIRExpr*>(total);
+                            call->args[0] = obj;
+                            for (uint32_t i = 0; i < mc->arg_count; ++i)
+                                call->args[i + 1] = buildExpr(mc->args[i]);
+                            call->type = ret_type;
+                            return call;
+                        }
                     }
                 }
             }
@@ -5306,6 +7913,8 @@ HIRExpr* HIRBuilder::buildTry(const Expr* expr) {
     }
 
     TypeId ret_type = current_return_type_;
+    TypeId ret_err_payload = INVALID_TYPE;
+    bool needs_from_conversion = false;
     if (ret_type < ctx_.types.size()) {
         const auto& ret_info = ctx_.types.get(ret_type);
         if (ret_info.kind != TypeKind::Union) {
@@ -5317,15 +7926,29 @@ HIRExpr* HIRBuilder::buildTry(const Expr* expr) {
         // Find Err variant in return type to check compatibility
         bool found_err = false;
         for (uint32_t i = 0; i < ret_info.union_.variant_count; ++i) {
-            if (ret_info.union_.variants[i].name == "Err" &&
-                ret_info.union_.variants[i].payload_type == err_payload) {
-                found_err = true;
+            if (ret_info.union_.variants[i].name == "Err") {
+                ret_err_payload = ret_info.union_.variants[i].payload_type;
+                if (ret_err_payload == err_payload) {
+                    found_err = true;
+                } else if (ret_err_payload != INVALID_TYPE && err_payload != INVALID_TYPE) {
+                    // Try From::from conversion: look for RetErrType_from(src_err) fn
+                    std::string_view ret_err_name = actualTypeName(ret_err_payload, ctx_.types);
+                    std::string from_fn = std::string(ret_err_name) + "_from";
+                    char* buf = ctx_.arena.makeArray<char>(from_fn.size());
+                    std::memcpy(buf, from_fn.data(), from_fn.size());
+                    auto from_fn_name = ctx_.strings.intern(std::string_view(buf, from_fn.size()));
+                    if (fn_table_.count(from_fn_name)) {
+                        found_err = true;
+                        needs_from_conversion = true;
+                    }
+                }
                 break;
             }
         }
         if (!found_err) {
             ctx_.diag.error(expr->loc,
-                "error type of '?' does not match function return type's Err variant");
+                "error type of '?' does not match function return type's Err variant "
+                "(and no From::from conversion found)");
             return errorExpr(expr->loc);
         }
     }
@@ -5385,19 +8008,41 @@ HIRExpr* HIRBuilder::buildTry(const Expr* expr) {
             pat->inner = nullptr;
         }
 
-        // Build: return RetType::Err(e)
-        auto* err_val = ctx_.arena.make<HIRIdentExpr>();
-        err_val->kind = HIRExpr::Kind::Ident;
-        err_val->loc = expr->loc;
-        err_val->name = err_name;
-        err_val->type = err_payload;
+        // Build: return RetType::Err(e) or return RetType::Err(From::from(e))
+        HIRExpr* err_val_expr;
+        auto* err_ident = ctx_.arena.make<HIRIdentExpr>();
+        err_ident->kind = HIRExpr::Kind::Ident;
+        err_ident->loc = expr->loc;
+        err_ident->name = err_name;
+        err_ident->type = err_payload;
+
+        if (needs_from_conversion && ret_err_payload != INVALID_TYPE) {
+            // Wrap in From::from() call: RetErrType_from(e)
+            std::string_view ret_err_name = actualTypeName(ret_err_payload, ctx_.types);
+            std::string from_fn = std::string(ret_err_name) + "_from";
+            char* buf = ctx_.arena.makeArray<char>(from_fn.size());
+            std::memcpy(buf, from_fn.data(), from_fn.size());
+            auto from_fn_name = ctx_.strings.intern(std::string_view(buf, from_fn.size()));
+
+            auto* conv = ctx_.arena.make<HIRCallExpr>();
+            conv->kind = HIRExpr::Kind::Call;
+            conv->loc = expr->loc;
+            conv->type = ret_err_payload;
+            conv->callee = from_fn_name;
+            conv->arg_count = 1;
+            conv->args = ctx_.arena.makeArray<HIRExpr*>(1);
+            conv->args[0] = err_ident;
+            err_val_expr = conv;
+        } else {
+            err_val_expr = err_ident;
+        }
 
         auto* err_wrap = ctx_.arena.make<HIRUnionVariantExpr>();
         err_wrap->kind = HIRExpr::Kind::UnionVariant;
         err_wrap->loc = expr->loc;
         err_wrap->union_name = ctx_.types.get(ret_type).union_.name;
         err_wrap->variant_name = ctx_.strings.intern("Err");
-        err_wrap->payload = err_val;
+        err_wrap->payload = err_val_expr;
         err_wrap->type = ret_type;
 
         auto* ret = ctx_.arena.make<HIRReturnExpr>();
@@ -5413,6 +8058,161 @@ HIRExpr* HIRBuilder::buildTry(const Expr* expr) {
     }
 
     return match;
+}
+
+// ============================================================================
+// Copy/Clone trait support
+// ============================================================================
+
+bool HIRBuilder::isCopyType(TypeId type) const {
+    const auto& ti = ctx_.types.get(type);
+    switch (ti.kind) {
+        case TypeKind::Primitive:
+            return true;  // All primitives are Copy
+        case TypeKind::Ptr:
+        case TypeKind::PtrMut:
+            return true;  // Pointers are Copy
+        case TypeKind::Enum:
+            return true;  // Enums (no payload) are Copy
+        case TypeKind::Struct:
+            if (copy_types_.count(ti.struct_.name)) return true;
+            // Struct is Copy if all fields are Copy and it's not in drop_fns_
+            if (drop_fns_.count(ti.struct_.name)) return false;
+            for (uint32_t i = 0; i < ti.struct_.field_count; ++i) {
+                if (!isCopyType(ti.struct_.fields[i].type)) return false;
+            }
+            return true;
+        case TypeKind::Union:
+            if (copy_types_.count(ti.union_.name)) return true;
+            return false;  // Unions are not Copy by default (payloads may not be Copy)
+        default:
+            return false;
+    }
+}
+
+// ============================================================================
+// Send/Sync marker trait support
+// ============================================================================
+
+bool HIRBuilder::isSendType(TypeId type) const {
+    const auto& ti = ctx_.types.get(type);
+    switch (ti.kind) {
+        case TypeKind::Primitive:
+            return true;  // All primitives are Send
+        case TypeKind::Ptr:
+        case TypeKind::PtrMut:
+            return false;  // Raw pointers are !Send by default
+        case TypeKind::Enum:
+            return true;
+        case TypeKind::Struct: {
+            if (not_send_types_.count(ti.struct_.name)) return false;
+            if (send_types_.count(ti.struct_.name)) return true;
+            // Auto-derive: Send if all fields are Send
+            for (uint32_t i = 0; i < ti.struct_.field_count; ++i) {
+                if (!isSendType(ti.struct_.fields[i].type)) return false;
+            }
+            return true;
+        }
+        case TypeKind::Union:
+            if (not_send_types_.count(ti.union_.name)) return false;
+            if (send_types_.count(ti.union_.name)) return true;
+            return false;
+        default:
+            return false;
+    }
+}
+
+bool HIRBuilder::isSyncType(TypeId type) const {
+    const auto& ti = ctx_.types.get(type);
+    switch (ti.kind) {
+        case TypeKind::Primitive:
+            return true;  // All primitives are Sync
+        case TypeKind::Ptr:
+        case TypeKind::PtrMut:
+            return false;  // Raw pointers are !Sync by default
+        case TypeKind::Enum:
+            return true;
+        case TypeKind::Struct: {
+            if (not_sync_types_.count(ti.struct_.name)) return false;
+            if (sync_types_.count(ti.struct_.name)) return true;
+            // Auto-derive: Sync if all fields are Sync
+            for (uint32_t i = 0; i < ti.struct_.field_count; ++i) {
+                if (!isSyncType(ti.struct_.fields[i].type)) return false;
+            }
+            return true;
+        }
+        case TypeKind::Union:
+            if (not_sync_types_.count(ti.union_.name)) return false;
+            if (sync_types_.count(ti.union_.name)) return true;
+            return false;
+        default:
+            return false;
+    }
+}
+
+// ============================================================================
+// Drop trait / automatic destructor support
+// ============================================================================
+
+bool HIRBuilder::needsDrop(TypeId type) const {
+    // Check if this type has a registered drop function
+    const auto& ti = ctx_.types.get(type);
+    if (ti.kind == TypeKind::Struct) {
+        if (drop_fns_.count(ti.struct_.name)) return true;
+        // Recursively check fields for types that need dropping
+        for (uint32_t i = 0; i < ti.struct_.field_count; ++i) {
+            if (needsDrop(ti.struct_.fields[i].type)) return true;
+        }
+    }
+    return false;
+}
+
+HIRExpr* HIRBuilder::makeDropCall(std::string_view var_name, TypeId type, SourceLocation loc) {
+    const auto& ti = ctx_.types.get(type);
+    std::string_view type_name = ti.struct_.name;
+    auto drop_it = drop_fns_.find(type_name);
+    if (drop_it == drop_fns_.end()) return nullptr;
+
+    // Build: TypeName_drop(&var)
+    auto* call = ctx_.arena.make<HIRCallExpr>();
+    call->kind = HIRExpr::Kind::Call;
+    call->loc = loc;
+    call->type = TypeTable::Unit;
+    call->callee = drop_it->second;
+
+    // Single argument: mutable pointer to the variable
+    call->arg_count = 1;
+    call->args = ctx_.arena.makeArray<HIRExpr*>(1);
+
+    // Build &mut var_name
+    auto* ident = ctx_.arena.make<HIRIdentExpr>();
+    ident->kind = HIRExpr::Kind::Ident;
+    ident->loc = loc;
+    ident->type = type;
+    ident->name = var_name;
+
+    auto* addr = ctx_.arena.make<HIRAddrOfExpr>();
+    addr->kind = HIRExpr::Kind::AddrOf;
+    addr->loc = loc;
+    addr->type = ctx_.types.makePtr(type, true);  // Ptr<mut T>
+    addr->operand = ident;
+
+    call->args[0] = addr;
+    return call;
+}
+
+void HIRBuilder::pushScope() {
+    scope_stack_.emplace_back();
+}
+
+void HIRBuilder::popScope() {
+    if (!scope_stack_.empty()) scope_stack_.pop_back();
+}
+
+void HIRBuilder::recordScopeVar(std::string_view name, TypeId type) {
+    if (!scope_stack_.empty()) {
+        scope_stack_.back().push_back({name, type});
+    }
 }
 
 } // namespace kern

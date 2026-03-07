@@ -34,6 +34,10 @@ private:
     void addTypes(std::vector<CompletionItem>& items,
                   IDEContext& ctx, std::string_view path,
                   std::string_view prefix);
+    void addLocals(std::vector<CompletionItem>& items,
+                   IDEContext& ctx, std::string_view path,
+                   uint32_t line, uint32_t column,
+                   std::string_view prefix);
     void addFieldCompletions(std::vector<CompletionItem>& items,
                              IDEContext& ctx, std::string_view path,
                              uint32_t line, uint32_t column);

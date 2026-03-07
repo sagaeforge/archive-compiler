@@ -1,0 +1,9 @@
+// Test implicit integer widening
+fn takes_i64(x: i64) -> i64 { x }
+
+fn main() -> i64 {
+    val a: i32 = 20
+    val b: i32 = 22
+    // i32 + i32 = i32, then implicit widen to i64 in fn call
+    takes_i64(a + b)
+}

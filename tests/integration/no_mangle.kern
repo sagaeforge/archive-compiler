@@ -1,0 +1,9 @@
+// Test @no_mangle annotation — suppress module name mangling
+@no_mangle
+fn get_value() -> i64 {
+    42
+}
+
+fn main() -> i64 {
+    get_value()
+}

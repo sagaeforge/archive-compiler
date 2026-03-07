@@ -1,6 +1,7 @@
 add_executable(kern_tests
     support/ArenaTest.cpp
     support/DiagnosticTest.cpp
+    support/ModuleResolverTest.cpp
     support/TypeSystemTest.cpp
     lexer/LexerTest.cpp
     parser/ParserTest.cpp

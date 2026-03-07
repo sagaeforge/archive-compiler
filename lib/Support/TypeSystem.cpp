@@ -27,6 +27,12 @@ void TypeTable::registerPrimitives() {
     never_info.kind = TypeKind::Never;
     auto* never_ti = arena_.make<TypeInfo>(never_info);
     types_.push_back(never_ti);
+
+    // Index 14-15: isize/usize (pointer-sized integers, 64-bit on x86-64)
+    auto* isize_ti = arena_.make<TypeInfo>(TypeInfo::makePrimitive(PrimitiveKind::Isize));
+    types_.push_back(isize_ti);
+    auto* usize_ti = arena_.make<TypeInfo>(TypeInfo::makePrimitive(PrimitiveKind::Usize));
+    types_.push_back(usize_ti);
 }
 
 TypeId TypeTable::add(TypeInfo info) {
@@ -240,7 +246,7 @@ TypeId TypeTable::makeEnum(std::string_view name,
 }
 
 TypeId TypeTable::makeUnion(std::string_view name, std::span<const VariantInfo> variants,
-                            bool is_repr_c) {
+                            bool is_repr_c, uint8_t tag_size) {
     auto count = static_cast<uint32_t>(variants.size());
     auto* var_copy = arena_.makeArray<VariantInfo>(count);
     std::memcpy(var_copy, variants.data(), count * sizeof(VariantInfo));
@@ -251,6 +257,7 @@ TypeId TypeTable::makeUnion(std::string_view name, std::span<const VariantInfo> 
     ti.union_.variants = var_copy;
     ti.union_.variant_count = count;
     ti.union_.is_repr_c = is_repr_c;
+    ti.union_.tag_size = tag_size;
     return add(ti);
 }
 
@@ -301,7 +308,8 @@ uint32_t TypeTable::sizeOf(TypeId id) const {
         case PrimitiveKind::I8:  case PrimitiveKind::U8:  case PrimitiveKind::Bool: return 1;
         case PrimitiveKind::I16: case PrimitiveKind::U16: return 2;
         case PrimitiveKind::I32: case PrimitiveKind::U32: case PrimitiveKind::F32:  return 4;
-        case PrimitiveKind::I64: case PrimitiveKind::U64: case PrimitiveKind::F64:  return 8;
+        case PrimitiveKind::I64: case PrimitiveKind::U64: case PrimitiveKind::F64:
+        case PrimitiveKind::Isize: case PrimitiveKind::Usize: return 8;  // 64-bit on x86-64
         case PrimitiveKind::Unit: return 0;
         case PrimitiveKind::Error: return 0;
         }
@@ -322,8 +330,10 @@ uint32_t TypeTable::sizeOf(TypeId id) const {
             // Untagged union: no discriminant, all variants at offset 0
             return (max_payload + 7) & ~7u;
         }
-        // Tagged union: 8-byte tag + max payload, aligned to 8
-        return 8 + ((max_payload + 7) & ~7u);
+        // Tagged union: tag + max payload, payload offset at 8 for alignment
+        uint32_t tag_sz = ti.union_.tag_size;
+        uint32_t payload_offset = (tag_sz + 7) & ~7u;  // round tag up to 8
+        return payload_offset + ((max_payload + 7) & ~7u);
     }
     case TypeKind::Ptr:
     case TypeKind::PtrMut:
@@ -350,7 +360,8 @@ uint32_t TypeTable::alignOf(TypeId id) const {
         case PrimitiveKind::I8:  case PrimitiveKind::U8:  case PrimitiveKind::Bool: return 1;
         case PrimitiveKind::I16: case PrimitiveKind::U16: return 2;
         case PrimitiveKind::I32: case PrimitiveKind::U32: case PrimitiveKind::F32:  return 4;
-        case PrimitiveKind::I64: case PrimitiveKind::U64: case PrimitiveKind::F64:  return 8;
+        case PrimitiveKind::I64: case PrimitiveKind::U64: case PrimitiveKind::F64:
+        case PrimitiveKind::Isize: case PrimitiveKind::Usize: return 8;
         case PrimitiveKind::Unit: case PrimitiveKind::Error: return 1;
         }
         return 1;
@@ -403,6 +414,7 @@ bool TypeTable::isSigned(TypeId id) const {
     switch (ti.primitive.prim) {
     case PrimitiveKind::I8: case PrimitiveKind::I16:
     case PrimitiveKind::I32: case PrimitiveKind::I64:
+    case PrimitiveKind::Isize:
     case PrimitiveKind::F32: case PrimitiveKind::F64:
         return true;
     default:
@@ -418,6 +430,7 @@ bool TypeTable::isInteger(TypeId id) const {
     case PrimitiveKind::I32: case PrimitiveKind::I64:
     case PrimitiveKind::U8:  case PrimitiveKind::U16:
     case PrimitiveKind::U32: case PrimitiveKind::U64:
+    case PrimitiveKind::Isize: case PrimitiveKind::Usize:
         return true;
     default:
         return false;
@@ -446,6 +459,8 @@ const char* TypeTable::name(TypeId id) const {
         case PrimitiveKind::Bool:  return "bool";
         case PrimitiveKind::Unit:  return "Unit";
         case PrimitiveKind::Error: return "Error";
+        case PrimitiveKind::Isize: return "isize";
+        case PrimitiveKind::Usize: return "usize";
         }
         return "?";
     case TypeKind::Struct: return "struct";

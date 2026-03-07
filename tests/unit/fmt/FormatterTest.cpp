@@ -110,4 +110,88 @@ TEST_F(FormatterTest, IndentWidth) {
     EXPECT_TRUE(result.find("    val x") != std::string::npos) << result;
 }
 
+// ============================================================================
+// New declaration formatting tests
+// ============================================================================
+
+TEST_F(FormatterTest, TypeAlias) {
+    auto result = format("type Millis = u64\nfn main() -> Millis { 0 as Millis }");
+    EXPECT_TRUE(result.find("type Millis = u64") != std::string::npos) << result;
+}
+
+TEST_F(FormatterTest, Newtype) {
+    auto result = format("newtype Millis(u64)\nfn main() -> i64 { 0 }");
+    EXPECT_TRUE(result.find("newtype Millis(u64)") != std::string::npos) << result;
+}
+
+TEST_F(FormatterTest, TraitDecl) {
+    auto result = format(
+        "trait Printable {\n"
+        "    fn print(self: i64) -> Unit\n"
+        "}\n"
+        "fn main() -> i64 { 0 }");
+    EXPECT_TRUE(result.find("trait Printable") != std::string::npos) << result;
+    EXPECT_TRUE(result.find("fn print") != std::string::npos) << result;
+}
+
+TEST_F(FormatterTest, ImplDecl) {
+    auto result = format(
+        "trait Foo {\n"
+        "    fn bar(self: i64) -> i64\n"
+        "}\n"
+        "struct MyStruct { x: i64 }\n"
+        "impl Foo for MyStruct {\n"
+        "    fn bar(self: i64) -> i64 { self }\n"
+        "}\n"
+        "fn main() -> i64 { 0 }");
+    EXPECT_TRUE(result.find("impl Foo for MyStruct") != std::string::npos) << result;
+}
+
+TEST_F(FormatterTest, GlobalVal) {
+    auto result = format(
+        "static val G: i64 = 42\n"
+        "fn main() -> i64 { G }");
+    EXPECT_TRUE(result.find("static val G: i64 = 42") != std::string::npos) << result;
+}
+
+TEST_F(FormatterTest, GlobalVar) {
+    auto result = format(
+        "static var COUNT: i64 = 0\n"
+        "fn main() -> i64 { COUNT }");
+    EXPECT_TRUE(result.find("static var COUNT: i64 = 0") != std::string::npos) << result;
+}
+
+TEST_F(FormatterTest, FnType) {
+    auto result = format(
+        "fn apply(f: fn(i64) -> i64, x: i64) -> i64 { f(x) }");
+    EXPECT_TRUE(result.find("fn(i64) -> i64") != std::string::npos) << result;
+}
+
+TEST_F(FormatterTest, Lambda) {
+    auto result = format(
+        "fn apply(f: fn(i64) -> i64, x: i64) -> i64 { f(x) }\n"
+        "fn main() -> i64 { apply({ x: i64 => x + 1 }, 41) }");
+    EXPECT_TRUE(result.find("x: i64 =>") != std::string::npos) << result;
+}
+
+TEST_F(FormatterTest, GenericType) {
+    auto result = format(
+        "struct Pair<T> { x: T, y: T }\n"
+        "fn main() -> i64 { 0 }");
+    EXPECT_TRUE(result.find("struct Pair") != std::string::npos) << result;
+}
+
+TEST_F(FormatterTest, ImportDecl) {
+    auto result = format(
+        "import kern.types\n"
+        "fn main() -> i64 { 0 }");
+    EXPECT_TRUE(result.find("import kern.types") != std::string::npos) << result;
+}
+
+TEST_F(FormatterTest, ArrayType) {
+    auto result = format(
+        "fn f(arr: [i64; 3]) -> i64 { arr[0] }");
+    EXPECT_TRUE(result.find("[i64; 3]") != std::string::npos) << result;
+}
+
 } // namespace kern

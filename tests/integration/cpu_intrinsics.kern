@@ -1,0 +1,18 @@
+// Test CPU control intrinsics — rdtsc works in userspace
+fn rdtsc() -> u64 = intrinsic
+fn cpuid_eax(leaf: u32) -> u32 = intrinsic
+
+fn main() -> i64 {
+    // rdtsc returns a non-zero timestamp counter
+    val t1: u64 = rdtsc()
+    val t2: u64 = rdtsc()
+    // t2 >= t1 always (monotonic)
+    // Both should be non-zero on any real CPU
+    val ok1: i64 = if t1 > 0 { 1 } else { 0 }
+    val ok2: i64 = if t2 >= t1 { 1 } else { 0 }
+    // cpuid leaf 0 returns max basic leaf in eax (always > 0)
+    val max_leaf: u32 = cpuid_eax(0 as u32)
+    val ok3: i64 = if max_leaf > 0 as u32 { 1 } else { 0 }
+    // 1 + 1 + 1 = 3, then * 14 = 42
+    (ok1 + ok2 + ok3) * 14
+}

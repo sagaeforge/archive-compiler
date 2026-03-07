@@ -1,0 +1,4 @@
+fn main() -> u8 {
+  val unused: u8 = 10
+  42
+}

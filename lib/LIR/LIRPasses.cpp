@@ -22,6 +22,7 @@ static bool hasSideEffects(LIROp op) {
         case LIROp::InlineAsm:
         case LIROp::AtomicStore:
         case LIROp::AtomicCas:
+        case LIROp::AtomicCas128:
         case LIROp::AtomicFetchAdd:
         case LIROp::AtomicFetchSub:
         case LIROp::AtomicFetchAnd:
@@ -33,6 +34,12 @@ static bool hasSideEffects(LIROp op) {
         case LIROp::PortIn:
         case LIROp::PortOut:
         case LIROp::Trap:
+        case LIROp::Switch:
+        case LIROp::VaStart:
+        case LIROp::VaArg:
+        case LIROp::Alloca:
+        case LIROp::TlsLoad:
+        case LIROp::TlsStore:
             return true;
         default:
             return false;
@@ -133,6 +140,13 @@ static void collectUses(const LIRInstr& instr, std::unordered_set<VReg>& uses) {
             uses.insert(instr.atomic_cas.expected);
             uses.insert(instr.atomic_cas.desired);
             break;
+        case LIROp::AtomicCas128:
+            uses.insert(instr.atomic_cas128.ptr);
+            uses.insert(instr.atomic_cas128.exp_lo);
+            uses.insert(instr.atomic_cas128.exp_hi);
+            uses.insert(instr.atomic_cas128.des_lo);
+            uses.insert(instr.atomic_cas128.des_hi);
+            break;
         case LIROp::AtomicFetchAdd:
             uses.insert(instr.atomic_fetch_add.ptr);
             uses.insert(instr.atomic_fetch_add.value);
@@ -166,6 +180,24 @@ static void collectUses(const LIRInstr& instr, std::unordered_set<VReg>& uses) {
         case LIROp::PortOut:
             uses.insert(instr.port_out.port);
             uses.insert(instr.port_out.value);
+            break;
+        case LIROp::Switch:
+            uses.insert(instr.switch_.scrutinee);
+            break;
+        case LIROp::VaStart:
+            break;  // no vreg operands (fixed_param_count is a constant)
+        case LIROp::VaArg:
+            uses.insert(instr.va_arg.ap);
+            break;
+        case LIROp::Alloca:
+            uses.insert(instr.alloca_.size);
+            break;
+        case LIROp::TlsLoad:
+            uses.insert(instr.tls_load.offset);
+            break;
+        case LIROp::TlsStore:
+            uses.insert(instr.tls_store.offset);
+            uses.insert(instr.tls_store.value);
             break;
     }
 }
@@ -938,6 +970,459 @@ void InliningPass::run(LIRModule& module, CompilationContext& ctx) {
             }
         }
     }
+}
+
+// ============================================================================
+// StrengthReductionPass
+// ============================================================================
+
+static bool isPowerOfTwo(int64_t val) {
+    return val > 0 && (val & (val - 1)) == 0;
+}
+
+static int log2i(int64_t val) {
+    int n = 0;
+    while (val > 1) { val >>= 1; ++n; }
+    return n;
+}
+
+void StrengthReductionPass::run(LIRModule& module, CompilationContext& ctx) {
+    for (uint32_t fi = 0; fi < module.fn_count; ++fi) {
+        auto& fn = module.functions[fi];
+
+        // Collect constant integer values
+        std::unordered_map<VReg, int64_t> int_consts;
+
+        for (uint32_t bi = 0; bi < fn.block_count; ++bi) {
+            auto& block = fn.blocks[bi];
+            for (uint32_t ii = 0; ii < block.instr_count; ++ii) {
+                auto& instr = block.instrs[ii];
+
+                if (instr.op == LIROp::ConstInt && instr.result != INVALID_VREG) {
+                    int_consts[instr.result] = instr.const_int.value;
+                }
+
+                if (instr.result == INVALID_VREG) continue;
+
+                bool is_unsigned = instr.type < ctx.types.size() &&
+                                   !ctx.types.isSigned(instr.type);
+
+                // Unsigned div by power-of-2 → logical right shift
+                if (instr.op == LIROp::Div && is_unsigned) {
+                    auto rhs_it = int_consts.find(instr.bin.rhs);
+                    if (rhs_it != int_consts.end() && isPowerOfTwo(rhs_it->second)) {
+                        int shift = log2i(rhs_it->second);
+                        // Replace divisor constant with shift amount
+                        instr.op = LIROp::Shr;
+                        // Need a new const for the shift amount — rewrite rhs
+                        // Since we can't easily create new vregs here, check if
+                        // the rhs const already has the right value or rewrite in-place
+                        // Actually: the rhs vreg holds the power-of-2 value.
+                        // We need it to hold the shift amount. We can modify the
+                        // ConstInt instruction that defines rhs if it's only used here.
+                        // For simplicity, just change the op. The ConstFoldPass after
+                        // this will fold Shr with a ConstInt rhs anyway.
+                        // But we need rhs to be log2(val), not val itself.
+                        // Best approach: scan back for the ConstInt and change its value.
+                        for (uint32_t si = 0; si < ii; ++si) {
+                            auto& src = block.instrs[si];
+                            if (src.op == LIROp::ConstInt && src.result == instr.bin.rhs) {
+                                src.const_int.value = shift;
+                                int_consts[src.result] = shift;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Unsigned mod by power-of-2 → bitwise AND (val & (divisor - 1))
+                if (instr.op == LIROp::Mod && is_unsigned) {
+                    auto rhs_it = int_consts.find(instr.bin.rhs);
+                    if (rhs_it != int_consts.end() && isPowerOfTwo(rhs_it->second)) {
+                        int64_t mask = rhs_it->second - 1;
+                        instr.op = LIROp::BAnd;
+                        for (uint32_t si = 0; si < ii; ++si) {
+                            auto& src = block.instrs[si];
+                            if (src.op == LIROp::ConstInt && src.result == instr.bin.rhs) {
+                                src.const_int.value = mask;
+                                int_consts[src.result] = mask;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Mul by power-of-2 → left shift (both signed and unsigned)
+                if (instr.op == LIROp::Mul) {
+                    auto rhs_it = int_consts.find(instr.bin.rhs);
+                    if (rhs_it != int_consts.end() && isPowerOfTwo(rhs_it->second)) {
+                        int shift = log2i(rhs_it->second);
+                        instr.op = LIROp::Shl;
+                        for (uint32_t si = 0; si < ii; ++si) {
+                            auto& src = block.instrs[si];
+                            if (src.op == LIROp::ConstInt && src.result == instr.bin.rhs) {
+                                src.const_int.value = shift;
+                                int_consts[src.result] = shift;
+                                break;
+                            }
+                        }
+                    }
+                    // Also check lhs for mul commutativity
+                    auto lhs_it = int_consts.find(instr.bin.lhs);
+                    if (lhs_it != int_consts.end() && isPowerOfTwo(lhs_it->second) &&
+                        instr.op == LIROp::Mul) {
+                        int shift = log2i(lhs_it->second);
+                        // Swap so lhs is the variable, rhs is the shift amount
+                        VReg tmp = instr.bin.lhs;
+                        instr.bin.lhs = instr.bin.rhs;
+                        instr.bin.rhs = tmp;
+                        instr.op = LIROp::Shl;
+                        for (uint32_t si = 0; si < ii; ++si) {
+                            auto& src = block.instrs[si];
+                            if (src.op == LIROp::ConstInt && src.result == instr.bin.rhs) {
+                                src.const_int.value = shift;
+                                int_consts[src.result] = shift;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// LICMPass — Loop-Invariant Code Motion
+// ============================================================================
+
+// Check if an instruction is pure (no side effects, safe to move)
+static bool isPureInstr(const LIRInstr& instr) {
+    switch (instr.op) {
+        case LIROp::ConstInt:
+        case LIROp::ConstFloat:
+        case LIROp::ConstBool:
+        case LIROp::ConstString:
+        case LIROp::ConstCString:
+        case LIROp::Add:
+        case LIROp::Sub:
+        case LIROp::Mul:
+        case LIROp::Div:
+        case LIROp::Mod:
+        case LIROp::AddWrap:
+        case LIROp::SubWrap:
+        case LIROp::MulWrap:
+        case LIROp::AddSat:
+        case LIROp::SubSat:
+        case LIROp::BAnd:
+        case LIROp::BOr:
+        case LIROp::BXor:
+        case LIROp::Shl:
+        case LIROp::Shr:
+        case LIROp::FAdd:
+        case LIROp::FSub:
+        case LIROp::FMul:
+        case LIROp::FDiv:
+        case LIROp::Neg:
+        case LIROp::BNot:
+        case LIROp::FNeg:
+        case LIROp::ICmpEq:
+        case LIROp::ICmpNe:
+        case LIROp::ICmpLt:
+        case LIROp::ICmpLe:
+        case LIROp::ICmpGt:
+        case LIROp::ICmpGe:
+        case LIROp::FCmpEq:
+        case LIROp::FCmpNe:
+        case LIROp::FCmpLt:
+        case LIROp::FCmpLe:
+        case LIROp::FCmpGt:
+        case LIROp::FCmpGe:
+        case LIROp::Cast:
+        case LIROp::FieldPtr:
+        case LIROp::FnRef:
+        case LIROp::GlobalRef:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// Get operand vregs used by an instruction
+static void getOperandVRegs(const LIRInstr& instr, std::vector<VReg>& out) {
+    switch (instr.op) {
+        case LIROp::ConstInt:
+        case LIROp::ConstFloat:
+        case LIROp::ConstBool:
+        case LIROp::ConstString:
+        case LIROp::ConstCString:
+        case LIROp::FnRef:
+        case LIROp::GlobalRef:
+            break; // no vreg operands
+        case LIROp::Neg:
+        case LIROp::BNot:
+        case LIROp::FNeg:
+            out.push_back(instr.unary.operand);
+            break;
+        case LIROp::Cast:
+            out.push_back(instr.cast.operand);
+            break;
+        case LIROp::FieldPtr:
+            out.push_back(instr.field_ptr.base);
+            break;
+        default:
+            // Binary ops use bin.lhs, bin.rhs
+            if (instr.bin.lhs != INVALID_VREG) out.push_back(instr.bin.lhs);
+            if (instr.bin.rhs != INVALID_VREG) out.push_back(instr.bin.rhs);
+            break;
+    }
+}
+
+void LICMPass::run(LIRModule& module, CompilationContext& ctx) {
+    for (uint32_t fi = 0; fi < module.fn_count; ++fi) {
+        auto& fn = module.functions[fi];
+        if (fn.block_count < 2) continue;
+
+        // Build CFG: predecessors for each block
+        std::vector<std::vector<uint32_t>> preds(fn.block_count);
+        for (uint32_t bi = 0; bi < fn.block_count; ++bi) {
+            auto& block = fn.blocks[bi];
+            if (block.instr_count == 0) continue;
+            auto& last = block.instrs[block.instr_count - 1];
+            if (last.op == LIROp::Branch) {
+                preds[last.branch.target].push_back(bi);
+            } else if (last.op == LIROp::CondBranch) {
+                preds[last.cond_branch.true_target].push_back(bi);
+                preds[last.cond_branch.false_target].push_back(bi);
+            } else if (last.op == LIROp::Switch) {
+                for (uint32_t ci = 0; ci < last.switch_.case_count; ++ci) {
+                    preds[last.switch_.cases[ci].target_block].push_back(bi);
+                }
+                preds[last.switch_.default_block].push_back(bi);
+            }
+        }
+
+        // Compute dominance ordering (simple: block 0 dominates all)
+        // Find back-edges: edge (src → dst) where dst <= src (loop header)
+        // Identify natural loops for each back-edge
+        for (uint32_t bi = 0; bi < fn.block_count; ++bi) {
+            auto& block = fn.blocks[bi];
+            if (block.instr_count == 0) continue;
+            auto& last = block.instrs[block.instr_count - 1];
+
+            auto processBackEdge = [&](uint32_t src, uint32_t header) {
+                if (header >= src) return; // not a back-edge
+                if (header >= fn.block_count) return;
+
+                // Collect loop body blocks via reverse BFS from src to header
+                std::unordered_set<uint32_t> loop_blocks;
+                loop_blocks.insert(header);
+                loop_blocks.insert(src);
+
+                std::vector<uint32_t> worklist;
+                if (src != header) worklist.push_back(src);
+
+                while (!worklist.empty()) {
+                    uint32_t b = worklist.back();
+                    worklist.pop_back();
+                    for (uint32_t p : preds[b]) {
+                        if (loop_blocks.insert(p).second) {
+                            worklist.push_back(p);
+                        }
+                    }
+                }
+
+                // Collect all vregs defined inside the loop
+                std::unordered_set<VReg> loop_defs;
+                for (uint32_t lb : loop_blocks) {
+                    auto& lblock = fn.blocks[lb];
+                    for (uint32_t ii = 0; ii < lblock.instr_count; ++ii) {
+                        if (lblock.instrs[ii].result != INVALID_VREG) {
+                            loop_defs.insert(lblock.instrs[ii].result);
+                        }
+                    }
+                    // Block parameters are also loop defs
+                    for (uint32_t pi = 0; pi < lblock.param_count; ++pi) {
+                        // Block params don't have explicit vregs in the block struct,
+                        // but BlockArg instructions reference them. Already covered above.
+                    }
+                }
+
+                // Identify loop-invariant instructions
+                // An instruction is loop-invariant if:
+                // 1. It is pure
+                // 2. All its operand vregs are defined outside the loop
+                //    (or are themselves loop-invariant constants)
+                std::vector<std::pair<uint32_t, uint32_t>> to_hoist; // (block_idx, instr_idx)
+
+                for (uint32_t lb : loop_blocks) {
+                    if (lb == header) continue; // don't hoist from header itself
+                    auto& lblock = fn.blocks[lb];
+                    for (uint32_t ii = 0; ii < lblock.instr_count; ++ii) {
+                        auto& instr = lblock.instrs[ii];
+                        if (!isPureInstr(instr)) continue;
+                        if (instr.result == INVALID_VREG) continue;
+
+                        std::vector<VReg> operands;
+                        getOperandVRegs(instr, operands);
+
+                        bool all_outside = true;
+                        for (VReg v : operands) {
+                            if (loop_defs.count(v)) {
+                                all_outside = false;
+                                break;
+                            }
+                        }
+
+                        if (all_outside) {
+                            to_hoist.push_back({lb, ii});
+                        }
+                    }
+                }
+
+                if (to_hoist.empty()) return;
+
+                // Find preheader: the unique predecessor of header that is NOT in the loop
+                uint32_t preheader = UINT32_MAX;
+                for (uint32_t p : preds[header]) {
+                    if (!loop_blocks.count(p)) {
+                        preheader = p;
+                        break;
+                    }
+                }
+                if (preheader == UINT32_MAX) return;
+
+                // Hoist instructions to the preheader (insert before terminator)
+                auto& ph = fn.blocks[preheader];
+                uint32_t insert_pos = (ph.instr_count > 0) ? ph.instr_count - 1 : 0;
+
+                // Rebuild preheader with hoisted instructions
+                uint32_t new_count = ph.instr_count + static_cast<uint32_t>(to_hoist.size());
+                auto* new_instrs = ctx.arena.makeArray<LIRInstr>(new_count);
+                // Copy pre-terminator instructions
+                for (uint32_t k = 0; k < insert_pos; ++k) {
+                    new_instrs[k] = ph.instrs[k];
+                }
+                // Insert hoisted instructions
+                for (uint32_t k = 0; k < to_hoist.size(); ++k) {
+                    auto [blk_idx, ii_idx] = to_hoist[k];
+                    new_instrs[insert_pos + k] = fn.blocks[blk_idx].instrs[ii_idx];
+                }
+                // Copy terminator
+                for (uint32_t k = insert_pos; k < ph.instr_count; ++k) {
+                    new_instrs[k + static_cast<uint32_t>(to_hoist.size())] = ph.instrs[k];
+                }
+                ph.instrs = new_instrs;
+                ph.instr_count = new_count;
+
+                // NOP out original instructions (replace with ConstInt 0 → same result vreg)
+                for (auto [blk_idx, ii_idx] : to_hoist) {
+                    auto& orig = fn.blocks[blk_idx].instrs[ii_idx];
+                    // Mark as no-op by making it a copy of itself from the hoisted location
+                    // Actually: just NOP it. DCE will clean up.
+                    // Turn into a harmless ConstInt that DCE will remove
+                    VReg result = orig.result;
+                    TypeId type = orig.type;
+                    orig.op = LIROp::ConstInt;
+                    orig.result = result;
+                    orig.type = type;
+                    orig.const_int.value = 0;
+                }
+            };
+
+            if (last.op == LIROp::Branch) {
+                processBackEdge(bi, last.branch.target);
+            } else if (last.op == LIROp::CondBranch) {
+                processBackEdge(bi, last.cond_branch.true_target);
+                processBackEdge(bi, last.cond_branch.false_target);
+            }
+        }
+    }
+}
+
+// ============================================================================
+// GlobalDCEPass — Remove entire functions that are never called
+// ============================================================================
+
+void GlobalDCEPass::run(LIRModule& module, CompilationContext& /*ctx*/) {
+    if (module.fn_count == 0) return;
+
+    // Build name → index map
+    std::unordered_map<std::string_view, uint32_t> fn_index;
+    for (uint32_t i = 0; i < module.fn_count; ++i) {
+        fn_index[module.functions[i].name] = i;
+    }
+
+    // Determine root functions (cannot be removed)
+    std::vector<bool> is_root(module.fn_count, false);
+    for (uint32_t i = 0; i < module.fn_count; ++i) {
+        auto& fn = module.functions[i];
+        if (fn.is_pub || fn.is_used || fn.is_extern || fn.is_interrupt ||
+            fn.is_constructor || fn.is_destructor || fn.is_weak ||
+            fn.name == "main" || fn.name == "_start") {
+            is_root[i] = true;
+        }
+        // Panic handler
+        if (!fn.link_name.empty()) is_root[i] = true;
+        // Functions with custom sections are usually externally referenced
+        if (!fn.section_name.empty()) is_root[i] = true;
+    }
+
+    // Build call graph: for each function, collect set of callees
+    std::vector<std::vector<uint32_t>> callees(module.fn_count);
+    for (uint32_t fi = 0; fi < module.fn_count; ++fi) {
+        auto& fn = module.functions[fi];
+        for (uint32_t bi = 0; bi < fn.block_count; ++bi) {
+            auto& block = fn.blocks[bi];
+            for (uint32_t ii = 0; ii < block.instr_count; ++ii) {
+                auto& instr = block.instrs[ii];
+                if (instr.op == LIROp::Call) {
+                    auto it = fn_index.find(instr.call.callee);
+                    if (it != fn_index.end()) {
+                        callees[fi].push_back(it->second);
+                    }
+                } else if (instr.op == LIROp::FnRef) {
+                    // Function pointer references count as uses
+                    auto it = fn_index.find(instr.fn_ref.fn_name);
+                    if (it != fn_index.end()) {
+                        callees[fi].push_back(it->second);
+                    }
+                }
+            }
+        }
+    }
+
+    // BFS from roots to find all reachable functions
+    std::vector<bool> reachable(module.fn_count, false);
+    std::vector<uint32_t> worklist;
+    for (uint32_t i = 0; i < module.fn_count; ++i) {
+        if (is_root[i]) {
+            reachable[i] = true;
+            worklist.push_back(i);
+        }
+    }
+    while (!worklist.empty()) {
+        uint32_t fi = worklist.back();
+        worklist.pop_back();
+        for (uint32_t callee : callees[fi]) {
+            if (!reachable[callee]) {
+                reachable[callee] = true;
+                worklist.push_back(callee);
+            }
+        }
+    }
+
+    // Compact: remove unreachable functions
+    uint32_t write = 0;
+    for (uint32_t read = 0; read < module.fn_count; ++read) {
+        if (reachable[read]) {
+            if (write != read) {
+                module.functions[write] = module.functions[read];
+            }
+            ++write;
+        }
+    }
+    module.fn_count = write;
 }
 
 } // namespace kern

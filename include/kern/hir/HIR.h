@@ -317,12 +317,14 @@ struct HIRValDeclStmt : HIRStmt {
     std::string_view name;  // interned
     TypeId type;
     HIRExpr* init;
+    uint32_t explicit_align = 0;  // @align(N), 0 = natural alignment
 };
 
 struct HIRVarDeclStmt : HIRStmt {
     std::string_view name;  // interned
     TypeId type;
     HIRExpr* init;
+    uint32_t explicit_align = 0;  // @align(N), 0 = natural alignment
 };
 
 struct HIRExprStmt : HIRStmt {
@@ -384,6 +386,7 @@ struct HIRParam {
     TypeId type;
     SourceLocation loc;
     uint8_t passing_mode = 0;  // PassingMode::Borrow (0=Borrow, 1=MutBorrow, 2=Own)
+    bool is_restrict = false;  // restrict — no aliasing (for pointer params)
 };
 
 struct HIRTypeParam {
@@ -391,6 +394,8 @@ struct HIRTypeParam {
     TypeId type_var_id;     // TypeVar TypeId in TypeTable (or const param's type for const generics)
     bool is_const = false;  // true for `const N: u64`
     TypeId const_type = INVALID_TYPE;  // resolved type of the const param (e.g. U64)
+    std::string_view* bounds = nullptr; // trait bounds: <T: Add + Clone>
+    uint32_t bound_count = 0;
 };
 
 struct HIRFnDecl {
@@ -412,6 +417,8 @@ struct HIRFnDecl {
     bool is_const;           // @const fn — compile-time evaluable
     bool is_naked;           // @naked — skip prologue/epilogue
     bool is_interrupt;       // @interrupt — iretq return, save all regs
+    bool is_interrupt_error = false; // @interrupt_error — interrupt with error code
+    bool is_interrupt_nofp = false;  // @interrupt_nofp — no XMM save/restore
     bool is_inline = false;  // @inline — hint to inline
     bool is_noinline = false;// @noinline — prevent inlining
     bool is_noreturn = false;// @noreturn — function never returns
@@ -421,7 +428,19 @@ struct HIRFnDecl {
     bool is_weak = false;     // @weak — weak symbol linkage
     bool is_cold = false;     // @cold — unlikely code path
     bool is_hot = false;      // @hot — frequently executed
+    bool is_panic_handler = false; // @panic_handler — called on panic()
+    bool is_hidden = false;        // @hidden — ELF hidden visibility
+    bool is_protected = false;     // @protected — ELF protected visibility
+    bool is_constructor = false;   // @constructor — placed in .init_array
+    bool is_destructor = false;    // @destructor — placed in .fini_array
+    uint32_t constructor_priority = 65535;
+    uint32_t destructor_priority = 65535;
+    bool is_must_use = false;      // @must_use — warn if return value discarded
+    bool is_used = false;          // @used — prevent DCE
+    bool is_no_red_zone = false;   // @no_red_zone — disable red zone
+    uint32_t fn_align = 0;         // @align(N) — function alignment
     std::string_view section_name;  // @section("name"), empty = default
+    std::string_view section_flags; // @section("name", "awx"), empty = default
     std::string_view link_name;     // @link_name("name"), empty = auto
 
     // Effect system (v2)
@@ -457,8 +476,15 @@ struct HIRGlobalDecl {
     bool is_mutable;        // static var vs static val
     bool is_pub = false;    // pub static — export as global symbol
     bool is_extern = false; // extern static — linker-defined symbol
+    bool is_global_allocator = false; // @global_allocator — weak alias for heap allocator
+    uint32_t explicit_align = 0;    // @align(N), 0 = natural alignment
     std::string_view section_name;  // @section("name"), empty = default
+    std::string_view section_flags; // @section("name", "awx"), empty = default
     std::string_view link_name;     // @link_name("name"), empty = use name
+    bool is_used = false;           // @used — prevent DCE
+    bool is_weak = false;           // @weak — weak symbol linkage
+    bool is_hidden = false;         // @hidden — ELF hidden visibility
+    bool is_protected = false;      // @protected — ELF protected visibility
     SourceLocation loc;
 };
 

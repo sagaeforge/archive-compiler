@@ -163,6 +163,8 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     mf->is_intrinsic = fn.is_intrinsic;
     mf->is_naked = fn.is_naked;
     mf->is_interrupt = fn.is_interrupt;
+    mf->is_interrupt_error = fn.is_interrupt_error;
+    mf->is_interrupt_nofp = fn.is_interrupt_nofp;
     mf->is_inline = fn.is_inline;
     mf->is_noinline = fn.is_noinline;
     mf->is_noreturn = fn.is_noreturn;
@@ -171,7 +173,16 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     mf->is_weak = fn.is_weak;
     mf->is_cold = fn.is_cold;
     mf->is_hot = fn.is_hot;
+    mf->is_hidden = fn.is_hidden;
+    mf->is_protected = fn.is_protected;
+    mf->is_constructor = fn.is_constructor;
+    mf->is_destructor = fn.is_destructor;
+    mf->constructor_priority = fn.constructor_priority;
+    mf->destructor_priority = fn.destructor_priority;
+    mf->is_no_red_zone = fn.is_no_red_zone;
+    mf->fn_align = fn.fn_align;
     mf->section_name = fn.section_name;
+    mf->section_flags = fn.section_flags;
     mf->link_name = fn.link_name;
     mf->loc = fn.loc;
     mf->next_vreg = fn.next_vreg;
@@ -182,11 +193,15 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     struct_vreg_sizes_.clear();
     stack_ptr_vregs_.clear();
     struct_alloc_vregs_.clear();
+    jump_tables_.clear();
     gpr_arg_slot_ = 0;
     xmm_arg_slot_ = 0;
     next_param_idx_ = 0;
     fn_return_type_ = fn.return_type;
     hidden_ret_ptr_ = INVALID_VREG;
+    is_variadic_fn_ = fn.is_variadic;
+    va_save_area_size_ = 0;
+    va_fixed_param_count_ = fn.param_count;
 
     // >16B struct return: the caller passes a hidden pointer in RDI.
     // We allocate a vreg to hold it and shift gpr_arg_slot_ so the first
@@ -221,6 +236,28 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
             gpr_arg_slot_ = 1;  // visible params start from RSI
         }
 
+        // Variadic function prologue: save all 6 GPR arg registers to a
+        // register save area on the stack.  va_start computes a pointer
+        // into this area based on the number of fixed parameters.
+        // Layout (offsets from struct_alloc area):
+        //   [rdi] [rsi] [rdx] [rcx] [r8] [r9]
+        //     0     8    16    24    32    40
+        if (b == 0 && is_variadic_fn_) {
+            va_save_area_size_ = MAX_GPR_ARGS * 8;  // 48 bytes
+            struct_alloc_bytes_ += va_save_area_size_;
+            static constexpr int32_t CS_AREA = NUM_CALLEE_SAVED * 8;
+            int32_t base = -CS_AREA - static_cast<int32_t>(struct_alloc_bytes_);
+            for (uint32_t r = 0; r < MAX_GPR_ARGS; ++r) {
+                MachInstr store(X86Op::MovStore);
+                store.width = 64;
+                store.operand_count = 2;
+                store.inline_ops[0] = MachOperand::stack(
+                    base + static_cast<int32_t>(r * 8));
+                store.inline_ops[1] = MachOperand::precolored(GPR_ARG_REGS[r]);
+                emit(store);
+            }
+        }
+
         for (uint32_t i = 0; i < block.instr_count; ++i) {
             selectInstr(block.instrs[i], fn);
         }
@@ -244,6 +281,16 @@ MachFunction* InstructionSelector::selectFunction(const LIRFunction& fn) {
     mf->stack_size = 0;  // computed by RegisterAllocator later
     mf->struct_alloc_bytes = struct_alloc_bytes_;
     mf->next_vreg = next_vreg_;
+
+    // Transfer jump tables
+    if (!jump_tables_.empty()) {
+        mf->jump_table_count = static_cast<uint32_t>(jump_tables_.size());
+        mf->jump_tables = ctx_.arena.makeArray<MachFunction::JumpTable>(mf->jump_table_count);
+        for (uint32_t i = 0; i < mf->jump_table_count; ++i) {
+            mf->jump_tables[i] = jump_tables_[i];
+        }
+    }
+
     return mf;
 }
 
@@ -332,6 +379,7 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
         case LIROp::AtomicLoad:     selectAtomicLoad(instr); break;
         case LIROp::AtomicStore:    selectAtomicStore(instr); break;
         case LIROp::AtomicCas:      selectAtomicCas(instr); break;
+        case LIROp::AtomicCas128:   selectAtomicCas128(instr); break;
         case LIROp::AtomicFetchAdd: selectAtomicFetchAdd(instr); break;
         case LIROp::AtomicFetchSub: selectAtomicFetchSub(instr); break;
         case LIROp::AtomicFetchAnd: selectAtomicRMW(instr, X86Op::And); break;
@@ -355,6 +403,24 @@ void InstructionSelector::selectInstr(const LIRInstr& instr,
             emit(mi);
             break;
         }
+        case LIROp::Switch:
+            selectSwitch(instr, fn);
+            break;
+        case LIROp::VaStart:
+            selectVaStart(instr, fn);
+            break;
+        case LIROp::VaArg:
+            selectVaArg(instr);
+            break;
+        case LIROp::Alloca:
+            selectAlloca(instr);
+            break;
+        case LIROp::TlsLoad:
+            selectTlsLoad(instr);
+            break;
+        case LIROp::TlsStore:
+            selectTlsStore(instr);
+            break;
     }
 }
 
@@ -1100,7 +1166,9 @@ void InstructionSelector::selectCondBranch(const LIRInstr& instr,
     test.inline_ops[1] = MachOperand::virt(cond);
     emit(test);
 
-    emit(makeJcc(CondCode::NE, MachOperand::lbl(true_label)));
+    auto jcc = makeJcc(CondCode::NE, MachOperand::lbl(true_label));
+    jcc.branch_hint = instr.cond_branch.branch_hint;
+    emit(jcc);
     emit(makeJmp(MachOperand::lbl(false_label)));
 }
 
@@ -1216,6 +1284,51 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
         gpr_idx = 1;
     }
 
+    // First pass: classify args into register vs stack
+    // Collect stack args (those beyond the 6 GPR register slots)
+    std::vector<std::pair<uint32_t, VReg>> stack_args;  // (reverse_idx, vreg)
+    uint32_t pre_gpr = gpr_idx;  // remember starting gpr for pre-scan
+
+    // Pre-scan to determine which args go to stack
+    for (uint32_t i = 0; i < call.arg_count; ++i) {
+        VReg arg = call.args[i];
+        if (float_vregs_.count(arg)) {
+            // Float args use XMM registers (separate numbering)
+        } else if (struct_vregs_.count(arg)) {
+            uint32_t size = struct_vreg_sizes_[arg];
+            if (size > 16) {
+                if (pre_gpr >= MAX_GPR_ARGS) stack_args.push_back({i, arg});
+                pre_gpr++;
+            } else {
+                uint32_t num_regs = (size <= 8) ? 1 : 2;
+                for (uint32_t r = 0; r < num_regs; ++r) {
+                    if (pre_gpr >= MAX_GPR_ARGS) stack_args.push_back({i, arg});
+                    pre_gpr++;
+                }
+            }
+        } else {
+            if (pre_gpr >= MAX_GPR_ARGS) stack_args.push_back({i, arg});
+            pre_gpr++;
+        }
+    }
+
+    // Push stack args right-to-left (reverse order for correct stack layout)
+    // System V ABI: RSP must be 16-byte aligned at the 'call' instruction.
+    // The 'call' itself pushes 8 bytes (return address), so RSP must be
+    // 16-byte aligned BEFORE call. If we push an odd number of 8-byte args,
+    // we need an extra 8-byte padding push to maintain alignment.
+    uint32_t stack_arg_bytes = 0;
+    if (stack_args.size() % 2 != 0) {
+        emit(makePush(MachOperand::immediate(0)));
+        stack_arg_bytes += 8;
+    }
+    for (int si = static_cast<int>(stack_args.size()) - 1; si >= 0; --si) {
+        VReg arg = stack_args[si].second;
+        emit(makePush(MachOperand::virt(arg)));
+        stack_arg_bytes += 8;
+    }
+
+    // Second pass: set up register args
     for (uint32_t i = 0; i < call.arg_count; ++i) {
         VReg arg = call.args[i];
         if (float_vregs_.count(arg)) {
@@ -1240,35 +1353,39 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
                     emit(makeMov(MachOperand::precolored(GPR_ARG_REGS[gpr_idx]),
                                  MachOperand::virt(arg), 64));
                     gpr_idx++;
+                } else {
+                    gpr_idx++;  // already pushed to stack
                 }
             } else {
                 // ≤16B: load fields into consecutive GPR args
                 uint32_t num_regs = (size <= 8) ? 1 : 2;
-                for (uint32_t r = 0; r < num_regs && gpr_idx < MAX_GPR_ARGS; ++r) {
-                    VReg field_ptr = freshVReg();
-                    if (r == 0) {
-                        emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
-                    } else {
-                        emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
-                        emit(makeAlu(X86Op::Add, MachOperand::virt(field_ptr),
-                                     MachOperand::immediate(r * 8), 64));
+                for (uint32_t r = 0; r < num_regs; ++r) {
+                    if (gpr_idx < MAX_GPR_ARGS) {
+                        VReg field_ptr = freshVReg();
+                        if (r == 0) {
+                            emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
+                        } else {
+                            emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
+                            emit(makeAlu(X86Op::Add, MachOperand::virt(field_ptr),
+                                         MachOperand::immediate(r * 8), 64));
+                        }
+                        MachInstr load(X86Op::MovLoad);
+                        load.width = 64;
+                        load.operand_count = 2;
+                        load.inline_ops[0] = MachOperand::precolored(GPR_ARG_REGS[gpr_idx]);
+                        load.inline_ops[1] = MachOperand::virt(field_ptr);
+                        emit(load);
                     }
-                    MachInstr load(X86Op::MovLoad);
-                    load.width = 64;
-                    load.operand_count = 2;
-                    load.inline_ops[0] = MachOperand::precolored(GPR_ARG_REGS[gpr_idx]);
-                    load.inline_ops[1] = MachOperand::virt(field_ptr);
-                    emit(load);
                     gpr_idx++;
                 }
             }
         } else {
-            // Integer/pointer arg → GPR
+            // Integer/pointer arg → GPR or already on stack
             if (gpr_idx < MAX_GPR_ARGS) {
                 emit(makeMov(MachOperand::precolored(GPR_ARG_REGS[gpr_idx]),
                              MachOperand::virt(arg), 64));
-                gpr_idx++;
             }
+            gpr_idx++;
         }
     }
 
@@ -1315,10 +1432,9 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
         }
     }
 
-    // Can't tail-call if any arg is a stack pointer (struct_alloc/addr_of)
-    // because the callee would access the caller's (destroyed) stack frame.
-    // Also can't tail-call if we need to pass a hidden return pointer.
-    bool can_tail = call.is_tail && !large_struct_ret;
+    // Can't tail-call if any arg is a stack pointer (struct_alloc/addr_of),
+    // if we need to pass a hidden return pointer, or if we have stack args.
+    bool can_tail = call.is_tail && !large_struct_ret && stack_arg_bytes == 0;
     if (can_tail) {
         for (uint32_t i = 0; i < call.arg_count; ++i) {
             if (stack_ptr_vregs_.count(call.args[i]) ||
@@ -1341,6 +1457,12 @@ void InstructionSelector::selectCall(const LIRInstr& instr) {
         emit(makeJmp(MachOperand::lbl(callee_label)));
     } else {
         emit(makeCall(MachOperand::lbl(callee_label)));
+
+        // Clean up stack-passed arguments
+        if (stack_arg_bytes > 0) {
+            emit(makeAlu(X86Op::Add, MachOperand::precolored(PhysReg::RSP),
+                         MachOperand::immediate(static_cast<int64_t>(stack_arg_bytes)), 64));
+        }
     }
 
     // Move return value
@@ -1454,6 +1576,30 @@ void InstructionSelector::selectCallIndirect(const LIRInstr& instr) {
         gpr_idx = 1;
     }
 
+    // Pre-scan to determine which args go to stack
+    uint32_t pre_gpr_ci = gpr_idx;
+    std::vector<VReg> stack_args_ci;
+    for (uint32_t i = 0; i < ci.arg_count; ++i) {
+        VReg arg = ci.args[i];
+        if (float_vregs_.count(arg)) {
+            // XMM args don't consume GPR slots
+        } else {
+            if (pre_gpr_ci >= MAX_GPR_ARGS) stack_args_ci.push_back(arg);
+            pre_gpr_ci++;
+        }
+    }
+
+    // Push stack args right-to-left (with alignment padding if needed)
+    uint32_t stack_arg_bytes_ci = 0;
+    if (stack_args_ci.size() % 2 != 0) {
+        emit(makePush(MachOperand::immediate(0)));
+        stack_arg_bytes_ci += 8;
+    }
+    for (int si = static_cast<int>(stack_args_ci.size()) - 1; si >= 0; --si) {
+        emit(makePush(MachOperand::virt(stack_args_ci[si])));
+        stack_arg_bytes_ci += 8;
+    }
+
     for (uint32_t i = 0; i < ci.arg_count; ++i) {
         VReg arg = ci.args[i];
         if (float_vregs_.count(arg)) {
@@ -1471,29 +1617,30 @@ void InstructionSelector::selectCallIndirect(const LIRInstr& instr) {
         } else if (struct_vregs_.count(arg)) {
             uint32_t size = struct_vreg_sizes_[arg];
             if (size > 16) {
-                // >16B: pass pointer to struct data directly via GPR
                 if (gpr_idx < MAX_GPR_ARGS) {
                     emit(makeMov(MachOperand::precolored(GPR_ARG_REGS[gpr_idx]),
                                  MachOperand::virt(arg), 64));
-                    gpr_idx++;
                 }
+                gpr_idx++;
             } else {
                 uint32_t num_regs = (size <= 8) ? 1 : 2;
-                for (uint32_t r = 0; r < num_regs && gpr_idx < MAX_GPR_ARGS; ++r) {
-                    VReg field_ptr = freshVReg();
-                    if (r == 0) {
-                        emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
-                    } else {
-                        emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
-                        emit(makeAlu(X86Op::Add, MachOperand::virt(field_ptr),
-                                     MachOperand::immediate(r * 8), 64));
+                for (uint32_t r = 0; r < num_regs; ++r) {
+                    if (gpr_idx < MAX_GPR_ARGS) {
+                        VReg field_ptr = freshVReg();
+                        if (r == 0) {
+                            emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
+                        } else {
+                            emit(makeMov(MachOperand::virt(field_ptr), MachOperand::virt(arg), 64));
+                            emit(makeAlu(X86Op::Add, MachOperand::virt(field_ptr),
+                                         MachOperand::immediate(r * 8), 64));
+                        }
+                        MachInstr load(X86Op::MovLoad);
+                        load.width = 64;
+                        load.operand_count = 2;
+                        load.inline_ops[0] = MachOperand::precolored(GPR_ARG_REGS[gpr_idx]);
+                        load.inline_ops[1] = MachOperand::virt(field_ptr);
+                        emit(load);
                     }
-                    MachInstr load(X86Op::MovLoad);
-                    load.width = 64;
-                    load.operand_count = 2;
-                    load.inline_ops[0] = MachOperand::precolored(GPR_ARG_REGS[gpr_idx]);
-                    load.inline_ops[1] = MachOperand::virt(field_ptr);
-                    emit(load);
                     gpr_idx++;
                 }
             }
@@ -1501,13 +1648,19 @@ void InstructionSelector::selectCallIndirect(const LIRInstr& instr) {
             if (gpr_idx < MAX_GPR_ARGS) {
                 emit(makeMov(MachOperand::precolored(GPR_ARG_REGS[gpr_idx]),
                              MachOperand::virt(arg), 64));
-                gpr_idx++;
             }
+            gpr_idx++;
         }
     }
 
     // Indirect call: call [callee_vreg]
     emit(makeCall(MachOperand::virt(ci.callee)));
+
+    // Clean up stack-passed arguments
+    if (stack_arg_bytes_ci > 0) {
+        emit(makeAlu(X86Op::Add, MachOperand::precolored(PhysReg::RSP),
+                     MachOperand::immediate(static_cast<int64_t>(stack_arg_bytes_ci)), 64));
+    }
 
     // Move return value
     if (instr.result != INVALID_VREG) {
@@ -1672,8 +1825,14 @@ void InstructionSelector::selectBlockArg(const LIRInstr& instr,
                 uint8_t w = widthOf(instr.type);
                 emit(makeMov(MachOperand::virt(instr.result),
                              MachOperand::precolored(GPR_ARG_REGS[gpr_arg_slot_]), w));
-                gpr_arg_slot_++;
+            } else {
+                // Stack-passed argument: load from [rbp + 16 + 8*(slot - 6)]
+                // rbp+0 = saved rbp, rbp+8 = return address, rbp+16 = first stack arg
+                int32_t stack_offset = 16 + 8 * static_cast<int32_t>(gpr_arg_slot_ - MAX_GPR_ARGS);
+                emit(makeMov(MachOperand::virt(instr.result),
+                             MachOperand::stack(stack_offset), 64));
             }
+            gpr_arg_slot_++;
         }
         return;
     }
@@ -1970,6 +2129,38 @@ void InstructionSelector::selectAtomicCas(const LIRInstr& instr) {
     // Move result from rax → result vreg
     emit(makeMov(MachOperand::virt(instr.result),
                  MachOperand::precolored(PhysReg::RAX), 64));
+}
+
+void InstructionSelector::selectAtomicCas128(const LIRInstr& instr) {
+    // lock cmpxchg16b [ptr]
+    // x86 cmpxchg16b: compares RDX:RAX with [ptr] (128-bit),
+    // if equal [ptr]=RCX:RBX, else RDX:RAX=[ptr].
+    // ZF=1 on success, ZF=0 on failure.
+    // Result: bool (ZF flag → setz)
+
+    // Move expected lo → RAX, expected hi → RDX
+    emit(makeMov(MachOperand::precolored(PhysReg::RAX),
+                 MachOperand::virt(instr.atomic_cas128.exp_lo), 64));
+    emit(makeMov(MachOperand::precolored(PhysReg::RDX),
+                 MachOperand::virt(instr.atomic_cas128.exp_hi), 64));
+
+    // Move desired lo → RBX, desired hi → RCX
+    emit(makeMov(MachOperand::precolored(PhysReg::RBX),
+                 MachOperand::virt(instr.atomic_cas128.des_lo), 64));
+    emit(makeMov(MachOperand::precolored(PhysReg::RCX),
+                 MachOperand::virt(instr.atomic_cas128.des_hi), 64));
+
+    MachInstr mi(X86Op::LockCmpxchg16b);
+    mi.width = 128;
+    mi.operand_count = 4;
+    mi.inline_ops[0] = MachOperand::virt(instr.atomic_cas128.ptr);
+    mi.inline_ops[1] = MachOperand::precolored(PhysReg::RAX);
+    mi.inline_ops[2] = MachOperand::precolored(PhysReg::RDX);
+    mi.inline_ops[3] = MachOperand::precolored(PhysReg::RBX);
+    emit(mi);
+
+    // ZF=1 on success → setz result
+    emit(makeSetcc(CondCode::E, MachOperand::virt(instr.result)));
 }
 
 void InstructionSelector::selectAtomicFetchAdd(const LIRInstr& instr) {
@@ -2288,6 +2479,311 @@ void InstructionSelector::selectPortOut(const LIRInstr& instr) {
     mi.operand_count = 2;
     mi.inline_ops[0] = MachOperand::precolored(PhysReg::RDX);  // port (implicit)
     mi.inline_ops[1] = MachOperand::precolored(PhysReg::RAX);  // value
+    emit(mi);
+}
+
+void InstructionSelector::selectSwitch(const LIRInstr& instr,
+                                       const LIRFunction& fn) {
+    auto& sw = instr.switch_;
+
+    // Generate jump table label
+    std::string jt_label = ".jt_" + std::to_string(next_temp_label_++);
+    auto jt_label_sv = ctx_.strings.intern(std::string_view(jt_label));
+
+    // Get default block label
+    auto default_label = blockLabel(fn, sw.default_block);
+
+    // Build the full table (range = max - min + 1 entries)
+    uint32_t range = static_cast<uint32_t>(sw.max_value - sw.min_value + 1);
+
+    // Allocate table entries (fill with default)
+    auto* targets = ctx_.arena.makeArray<std::string_view>(range);
+    for (uint32_t i = 0; i < range; ++i) {
+        targets[i] = default_label;
+    }
+    // Fill in case targets
+    for (uint32_t i = 0; i < sw.case_count; ++i) {
+        uint32_t idx = static_cast<uint32_t>(sw.cases[i].value - sw.min_value);
+        if (idx < range) {
+            targets[idx] = blockLabel(fn, sw.cases[i].target_block);
+        }
+    }
+
+    // Store jump table in MachFunction for emitter
+    auto& jts = jump_tables_;
+    jts.push_back({jt_label_sv, targets, range});
+
+    // Emit bounds check: if (scrutinee - min) >= range, goto default
+    VReg idx_vreg = freshVReg();
+    if (sw.min_value != 0) {
+        // idx = scrutinee - min_value
+        emit(makeMov(MachOperand::virt(idx_vreg),
+                     MachOperand::virt(sw.scrutinee), 64));
+        MachInstr sub_mi(X86Op::Sub);
+        sub_mi.width = 64;
+        sub_mi.operand_count = 2;
+        sub_mi.inline_ops[0] = MachOperand::virt(idx_vreg);
+        sub_mi.inline_ops[1] = MachOperand::immediate(sw.min_value);
+        emit(sub_mi);
+    } else {
+        emit(makeMov(MachOperand::virt(idx_vreg),
+                     MachOperand::virt(sw.scrutinee), 64));
+    }
+
+    // cmp idx, range
+    emit(makeCmp(MachOperand::virt(idx_vreg),
+                 MachOperand::immediate(static_cast<int64_t>(range)), 64));
+
+    // jae default (unsigned above-or-equal = out of range)
+    emit(makeJcc(CondCode::AE, MachOperand::lbl(default_label)));
+
+    // lea tbl, [rel .jt_N]
+    VReg tbl_vreg = freshVReg();
+    emit(makeLea(MachOperand::virt(tbl_vreg), MachOperand::lbl(jt_label_sv)));
+
+    // jmp [tbl + idx*8] — emit as JmpTable pseudo-op
+    MachInstr jt_mi(X86Op::JmpTable);
+    jt_mi.width = 64;
+    jt_mi.operand_count = 2;
+    jt_mi.inline_ops[0] = MachOperand::virt(tbl_vreg);  // table base
+    jt_mi.inline_ops[1] = MachOperand::virt(idx_vreg);   // index
+    emit(jt_mi);
+}
+
+// ============================================================================
+// Varargs: va_start / va_arg
+// ============================================================================
+
+void InstructionSelector::selectVaStart(const LIRInstr& instr,
+                                         const LIRFunction& /*fn*/) {
+    // SysV AMD64 va_list layout (24 bytes):
+    //   [0]  gp_offset    (u32) — byte offset to next GPR in reg_save_area
+    //   [4]  fp_offset    (u32) — byte offset to next FP reg (always 48 for us)
+    //   [8]  overflow_arg_area (u64) — pointer to stack-passed args
+    //   [16] reg_save_area    (u64) — pointer to GPR register save area
+    //
+    // Allocate 24-byte va_list struct on the stack.
+    uint32_t valist_size = 24;
+    struct_alloc_bytes_ += valist_size;
+    static constexpr int32_t CS_AREA = NUM_CALLEE_SAVED * 8;
+    int32_t valist_base = -CS_AREA - static_cast<int32_t>(struct_alloc_bytes_);
+
+    uint32_t fixed = instr.va_start.fixed_param_count;
+    if (fixed > MAX_GPR_ARGS) fixed = MAX_GPR_ARGS;
+
+    // gp_offset = fixed_param_count * 8 (byte offset into save area)
+    VReg gp_off = freshVReg();
+    emit(makeMov(MachOperand::virt(gp_off),
+                 MachOperand::immediate(static_cast<int32_t>(fixed * 8)), 32));
+    MachInstr store_gp(X86Op::MovStore);
+    store_gp.width = 32;
+    store_gp.operand_count = 2;
+    store_gp.inline_ops[0] = MachOperand::stack(valist_base + 0);
+    store_gp.inline_ops[1] = MachOperand::virt(gp_off);
+    emit(store_gp);
+
+    // fp_offset = 48 (6 GPR * 8 bytes; we don't save XMM for kernel use)
+    VReg fp_off = freshVReg();
+    emit(makeMov(MachOperand::virt(fp_off), MachOperand::immediate(48), 32));
+    MachInstr store_fp(X86Op::MovStore);
+    store_fp.width = 32;
+    store_fp.operand_count = 2;
+    store_fp.inline_ops[0] = MachOperand::stack(valist_base + 4);
+    store_fp.inline_ops[1] = MachOperand::virt(fp_off);
+    emit(store_fp);
+
+    // overflow_arg_area = rbp + 16 (first stack-passed arg)
+    VReg overflow_ptr = freshVReg();
+    emit(makeLea(MachOperand::virt(overflow_ptr), MachOperand::stack(16)));
+    // Adjust: overflow_arg_area is relative to RBP, not our stack frame.
+    // [rbp+16] is the 7th arg (first stack-passed in SysV).
+    // Use lea with rbp-relative offset. MachOperand::stack encodes [rbp+offset].
+    MachInstr store_ov(X86Op::MovStore);
+    store_ov.width = 64;
+    store_ov.operand_count = 2;
+    store_ov.inline_ops[0] = MachOperand::stack(valist_base + 8);
+    store_ov.inline_ops[1] = MachOperand::virt(overflow_ptr);
+    emit(store_ov);
+
+    // reg_save_area = &save_area[0] (base of GPR register save area)
+    int32_t save_base = -CS_AREA - static_cast<int32_t>(va_save_area_size_);
+    VReg save_ptr = freshVReg();
+    emit(makeLea(MachOperand::virt(save_ptr), MachOperand::stack(save_base)));
+    MachInstr store_sa(X86Op::MovStore);
+    store_sa.width = 64;
+    store_sa.operand_count = 2;
+    store_sa.inline_ops[0] = MachOperand::stack(valist_base + 16);
+    store_sa.inline_ops[1] = MachOperand::virt(save_ptr);
+    emit(store_sa);
+
+    // Return pointer to the va_list struct
+    emit(makeLea(MachOperand::virt(instr.result), MachOperand::stack(valist_base)));
+}
+
+void InstructionSelector::selectVaArg(const LIRInstr& instr) {
+    // va_arg from SysV va_list struct:
+    //   1. Load gp_offset from [ap+0] (32-bit)
+    //   2. If gp_offset < 48: load from reg_save_area + gp_offset, advance gp_offset
+    //   3. Else: load from overflow_arg_area, advance overflow_arg_area
+    //
+    // We use cmov to avoid branches.
+    VReg ap = instr.va_arg.ap;
+    uint8_t w = widthOf(instr.type);
+    if (w == 0) w = 64;
+
+    // Load gp_offset (32-bit)
+    VReg gp_off = freshVReg();
+    MachInstr ld_gp(X86Op::MovLoad);
+    ld_gp.width = 32;
+    ld_gp.operand_count = 2;
+    ld_gp.inline_ops[0] = MachOperand::virt(gp_off);
+    ld_gp.inline_ops[1] = MachOperand::virt(ap);  // [ap+0]
+    emit(ld_gp);
+
+    // Load reg_save_area (64-bit) from [ap+16]
+    VReg reg_save = freshVReg();
+    // We need [ap+16]. We can compute ap+16 then load.
+    VReg ap_plus_16 = freshVReg();
+    emit(makeMov(MachOperand::virt(ap_plus_16), MachOperand::virt(ap), 64));
+    emit(makeAlu(X86Op::Add, MachOperand::virt(ap_plus_16),
+                 MachOperand::immediate(16), 64));
+    MachInstr ld_sa(X86Op::MovLoad);
+    ld_sa.width = 64;
+    ld_sa.operand_count = 2;
+    ld_sa.inline_ops[0] = MachOperand::virt(reg_save);
+    ld_sa.inline_ops[1] = MachOperand::virt(ap_plus_16);
+    emit(ld_sa);
+
+    // Compute addr_reg = reg_save_area + gp_offset (zero-extend gp_offset to 64)
+    VReg gp_off_64 = freshVReg();
+    emit(makeMov(MachOperand::virt(gp_off_64), MachOperand::virt(gp_off), 32));
+    // movzx 32→64 is implicit in x86-64 (writing 32-bit reg zeros upper)
+    VReg addr_reg = freshVReg();
+    emit(makeMov(MachOperand::virt(addr_reg), MachOperand::virt(reg_save), 64));
+    emit(makeAlu(X86Op::Add, MachOperand::virt(addr_reg),
+                 MachOperand::virt(gp_off_64), 64));
+
+    // Load overflow_arg_area (64-bit) from [ap+8]
+    VReg overflow = freshVReg();
+    VReg ap_plus_8 = freshVReg();
+    emit(makeMov(MachOperand::virt(ap_plus_8), MachOperand::virt(ap), 64));
+    emit(makeAlu(X86Op::Add, MachOperand::virt(ap_plus_8),
+                 MachOperand::immediate(8), 64));
+    MachInstr ld_ov(X86Op::MovLoad);
+    ld_ov.width = 64;
+    ld_ov.operand_count = 2;
+    ld_ov.inline_ops[0] = MachOperand::virt(overflow);
+    ld_ov.inline_ops[1] = MachOperand::virt(ap_plus_8);
+    emit(ld_ov);
+
+    // Compare gp_offset < 48
+    VReg cmp_val = freshVReg();
+    emit(makeMov(MachOperand::virt(cmp_val), MachOperand::immediate(48), 32));
+    emit(makeCmp(MachOperand::virt(gp_off), MachOperand::virt(cmp_val), 32));
+
+    // Use addr_reg if gp_offset < 48, else use overflow
+    // cmovge addr_reg, overflow (if gp_off >= 48, use overflow)
+    VReg final_addr = freshVReg();
+    emit(makeMov(MachOperand::virt(final_addr), MachOperand::virt(addr_reg), 64));
+    MachInstr cmov(X86Op::Cmovcc);
+    cmov.width = 64;
+    cmov.operand_count = 2;
+    cmov.inline_ops[0] = MachOperand::virt(final_addr);
+    cmov.inline_ops[1] = MachOperand::virt(overflow);
+    cmov.cc = CondCode::GE;
+    emit(cmov);
+
+    // Load the value from final_addr
+    MachInstr load(X86Op::MovLoad);
+    load.width = w;
+    load.operand_count = 2;
+    load.inline_ops[0] = MachOperand::virt(instr.result);
+    load.inline_ops[1] = MachOperand::virt(final_addr);
+    emit(load);
+
+    // Advance: increment gp_offset by 8 (always, since we track both)
+    VReg new_gp = freshVReg();
+    emit(makeMov(MachOperand::virt(new_gp), MachOperand::virt(gp_off), 32));
+    emit(makeAlu(X86Op::Add, MachOperand::virt(new_gp),
+                 MachOperand::immediate(8), 32));
+    MachInstr st_gp(X86Op::MovStore);
+    st_gp.width = 32;
+    st_gp.operand_count = 2;
+    st_gp.inline_ops[0] = MachOperand::virt(ap);  // [ap+0] = gp_offset
+    st_gp.inline_ops[1] = MachOperand::virt(new_gp);
+    emit(st_gp);
+
+    // If gp_offset >= 48, also advance overflow_arg_area
+    // We always advance overflow — if gp_offset < 48, it doesn't matter
+    // because overflow won't be used until gp_offset reaches 48.
+    VReg new_ov = freshVReg();
+    emit(makeMov(MachOperand::virt(new_ov), MachOperand::virt(overflow), 64));
+    emit(makeAlu(X86Op::Add, MachOperand::virt(new_ov),
+                 MachOperand::immediate(8), 64));
+    // Cmov: only update overflow if gp_offset >= 48
+    VReg updated_ov = freshVReg();
+    emit(makeMov(MachOperand::virt(updated_ov), MachOperand::virt(overflow), 64));
+    MachInstr cmov_ov(X86Op::Cmovcc);
+    cmov_ov.width = 64;
+    cmov_ov.operand_count = 2;
+    cmov_ov.inline_ops[0] = MachOperand::virt(updated_ov);
+    cmov_ov.inline_ops[1] = MachOperand::virt(new_ov);
+    cmov_ov.cc = CondCode::GE;
+    emit(cmov_ov);
+    MachInstr st_ov(X86Op::MovStore);
+    st_ov.width = 64;
+    st_ov.operand_count = 2;
+    st_ov.inline_ops[0] = MachOperand::virt(ap_plus_8);  // [ap+8] = overflow
+    st_ov.inline_ops[1] = MachOperand::virt(updated_ov);
+    emit(st_ov);
+}
+
+// ============================================================================
+// Dynamic stack allocation
+// ============================================================================
+
+void InstructionSelector::selectAlloca(const LIRInstr& instr) {
+    // alloca(size): sub rsp, size; mov result, rsp
+    // Align size to 16 bytes: size = (size + 15) & ~15
+    VReg aligned = freshVReg();
+    emit(makeMov(MachOperand::virt(aligned), MachOperand::virt(instr.alloca_.size), 64));
+    emit(makeAlu(X86Op::Add, MachOperand::virt(aligned),
+                 MachOperand::immediate(15), 64));
+    MachInstr mask(X86Op::And);
+    mask.width = 64;
+    mask.operand_count = 2;
+    mask.inline_ops[0] = MachOperand::virt(aligned);
+    mask.inline_ops[1] = MachOperand::immediate(-16);
+    emit(mask);
+
+    // sub rsp, aligned_size
+    emit(makeAlu(X86Op::Sub, MachOperand::precolored(PhysReg::RSP),
+                 MachOperand::virt(aligned), 64));
+
+    // mov result, rsp (return pointer to allocated space)
+    emit(makeMov(MachOperand::virt(instr.result),
+                 MachOperand::precolored(PhysReg::RSP), 64));
+}
+
+// ============================================================================
+// Thread-local storage (FS segment)
+// ============================================================================
+
+void InstructionSelector::selectTlsLoad(const LIRInstr& instr) {
+    MachInstr mi(X86Op::FsLoad);
+    mi.width = widthOf(instr.type);
+    mi.operand_count = 2;
+    mi.inline_ops[0] = MachOperand::virt(instr.result);
+    mi.inline_ops[1] = MachOperand::virt(instr.tls_load.offset);
+    emit(mi);
+}
+
+void InstructionSelector::selectTlsStore(const LIRInstr& instr) {
+    MachInstr mi(X86Op::FsStore);
+    mi.width = 64;
+    mi.operand_count = 2;
+    mi.inline_ops[0] = MachOperand::virt(instr.tls_store.offset);
+    mi.inline_ops[1] = MachOperand::virt(instr.tls_store.value);
     emit(mi);
 }
 

@@ -14,6 +14,8 @@ class NASMEmitter {
     OutputFormat format_;           // output format (macho64/elf64/bin)
     bool stack_protector_ = false;  // emit stack canary checks
     bool emit_source_locs_ = false; // emit source location comments in asm
+    bool emit_debug_info_ = false;  // emit %line directives for DWARF debug info
+    bool emit_unwind_info_ = false; // emit .eh_frame section for stack unwinding
     uint32_t last_emitted_line_ = 0;  // for deduplicating source loc comments
 
     // dyn dispatch thunks: generated during emitRodata, emitted in .text
@@ -30,6 +32,8 @@ public:
 
     void setStackProtector(bool v) { stack_protector_ = v; }
     void setEmitSourceLocs(bool v) { emit_source_locs_ = v; }
+    void setEmitDebugInfo(bool v) { emit_debug_info_ = v; }
+    void setEmitUnwindInfo(bool v) { emit_unwind_info_ = v; }
 
     // Symbol prefix: "_" for Mach-O, "" for ELF/flat binary
     const char* symPrefix() const {
@@ -74,6 +78,9 @@ private:
 
     // Emit dyn dispatch thunks collected during emitRodata
     void emitDynThunks();
+
+    // Emit .eh_frame section for stack unwinding (DWARF CFI)
+    void emitEhFrame(const MachModule& mod);
 };
 
 } // namespace kern

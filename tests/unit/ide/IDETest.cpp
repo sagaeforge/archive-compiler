@@ -22,6 +22,13 @@ static const char* ENUM_SOURCE =
     "enum Color { Red, Green, Blue }\n"
     "fn pick() -> i64 { Color.Red }\n";
 
+static const char* LOCAL_SOURCE =
+    "fn compute(x: i64, y: i64) -> i64 {\n"
+    "    val sum: i64 = x + y\n"
+    "    var acc: i64 = sum\n"
+    "    acc\n"
+    "}\n";
+
 // ============================================================================
 // IDEContext tests
 // ============================================================================
@@ -530,4 +537,225 @@ TEST(DiagnosticProviderTest, DiagnosticHasLocation) {
     auto diags = provider.diagnose(ide, "loc.kern");
     EXPECT_FALSE(diags.empty());
     EXPECT_GT(diags[0].loc.line, 0u);
+}
+
+// ============================================================================
+// CompletionProvider — local variable + parameter completions
+// ============================================================================
+
+TEST(CompletionTest, ParamCompletion) {
+    CompilationContext ctx;
+    ctx.diag.setSource(LOCAL_SOURCE);
+    IDEContext ide(ctx);
+    ide.openFile("test.kern", LOCAL_SOURCE);
+
+    CompletionProvider provider;
+    // Inside compute body (line 2), prefix empty → params should appear
+    auto items = provider.complete(ide, "test.kern", 2, 1);
+    bool has_x = false, has_y = false;
+    for (const auto& item : items) {
+        if (item.label == "x" && item.kind == CompletionItem::Variable) has_x = true;
+        if (item.label == "y" && item.kind == CompletionItem::Variable) has_y = true;
+    }
+    EXPECT_TRUE(has_x);
+    EXPECT_TRUE(has_y);
+}
+
+TEST(CompletionTest, LocalVarCompletion) {
+    CompilationContext ctx;
+    ctx.diag.setSource(LOCAL_SOURCE);
+    IDEContext ide(ctx);
+    ide.openFile("test.kern", LOCAL_SOURCE);
+
+    CompletionProvider provider;
+    // Inside compute body (line 3), prefix "a" → "acc" should appear
+    auto items = provider.complete(ide, "test.kern", 4, 4);
+    bool has_acc = false;
+    for (const auto& item : items) {
+        if (item.label == "acc" && item.kind == CompletionItem::Variable) has_acc = true;
+    }
+    EXPECT_TRUE(has_acc);
+}
+
+TEST(CompletionTest, LocalValCompletion) {
+    CompilationContext ctx;
+    ctx.diag.setSource(LOCAL_SOURCE);
+    IDEContext ide(ctx);
+    ide.openFile("test.kern", LOCAL_SOURCE);
+
+    CompletionProvider provider;
+    // Inside compute body (line 3), prefix "s" → "sum" should appear
+    auto items = provider.complete(ide, "test.kern", 3, 1);
+    bool has_sum = false;
+    for (const auto& item : items) {
+        if (item.label == "sum" && item.kind == CompletionItem::Variable) has_sum = true;
+    }
+    EXPECT_TRUE(has_sum);
+}
+
+// ============================================================================
+// HoverProvider — parameter + local hover
+// ============================================================================
+
+TEST(HoverTest, HoverOnParam) {
+    CompilationContext ctx;
+    ctx.diag.setSource(LOCAL_SOURCE);
+    IDEContext ide(ctx);
+    ide.openFile("test.kern", LOCAL_SOURCE);
+
+    HoverProvider provider;
+    // "x" at line 2, col 20 (x in "    val sum: i64 = x + y")
+    auto result = provider.hover(ide, "test.kern", 2, 20);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_NE(result->type_info.find("x"), std::string::npos);
+    EXPECT_NE(result->type_info.find("i64"), std::string::npos);
+}
+
+TEST(HoverTest, HoverOnLocalVal) {
+    CompilationContext ctx;
+    ctx.diag.setSource(LOCAL_SOURCE);
+    IDEContext ide(ctx);
+    ide.openFile("test.kern", LOCAL_SOURCE);
+
+    HoverProvider provider;
+    // "sum" at line 2, col 9
+    auto result = provider.hover(ide, "test.kern", 2, 9);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_NE(result->type_info.find("val sum"), std::string::npos);
+    EXPECT_NE(result->type_info.find("i64"), std::string::npos);
+}
+
+TEST(HoverTest, HoverOnLocalVar) {
+    CompilationContext ctx;
+    ctx.diag.setSource(LOCAL_SOURCE);
+    IDEContext ide(ctx);
+    ide.openFile("test.kern", LOCAL_SOURCE);
+
+    HoverProvider provider;
+    // "acc" at line 3, col 9
+    auto result = provider.hover(ide, "test.kern", 3, 9);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_NE(result->type_info.find("var acc"), std::string::npos);
+}
+
+// ============================================================================
+// DefinitionProvider — parameter + local definitions
+// ============================================================================
+
+TEST(DefinitionTest, FindParamDef) {
+    CompilationContext ctx;
+    ctx.diag.setSource(LOCAL_SOURCE);
+    IDEContext ide(ctx);
+    ide.openFile("test.kern", LOCAL_SOURCE);
+
+    DefinitionProvider provider;
+    // "x" at line 2, col 20 (usage in body) → should find param definition
+    auto result = provider.findDefinition(ide, "test.kern", 2, 20);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->name, "x");
+}
+
+TEST(DefinitionTest, FindLocalValDef) {
+    CompilationContext ctx;
+    ctx.diag.setSource(LOCAL_SOURCE);
+    IDEContext ide(ctx);
+    ide.openFile("test.kern", LOCAL_SOURCE);
+
+    DefinitionProvider provider;
+    // "sum" at line 3, col 21 (usage in var init)
+    auto result = provider.findDefinition(ide, "test.kern", 3, 21);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->name, "sum");
+}
+
+TEST(DefinitionTest, FindLocalVarDef) {
+    CompilationContext ctx;
+    ctx.diag.setSource(LOCAL_SOURCE);
+    IDEContext ide(ctx);
+    ide.openFile("test.kern", LOCAL_SOURCE);
+
+    DefinitionProvider provider;
+    // "acc" at line 4, col 5 (usage as result)
+    auto result = provider.findDefinition(ide, "test.kern", 4, 5);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->name, "acc");
+}
+
+// ============================================================================
+// ReferencesProvider — struct/array/cast/index traversal
+// ============================================================================
+
+TEST(ReferencesTest, FindStructRefs) {
+    CompilationContext ctx;
+    auto* src = STRUCT_SOURCE;
+    ctx.diag.setSource(src);
+    IDEContext ide(ctx);
+    ide.openFile("test.kern", src);
+
+    ReferencesProvider provider;
+    // "Point" is defined at line 1, used in line 2 (return type + struct lit)
+    auto refs = provider.findReferences(ide, "test.kern", 1, 8);
+    bool has_def = false;
+    for (const auto& r : refs) {
+        if (r.is_definition) has_def = true;
+    }
+    EXPECT_TRUE(has_def);
+}
+
+TEST(ReferencesTest, FindLocalVarRefs) {
+    CompilationContext ctx;
+    ctx.diag.setSource(LOCAL_SOURCE);
+    IDEContext ide(ctx);
+    ide.openFile("test.kern", LOCAL_SOURCE);
+
+    ReferencesProvider provider;
+    // "x" should be referenced in function body (x + y) at line 2, col 20
+    auto refs = provider.findReferences(ide, "test.kern", 2, 20, false);
+    EXPECT_GE(refs.size(), 1u);
+}
+
+TEST(ReferencesTest, IndexAccessRefs) {
+    static const char* src =
+        "fn get(arr: [i64; 3], idx: i64) -> i64 { arr[idx] }\n";
+    CompilationContext ctx;
+    ctx.diag.setSource(src);
+    IDEContext ide(ctx);
+    ide.openFile("test.kern", src);
+
+    ReferencesProvider provider;
+    // "arr" used in arr[idx]
+    auto refs = provider.findReferences(ide, "test.kern", 1, 43, false);
+    EXPECT_GE(refs.size(), 1u);
+}
+
+TEST(ReferencesTest, CastRefs) {
+    static const char* src =
+        "fn cast_it(x: i64) -> u8 { x as u8 }\n";
+    CompilationContext ctx;
+    ctx.diag.setSource(src);
+    IDEContext ide(ctx);
+    ide.openFile("test.kern", src);
+
+    ReferencesProvider provider;
+    // "x" used in cast expression
+    auto refs = provider.findReferences(ide, "test.kern", 1, 29, false);
+    EXPECT_GE(refs.size(), 1u);
+}
+
+TEST(ReferencesTest, AddrOfRefs) {
+    static const char* src =
+        "fn take_ptr(p: Ptr<i64>) -> i64 { (*p) }\n"
+        "fn use_it() -> i64 {\n"
+        "    val v: i64 = 42\n"
+        "    take_ptr(&v)\n"
+        "}\n";
+    CompilationContext ctx;
+    ctx.diag.setSource(src);
+    IDEContext ide(ctx);
+    ide.openFile("test.kern", src);
+
+    ReferencesProvider provider;
+    // "v" used in &v at line 4
+    auto refs = provider.findReferences(ide, "test.kern", 4, 15, false);
+    EXPECT_GE(refs.size(), 1u);
 }

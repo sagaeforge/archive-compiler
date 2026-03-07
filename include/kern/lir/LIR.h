@@ -82,6 +82,7 @@ enum class LIROp : uint8_t {
     AtomicFetchAnd, // atomic fetch-and-and (returns old value, CAS loop)
     AtomicFetchOr,  // atomic fetch-and-or (returns old value, CAS loop)
     AtomicFetchXor, // atomic fetch-and-xor (returns old value, CAS loop)
+    AtomicCas128,   // 128-bit compare-and-swap (cmpxchg16b)
 
     // Fences
     Fence,          // hardware memory fence (mfence/sfence/lfence)
@@ -107,6 +108,20 @@ enum class LIROp : uint8_t {
 
     // Trap (unreachable / bounds check failure)
     Trap,           // ud2 — illegal instruction, used for bounds check failure
+
+    // Jump table (dense match optimization)
+    Switch,         // jump table: scrutinee → one of N target blocks
+
+    // Varargs (C-style variadic functions)
+    VaStart,        // result = pointer to first variadic arg
+    VaArg,          // result = next variadic arg, advances ap
+
+    // Dynamic stack allocation
+    Alloca,         // result = sub rsp, size; mov result, rsp
+
+    // Thread-local storage (FS segment)
+    TlsLoad,        // load via FS segment (thread-local)
+    TlsStore,       // store via FS segment (thread-local)
 };
 
 const char* lirOpName(LIROp op);
@@ -131,7 +146,9 @@ struct LIRCallPayload  {
     bool is_variadic;
 };
 struct LIRBranchPayload    { uint32_t target; VReg* args; uint32_t arg_count; };
-struct LIRCondBrPayload    { VReg cond; uint32_t true_target; uint32_t false_target; };
+struct LIRCondBrPayload    { VReg cond; uint32_t true_target; uint32_t false_target;
+                             int8_t branch_hint = 0; // +1 = likely true, -1 = likely false
+                           };
 struct LIRRetPayload       { VReg value; };
 struct LIRAddrOfPayload    { VReg source; };
 struct LIRLoadPayload      { VReg ptr; bool is_volatile = false; };
@@ -146,6 +163,18 @@ struct LIRCallIndirectPayload {
     uint32_t arg_count;
 };
 struct LIRFnRefPayload { std::string_view fn_name; std::string_view fn_module; };
+struct LIRSwitchCase {
+    int64_t value;
+    uint32_t target_block;
+};
+struct LIRSwitchPayload {
+    VReg scrutinee;
+    uint32_t default_block;     // fallthrough/wildcard block
+    LIRSwitchCase* cases;       // arena-allocated array
+    uint32_t case_count;
+    int64_t min_value;          // min case value (for range subtraction)
+    int64_t max_value;          // max case value (for bounds check)
+};
 struct LIRAsmOperand {
     std::string_view constraint;
     VReg vreg;  // vreg holding the value (for inputs) or receiving value (for outputs)
@@ -177,6 +206,7 @@ struct LIRAtomicCasPayload   { VReg ptr; VReg expected; VReg desired; MemOrder o
 struct LIRAtomicFetchAddPayload { VReg ptr; VReg value; MemOrder order; };
 struct LIRAtomicFetchSubPayload { VReg ptr; VReg value; MemOrder order; };
 struct LIRAtomicRMWPayload   { VReg ptr; VReg value; MemOrder order; }; // for and/or/xor (CAS-based)
+struct LIRAtomicCas128Payload { VReg ptr; VReg exp_lo; VReg exp_hi; VReg des_lo; VReg des_hi; MemOrder order; };
 struct LIRFencePayload       { MemOrder order; };
 struct LIRPercpuPayload      { VReg offset; };
 struct LIRPercpuStorePayload { VReg offset; VReg value; };
@@ -184,6 +214,12 @@ struct LIRLoadGlobalPayload  { std::string_view label; };
 struct LIRStoreGlobalPayload { std::string_view label; VReg value; };
 struct LIRPortInPayload  { VReg port; };
 struct LIRPortOutPayload { VReg port; VReg value; };
+
+struct LIRVaStartPayload { uint32_t fixed_param_count; };
+struct LIRVaArgPayload   { VReg ap; };  // ap = va_list pointer vreg
+struct LIRAllocaPayload  { VReg size; }; // dynamic stack allocation size (bytes)
+struct LIRTlsLoadPayload  { VReg offset; };
+struct LIRTlsStorePayload { VReg offset; VReg value; };
 
 struct LIRInstr {
     LIROp op;
@@ -223,6 +259,7 @@ struct LIRInstr {
         LIRAtomicFetchAddPayload atomic_fetch_add;
         LIRAtomicFetchSubPayload atomic_fetch_sub;
         LIRAtomicRMWPayload  atomic_rmw;  // fetch_and, fetch_or, fetch_xor
+        LIRAtomicCas128Payload atomic_cas128;
         LIRFencePayload      fence;
         LIRPercpuPayload     percpu_load;
         LIRPercpuStorePayload percpu_store;
@@ -230,6 +267,12 @@ struct LIRInstr {
         LIRStoreGlobalPayload store_global;
         LIRPortInPayload      port_in;
         LIRPortOutPayload     port_out;
+        LIRSwitchPayload      switch_;
+        LIRVaStartPayload     va_start;
+        LIRVaArgPayload       va_arg;
+        LIRAllocaPayload      alloca_;
+        LIRTlsLoadPayload     tls_load;
+        LIRTlsStorePayload    tls_store;
     };
 };
 
@@ -275,8 +318,20 @@ struct LIRFunction {
     bool is_variadic = false;   // fn(x: T, ...) — C-style varargs
     bool is_weak = false;       // @weak — weak symbol linkage
     bool is_cold = false;       // @cold — unlikely code path
+    bool is_interrupt_error = false; // @interrupt_error — has error code
+    bool is_interrupt_nofp = false;  // @interrupt_nofp — no XMM save/restore
     bool is_hot = false;        // @hot — frequently executed
+    bool is_hidden = false;     // @hidden — ELF hidden visibility
+    bool is_protected = false;  // @protected — ELF protected visibility
+    bool is_constructor = false; // @constructor — placed in .init_array
+    bool is_destructor = false;  // @destructor — placed in .fini_array
+    uint32_t constructor_priority = 65535;
+    uint32_t destructor_priority = 65535;
+    bool is_used = false;       // @used — prevent DCE
+    bool is_no_red_zone = false; // @no_red_zone — disable red zone
+    uint32_t fn_align = 0;      // @align(N) — function alignment
     std::string_view section_name;  // @section("name"), empty = default
+    std::string_view section_flags; // @section("name", "awx"), empty = default
     std::string_view link_name;     // @link_name("name"), empty = auto
     SourceLocation loc;             // function declaration source location
 };
@@ -287,18 +342,35 @@ struct LIRFunction {
 
 struct GlobalStringLit { const char* data; uint32_t length; };
 struct GlobalFloatConst { double value; bool is_f32; };
+// Relocation entry for symbol references within raw byte initializers
+struct GlobalReloc {
+    uint32_t offset;          // byte offset within init_bytes
+    std::string_view symbol;  // symbol name (e.g., function label)
+    uint8_t size;             // 4 or 8 bytes (dd vs dq)
+    bool is_relative;         // true = symbol - reloc_addr, false = absolute
+};
+
 struct GlobalVariable {
     int64_t init_value;       // integer init value (0 for .bss)
     uint8_t size;             // 1/2/4/8 bytes (element size for arrays)
     bool is_mutable;          // static var → .data/.bss, static val → .rodata
     bool is_pub = false;      // pub static — export as global symbol
-    bool is_extern;           // extern static — linker-defined symbol (no storage)
+    bool is_extern = false;   // extern static — linker-defined symbol (no storage)
+    bool is_global_allocator = false; // @global_allocator — weak alias __kern_global_alloc
+    uint32_t explicit_align = 0;     // @align(N), 0 = natural alignment
     int64_t* array_values;    // array initializer values (nullptr if scalar)
     std::string_view* array_labels; // fn-pointer array: label per element (nullptr if not fn ptrs)
     uint32_t array_count;     // number of elements (0 if scalar)
     uint8_t* init_bytes;      // raw byte initializer (struct/float literals)
     uint32_t init_byte_count; // byte count for init_bytes (0 if unused)
+    GlobalReloc* relocs;      // symbol relocations within init_bytes
+    uint32_t reloc_count = 0; // number of relocations
+    bool is_used = false;       // @used — prevent DCE
+    bool is_weak = false;       // @weak — weak symbol linkage
+    bool is_hidden = false;     // @hidden — ELF hidden visibility
+    bool is_protected = false;  // @protected — ELF protected visibility
     std::string_view section_name;  // @section("name"), empty = default
+    std::string_view section_flags; // @section("name", "awx"), empty = default
     std::string_view link_name;     // @link_name("name"), empty = use label
 };
 

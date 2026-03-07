@@ -5,6 +5,7 @@
 # Each .kern file can have a companion .expected file with:
 #   exit:<number>  — expected exit code
 #   error:<text>   — expected error output substring (for error tests)
+#   warning:<text> — expected warning substring (compilation succeeds, check stderr)
 
 set -e
 
@@ -34,12 +35,14 @@ for kern_file in $(find "$TEST_DIR" -name '*.kern' | sort); do
     # Read expected values
     expected_exit=""
     expected_error=""
+    expected_warning=""
     expected_stdout=""
     compiler_args=""
     while IFS= read -r line; do
         case "$line" in
             exit:*) expected_exit="${line#exit:}" ;;
             error:*) expected_error="${line#error:}" ;;
+            warning:*) expected_warning="${line#warning:}" ;;
             stdout:*) expected_stdout="${line#stdout:}" ;;
             args:*) compiler_args="${line#args:}" ;;
         esac
@@ -64,6 +67,23 @@ for kern_file in $(find "$TEST_DIR" -name '*.kern' | sort); do
             FAIL=$((FAIL + 1))
             FAILURES="$FAILURES\n  $test_name: error mismatch"
         fi
+        continue
+    fi
+
+    # Warning test — compilation succeeds, check stderr for warning
+    if [ -n "$expected_warning" ]; then
+        output=$("$KERNC" "$kern_file" -o /tmp/kern_test_bin 2>&1)
+        if echo "$output" | grep -qF "$expected_warning"; then
+            echo "  PASS  $test_name (warning)"
+            PASS=$((PASS + 1))
+        else
+            echo "  FAIL  $test_name (warning message not found)"
+            echo "        expected: $expected_warning"
+            echo "        got: $output"
+            FAIL=$((FAIL + 1))
+            FAILURES="$FAILURES\n  $test_name: warning mismatch"
+        fi
+        rm -f /tmp/kern_test_bin
         continue
     fi
 

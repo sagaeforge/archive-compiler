@@ -24,6 +24,19 @@ public:
 
     Module* parseModule();
 
+    // Parse a single expression (used by f-string sub-parser)
+    Expr* parseExpression() {
+        has_current_ = false;
+        return parseExpr();
+    }
+
+    // Copy known type names from another parser (for sub-parsing)
+    void copyNamesFrom(const Parser& other) {
+        struct_names_ = other.struct_names_;
+        enum_names_ = other.enum_names_;
+        union_names_ = other.union_names_;
+    }
+
 private:
     // Token management
     Token peek();
@@ -67,7 +80,7 @@ private:
     Pattern* parsePattern();
 
     // Statements
-    Stmt* parseValDecl();
+    Stmt* parseValDecl(uint32_t explicit_align = 0);
 
     // Helpers
     static bool isDerefTarget(const Expr* expr);

@@ -122,6 +122,7 @@ const char* x86OpName(X86Op op) {
         case X86Op::Nop:    return "nop";
         case X86Op::InlineAsm: return "inline_asm";
         case X86Op::LockCmpxchg: return "lock_cmpxchg";
+        case X86Op::LockCmpxchg16b: return "lock_cmpxchg16b";
         case X86Op::LockXadd:    return "lock_xadd";
         case X86Op::Xchg:        return "xchg";
         case X86Op::Mfence:      return "mfence";
@@ -129,6 +130,8 @@ const char* x86OpName(X86Op op) {
         case X86Op::Lfence:      return "lfence";
         case X86Op::GsLoad:      return "gs_load";
         case X86Op::GsStore:     return "gs_store";
+        case X86Op::FsLoad:      return "fs_load";
+        case X86Op::FsStore:     return "fs_store";
         case X86Op::MovLoadGlobal:  return "mov_load_global";
         case X86Op::MovStoreGlobal: return "mov_store_global";
         case X86Op::LeaGlobal:      return "lea_global";
@@ -145,6 +148,7 @@ const char* x86OpName(X86Op op) {
         case X86Op::In:            return "in";
         case X86Op::Out:           return "out";
         case X86Op::Ud2:           return "ud2";
+        case X86Op::JmpTable:      return "jmp_table";
     }
     return "?";
 }

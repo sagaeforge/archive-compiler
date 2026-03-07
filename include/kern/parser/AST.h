@@ -49,6 +49,7 @@ struct Param {
     TypeRef type;
     SourceLocation loc;
     PassingMode mode = PassingMode::Borrow;
+    bool is_restrict = false;    // @restrict — no aliasing (for pointer params)
 };
 
 // --- Patterns (for match expressions) ---
@@ -101,6 +102,17 @@ struct TypeParam {
     SourceLocation loc;
     bool is_const = false;   // true for `const N: u64`
     TypeRef const_type{};    // type of const param (e.g. u64), only valid if is_const
+    std::string_view* bounds = nullptr; // trait bounds: <T: Add + Clone>
+    uint32_t bound_count = 0;
+};
+
+// --- Where clause ---
+// where T: Ord + Clone, U: Display
+struct WhereClause {
+    std::string_view type_name;     // "T"
+    std::string_view* bounds;       // ["Ord", "Clone"]
+    uint32_t bound_count;
+    SourceLocation loc;
 };
 
 // --- Field declarations (for struct definitions) ---
@@ -158,6 +170,7 @@ struct UnionDecl {
     SourceLocation loc;
     bool is_pub = false;            // pub union
     bool is_repr_c = false;         // @repr(C) — untagged C-style union
+    uint8_t tag_size = 8;           // @repr(u8)=1, @repr(u16)=2, @repr(u32)=4, default=8
     TypeParam* type_params = nullptr;
     uint32_t type_param_count = 0;
 };
@@ -168,6 +181,8 @@ struct TypeAliasDecl {
     TypeRef target;
     SourceLocation loc;
     bool is_pub = false;            // pub type
+    TypeParam* type_params = nullptr;   // generic type params: type Result<T, E> = ...
+    uint32_t type_param_count = 0;
 };
 
 // --- Newtype ---
@@ -197,12 +212,27 @@ struct TraitMethodSig {
     uint32_t effect_count = 0;
 };
 
+// Associated type declaration in a trait: `type Item;`
+struct TraitAssocType {
+    std::string_view name;
+    SourceLocation loc;
+};
+
 struct TraitDecl {
     std::string_view name;
     TraitMethodSig* methods;
     uint32_t method_count;
+    TraitAssocType* assoc_types = nullptr;
+    uint32_t assoc_type_count = 0;
     SourceLocation loc;
     bool is_pub = false;            // pub trait
+};
+
+// Associated type definition in an impl: `type Item = u64;`
+struct ImplAssocType {
+    std::string_view name;
+    TypeRef type;
+    SourceLocation loc;
 };
 
 // --- Impl declaration ---
@@ -211,6 +241,8 @@ struct ImplDecl {
     TypeRef target_type;       // the type implementing the trait
     FnDecl** methods;
     uint32_t method_count;
+    ImplAssocType* assoc_types = nullptr;
+    uint32_t assoc_type_count = 0;
     SourceLocation loc;
 };
 
@@ -223,11 +255,13 @@ struct Expr {
         StructLit, FieldAccess,
         EnumAccess, UnionVariant,
         Loop, ForRange, ForEach, WhileLoop, InlineAsm,
-        ArrayLit, IndexAccess, SliceExpr,
+        ArrayLit, ArrayRepeat, IndexAccess, SliceExpr,
         Sizeof, Alignof, Offsetof,
         Lambda, MethodCall,
         Try, TupleLit, Uninit,
-        ExprCall  // call through arbitrary expression: arr[i](), (*fp)(), etc.
+        ExprCall,  // call through arbitrary expression: arr[i](), (*fp)(), etc.
+        StringInterp,  // f"hello {name}, age {expr}"
+        ConstIf    // const if cond { ... } else { ... } — compile-time branch elimination
     };
     Kind kind;
     SourceLocation loc;
@@ -257,6 +291,21 @@ struct StringLitExpr : Expr {
 struct CStringLitExpr : Expr {
     const char* data;    // processed bytes (escape sequences resolved, NUL-terminated)
     uint32_t length;     // byte length WITHOUT the NUL terminator
+};
+
+// String interpolation: f"hello {name}, {expr + 1}"
+// Parts alternate: string, expr, string, expr, string
+// Always starts and ends with a string part (may be empty)
+struct StringInterpPart {
+    bool is_expr;           // true = expression, false = string literal
+    const char* str_data = nullptr;   // valid when !is_expr
+    uint32_t str_length = 0;          // valid when !is_expr
+    Expr* expr = nullptr;             // valid when is_expr
+};
+
+struct StringInterpExpr : Expr {
+    StringInterpPart* parts;
+    uint32_t part_count;
 };
 
 struct IdentExpr : Expr {
@@ -342,6 +391,7 @@ struct StructLitExpr : Expr {
     std::string_view struct_name;
     FieldInit* fields;
     uint32_t field_count;
+    Expr* base = nullptr;   // ..base in { ..base, field: value }
 };
 
 struct FieldAccessExpr : Expr {
@@ -363,6 +413,11 @@ struct UnionVariantExpr : Expr {
 struct ArrayLitExpr : Expr {
     Expr** elements;
     uint32_t count;
+};
+
+struct ArrayRepeatExpr : Expr {
+    Expr* value;        // the expression to repeat
+    uint32_t repeat_count;  // number of repetitions
 };
 
 struct IndexAccessExpr : Expr {
@@ -487,12 +542,14 @@ struct ValDeclStmt : Stmt {
     std::string_view name;
     TypeRef type;
     Expr* init;
+    uint32_t explicit_align = 0;  // @align(N), 0 = natural alignment
 };
 
 struct VarDeclStmt : Stmt {
     std::string_view name;
     TypeRef type;
     Expr* init;
+    uint32_t explicit_align = 0;  // @align(N), 0 = natural alignment
 };
 
 struct ExprStmt : Stmt {
@@ -554,6 +611,8 @@ struct FnDecl {
     bool is_const = false;           // const fn — compile-time evaluable
     bool is_naked = false;           // @naked annotation
     bool is_interrupt = false;       // @interrupt annotation
+    bool is_interrupt_error = false; // @interrupt_error — interrupt with error code
+    bool is_interrupt_nofp = false;  // @interrupt_nofp — no XMM save/restore
     bool is_inline = false;          // @inline — hint to inline
     bool is_noinline = false;        // @noinline — prevent inlining
     bool is_noreturn = false;        // @noreturn — function never returns
@@ -565,16 +624,31 @@ struct FnDecl {
     TypeParam* type_params = nullptr; // generic type parameters (<T, U>)
     uint32_t type_param_count = 0;
     std::string_view section_name;    // @section("name"), empty = default
+    std::string_view section_flags;   // @section("name", "awx"), empty = default
     std::string_view link_name;       // @link_name("name"), empty = auto
     std::string_view extern_abi;      // "C" for extern "C", empty otherwise
     bool is_weak = false;             // @weak — weak symbol linkage
     bool is_cold = false;             // @cold — unlikely code path, placed in .text.cold
     bool is_hot = false;              // @hot — frequently executed, placed in .text.hot
     bool is_no_mangle = false;       // @no_mangle — suppress module name mangling
+    bool is_panic_handler = false;   // @panic_handler — called on panic()
+    bool is_hidden = false;          // @hidden — ELF hidden visibility
+    bool is_protected = false;       // @protected — ELF protected visibility
+    bool is_constructor = false;     // @constructor — placed in .init_array
+    bool is_destructor = false;      // @destructor — placed in .fini_array
+    uint32_t constructor_priority = 65535;  // @constructor(N) — lower runs first
+    uint32_t destructor_priority = 65535;   // @destructor(N) — lower runs first
+    bool is_must_use = false;        // @must_use — warn if return value discarded
+    bool is_used = false;            // @used — prevent DCE of externally-referenced symbol
+    bool is_no_red_zone = false;     // @no_red_zone — disable 128-byte red zone
+    uint32_t fn_align = 0;           // @align(N) — function alignment (0 = default)
     // Effect clause: "with io, atomic" → effect_names = {"io", "atomic"}
     std::string_view* effect_names = nullptr;
     uint32_t effect_count = 0;
     bool has_effect_clause = false;  // true if "with ..." clause present (including "with pure")
+    // Where clauses: fn sort<T>(arr: [T]) where T: Ord + Clone { ... }
+    WhereClause* where_clauses = nullptr;
+    uint32_t where_clause_count = 0;
 };
 
 // --- Global variable declaration ---
@@ -585,8 +659,15 @@ struct GlobalDecl {
     bool is_mutable;         // true = "static var", false = "static val"
     bool is_pub = false;     // pub static
     bool is_extern = false;  // extern static — linker-defined symbol
+    bool is_global_allocator = false;  // @global_allocator — registered as heap allocator
+    uint32_t explicit_align = 0;   // @align(N), 0 = natural alignment
     std::string_view section_name;  // @section("name"), empty = default
+    std::string_view section_flags; // @section("name", "awx"), empty = default
     std::string_view link_name;  // @link_name("name"), empty = use name as-is
+    bool is_used = false;  // @used — prevent DCE of externally-referenced symbol
+    bool is_weak = false;  // @weak — weak symbol linkage
+    bool is_hidden = false;   // @hidden — ELF hidden visibility
+    bool is_protected = false; // @protected — ELF protected visibility
     SourceLocation loc;
 };
 

@@ -93,7 +93,8 @@ enum class PrimitiveKind : uint8_t {
     I8, I16, I32, I64,
     U8, U16, U32, U64,
     F32, F64,
-    Bool, Unit, Error
+    Bool, Unit, Error,
+    Isize, Usize  // pointer-sized integers (64-bit on x86-64)
 };
 
 enum class TypeKind : uint8_t {
@@ -152,6 +153,7 @@ struct UnionData {
     VariantInfo* variants;
     uint32_t variant_count;
     bool is_repr_c = false;     // untagged C-style union (no discriminant tag)
+    uint8_t tag_size = 8;       // discriminant tag size in bytes (1/2/4/8)
 };
 
 struct PtrData {
@@ -224,7 +226,9 @@ public:
     static constexpr TypeId Unit  = 11;
     static constexpr TypeId Error = 12;
     static constexpr TypeId Never = 13;  // bottom type (!)
-    static constexpr TypeId PRIMITIVE_COUNT = 14;
+    static constexpr TypeId Isize = 14;  // pointer-sized signed integer
+    static constexpr TypeId Usize = 15;  // pointer-sized unsigned integer
+    static constexpr TypeId PRIMITIVE_COUNT = 16;
 
     // Register a new type and return its TypeId.
     TypeId add(TypeInfo info);
@@ -250,7 +254,7 @@ public:
     TypeId makeEnum(std::string_view name, std::span<const std::string_view> variant_names,
                     std::span<const int64_t> values, uint8_t backing_size = 8);
     TypeId makeUnion(std::string_view name, std::span<const VariantInfo> variants,
-                     bool is_repr_c = false);
+                     bool is_repr_c = false, uint8_t tag_size = 8);
     TypeId makeArrayType(TypeId element, uint32_t count);
     TypeId makeDynTrait(std::string_view trait_name,
                         std::span<const std::string_view> method_names);

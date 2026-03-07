@@ -48,6 +48,7 @@ private:
     Token scanNumber();
     Token scanString();
     Token scanCString();
+    Token scanFString();
     Token scanIdentifierOrKeyword();
     static TokenKind identifierKind(std::string_view text);
 

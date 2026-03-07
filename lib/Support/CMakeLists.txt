@@ -1,6 +1,8 @@
 add_library(kern_support
     Arena.cpp
+    BuildCache.cpp
     Diagnostic.cpp
+    ModuleResolver.cpp
     StringPool.cpp
     TypeSystem.cpp
 )

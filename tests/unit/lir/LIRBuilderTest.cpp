@@ -553,4 +553,41 @@ TEST_F(LIRBuilderTest, RdpmcIntrinsic) {
     EXPECT_TRUE(s.find("inline_asm") != std::string::npos) << s;
 }
 
+TEST_F(LIRBuilderTest, DenseMatchEmitsSwitch) {
+    auto* mod = buildLIR(
+        "fn dispatch(x: i64) -> i64 {\n"
+        "    match x {\n"
+        "        0 => 10,\n"
+        "        1 => 20,\n"
+        "        2 => 30,\n"
+        "        3 => 40,\n"
+        "        _ => 99,\n"
+        "    }\n"
+        "}\n"
+        "fn main() -> i64 { dispatch(1) }\n"
+    );
+    ASSERT_NE(mod, nullptr);
+    auto s = dumpFn(mod, 0); // dispatch is fn 0
+    EXPECT_TRUE(s.find("switch") != std::string::npos)
+        << "Dense integer match should emit LIR Switch: " << s;
+}
+
+TEST_F(LIRBuilderTest, SparseMatchDoesNotEmitSwitch) {
+    auto* mod = buildLIR(
+        "fn f(x: i64) -> i64 {\n"
+        "    match x {\n"
+        "        0 => 10,\n"
+        "        100 => 20,\n"
+        "        200 => 30,\n"
+        "        _ => 99,\n"
+        "    }\n"
+        "}\n"
+        "fn main() -> i64 { f(0) }\n"
+    );
+    ASSERT_NE(mod, nullptr);
+    auto s = dumpFn(mod, 0);
+    EXPECT_TRUE(s.find("switch") == std::string::npos)
+        << "Sparse match should NOT emit Switch (use conditional chains): " << s;
+}
+
 } // namespace kern

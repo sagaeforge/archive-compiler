@@ -1,0 +1,9 @@
+fn get_second(count: i64, ...) -> i64 with io {
+    val ap = va_start()
+    val first = va_arg<i64>(ap)
+    val ap2 = (ap as u64 + 8) as *u8
+    val second = va_arg<i64>(ap2)
+    second
+}
+
+fn main() -> i64 { get_second(2, 10, 32) }

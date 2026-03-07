@@ -1,0 +1,15 @@
+struct PTE {
+    var present:  u64 : 1,
+    var writable: u64 : 1,
+    var user:     u64 : 1,
+    var reserved: u64 : 5
+}
+
+fn main() -> i64 with mut {
+    var pte: PTE = PTE { present: 1, writable: 1, user: 0, reserved: 0 }
+    val p: i64 = pte.present as i64
+    val w: i64 = pte.writable as i64
+    pte.user = 1
+    val u: i64 = pte.user as i64
+    p * 10 + w * 10 + u * 10 + 12
+}

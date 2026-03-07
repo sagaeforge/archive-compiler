@@ -1,0 +1,2 @@
+module multimod_prelude
+pub import multimod_math (add, mul)

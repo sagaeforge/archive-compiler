@@ -130,6 +130,73 @@ void CompletionProvider::addTypes(std::vector<CompletionItem>& items,
     }
 }
 
+// Find the function containing the cursor position.
+static const HIRFnDecl* findFunctionAt(const HIRModule* hir,
+                                        uint32_t line) {
+    const HIRFnDecl* best = nullptr;
+    for (uint32_t i = 0; i < hir->fn_count; ++i) {
+        auto* fn = hir->functions[i];
+        if (fn->loc.line <= line) {
+            if (!best || fn->loc.line > best->loc.line) {
+                best = fn;
+            }
+        }
+    }
+    return best;
+}
+
+// Collect val/var declarations from a block expression.
+static void collectBlockLocals(const HIRExpr* expr,
+                                std::vector<std::pair<std::string_view, TypeId>>& locals) {
+    if (!expr || expr->kind != HIRExpr::Kind::Block) return;
+    auto* blk = static_cast<const HIRBlockExpr*>(expr);
+    for (uint32_t i = 0; i < blk->stmt_count; ++i) {
+        auto* stmt = blk->stmts[i];
+        if (stmt->kind == HIRStmt::Kind::ValDecl) {
+            auto* vd = static_cast<const HIRValDeclStmt*>(stmt);
+            locals.push_back({vd->name, vd->type});
+        } else if (stmt->kind == HIRStmt::Kind::VarDecl) {
+            auto* vd = static_cast<const HIRVarDeclStmt*>(stmt);
+            locals.push_back({vd->name, vd->type});
+        }
+    }
+}
+
+void CompletionProvider::addLocals(std::vector<CompletionItem>& items,
+                                    IDEContext& ctx, std::string_view path,
+                                    uint32_t line, uint32_t /* column */,
+                                    std::string_view prefix) {
+    const HIRModule* hir = ctx.getHIR(path);
+    if (!hir) return;
+
+    auto* fn = findFunctionAt(hir, line);
+    if (!fn) return;
+
+    // Add parameters
+    for (uint32_t i = 0; i < fn->param_count; ++i) {
+        if (startsWith(fn->params[i].name, prefix)) {
+            items.push_back({
+                std::string(fn->params[i].name),
+                ctx.context().types.name(fn->params[i].type),
+                CompletionItem::Variable
+            });
+        }
+    }
+
+    // Add local val/var declarations from function body
+    std::vector<std::pair<std::string_view, TypeId>> locals;
+    collectBlockLocals(fn->body, locals);
+    for (auto& [name, type] : locals) {
+        if (startsWith(name, prefix)) {
+            items.push_back({
+                std::string(name),
+                ctx.context().types.name(type),
+                CompletionItem::Variable
+            });
+        }
+    }
+}
+
 void CompletionProvider::addFieldCompletions(
     std::vector<CompletionItem>& /* items */,
     IDEContext& /* ctx */, std::string_view /* path */,
@@ -137,7 +204,6 @@ void CompletionProvider::addFieldCompletions(
     // Field completions require resolving the type of the expression
     // before the dot. This needs cursor-position-aware type resolution
     // which will be implemented when HIR carries per-node source mapping.
-    // For now, field completions are not supported.
 }
 
 std::vector<CompletionItem> CompletionProvider::complete(
@@ -153,6 +219,7 @@ std::vector<CompletionItem> CompletionProvider::complete(
     addKeywords(items, prefix);
     addFunctions(items, ctx, path, prefix);
     addTypes(items, ctx, path, prefix);
+    addLocals(items, ctx, path, line, column, prefix);
 
     return items;
 }

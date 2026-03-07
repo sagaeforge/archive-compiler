@@ -129,6 +129,18 @@ std::string ValueInspector::formatPrimitive(const TypeInfo& info,
         }
         case PrimitiveKind::Unit:
             return "()";
+        case PrimitiveKind::Isize: {
+            if (size < 8) return "<isize?>";
+            int64_t v = 0;
+            std::memcpy(&v, bytes, 8);
+            return std::to_string(v);
+        }
+        case PrimitiveKind::Usize: {
+            if (size < 8) return "<usize?>";
+            uint64_t v = 0;
+            std::memcpy(&v, bytes, 8);
+            return std::to_string(v);
+        }
         default:
             return "<primitive?>";
     }

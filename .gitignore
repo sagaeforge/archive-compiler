@@ -1,5 +1,5 @@
 build/
-build-cov/
+build*/
 .cache/
 *.o
 *.asm

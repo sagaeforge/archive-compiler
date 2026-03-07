@@ -1,0 +1,29 @@
+trait Animal {
+    fn speak(self: Ptr<u8>) -> i64
+}
+
+struct Dog { val bark_val: i64 }
+
+struct Cat { val meow_val: i64 }
+
+impl Animal for Dog {
+    fn speak(self: Ptr<u8>) -> i64 {
+        42
+    }
+}
+
+impl Animal for Cat {
+    fn speak(self: Ptr<u8>) -> i64 {
+        10
+    }
+}
+
+fn call_animal(a: dyn Animal) -> i64 {
+    a.speak()
+}
+
+fn main() -> i64 {
+    val d: Dog = Dog { bark_val: 42 }
+    val obj: dyn Animal = d as dyn Animal
+    call_animal(obj)
+}

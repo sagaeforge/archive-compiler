@@ -88,6 +88,41 @@ std::optional<DefinitionResult> DefinitionProvider::findDefinition(
         }
     }
 
+    // Params and locals in enclosing function
+    const HIRFnDecl* enclosing = nullptr;
+    for (uint32_t i = 0; i < hir->fn_count; ++i) {
+        auto* fn = hir->functions[i];
+        if (fn->loc.line <= line) {
+            if (!enclosing || fn->loc.line > enclosing->loc.line) {
+                enclosing = fn;
+            }
+        }
+    }
+    if (enclosing) {
+        for (uint32_t i = 0; i < enclosing->param_count; ++i) {
+            if (enclosing->params[i].name == ident) {
+                return DefinitionResult{enclosing->params[i].loc, enclosing->params[i].name};
+            }
+        }
+        if (enclosing->body && enclosing->body->kind == HIRExpr::Kind::Block) {
+            auto* blk = static_cast<const HIRBlockExpr*>(enclosing->body);
+            for (uint32_t i = 0; i < blk->stmt_count; ++i) {
+                auto* stmt = blk->stmts[i];
+                if (stmt->kind == HIRStmt::Kind::ValDecl) {
+                    auto* vd = static_cast<const HIRValDeclStmt*>(stmt);
+                    if (vd->name == ident) {
+                        return DefinitionResult{stmt->loc, vd->name};
+                    }
+                } else if (stmt->kind == HIRStmt::Kind::VarDecl) {
+                    auto* vd = static_cast<const HIRVarDeclStmt*>(stmt);
+                    if (vd->name == ident) {
+                        return DefinitionResult{stmt->loc, vd->name};
+                    }
+                }
+            }
+        }
+    }
+
     return std::nullopt;
 }
 

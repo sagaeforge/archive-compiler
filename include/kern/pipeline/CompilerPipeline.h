@@ -38,6 +38,13 @@ struct CompileOptions {
     bool bounds_check = false;             // --bounds-check: runtime array bounds checking
     bool stack_protector = false;          // --stack-protector: stack canary checks
     bool debug_locs = false;               // --debug-locs: emit source location comments in asm
+    bool debug_info = false;               // -g: emit DWARF debug info
+    bool incremental = false;              // --incremental: cache .o files, skip unchanged modules
+    std::string cache_dir = ".kern-cache"; // --cache-dir: build cache directory
+    bool pie = false;                      // --pie: position-independent executable
+    bool shared = false;                   // --shared: build shared object (.so/.dylib)
+    bool relocatable = false;              // -r: produce relocatable object (for kernel modules)
+    bool no_red_zone = false;              // --no-red-zone: disable 128-byte red zone (kernel safety)
 };
 
 // Orchestrates the full compilation pipeline:
@@ -55,6 +62,7 @@ private:
     OutputFormat format_ = OutputFormat::Macho64;
     bool stack_protector_ = false;
     bool debug_locs_ = false;
+    bool debug_info_ = false;
 
     // Individual stages
     Module* parse(const std::string& source, const std::string& filename,

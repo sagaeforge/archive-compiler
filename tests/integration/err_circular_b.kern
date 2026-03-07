@@ -1,0 +1,6 @@
+module err_circular_b
+import err_circular_a (foo)
+
+pub fn bar(x: i64) -> i64 {
+    foo(x)
+}

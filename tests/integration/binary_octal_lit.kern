@@ -1,0 +1,6 @@
+fn main() -> i64 {
+    val a: i64 = 0b101010
+    val b: i64 = 0o52
+    val c: i64 = 0x2A
+    if a == 42 and b == 42 and c == 42 { 42 } else { 0 }
+}

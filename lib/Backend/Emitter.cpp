@@ -286,6 +286,9 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             break;
 
         case X86Op::Jcc:
+            // Emit Intel branch hint prefix: 0x3E = taken, 0x2E = not taken
+            if (instr.branch_hint > 0) out_ << "db 0x3E\n    ";
+            else if (instr.branch_hint < 0) out_ << "db 0x2E\n    ";
             out_ << "j" << condCodeSuffix(instr.cc) << " ";
             emitOperand(instr.dst(), 64);
             break;
@@ -457,6 +460,18 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
             }
             emitOperand(instr.src2(), 64);
             break;
+        case X86Op::LockCmpxchg16b:
+            // lock cmpxchg16b [ptr] — RDX:RAX expected, RCX:RBX desired
+            if (instr.operand(0).isStack()) {
+                out_ << "mov r11, ";
+                emitOperand(instr.operand(0), 64);
+                out_ << "\n    lock cmpxchg16b [r11]";
+            } else {
+                out_ << "lock cmpxchg16b [";
+                emitOperand(instr.operand(0), 64);
+                out_ << "]";
+            }
+            break;
         case X86Op::LockXadd:
             // lock xadd [ptr], value — old value returned in value reg
             if (instr.src1().isStack()) {
@@ -531,6 +546,33 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
                 out_ << "\n    mov [gs:r11], ";
             } else {
                 out_ << "mov [gs:";
+                emitOperand(instr.dst(), 64);
+                out_ << "], ";
+            }
+            emitOperand(instr.src1(), 64);
+            break;
+        case X86Op::FsLoad:
+            if (instr.src1().isStack()) {
+                out_ << "mov r11, ";
+                emitOperand(instr.src1(), 64);
+                out_ << "\n    mov ";
+                emitOperand(instr.dst(), instr.width);
+                out_ << ", [fs:r11]";
+            } else {
+                out_ << "mov ";
+                emitOperand(instr.dst(), instr.width);
+                out_ << ", [fs:";
+                emitOperand(instr.src1(), 64);
+                out_ << "]";
+            }
+            break;
+        case X86Op::FsStore:
+            if (instr.dst().isStack()) {
+                out_ << "mov r11, ";
+                emitOperand(instr.dst(), 64);
+                out_ << "\n    mov [fs:r11], ";
+            } else {
+                out_ << "mov [fs:";
                 emitOperand(instr.dst(), 64);
                 out_ << "], ";
             }
@@ -626,6 +668,28 @@ void NASMEmitter::emitInstr(const MachInstr& instr) {
         case X86Op::Ud2:
             out_ << "ud2";
             break;
+
+        case X86Op::JmpTable: {
+            // Load PC-relative offset from table, add base, jump
+            // mov tmp, [base + idx*8]   ; load relative offset
+            // add tmp, base             ; compute absolute target
+            // jmp tmp
+            auto base = instr.dst();
+            auto idx = instr.src1();
+            out_ << "mov ";
+            emitOperand(idx, 64);
+            out_ << ", [";
+            emitOperand(base, 64);
+            out_ << " + ";
+            emitOperand(idx, 64);
+            out_ << "*8]\n    add ";
+            emitOperand(idx, 64);
+            out_ << ", ";
+            emitOperand(base, 64);
+            out_ << "\n    jmp ";
+            emitOperand(idx, 64);
+            break;
+        }
     }
 
     out_ << "\n";
@@ -770,12 +834,20 @@ void NASMEmitter::emitPrologue(const MachFunction& fn) {
         out_ << "    push r13\n";
         out_ << "    push r14\n";
         out_ << "    push r15\n";
-        // Save all 16 XMM registers (256 bytes, unaligned store)
-        out_ << "    sub rsp, 256\n";
-        for (int i = 0; i < 16; ++i) {
-            out_ << "    movdqu [rsp+" << (i * 16) << "], xmm" << i << "\n";
+        if (!fn.is_interrupt_nofp) {
+            // Save all 16 XMM registers (256 bytes, unaligned store)
+            out_ << "    sub rsp, 256\n";
+            for (int i = 0; i < 16; ++i) {
+                out_ << "    movdqu [rsp+" << (i * 16) << "], xmm" << i << "\n";
+            }
         }
         out_ << "    mov rbp, rsp\n";
+        if (fn.is_interrupt_error) {
+            // Load the error code into rdi for the handler's first parameter.
+            // Error code offset: 15 pushed GPRs (15*8=120) + XMM bytes above.
+            uint32_t xmm_bytes = fn.is_interrupt_nofp ? 0 : 256;
+            out_ << "    mov rdi, [rsp+" << (120 + xmm_bytes) << "]\n";
+        }
     } else {
         out_ << "    push rbp\n";
         out_ << "    mov rbp, rsp\n";
@@ -790,26 +862,51 @@ void NASMEmitter::emitPrologue(const MachFunction& fn) {
         }
     }
 
-    // Allocate stack frame
-    if (fn.stack_size > 0) {
-        out_ << "    sub rsp, " << fn.stack_size << "\n";
+    // Allocate stack frame (with stack probing for large frames)
+    // When no_red_zone is set, ensure RSP is decremented by at least 128 bytes
+    // to protect against interrupt clobbering the red zone area below RSP.
+    uint32_t effective_stack = fn.stack_size;
+    if (fn.is_no_red_zone && !fn.is_interrupt && effective_stack < 128) {
+        effective_stack = 128;
+    }
+    if (effective_stack > 0) {
+        if (effective_stack > 4096) {
+            // Probe each page to ensure guard pages are hit
+            uint32_t remaining = effective_stack;
+            while (remaining > 4096) {
+                out_ << "    sub rsp, 4096\n";
+                out_ << "    or dword [rsp], 0\n";  // write-probe the page
+                remaining -= 4096;
+            }
+            if (remaining > 0) {
+                out_ << "    sub rsp, " << remaining << "\n";
+            }
+        } else {
+            out_ << "    sub rsp, " << effective_stack << "\n";
+        }
     }
 }
 
 void NASMEmitter::emitEpilogue(const MachFunction& fn) {
-    // Deallocate stack frame
-    if (fn.stack_size > 0) {
-        out_ << "    add rsp, " << fn.stack_size << "\n";
+    // Deallocate stack frame (match prologue's effective_stack)
+    uint32_t effective_stack = fn.stack_size;
+    if (fn.is_no_red_zone && !fn.is_interrupt && effective_stack < 128) {
+        effective_stack = 128;
+    }
+    if (effective_stack > 0) {
+        out_ << "    add rsp, " << effective_stack << "\n";
     }
 
     if (fn.is_interrupt) {
         // Interrupt handler: restore all XMM + GPRs + iretq
         out_ << "    mov rsp, rbp\n";
-        // Restore 16 XMM registers
-        for (int i = 0; i < 16; ++i) {
-            out_ << "    movdqu xmm" << i << ", [rsp+" << (i * 16) << "]\n";
+        if (!fn.is_interrupt_nofp) {
+            // Restore 16 XMM registers
+            for (int i = 0; i < 16; ++i) {
+                out_ << "    movdqu xmm" << i << ", [rsp+" << (i * 16) << "]\n";
+            }
+            out_ << "    add rsp, 256\n";
         }
-        out_ << "    add rsp, 256\n";
         out_ << "    pop r15\n";
         out_ << "    pop r14\n";
         out_ << "    pop r13\n";
@@ -825,6 +922,10 @@ void NASMEmitter::emitEpilogue(const MachFunction& fn) {
         out_ << "    pop rcx\n";
         out_ << "    pop rbx\n";
         out_ << "    pop rax\n";
+        if (fn.is_interrupt_error) {
+            // Pop the CPU-pushed error code before iretq
+            out_ << "    add rsp, 8\n";
+        }
         out_ << "    iretq\n";
     } else {
         // Pop callee-saved registers (reverse order)
@@ -850,7 +951,19 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
 
     // Emit custom section directive if specified
     if (!fn.section_name.empty()) {
-        out_ << "section " << fn.section_name << "\n";
+        out_ << "section " << fn.section_name;
+        if (!fn.section_flags.empty()) {
+            for (char c : fn.section_flags) {
+                switch (c) {
+                case 'a': out_ << " alloc"; break;
+                case 'w': out_ << " write"; break;
+                case 'x': out_ << " exec"; break;
+                case 'p': out_ << " progbits"; break;
+                case 'n': out_ << " nobits"; break;
+                }
+            }
+        }
+        out_ << "\n";
     } else if (fn.is_cold) {
         if (format_ == OutputFormat::Elf64) {
             out_ << "section .text.cold\n";
@@ -860,6 +973,11 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
         if (format_ == OutputFormat::Elf64) {
             out_ << "section .text.hot\n";
         }
+    }
+
+    // Function alignment
+    if (fn.fn_align > 0) {
+        out_ << "align " << fn.fn_align << "\n";
     }
 
     // Function label: @link_name overrides, otherwise mangled if module context exists
@@ -892,11 +1010,17 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
         for (uint32_t i = 0; i < block.instr_count; ++i) {
             const auto& instr = block.instrs[i];
 
-            // Emit source location comment when line changes
-            if (emit_source_locs_ && instr.loc.line > 0 &&
+            // Emit source location info when line changes
+            if ((emit_source_locs_ || emit_debug_info_) && instr.loc.line > 0 &&
                 instr.loc.line != last_emitted_line_) {
                 last_emitted_line_ = instr.loc.line;
-                out_ << "    ; " << instr.loc.filename << ":" << instr.loc.line << "\n";
+                if (emit_source_locs_) {
+                    out_ << "    ; " << instr.loc.filename << ":" << instr.loc.line << "\n";
+                }
+                if (emit_debug_info_) {
+                    out_ << "%line " << instr.loc.line << " "
+                         << instr.loc.filename << "\n";
+                }
             }
 
             // For naked functions, skip all frame-related pseudo-instructions
@@ -956,11 +1080,37 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
         out_ << "    ud2\n";
     }
 
+    // Emit jump tables in .rodata with PC-relative offsets for PIE compatibility
+    if (fn.jump_table_count > 0) {
+        out_ << "section .rodata\n";
+        for (uint32_t jt = 0; jt < fn.jump_table_count; ++jt) {
+            auto& jtbl = fn.jump_tables[jt];
+            out_ << "align 8\n";
+            out_ << jtbl.label << ":\n";
+            for (uint32_t e = 0; e < jtbl.entry_count; ++e) {
+                // Relative offset: target - table_base (PIE-safe)
+                out_ << "    dq " << jtbl.targets[e] << " - " << jtbl.label << "\n";
+            }
+        }
+        out_ << "section .text\n";
+    }
+
     // Switch back to .text if we emitted a custom section
     if (!fn.section_name.empty()) {
         out_ << "section .text\n";
     } else if (format_ == OutputFormat::Elf64 && (fn.is_cold || fn.is_hot)) {
         out_ << "section .text\n";
+    }
+
+    // Emit function end label for .eh_frame FDE address range
+    if (emit_unwind_info_) {
+        if (!fn.link_name.empty()) {
+            out_ << symPrefix() << fn.link_name << "__end:\n";
+        } else if (!module_name_.empty() && fn.name != "main") {
+            out_ << symPrefix() << module_name_ << "__" << fn.name << "__end:\n";
+        } else {
+            out_ << symPrefix() << fn.name << "__end:\n";
+        }
     }
 
     out_ << "\n";
@@ -973,11 +1123,13 @@ void NASMEmitter::emitFunction(const MachFunction& fn) {
 void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
     if (global_count == 0) return;
 
-    // Export pub globals as global symbols
+    // Export pub/weak/hidden/protected globals as global symbols
     for (uint32_t i = 0; i < global_count; ++i) {
         const auto& g = globals[i];
-        if (g.kind != GlobalData::Variable || !g.variable.is_pub) continue;
-        if (g.variable.is_extern) continue;  // extern globals are imported, not exported
+        if (g.kind != GlobalData::Variable) continue;
+        if (g.variable.is_extern) continue;
+        if (!g.variable.is_pub && !g.variable.is_weak &&
+            !g.variable.is_hidden && !g.variable.is_protected) continue;
         std::string sym;
         if (!g.variable.link_name.empty()) {
             sym = std::string(symPrefix()) + std::string(g.variable.link_name);
@@ -985,6 +1137,31 @@ void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
             sym = std::string(symPrefix()) + std::string(g.label);
         }
         out_ << "global " << sym << "\n";
+        if (g.variable.is_weak) {
+            out_ << "weak " << sym << "\n";
+        }
+        if (format_ != OutputFormat::Macho64) {
+            if (g.variable.is_hidden) {
+                out_ << "hidden " << sym << "\n";
+            } else if (g.variable.is_protected) {
+                out_ << "protected " << sym << "\n";
+            }
+        }
+    }
+
+    // Emit weak alias for @global_allocator globals
+    for (uint32_t i = 0; i < global_count; ++i) {
+        const auto& g = globals[i];
+        if (g.kind != GlobalData::Variable || !g.variable.is_global_allocator) continue;
+        std::string sym;
+        if (!g.variable.link_name.empty()) {
+            sym = std::string(symPrefix()) + std::string(g.variable.link_name);
+        } else {
+            sym = std::string(symPrefix()) + std::string(g.label);
+        }
+        // Export the global allocator under a well-known weak symbol
+        out_ << "global " << symPrefix() << "__kern_global_alloc\n";
+        out_ << symPrefix() << "__kern_global_alloc equ " << sym << "\n";
     }
 
     // Emit extern declarations for extern globals
@@ -1044,7 +1221,8 @@ void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
             }
         } else if (g.kind == GlobalData::Variable) {
             // Immutable global variable → .rodata
-            uint32_t align = g.variable.size >= 8 ? 8 : (g.variable.size >= 4 ? 4 : 1);
+            uint32_t align = g.variable.explicit_align > 0 ? g.variable.explicit_align
+                : (g.variable.size >= 8 ? 8 : (g.variable.size >= 4 ? 4 : 1));
             if (align > 1) out_ << "align " << align << "\n";
             out_ << symPrefix() << g.label << ":\n";
             emitGlobalVarDirective(g.variable);
@@ -1088,7 +1266,8 @@ void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
                         g.variable.init_byte_count > 0;
         if (!has_init) continue;  // zero-init goes to .bss
         if (!has_data) { out_ << "section .data\n"; has_data = true; }
-        uint32_t align = g.variable.size >= 8 ? 8 : (g.variable.size >= 4 ? 4 : 1);
+        uint32_t align = g.variable.explicit_align > 0 ? g.variable.explicit_align
+            : (g.variable.size >= 8 ? 8 : (g.variable.size >= 4 ? 4 : 1));
         if (align > 1) out_ << "align " << align << "\n";
         out_ << symPrefix() << g.label << ":\n";
         emitGlobalVarDirective(g.variable);
@@ -1105,6 +1284,7 @@ void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
         if (g.variable.init_value != 0 || g.variable.array_count > 0 ||
             g.variable.init_byte_count > 0) continue;
         if (!has_bss) { out_ << "section .bss\n"; has_bss = true; }
+        if (g.variable.explicit_align > 1) out_ << "align " << g.variable.explicit_align << "\n";
         // For structs, init_byte_count may carry the full size
         uint32_t bss_sz = g.variable.init_byte_count > 0 ? g.variable.init_byte_count
                          : static_cast<uint32_t>(g.variable.size);
@@ -1118,7 +1298,20 @@ void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
         if (g.kind != GlobalData::Variable) continue;
         if (g.variable.is_extern) continue;
         if (g.variable.section_name.empty()) continue;
-        out_ << "section " << g.variable.section_name << "\n";
+        out_ << "section " << g.variable.section_name;
+        if (!g.variable.section_flags.empty()) {
+            for (char c : g.variable.section_flags) {
+                switch (c) {
+                case 'a': out_ << " alloc"; break;
+                case 'w': out_ << " write"; break;
+                case 'x': out_ << " exec"; break;
+                case 'p': out_ << " progbits"; break;
+                case 'n': out_ << " nobits"; break;
+                }
+            }
+        }
+        out_ << "\n";
+        if (g.variable.explicit_align > 1) out_ << "align " << g.variable.explicit_align << "\n";
         out_ << symPrefix() << g.label << ":\n";
         bool is_zero = (g.variable.init_value == 0 && g.variable.array_count == 0 &&
                         g.variable.init_byte_count == 0);
@@ -1134,14 +1327,47 @@ void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
 }
 
 void NASMEmitter::emitGlobalVarDirective(const GlobalVariable& var) {
-    // Raw byte initializer (struct/float literals)
+    // Raw byte initializer (struct/float literals) with optional symbol relocations
     if (var.init_bytes && var.init_byte_count > 0) {
-        out_ << "    db ";
-        for (uint32_t i = 0; i < var.init_byte_count; ++i) {
-            if (i > 0) out_ << ", ";
-            out_ << static_cast<int>(var.init_bytes[i]);
+        if (var.relocs && var.reloc_count > 0) {
+            // Emit bytes with interleaved symbol references at relocation offsets
+            uint32_t pos = 0;
+            for (uint32_t r = 0; r < var.reloc_count; ++r) {
+                auto& reloc = var.relocs[r];
+                // Emit plain bytes before this relocation
+                if (reloc.offset > pos) {
+                    out_ << "    db ";
+                    for (uint32_t i = pos; i < reloc.offset; ++i) {
+                        if (i > pos) out_ << ", ";
+                        out_ << static_cast<int>(var.init_bytes[i]);
+                    }
+                    out_ << "\n";
+                }
+                // Emit symbol reference
+                if (reloc.size == 8) {
+                    out_ << "    dq " << symPrefix() << reloc.symbol << "\n";
+                } else {
+                    out_ << "    dd " << symPrefix() << reloc.symbol << "\n";
+                }
+                pos = reloc.offset + reloc.size;
+            }
+            // Emit remaining bytes after last relocation
+            if (pos < var.init_byte_count) {
+                out_ << "    db ";
+                for (uint32_t i = pos; i < var.init_byte_count; ++i) {
+                    if (i > pos) out_ << ", ";
+                    out_ << static_cast<int>(var.init_bytes[i]);
+                }
+                out_ << "\n";
+            }
+        } else {
+            out_ << "    db ";
+            for (uint32_t i = 0; i < var.init_byte_count; ++i) {
+                if (i > 0) out_ << ", ";
+                out_ << static_cast<int>(var.init_bytes[i]);
+            }
+            out_ << "\n";
         }
-        out_ << "\n";
         return;
     }
     if (var.array_values && var.array_count > 0) {
@@ -1260,8 +1486,8 @@ void NASMEmitter::emitModule(const MachModule& mod, const LIRModule& lir_mod,
     for (uint32_t i = 0; i < mod.fn_count; ++i) {
         auto& fn = mod.functions[i];
         if (fn.is_intrinsic || fn.is_extern) continue;
-        // Only export: pub functions, main, weak symbols, or explicitly named symbols
-        if (!fn.is_pub && !fn.is_weak && fn.link_name.empty()) continue;
+        // Only export: pub functions, main, weak symbols, visibility-annotated, or explicitly named symbols
+        if (!fn.is_pub && !fn.is_weak && !fn.is_hidden && !fn.is_protected && fn.link_name.empty()) continue;
         std::string sym;
         if (!fn.link_name.empty()) {
             sym = std::string(sp) + std::string(fn.link_name);
@@ -1273,6 +1499,14 @@ void NASMEmitter::emitModule(const MachModule& mod, const LIRModule& lir_mod,
         out_ << "global " << sym << "\n";
         if (fn.is_weak) {
             out_ << "weak " << sym << "\n";
+        }
+        // ELF visibility (only meaningful for ELF, not Mach-O)
+        if (format_ != OutputFormat::Macho64) {
+            if (fn.is_hidden) {
+                out_ << "hidden " << sym << "\n";
+            } else if (fn.is_protected) {
+                out_ << "protected " << sym << "\n";
+            }
         }
     }
 
@@ -1299,6 +1533,194 @@ void NASMEmitter::emitModule(const MachModule& mod, const LIRModule& lir_mod,
     // In freestanding mode, export main as global entry
     if (freestanding && has_main) {
         out_ << "global " << sp << "main\n";
+    }
+
+    // Emit .eh_frame for stack unwinding
+    if (emit_unwind_info_) {
+        emitEhFrame(mod);
+    }
+
+    // Emit .init_array for @constructor functions (grouped by priority)
+    {
+        // Group constructors by priority for correct section ordering
+        uint32_t last_priority = 0;
+        bool has_init = false;
+        // First pass: sort by priority (emit lower priorities first)
+        std::vector<std::pair<uint32_t, uint32_t>> ctor_indices; // (priority, index)
+        for (uint32_t i = 0; i < mod.fn_count; ++i) {
+            if (mod.functions[i].is_constructor)
+                ctor_indices.push_back({mod.functions[i].constructor_priority, i});
+        }
+        std::sort(ctor_indices.begin(), ctor_indices.end());
+        for (auto& [prio, idx] : ctor_indices) {
+            auto& fn = mod.functions[idx];
+            if (!has_init || prio != last_priority) {
+                if (prio == 65535) {
+                    out_ << "\nsection .init_array\n";
+                } else {
+                    // Zero-pad priority to 5 digits for correct linker sorting
+                    char pbuf[16];
+                    std::snprintf(pbuf, sizeof(pbuf), "%05u", prio);
+                    out_ << "\nsection .init_array." << pbuf << "\n";
+                }
+                last_priority = prio;
+                has_init = true;
+            }
+            std::string sym;
+            if (!fn.link_name.empty()) {
+                sym = std::string(sp) + std::string(fn.link_name);
+            } else if (!mod.module_name.empty() && fn.name != "main") {
+                sym = std::string(sp) + std::string(mod.module_name) + "__" + std::string(fn.name);
+            } else {
+                sym = std::string(sp) + std::string(fn.name);
+            }
+            out_ << "    dq " << sym << "\n";
+        }
+    }
+
+    // Emit .fini_array for @destructor functions (grouped by priority)
+    {
+        std::vector<std::pair<uint32_t, uint32_t>> dtor_indices;
+        for (uint32_t i = 0; i < mod.fn_count; ++i) {
+            if (mod.functions[i].is_destructor)
+                dtor_indices.push_back({mod.functions[i].destructor_priority, i});
+        }
+        std::sort(dtor_indices.begin(), dtor_indices.end());
+        uint32_t last_priority = 0;
+        bool has_fini = false;
+        for (auto& [prio, idx] : dtor_indices) {
+            auto& fn = mod.functions[idx];
+            if (!has_fini || prio != last_priority) {
+                if (prio == 65535) {
+                    out_ << "\nsection .fini_array\n";
+                } else {
+                    char pbuf[16];
+                    std::snprintf(pbuf, sizeof(pbuf), "%05u", prio);
+                    out_ << "\nsection .fini_array." << pbuf << "\n";
+                }
+                last_priority = prio;
+                has_fini = true;
+            }
+            std::string sym;
+            if (!fn.link_name.empty()) {
+                sym = std::string(sp) + std::string(fn.link_name);
+            } else if (!mod.module_name.empty() && fn.name != "main") {
+                sym = std::string(sp) + std::string(mod.module_name) + "__" + std::string(fn.name);
+            } else {
+                sym = std::string(sp) + std::string(fn.name);
+            }
+            out_ << "    dq " << sym << "\n";
+        }
+    }
+}
+
+void NASMEmitter::emitEhFrame(const MachModule& mod) {
+    auto sp = symPrefix();
+
+    // Emit .eh_frame section with DWARF CIE and FDE entries
+    // This allows debuggers and unwinders to reconstruct call stacks.
+    out_ << "\n; --- .eh_frame (stack unwind info) ---\n";
+    if (format_ == OutputFormat::Elf64) {
+        out_ << "section .eh_frame alloc noexec nowrite progbits align=8\n";
+    } else {
+        out_ << "section __TEXT,__eh_frame\n";
+    }
+
+    // CIE (Common Information Entry) — one per module
+    // DWARF4 x86-64 CIE:
+    //   length (4B) | CIE_id=0 (4B) | version=1 (1B) | augmentation
+    //   code_align=1 (ULEB128) | data_align=-8 (SLEB128) | ret_addr_reg=16 (ULEB128)
+    //   [augmentation data] | initial instructions
+    out_ << "__cie_start:\n";
+    out_ << "    dd __cie_end - __cie_start - 4  ; CIE length\n";
+    out_ << "    dd 0                             ; CIE_id (0 = this is a CIE)\n";
+    out_ << "    db 1                             ; version\n";
+    if (format_ == OutputFormat::Elf64) {
+        // ELF: "zR" augmentation = augmentation data length (z) + FDE encoding (R)
+        out_ << "    db 'z','R',0                    ; augmentation \"zR\"\n";
+    } else {
+        out_ << "    db 0                             ; augmentation (empty string)\n";
+    }
+    out_ << "    db 1                             ; code alignment factor (ULEB128)\n";
+    out_ << "    db 0x78                          ; data alignment factor -8 (SLEB128)\n";
+    out_ << "    db 16                            ; return address register (ULEB128)\n";
+    if (format_ == OutputFormat::Elf64) {
+        // Augmentation data: 1 byte length + FDE pointer encoding
+        // DW_EH_PE_pcrel(0x10) | DW_EH_PE_sdata8(0x0c) = 0x1c
+        out_ << "    db 1                             ; augmentation data length\n";
+        out_ << "    db 0x1c                          ; FDE encoding: pcrel|sdata8\n";
+    }
+    // Initial instructions: CFA = RSP+8 (after call pushes return addr)
+    out_ << "    db 0x0c, 7, 8                    ; DW_CFA_def_cfa: r7 (rsp) ofs 8\n";
+    // RA at CFA-8 (offset 1 * data_align = -8)
+    out_ << "    db 0x80 + 16, 1                  ; DW_CFA_offset: r16 (ra) at cfa-8\n";
+    out_ << "    align 8, db 0                    ; pad to 8-byte boundary\n";
+    out_ << "__cie_end:\n";
+
+    // FDE (Frame Description Entry) — one per function
+    for (uint32_t i = 0; i < mod.fn_count; ++i) {
+        auto& fn = mod.functions[i];
+        if (fn.is_naked) continue; // naked functions have no frame
+
+        std::string sym;
+        if (!fn.link_name.empty()) {
+            sym = std::string(sp) + std::string(fn.link_name);
+        } else if (!mod.module_name.empty() && fn.name != "main") {
+            sym = std::string(sp) + std::string(mod.module_name) + "__" + std::string(fn.name);
+        } else {
+            sym = std::string(sp) + std::string(fn.name);
+        }
+
+        std::string fde_start = "__fde_" + std::to_string(i) + "_start";
+        std::string fde_end = "__fde_" + std::to_string(i) + "_end";
+
+        out_ << fde_start << ":\n";
+        out_ << "    dd " << fde_end << " - " << fde_start << " - 4  ; FDE length\n";
+        out_ << "    dd " << fde_start << " - __cie_start             ; CIE pointer\n";
+        if (format_ == OutputFormat::Elf64) {
+            // PC-relative initial location (pcrel|sdata8 encoding)
+            out_ << "    dq " << sym << " - $                             ; initial location (pcrel)\n";
+            out_ << "    dq " << sym << "__end - " << sym << "            ; address range\n";
+            // Augmentation data: 0 bytes (no LSDA)
+            out_ << "    db 0                                             ; augmentation data length\n";
+        } else {
+            // Mach-O: absolute pointers
+            out_ << "    dq " << sym << "                                 ; initial location\n";
+            out_ << "    dq " << sym << "__end - " << sym << "            ; address range\n";
+        }
+
+        // CFA = RSP+8 initially (after call instruction)
+        // After push rbp: CFA = RSP+16, rbp at CFA-16
+        // After mov rbp,rsp: CFA = RBP+16
+        if (!fn.is_interrupt) {
+            // push rbp — CFA now RSP+16, rbp saved at CFA-16
+            out_ << "    db 0x41                           ; DW_CFA_advance_loc: 1\n";
+            out_ << "    db 0x0e, 16                       ; DW_CFA_def_cfa_offset: 16\n";
+            out_ << "    db 0x80 + 6, 2                    ; DW_CFA_offset: r6 (rbp) at cfa-16\n";
+            // mov rbp, rsp — CFA now RBP+16
+            out_ << "    db 0x41                           ; DW_CFA_advance_loc: 1\n";
+            out_ << "    db 0x0d, 6                        ; DW_CFA_def_cfa_register: r6 (rbp)\n";
+        }
+
+        out_ << "    align 8, db 0                    ; pad to 8-byte boundary\n";
+        out_ << fde_end << ":\n";
+    }
+
+    // Emit function end labels (needed by FDE address range)
+    out_ << "\nsection .text\n";
+    for (uint32_t i = 0; i < mod.fn_count; ++i) {
+        auto& fn = mod.functions[i];
+        if (fn.is_naked) continue;
+        std::string sym;
+        if (!fn.link_name.empty()) {
+            sym = std::string(sp) + std::string(fn.link_name);
+        } else if (!mod.module_name.empty() && fn.name != "main") {
+            sym = std::string(sp) + std::string(mod.module_name) + "__" + std::string(fn.name);
+        } else {
+            sym = std::string(sp) + std::string(fn.name);
+        }
+        // The end label is emitted after the last ret of each function
+        // We don't re-emit it here; emitFunction should emit fn_name__end
     }
 }
 

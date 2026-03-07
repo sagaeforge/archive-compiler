@@ -539,3 +539,181 @@ fn main() -> i64 { val s = make_big(); s.a }
     EXPECT_TRUE(found_rdi_capture)
         << ">16B return: entry block must capture hidden RDI pointer";
 }
+
+// ============================================================================
+// Jump table (Switch)
+// ============================================================================
+
+TEST_F(InstructionSelectorTest, SwitchDenseMatchGeneratesJmpTable) {
+    const char* src = R"(
+fn classify(x: i64) -> i64 {
+    match x {
+        0 => 10,
+        1 => 20,
+        2 => 30,
+        3 => 40,
+        _ => 99,
+    }
+}
+
+fn main() -> i64 { classify(2) }
+)";
+
+    auto* mod = selectAll(src);
+    ASSERT_NE(mod, nullptr);
+
+    // Find the classify function
+    const MachFunction* classify_fn = nullptr;
+    for (uint32_t i = 0; i < mod->fn_count; ++i) {
+        if (mod->functions[i].name == "classify") {
+            classify_fn = &mod->functions[i];
+            break;
+        }
+    }
+    ASSERT_NE(classify_fn, nullptr) << "classify function not found";
+
+    // Should have jump tables
+    EXPECT_GT(classify_fn->jump_table_count, 0u)
+        << "Dense match should generate jump table";
+
+    // Verify JmpTable instruction exists in some block
+    bool found_jmptable = false;
+    bool found_jae = false;
+    for (uint32_t b = 0; b < classify_fn->block_count; ++b) {
+        for (uint32_t i = 0; i < classify_fn->blocks[b].instr_count; ++i) {
+            const auto& mi = classify_fn->blocks[b].instrs[i];
+            if (mi.op == X86Op::JmpTable) {
+                found_jmptable = true;
+                EXPECT_EQ(mi.operand_count, 2u) << "JmpTable needs base and index operands";
+            }
+            if (mi.op == X86Op::Jcc && mi.cc == CondCode::AE) {
+                found_jae = true;
+            }
+        }
+    }
+    EXPECT_TRUE(found_jmptable) << "Should emit JmpTable instruction";
+    EXPECT_TRUE(found_jae) << "Should emit bounds check (JAE) before jump table";
+
+    // Verify jump table has correct entry count (range = 3 - 0 + 1 = 4)
+    ASSERT_GE(classify_fn->jump_table_count, 1u);
+    EXPECT_EQ(classify_fn->jump_tables[0].entry_count, 4u)
+        << "Jump table should have 4 entries for values 0-3";
+}
+
+// ============================================================================
+// Stack-passed arguments (>6 GPR args)
+// ============================================================================
+
+TEST_F(InstructionSelectorTest, SevenArgsUsesPushForStackArg) {
+    const char* src = R"(
+fn sum7(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64) -> i64 {
+    a + b + c + d + e + f + g
+}
+
+fn main() -> i64 { sum7(1, 2, 3, 4, 5, 6, 7) }
+)";
+
+    auto* mod = selectAll(src);
+    ASSERT_NE(mod, nullptr);
+
+    // Find main function (contains the call with 7 args)
+    const MachFunction* main_fn = nullptr;
+    for (uint32_t i = 0; i < mod->fn_count; ++i) {
+        if (mod->functions[i].name == "main") {
+            main_fn = &mod->functions[i];
+            break;
+        }
+    }
+    ASSERT_NE(main_fn, nullptr) << "main function not found";
+
+    // Verify there's a Push instruction (for 7th arg on stack)
+    bool found_push = false;
+    for (uint32_t b = 0; b < main_fn->block_count; ++b) {
+        for (uint32_t i = 0; i < main_fn->blocks[b].instr_count; ++i) {
+            if (main_fn->blocks[b].instrs[i].op == X86Op::Push) {
+                found_push = true;
+                break;
+            }
+        }
+    }
+    EXPECT_TRUE(found_push) << "7th arg should be pushed to stack";
+
+    // Find sum7 function (receives 7 args)
+    const MachFunction* sum7_fn = nullptr;
+    for (uint32_t i = 0; i < mod->fn_count; ++i) {
+        if (mod->functions[i].name == "sum7") {
+            sum7_fn = &mod->functions[i];
+            break;
+        }
+    }
+    ASSERT_NE(sum7_fn, nullptr) << "sum7 function not found";
+
+    // Verify sum7's entry block loads 7th param from stack [rbp+16]
+    // This will be a Mov with a positive stack offset source operand
+    bool found_stack_load = false;
+    for (uint32_t i = 0; i < sum7_fn->blocks[0].instr_count; ++i) {
+        const auto& mi = sum7_fn->blocks[0].instrs[i];
+        if (mi.op == X86Op::Mov && mi.operand_count >= 2 &&
+            mi.inline_ops[1].kind == MachOperand::Kind::Stack &&
+            mi.inline_ops[1].stack_offset > 0) {
+            found_stack_load = true;
+            EXPECT_EQ(mi.inline_ops[1].stack_offset, 16)
+                << "7th arg should be at [rbp+16]";
+            break;
+        }
+    }
+    EXPECT_TRUE(found_stack_load)
+        << "sum7 should load 7th param from stack (positive rbp offset)";
+}
+
+// ---------- Varargs ----------
+
+TEST_F(InstructionSelectorTest, VariadicFnSavesGPRRegsAndEmitsLea) {
+    // A variadic function should:
+    // 1. Save all 6 GPR arg registers to the register save area in the prologue
+    // 2. va_start emits a LEA pointing into the save area
+    const char* src = R"(
+fn vfn(fmt: Ptr<u8>, ...) -> i64 with io {
+    val ap = va_start()
+    val x = va_arg<i64>(ap)
+    x
+}
+fn main() -> i64 { 0 }
+)";
+    auto* mod = selectAll(src);
+    ASSERT_NE(mod, nullptr);
+
+    const MachFunction* vfn = nullptr;
+    for (uint32_t i = 0; i < mod->fn_count; ++i) {
+        if (mod->functions[i].name == "vfn") {
+            vfn = &mod->functions[i];
+            break;
+        }
+    }
+    ASSERT_NE(vfn, nullptr) << "vfn not found";
+
+    // Entry block should contain MovStore instructions saving GPR arg regs
+    uint32_t save_count = 0;
+    bool found_lea = false;
+    bool found_load = false;
+    for (uint32_t i = 0; i < vfn->blocks[0].instr_count; ++i) {
+        const auto& mi = vfn->blocks[0].instrs[i];
+        if (mi.op == X86Op::MovStore && mi.operand_count >= 2 &&
+            mi.inline_ops[0].isStack() &&
+            mi.inline_ops[1].isPhysical()) {
+            save_count++;
+        }
+        if (mi.op == X86Op::Lea) {
+            found_lea = true;
+        }
+        if (mi.op == X86Op::MovLoad) {
+            found_load = true;
+        }
+    }
+    EXPECT_EQ(save_count, 6u)
+        << "Variadic function should save all 6 GPR arg registers";
+    EXPECT_TRUE(found_lea)
+        << "va_start should emit a LEA into the register save area";
+    EXPECT_TRUE(found_load)
+        << "va_arg should emit a MovLoad from the ap pointer";
+}

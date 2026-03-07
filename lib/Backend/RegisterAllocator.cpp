@@ -70,6 +70,8 @@ static bool isSSEOp(X86Op op) {
         case X86Op::Divss: case X86Op::Divsd:
         case X86Op::Ucomisd: case X86Op::Ucomiss:
         case X86Op::Xorps: case X86Op::Xorpd:
+        case X86Op::Cvtsi2sd: case X86Op::Cvtsi2ss:   // int→float: dst is XMM
+        case X86Op::Cvtsd2ss: case X86Op::Cvtss2sd:   // float→float: dst is XMM
             return true;
         default:
             return false;
@@ -131,6 +133,26 @@ static void scanOperandUses(const MachInstr& instr, uint32_t idx,
                 recordPhysUse(intervals, op.phys, idx);
             }
         }
+    } else if (instr.op == X86Op::Cvttsd2si || instr.op == X86Op::Cvttss2si) {
+        // float→int: dst(GPR) already handled by scanOperandDefs, src(XMM)
+        for (uint8_t i = start; i < instr.operand_count; ++i) {
+            const auto& op = instr.operand(i);
+            if (op.isVirtual()) {
+                recordVRegUse(intervals, op.vreg, idx, true);  // source is XMM
+            } else if (op.isPhysical()) {
+                recordPhysUse(intervals, op.phys, idx);
+            }
+        }
+    } else if (instr.op == X86Op::Cvtsi2sd || instr.op == X86Op::Cvtsi2ss) {
+        // int→float: dst(XMM) already handled by scanOperandDefs, src(GPR)
+        for (uint8_t i = start; i < instr.operand_count; ++i) {
+            const auto& op = instr.operand(i);
+            if (op.isVirtual()) {
+                recordVRegUse(intervals, op.vreg, idx, false);  // source is GPR
+            } else if (op.isPhysical()) {
+                recordPhysUse(intervals, op.phys, idx);
+            }
+        }
     } else {
         for (uint8_t i = start; i < instr.operand_count; ++i) {
             const auto& op = instr.operand(i);
@@ -171,6 +193,12 @@ static void scanOperandUses(const MachInstr& instr, uint32_t idx,
     if (instr.op == X86Op::LockCmpxchg) {
         recordPhysUse(intervals, PhysReg::RAX, idx);
     }
+    if (instr.op == X86Op::LockCmpxchg16b) {
+        recordPhysUse(intervals, PhysReg::RAX, idx);
+        recordPhysUse(intervals, PhysReg::RDX, idx);
+        recordPhysUse(intervals, PhysReg::RCX, idx);
+        recordPhysUse(intervals, PhysReg::RBX, idx);
+    }
     // Call clobbers all caller-saved registers (GPR and XMM)
     if (instr.op == X86Op::Call) {
         for (uint32_t i = 0; i < NUM_CALLER_SAVED; ++i) {
@@ -179,6 +207,30 @@ static void scanOperandUses(const MachInstr& instr, uint32_t idx,
         // All XMM registers are caller-saved in System V AMD64
         for (uint32_t i = 0; i < NUM_ALLOCATABLE_XMMS; ++i) {
             recordPhysUse(intervals, ALLOCATABLE_XMMS[i], idx);
+        }
+    }
+    // InlineAsm clobbers — mark clobbered physical registers as used
+    if (instr.op == X86Op::InlineAsm) {
+        for (uint32_t i = 0; i < instr.asm_data.clobber_count; ++i) {
+            auto name = instr.asm_data.clobbers[i];
+            PhysReg pr = PhysReg::NONE;
+            if (name == "rax" || name == "eax") pr = PhysReg::RAX;
+            else if (name == "rbx" || name == "ebx") pr = PhysReg::RBX;
+            else if (name == "rcx" || name == "ecx") pr = PhysReg::RCX;
+            else if (name == "rdx" || name == "edx") pr = PhysReg::RDX;
+            else if (name == "rsi") pr = PhysReg::RSI;
+            else if (name == "rdi") pr = PhysReg::RDI;
+            else if (name == "r8")  pr = PhysReg::R8;
+            else if (name == "r9")  pr = PhysReg::R9;
+            else if (name == "r10") pr = PhysReg::R10;
+            else if (name == "r11") pr = PhysReg::R11;
+            else if (name == "r12") pr = PhysReg::R12;
+            else if (name == "r13") pr = PhysReg::R13;
+            else if (name == "r14") pr = PhysReg::R14;
+            else if (name == "r15") pr = PhysReg::R15;
+            if (pr != PhysReg::NONE) {
+                recordPhysUse(intervals, pr, idx);
+            }
         }
     }
 }

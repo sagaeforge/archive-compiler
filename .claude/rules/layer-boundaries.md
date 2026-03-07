@@ -16,7 +16,7 @@ Dependencies flow strictly downward. Reverse dependencies are blocked by the lay
 | **IDE** | Support, Lexer, Parser, HIR |
 | **Debug** | Support |
 | **Fmt** | Support, Lexer, Parser |
-| **Lint** | Support, Lexer, Parser, HIR |
+| **Pkg** | Support |
 | **Pipeline** | All libs (orchestrator) |
 
 ## File Scope Rules

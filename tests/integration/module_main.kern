@@ -1,8 +1,4 @@
-module app
-import math (add, mul)
-
-fn add(a: i64, b: i64) -> i64 = intrinsic
-fn mul(a: i64, b: i64) -> i64 = intrinsic
+import module_math (add, mul)
 
 fn main() -> i64 {
     add(mul(6, 7), 0)

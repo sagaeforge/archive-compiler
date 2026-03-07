@@ -1,0 +1,10 @@
+struct Point {
+    x: i64,
+    y: i64,
+}
+
+static val ORIGIN: Point = Point { x: 10, y: 32 }
+
+fn main() -> i64 {
+    ORIGIN.x + ORIGIN.y
+}

@@ -39,4 +39,29 @@ public:
     void run(LIRModule& module, CompilationContext& ctx) override;
 };
 
+// Strength reduction: replace expensive operations with cheaper equivalents.
+// - Unsigned div/mod by power-of-2 → shift/and
+// - Mul by power-of-2 → shift
+class StrengthReductionPass : public LIRPass {
+public:
+    std::string_view name() const override { return "strength-reduce"; }
+    void run(LIRModule& module, CompilationContext& ctx) override;
+};
+
+// Loop-invariant code motion: hoist pure computations out of loops
+// when all operands are defined outside the loop body.
+class LICMPass : public LIRPass {
+public:
+    std::string_view name() const override { return "licm"; }
+    void run(LIRModule& module, CompilationContext& ctx) override;
+};
+
+// Global function-level dead code elimination: remove functions that are
+// never called and have no external visibility (not pub/used/interrupt/etc).
+class GlobalDCEPass : public LIRPass {
+public:
+    std::string_view name() const override { return "global-dce"; }
+    void run(LIRModule& module, CompilationContext& ctx) override;
+};
+
 } // namespace kern

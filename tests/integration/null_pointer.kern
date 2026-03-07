@@ -1,0 +1,16 @@
+// Test null pointer literal and pointer comparison
+fn main() -> i64 {
+    val p: Ptr<i64> = null
+    val q: Ptr<i64> = 1000 as Ptr<i64>
+    var result: i64 = 0
+    if p == null {
+        result = result + 20
+    }
+    if q == null {
+        result = result + 100
+    }
+    if q != null {
+        result = result + 22
+    }
+    result
+}

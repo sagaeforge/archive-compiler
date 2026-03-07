@@ -95,7 +95,7 @@ val b: i64 = 200
 // a + b   ← compile error: type mismatch (i32 vs i64)
 ```
 
-Integer literals (like `42`) are always `i64`. Context-based type inference (letting `42` adapt to the expected type) is planned for a future release.
+Integer literals (like `42`) default to `i64`, but context-based type inference lets them adapt to the expected type: `val x: i32 = 42` works without a cast.
 
 ### Control Flow
 
@@ -157,20 +157,19 @@ This design gives kernel developers a clear picture of which functions touch har
 
 ---
 
-## Planned Features
+## Implemented Features
 
-Kern is under active development. Here's what's coming:
+All planned features are now implemented and working.
 
-### Floating Point & Type Inference (M3 — next)
+### Floating Point & Type Inference
 
 ```kern
 val pi: f64 = 3.141592653589793
 val half: f32 = 0.5
+val x: i32 = 42    // Context-based inference — 42 adapts to i32
 ```
 
-Plus context-based type inference, so `val x: i32 = 42` will work without requiring a cast.
-
-### Pipe Operator (M4)
+### Pipe Operator
 
 Data flows left-to-right, with zero runtime cost:
 
@@ -182,13 +181,13 @@ val result: i64 = 10
 
 The pipe `a |> f(b)` is syntactic sugar for `f(a, b)`. No closures, no overhead.
 
-### Pattern Matching (M4)
+### Pattern Matching
 
 Both as expressions and at the function definition level:
 
 ```kern
 // Expression-level
-val label = match status_code {
+val label: String = match status_code {
     200 => "OK"
     404 => "Not Found"
     _   => "Unknown"
@@ -200,17 +199,21 @@ fn fib(1) -> i64 { 1 }
 fn fib(n: i64) -> i64 { fib(n - 1) + fib(n - 2) }
 ```
 
-### Structs, Enums & Pointers (M5)
+### Structs, Enums & Pointers
 
 User-defined types with explicit pointer semantics for kernel work:
 
 ```kern
-val ptr: Ptr<u8> = ...
+struct Point { x: i64, y: i64 }
+enum Color { Red, Green, Blue }
+union Shape { Circle(i64), Square(i64) }
+
+val ptr: Ptr<u8> = &value
 val value: u8 = *ptr             // Explicit dereference
 val name = (*ptr).name           // No auto-deref — always explicit
 ```
 
-### Generics, Lambdas & Modules (M6)
+### Generics, Lambdas & Modules
 
 Higher-order functions, monomorphized generics, and a module system:
 
@@ -220,6 +223,23 @@ fn identity<T>(x: T) -> T { x }
 val double = { x: i64 => x * 2 }
 
 module Kernel.Serial
+import Math.{add, subtract}
+```
+
+### OS-Level Features
+
+Kernel development primitives:
+
+```kern
+// Inline assembly
+fn outb(port: u16, val: u8) -> Unit = intrinsic
+
+// Atomics and fences
+atomic_cas(ptr, expected, desired)
+mfence()
+
+// Effect system
+fn init_serial(port: u16) -> Unit with io { ... }
 ```
 
 ---
@@ -264,24 +284,32 @@ The compiler knows `baudToDivisor` is pure and can run anywhere, while `initSeri
 | Kernel-ready | Yes (native x86-64) | Yes | Yes | No |
 | Annotations needed | None | N/A | Extensive (`#[derive]`, lifetimes) | Extensive (type classes) |
 | Mutable state | Allowed with warning | Default | Opt-in (`mut`) | Discouraged (`IORef`) |
-| Pattern matching | Planned (M4) | No | Yes | Yes |
+| Pattern matching | Yes (expression + function-level) | No | Yes | Yes |
 | Zero-cost abstractions | Yes | Manual | Yes | Partial |
+| Generics | Monomorphization | N/A | Monomorphization | Type erasure |
+| Effect system | Automatic inference | N/A | N/A | Manual (monads) |
 | Learning curve | Low (Kotlin-like syntax) | Low | High | High |
 
 ---
 
 ## Current Status
 
-| Milestone | Status | What it delivers |
-|-----------|--------|-----------------|
-| **M1** | Done | Basic compiler: functions, arithmetic, recursion, native binary output |
-| **M2** | Done | Strong type system (11 types), purity inference, typed IR |
-| **M3** | Next | Floating-point types (f32/f64), context-based type inference |
-| **M4** | Planned | Pattern matching, pipe operator, intrinsics, tail-call optimization |
-| **M5** | Planned | Structs, enums, pointers, string literals |
-| **M6** | Planned | Lambdas, generics, monads, module system |
+All milestones and language features are complete.
 
-The compiler currently produces native x86-64 macOS binaries. All 255 unit tests and 44 end-to-end integration tests pass.
+| Area | Status | What it delivers |
+|------|--------|-----------------|
+| **Core** | Done | Functions, arithmetic, recursion, native x86-64 binary output |
+| **Type System** | Done | 15+ types (i8-i64, u8-u64, f32/f64, bool, Unit, String), strict typing, context-based inference |
+| **Purity** | Done | Automatic purity inference, effect system (io/mut/mem/atomic) |
+| **Control Flow** | Done | Pattern matching (expression + function-level), pipe operator, TCO, loops |
+| **Data Types** | Done | Structs, enums, unions, pointers (Ptr<T>), generics (monomorphization), const generics |
+| **Functions** | Done | Lambdas/closures (with captures), higher-order functions, fn pointers, intrinsics |
+| **OS Features** | Done | Inline asm, atomics, fences, per-CPU (GS), volatile, naked/interrupt, packed structs |
+| **Modules** | Done | Multi-file compilation, import/export |
+| **Tooling** | Done | IDE (completion, definition, hover, references), LSP, formatter |
+| **Backend** | Done | 4-level IR pipeline (AST→HIR→LIR→MachIR), LIR optimizations, multi-arch interface |
+
+The compiler produces native x86-64 macOS binaries via the v2 pipeline.
 
 ---
 

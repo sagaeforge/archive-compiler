@@ -1,0 +1,22 @@
+fn classify(x: i64) -> i64 =
+    match x {
+        0 => 10,
+        1 => 11,
+        2 => 12,
+        3 => 13,
+        4 => 14,
+        _ => 99,
+    }
+
+fn main() -> i64 {
+    val a = classify(0)
+    val b = classify(2)
+    val c = classify(4)
+    val d = classify(5)
+    // a=10, b=12, c=14, d=99 => 10+12+14+99 = 135
+    // We want exit code 42, so compute differently:
+    // classify(2) + classify(1) + classify(3) + classify(99)
+    // = 12 + 11 + 13 + 99 = 135 ... still not 42
+    // Let's just do: classify(2) - classify(0) + 40 = 12 - 10 + 40 = 42
+    classify(2) - classify(0) + 40
+}

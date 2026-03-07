@@ -34,6 +34,10 @@ class InstructionSelector {
     std::unordered_map<std::string_view, std::string_view> link_names_;  // fn name → custom link name
     uint32_t next_temp_label_ = 0;  // for generating unique CAS loop labels
     SourceLocation current_loc_;    // source location for emitted instructions
+    std::vector<MachFunction::JumpTable> jump_tables_;  // collected during selectSwitch
+    bool is_variadic_fn_ = false;        // current function is variadic
+    uint32_t va_save_area_size_ = 0;     // bytes reserved for register save area (6*8=48 max)
+    uint32_t va_fixed_param_count_ = 0;  // number of fixed params (for va_start offset)
 
     // VReg mapping: LIR VReg → MachIR VReg (1:1 for most, but some ops create new vregs)
     // We keep the same VReg numbering from LIR
@@ -110,6 +114,7 @@ private:
     void selectAtomicLoad(const LIRInstr& instr);
     void selectAtomicStore(const LIRInstr& instr);
     void selectAtomicCas(const LIRInstr& instr);
+    void selectAtomicCas128(const LIRInstr& instr);
     void selectAtomicFetchAdd(const LIRInstr& instr);
     void selectAtomicFetchSub(const LIRInstr& instr);
     void selectAtomicRMW(const LIRInstr& instr, X86Op alu_op);
@@ -124,6 +129,12 @@ private:
     void selectBswap(const LIRInstr& instr);
     void selectPortIn(const LIRInstr& instr);
     void selectPortOut(const LIRInstr& instr);
+    void selectSwitch(const LIRInstr& instr, const LIRFunction& fn);
+    void selectVaStart(const LIRInstr& instr, const LIRFunction& fn);
+    void selectVaArg(const LIRInstr& instr);
+    void selectAlloca(const LIRInstr& instr);
+    void selectTlsLoad(const LIRInstr& instr);
+    void selectTlsStore(const LIRInstr& instr);
 
     // Division: special handling for idiv/div
     void selectDiv(const LIRInstr& instr, bool is_mod);

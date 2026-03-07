@@ -724,7 +724,8 @@ static bool stmtUsesAtomicIntrinsic(const HIRStmt* stmt);
 
 static bool isAtomicIntrinsicName(std::string_view name) {
     return name == "atomic_load" || name == "atomic_store" ||
-           name == "atomic_cas" || name == "atomic_fetch_add" ||
+           name == "atomic_cas" || name == "atomic_cas128" ||
+           name == "atomic_fetch_add" ||
            name == "atomic_fetch_sub" || name == "atomic_fetch_and" ||
            name == "atomic_fetch_or" || name == "atomic_fetch_xor" ||
            name == "atomic_xchg" ||
@@ -2614,6 +2615,49 @@ void UnusedBindingPass::run(HIRModule& module, CompilationContext& ctx) {
             if (counts.find(b.name) == counts.end() || counts[b.name] == 0) {
                 ctx.diag.warning(b.loc,
                     std::string("unused binding '") + std::string(b.name) + "'");
+            }
+        }
+    }
+}
+
+// ============================================================================
+// MustUseCheckPass — warn when @must_use function return values are discarded
+// ============================================================================
+
+void MustUseCheckPass::run(HIRModule& module, CompilationContext& ctx) {
+    // Collect which functions are @must_use
+    std::unordered_set<std::string_view> must_use_fns;
+    for (uint32_t i = 0; i < module.fn_count; ++i) {
+        if (module.functions[i]->is_must_use) {
+            must_use_fns.insert(module.functions[i]->name);
+        }
+    }
+    if (must_use_fns.empty()) return;
+
+    // Walk all function bodies looking for ExprStmt with Call to @must_use fn
+    auto checkExpr = [&](HIRExpr* expr) {
+        if (!expr) return;
+        if (expr->kind == HIRExpr::Kind::Call) {
+            auto* call = static_cast<HIRCallExpr*>(expr);
+            if (must_use_fns.count(call->callee)) {
+                ctx.diag.warning(call->loc,
+                    std::string("return value of @must_use function '") +
+                    std::string(call->callee) + "' is discarded");
+            }
+        }
+    };
+
+    // Walk statements in all functions
+    for (uint32_t i = 0; i < module.fn_count; ++i) {
+        auto* fn = module.functions[i];
+        if (!fn->body) continue;
+        if (fn->body->kind != HIRExpr::Kind::Block) continue;
+        auto* block = static_cast<HIRBlockExpr*>(fn->body);
+        for (uint32_t s = 0; s < block->stmt_count; ++s) {
+            auto* stmt = block->stmts[s];
+            if (stmt->kind == HIRStmt::Kind::ExprStmt) {
+                auto* es = static_cast<HIRExprStmt*>(stmt);
+                checkExpr(es->expr);
             }
         }
     }

@@ -22,6 +22,10 @@ public:
     void note(SourceLocation loc, std::string message);
 
     bool hasErrors() const { return has_errors_; }
+    bool hasWarnings() const {
+        for (auto& d : diags_) if (d.level == DiagLevel::Warning) return true;
+        return false;
+    }
     const std::vector<Diagnostic>& diagnostics() const { return diags_; }
     void setSource(std::string_view source) { source_ = source; }
     void printAll(std::ostream& out) const;

@@ -12,6 +12,7 @@
 #include "kern/backend/X86Backend.h"
 #include "kern/backend/Emitter.h"
 #include "kern/backend/MachIRDump.h"
+#include "kern/support/BuildCache.h"
 #include "kern/support/ModuleResolver.h"
 
 #include <filesystem>
@@ -22,6 +23,21 @@
 #include <unistd.h>
 
 namespace kern {
+
+// Run a shell command, capture output, filter lines matching `filter_substr`,
+// print remaining output to `err`, and return the process exit status.
+static int runFiltered(const std::string& cmd, std::ostream& err,
+                       const char* filter_substr) {
+    FILE* pipe = popen((cmd + " 2>&1").c_str(), "r");
+    if (!pipe) return -1;
+    char buf[1024];
+    while (fgets(buf, sizeof(buf), pipe)) {
+        if (filter_substr && strstr(buf, filter_substr)) continue;
+        err << buf;
+    }
+    int status = pclose(pipe);
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+}
 
 // Resolve @include("path") — search relative to base_dir, then include_paths
 static std::string resolveInclude(const std::string& path,
@@ -196,6 +212,7 @@ HIRModule* CompilerPipeline::buildHIR(Module* ast) {
     pm.add<BorrowEscapePass>();
     pm.add<MutBorrowAliasPass>();
     pm.add<UnusedBindingPass>();
+    pm.add<MustUseCheckPass>();
     pm.run(*hir, ctx_);
 
     return hir;
@@ -209,11 +226,15 @@ LIRModule* CompilerPipeline::buildLIR(HIRModule* hir, const CompileOptions& opts
 
 void CompilerPipeline::optimizeLIR(LIRModule* lir) {
     LIRPassManager pm;
+    pm.add<InliningPass>();    // inline small/@inline functions before optimization
     pm.add<ConstFoldPass>();
     pm.add<ConstPropPass>();
+    pm.add<StrengthReductionPass>(); // div/mod/mul by power-of-2 → shift/and
     pm.add<ConstFoldPass>();   // second pass catches propagated constants
     pm.add<CSEPass>();         // eliminate redundant computations
+    pm.add<LICMPass>();        // hoist loop-invariant code
     pm.add<DeadCodeElimPass>();
+    pm.add<GlobalDCEPass>();   // remove unreachable functions
     pm.run(*lir, ctx_);
 }
 
@@ -229,6 +250,8 @@ void CompilerPipeline::emitASM(MachModule* mach, LIRModule* lir,
     NASMEmitter emitter(asm_out, format_);
     emitter.setStackProtector(stack_protector_);
     emitter.setEmitSourceLocs(debug_locs_);
+    emitter.setEmitDebugInfo(debug_info_);
+    emitter.setEmitUnwindInfo(debug_info_);
     emitter.emitModule(*mach, *lir, freestanding);
 }
 
@@ -244,6 +267,7 @@ int CompilerPipeline::assemble(const std::string& asm_file,
                                 const std::string& obj_file,
                                 std::ostream& err) {
     std::string cmd = "nasm -f " + std::string(nasmFormat(format_)) +
+                      (debug_info_ ? " -g -F dwarf" : "") +
                       " " + asm_file + " -o " + obj_file + " 2>&1";
     int ret = std::system(cmd.c_str());
     if (ret != 0) {
@@ -270,8 +294,10 @@ int CompilerPipeline::link(const std::string& obj_file,
             cmd += " -T " + opts.linker_script;
         }
         appendLibFlags(cmd, opts);
-        cmd += " -lc 2>&1";
-        int ret = std::system(cmd.c_str());
+        if (!opts.freestanding) {
+            cmd += " -lc";
+        }
+        int ret = runFiltered(cmd, err, nullptr);
         if (ret != 0) {
             err << "error: linker failed (elf64)\n";
             err << "  command: " << cmd << "\n";
@@ -295,18 +321,31 @@ int CompilerPipeline::link(const std::string& obj_file,
         }
     }
 
-    std::string cmd = "ld " + obj_file + " -o " + output_file +
-                      " -e _start -platform_version macos 14.0.0 14.0.0 -arch x86_64";
-    if (!sdk_lib_path.empty()) {
-        cmd += " -L" + sdk_lib_path;
+    std::string cmd = "ld " + obj_file + " -o " + output_file;
+    if (opts.relocatable) {
+        cmd += " -r -arch x86_64";
+    } else {
+        if (opts.shared) {
+            cmd += " -dylib -arch x86_64";
+        } else if (opts.pie) {
+            cmd += " -pie -e _start -platform_version macos 14.0.0 14.0.0 -arch x86_64";
+        } else {
+            cmd += " -e _start -platform_version macos 14.0.0 14.0.0 -arch x86_64";
+        }
+        if (!sdk_lib_path.empty()) {
+            cmd += " -L" + sdk_lib_path;
+        }
+        if (!opts.linker_script.empty()) {
+            cmd += " -T " + opts.linker_script;
+        }
+        appendLibFlags(cmd, opts);
+        if (!opts.freestanding) {
+            cmd += " -lSystem";
+        }
     }
-    if (!opts.linker_script.empty()) {
-        cmd += " -T " + opts.linker_script;
-    }
-    appendLibFlags(cmd, opts);
-    cmd += " -lSystem 2>&1";
-
-    int ret = std::system(cmd.c_str());
+    const char* filter = (format_ == OutputFormat::Macho64)
+                             ? "no platform load command found" : nullptr;
+    int ret = runFiltered(cmd, err, filter);
     if (ret != 0) {
         err << "error: linker failed\n";
         err << "  command: " << cmd << "\n";
@@ -323,14 +362,18 @@ int CompilerPipeline::linkFreestanding(const std::string& obj_file,
                       " -e " + entry;
     if (format_ == OutputFormat::Macho64) {
         cmd += " -platform_version macos 14.0.0 14.0.0 -arch x86_64";
+    } else {
+        cmd += " -nostdlib -nostartfiles";
     }
     if (!opts.linker_script.empty()) {
         cmd += " -T " + opts.linker_script;
     }
     appendLibFlags(cmd, opts);
-    cmd += " -static 2>&1";
+    cmd += " -static";
 
-    int ret = std::system(cmd.c_str());
+    const char* filter = (format_ == OutputFormat::Macho64)
+                             ? "no platform load command found" : nullptr;
+    int ret = runFiltered(cmd, err, filter);
     if (ret != 0) {
         err << "error: linker failed (freestanding)\n";
         err << "  command: " << cmd << "\n";
@@ -343,6 +386,7 @@ int CompilerPipeline::run(const std::string& source, const CompileOptions& opts,
     format_ = opts.format;
     stack_protector_ = opts.stack_protector;
     debug_locs_ = opts.debug_locs;
+    debug_info_ = opts.debug_info;
 
     // Preprocess @include directives
     std::string base_dir = std::filesystem::path(opts.input_file).parent_path().string();
@@ -431,6 +475,13 @@ int CompilerPipeline::run(const std::string& source, const CompileOptions& opts,
     // --- MachIR ---
     MachModule* mach = buildMachIR(lir);
 
+    // Apply global --no-red-zone flag to all functions
+    if (opts.no_red_zone) {
+        for (uint32_t i = 0; i < mach->fn_count; ++i) {
+            mach->functions[i].is_no_red_zone = true;
+        }
+    }
+
     if (opts.dump_machir) {
         dumpMachIR(mach, lir, ctx_.types, out);
         if (!opts.asm_only) {
@@ -506,7 +557,9 @@ int CompilerPipeline::linkMultiple(const std::vector<std::string>& obj_files,
         cmd += " -o " + output_file + " -e _start";
         if (!opts.linker_script.empty()) cmd += " -T " + opts.linker_script;
         appendLibFlags(cmd, opts);
-        cmd += " -lc 2>&1";
+        if (!opts.freestanding) {
+            cmd += " -lc";
+        }
     } else {
         std::string sdk_lib_path;
         {
@@ -522,15 +575,29 @@ int CompilerPipeline::linkMultiple(const std::vector<std::string>& obj_files,
                 pclose(pipe);
             }
         }
-        cmd += " -o " + output_file +
-               " -e _start -platform_version macos 14.0.0 14.0.0 -arch x86_64";
-        if (!sdk_lib_path.empty()) cmd += " -L" + sdk_lib_path;
-        if (!opts.linker_script.empty()) cmd += " -T " + opts.linker_script;
-        appendLibFlags(cmd, opts);
-        cmd += " -lSystem 2>&1";
+        cmd += " -o " + output_file;
+        if (opts.relocatable) {
+            cmd += " -r -arch x86_64";
+        } else {
+            if (opts.shared) {
+                cmd += " -dylib -arch x86_64";
+            } else if (opts.pie) {
+                cmd += " -pie -e _start -platform_version macos 14.0.0 14.0.0 -arch x86_64";
+            } else {
+                cmd += " -e _start -platform_version macos 14.0.0 14.0.0 -arch x86_64";
+            }
+            if (!sdk_lib_path.empty()) cmd += " -L" + sdk_lib_path;
+            if (!opts.linker_script.empty()) cmd += " -T " + opts.linker_script;
+            appendLibFlags(cmd, opts);
+            if (!opts.freestanding) {
+                cmd += " -lSystem";
+            }
+        }
     }
 
-    int ret = std::system(cmd.c_str());
+    const char* filter = (format_ == OutputFormat::Macho64)
+                             ? "no platform load command found" : nullptr;
+    int ret = runFiltered(cmd, err, filter);
     if (ret != 0) {
         err << "error: linker failed\n";
         err << "  command: " << cmd << "\n";
@@ -544,6 +611,7 @@ int CompilerPipeline::compileToObject(const std::string& source,
     format_ = opts.format;
     stack_protector_ = opts.stack_protector;
     debug_locs_ = opts.debug_locs;
+    debug_info_ = opts.debug_info;
 
     // Preprocess @include directives
     std::string base_dir = std::filesystem::path(opts.input_file).parent_path().string();
@@ -619,6 +687,44 @@ int CompilerPipeline::compileToObject(const std::string& source,
             if (dep_ast->enums[i]->is_pub) enames.push_back(dep_ast->enums[i]->name);
         for (uint32_t i = 0; i < dep_ast->union_count; ++i)
             if (dep_ast->unions[i]->is_pub) unames.push_back(dep_ast->unions[i]->name);
+
+        // Propagate pub import re-exports
+        for (uint32_t i = 0; i < dep_ast->import_count; ++i) {
+            auto* imp = dep_ast->imports[i];
+            if (!imp->is_pub) continue;
+            std::string src_mod(imp->module_path);
+            auto sn_it = mod_struct_names.find(src_mod);
+            if (sn_it != mod_struct_names.end()) {
+                if (imp->name_count == 0) {
+                    for (auto n : sn_it->second) snames.push_back(n);
+                } else {
+                    for (uint32_t j = 0; j < imp->name_count; ++j)
+                        for (auto n : sn_it->second)
+                            if (n == imp->names[j]) { snames.push_back(n); break; }
+                }
+            }
+            auto en_it = mod_enum_names.find(src_mod);
+            if (en_it != mod_enum_names.end()) {
+                if (imp->name_count == 0) {
+                    for (auto n : en_it->second) enames.push_back(n);
+                } else {
+                    for (uint32_t j = 0; j < imp->name_count; ++j)
+                        for (auto n : en_it->second)
+                            if (n == imp->names[j]) { enames.push_back(n); break; }
+                }
+            }
+            auto un_it = mod_union_names.find(src_mod);
+            if (un_it != mod_union_names.end()) {
+                if (imp->name_count == 0) {
+                    for (auto n : un_it->second) unames.push_back(n);
+                } else {
+                    for (uint32_t j = 0; j < imp->name_count; ++j)
+                        for (auto n : un_it->second)
+                            if (n == imp->names[j]) { unames.push_back(n); break; }
+                }
+            }
+        }
+
         if (!snames.empty()) mod_struct_names[mod_path] = std::move(snames);
         if (!enames.empty()) mod_enum_names[mod_path] = std::move(enames);
         if (!unames.empty()) mod_union_names[mod_path] = std::move(unames);
@@ -667,6 +773,17 @@ int CompilerPipeline::compileToObject(const std::string& source,
     for (const auto& [mod_path, dep_ast] : dep_asts) {
         auto dep_mod_name = dep_ast->module_name;
         builder.registerExports(dep_ast, dep_mod_name);
+
+        // Process pub import re-exports
+        for (uint32_t pi = 0; pi < dep_ast->import_count; ++pi) {
+            auto* imp = dep_ast->imports[pi];
+            if (!imp->is_pub) continue;
+            std::string src_mod(imp->module_path);
+            auto src_it = dep_asts.find(src_mod);
+            if (src_it != dep_asts.end() && src_it->second) {
+                builder.registerExports(src_it->second, dep_mod_name);
+            }
+        }
     }
     HIRModule* hir = builder.build(ast);
     if (!hir || ctx_.diag.hasErrors()) { ctx_.diag.printAll(err); return 1; }
@@ -687,6 +804,7 @@ int CompilerPipeline::compileToObject(const std::string& source,
     pm.add<BorrowEscapePass>();
     pm.add<MutBorrowAliasPass>();
     pm.add<UnusedBindingPass>();
+    pm.add<MustUseCheckPass>();
     pm.run(*hir, ctx_);
     if (ctx_.diag.hasErrors()) { ctx_.diag.printAll(err); return 1; }
 
@@ -696,6 +814,10 @@ int CompilerPipeline::compileToObject(const std::string& source,
 
     // MachIR
     MachModule* mach = buildMachIR(lir);
+    if (opts.no_red_zone) {
+        for (uint32_t i = 0; i < mach->fn_count; ++i)
+            mach->functions[i].is_no_red_zone = true;
+    }
 
     // Determine output path for the .o file
     std::string obj_file = opts.output_file;
@@ -718,6 +840,8 @@ int CompilerPipeline::compileToObject(const std::string& source,
         NASMEmitter emitter(asm_out, format_);
         emitter.setStackProtector(stack_protector_);
         emitter.setEmitSourceLocs(debug_locs_);
+        emitter.setEmitDebugInfo(debug_info_);
+        emitter.setEmitUnwindInfo(debug_info_);
         emitter.emitModule(*mach, *lir, true);
     }
 
@@ -790,18 +914,27 @@ int CompilerPipeline::runMultiFile(const CompileOptions& opts,
                                     std::ostream& /*out*/, std::ostream& err) {
     std::vector<std::string> obj_files;
     std::vector<std::string> asm_files;
+    std::vector<bool> obj_from_cache; // track which .o came from cache (don't delete)
 
     format_ = opts.format;
     stack_protector_ = opts.stack_protector;
     debug_locs_ = opts.debug_locs;
-    for (const auto& input_file : opts.input_files) {
-        // Fresh context for each file
-        CompilationContext file_ctx;
-        CompilerPipeline file_pipeline(file_ctx);
-        file_pipeline.format_ = opts.format;
-        file_pipeline.stack_protector_ = opts.stack_protector;
-        file_pipeline.debug_locs_ = opts.debug_locs;
+    debug_info_ = opts.debug_info;
 
+    // Build a flags string for cache keying (compiler options that affect output)
+    std::string flags_key;
+    flags_key += "fmt=" + std::to_string(static_cast<int>(opts.format));
+    flags_key += ",tgt=" + std::to_string(static_cast<int>(opts.target));
+    if (opts.freestanding) flags_key += ",freestanding";
+    if (opts.stack_protector) flags_key += ",stack_protector";
+    if (opts.bounds_check) flags_key += ",bounds_check";
+    if (opts.debug_locs) flags_key += ",debug_locs";
+
+    BuildCache cache(opts.cache_dir);
+    if (opts.incremental) cache.ensureCacheDir();
+
+    for (const auto& input_file : opts.input_files) {
+        // Read source first (needed for cache key)
         std::ifstream ifs(input_file);
         if (!ifs) {
             err << "error: cannot open file '" << input_file << "'\n";
@@ -818,6 +951,26 @@ int CompilerPipeline::runMultiFile(const CompileOptions& opts,
         source = preprocessIncludes(source, base_dir, opts.include_paths, err, inc_ok);
         if (!inc_ok) return 1;
 
+        // Check cache before compiling
+        if (opts.incremental) {
+            std::string key = cache.cacheKey(source, flags_key);
+            std::string cached = cache.lookup(key);
+            if (!cached.empty()) {
+                obj_files.push_back(cached);
+                asm_files.push_back(""); // no asm to clean
+                obj_from_cache.push_back(true);
+                continue;
+            }
+        }
+
+        // Cache miss — compile
+        CompilationContext file_ctx;
+        CompilerPipeline file_pipeline(file_ctx);
+        file_pipeline.format_ = opts.format;
+        file_pipeline.stack_protector_ = opts.stack_protector;
+        file_pipeline.debug_locs_ = opts.debug_locs;
+        file_pipeline.debug_info_ = opts.debug_info;
+
         file_ctx.diag.setSource(source);
 
         Module* ast = file_pipeline.parse(source, input_file, opts);
@@ -829,6 +982,10 @@ int CompilerPipeline::runMultiFile(const CompileOptions& opts,
         LIRModule* lir = file_pipeline.buildLIR(hir, opts);
         file_pipeline.optimizeLIR(lir);
         MachModule* mach = file_pipeline.buildMachIR(lir);
+        if (opts.no_red_zone) {
+            for (uint32_t i = 0; i < mach->fn_count; ++i)
+                mach->functions[i].is_no_red_zone = true;
+        }
 
         std::string asm_file = "/tmp/kern_" + std::to_string(getpid()) + "_" +
                                std::to_string(obj_files.size()) + ".asm";
@@ -844,15 +1001,32 @@ int CompilerPipeline::runMultiFile(const CompileOptions& opts,
         }
 
         if (file_pipeline.assemble(asm_file, obj_file, err) != 0) return 1;
+
+        // Store in cache
+        if (opts.incremental) {
+            std::string key = cache.cacheKey(source, flags_key);
+            cache.store(key, obj_file);
+        }
+
         obj_files.push_back(obj_file);
         asm_files.push_back(asm_file);
+        obj_from_cache.push_back(false);
+    }
+
+    if (opts.incremental && (cache.hits() > 0 || cache.misses() > 0)) {
+        err << "incremental: " << cache.hits() << " cached, "
+            << cache.misses() << " recompiled\n";
     }
 
     int ret = linkMultiple(obj_files, opts.output_file, err, opts);
 
-    // Clean up temp files
-    for (const auto& f : asm_files) std::remove(f.c_str());
-    for (const auto& f : obj_files) std::remove(f.c_str());
+    // Clean up temp files (but not cached .o files)
+    for (size_t i = 0; i < asm_files.size(); ++i) {
+        if (!asm_files[i].empty()) std::remove(asm_files[i].c_str());
+        if (i < obj_from_cache.size() && !obj_from_cache[i]) {
+            std::remove(obj_files[i].c_str());
+        }
+    }
 
     return ret;
 }
@@ -862,6 +1036,7 @@ int CompilerPipeline::runModular(const CompileOptions& opts,
     format_ = opts.format;
     stack_protector_ = opts.stack_protector;
     debug_locs_ = opts.debug_locs;
+    debug_info_ = opts.debug_info;
     namespace fs = std::filesystem;
 
     // Phase 0: Build dependency graph
@@ -977,6 +1152,54 @@ int CompilerPipeline::runModular(const CompileOptions& opts,
                 if (mi.ast->unions[i]->is_pub)
                     unames.push_back(mi.ast->unions[i]->name);
             }
+            // Propagate pub import re-exports: if this module has `pub import X (Foo)`,
+            // add Foo to this module's exported type names so downstream modules see it.
+            for (uint32_t i = 0; i < mi.ast->import_count; ++i) {
+                auto* imp = mi.ast->imports[i];
+                if (!imp->is_pub) continue;
+                std::string src_mod(imp->module_path);
+                // If no specific names, re-export all pub types from source
+                auto add_names = [&](const std::string& from_mod) {
+                    auto sn_it = mod_struct_names.find(from_mod);
+                    if (sn_it != mod_struct_names.end()) {
+                        if (imp->name_count == 0) {
+                            for (auto n : sn_it->second) snames.push_back(n);
+                        } else {
+                            for (uint32_t j = 0; j < imp->name_count; ++j) {
+                                for (auto n : sn_it->second) {
+                                    if (n == imp->names[j]) { snames.push_back(n); break; }
+                                }
+                            }
+                        }
+                    }
+                    auto en_it = mod_enum_names.find(from_mod);
+                    if (en_it != mod_enum_names.end()) {
+                        if (imp->name_count == 0) {
+                            for (auto n : en_it->second) enames.push_back(n);
+                        } else {
+                            for (uint32_t j = 0; j < imp->name_count; ++j) {
+                                for (auto n : en_it->second) {
+                                    if (n == imp->names[j]) { enames.push_back(n); break; }
+                                }
+                            }
+                        }
+                    }
+                    auto un_it = mod_union_names.find(from_mod);
+                    if (un_it != mod_union_names.end()) {
+                        if (imp->name_count == 0) {
+                            for (auto n : un_it->second) unames.push_back(n);
+                        } else {
+                            for (uint32_t j = 0; j < imp->name_count; ++j) {
+                                for (auto n : un_it->second) {
+                                    if (n == imp->names[j]) { unames.push_back(n); break; }
+                                }
+                            }
+                        }
+                    }
+                };
+                add_names(src_mod);
+            }
+
             if (!snames.empty()) mod_struct_names[mod_path] = std::move(snames);
             if (!enames.empty()) mod_enum_names[mod_path] = std::move(enames);
             if (!unames.empty()) mod_union_names[mod_path] = std::move(unames);
@@ -1023,6 +1246,11 @@ int CompilerPipeline::runModular(const CompileOptions& opts,
     std::vector<std::string> obj_files;
     std::vector<std::string> asm_files;
 
+    // Incremental build cache (if enabled)
+    BuildCache cache(opts.cache_dir);
+    uint32_t cache_hits = 0, cache_misses = 0;
+    std::unordered_map<std::string, std::string> mod_cache_keys;
+
     // Track which modules have been registered (their pub symbols)
     std::unordered_map<std::string, Module*> registered_asts;
 
@@ -1033,6 +1261,28 @@ int CompilerPipeline::runModular(const CompileOptions& opts,
         if (!mi.ast) continue;
 
         ctx_.diag.setSource(mi.source);
+
+        // Incremental: check if this module has a cached .o file
+        if (opts.incremental) {
+            // Build cache key: source + dependency sources (transitive)
+            std::string combined = mi.source;
+            for (const auto& dep_path : topo_order) {
+                if (dep_path == mod_path) break;
+                auto dep_it = mod_info.find(dep_path);
+                if (dep_it != mod_info.end()) combined += dep_it->second.source;
+            }
+            std::string key = cache.cacheKey(combined, "modular");
+            std::string cached = cache.lookup(key);
+            if (!cached.empty()) {
+                obj_files.push_back(cached);
+                registered_asts[mod_path] = mi.ast;
+                cache_hits++;
+                continue;
+            }
+            // Will store after compilation — save the key
+            mod_cache_keys[mod_path] = key;
+            cache_misses++;
+        }
 
         // Create a fresh HIRBuilder for this module
         HIRBuilder builder(ctx_);
@@ -1051,6 +1301,21 @@ int CompilerPipeline::runModular(const CompileOptions& opts,
                 dep_mod_name = ctx_.strings.intern(dep_it->second.module_path);
             }
             builder.registerExports(dep_it->second.ast, dep_mod_name);
+
+            // Process pub import re-exports: if dep has `pub import X { foo }`,
+            // re-register X's exports under dep's module name so this module sees them.
+            auto* dep_ast = dep_it->second.ast;
+            for (uint32_t pi = 0; pi < dep_ast->import_count; ++pi) {
+                auto* imp = dep_ast->imports[pi];
+                if (!imp->is_pub) continue;
+                std::string src_mod(imp->module_path);
+                auto src_it = mod_info.find(src_mod);
+                if (src_it == mod_info.end() || !src_it->second.ast) continue;
+                // Re-register the source module's exports (they've already been
+                // registered on their own, but this ensures fn_module_map_ tracks
+                // them as accessible through the re-exporting module too).
+                builder.registerExports(src_it->second.ast, dep_mod_name);
+            }
         }
 
         // Ensure module name is set (from resolver path if not declared in source)
@@ -1084,6 +1349,7 @@ int CompilerPipeline::runModular(const CompileOptions& opts,
         pm.add<BorrowEscapePass>();
         pm.add<MutBorrowAliasPass>();
         pm.add<UnusedBindingPass>();
+    pm.add<MustUseCheckPass>();
         pm.run(*hir, ctx_);
 
         if (ctx_.diag.hasErrors()) {
@@ -1098,11 +1364,15 @@ int CompilerPipeline::runModular(const CompileOptions& opts,
 
         // LIR optimization
         LIRPassManager lir_pm;
+        lir_pm.add<InliningPass>();
         lir_pm.add<ConstFoldPass>();
         lir_pm.add<ConstPropPass>();
+        lir_pm.add<StrengthReductionPass>();
         lir_pm.add<ConstFoldPass>();
         lir_pm.add<CSEPass>();
+        lir_pm.add<LICMPass>();        // hoist loop-invariant code
         lir_pm.add<DeadCodeElimPass>();
+        lir_pm.add<GlobalDCEPass>();   // remove unreachable functions
         lir_pm.run(*lir, ctx_);
 
         // MachIR
@@ -1124,6 +1394,8 @@ int CompilerPipeline::runModular(const CompileOptions& opts,
             NASMEmitter emitter(asm_out, format_);
             emitter.setStackProtector(stack_protector_);
             emitter.setEmitSourceLocs(debug_locs_);
+            emitter.setEmitDebugInfo(debug_info_);
+            emitter.setEmitUnwindInfo(debug_info_);
             // Only emit _start wrapper for the entry module (the one with main)
             bool has_main = false;
             for (uint32_t i = 0; i < mi.ast->fn_count; ++i) {
@@ -1140,6 +1412,14 @@ int CompilerPipeline::runModular(const CompileOptions& opts,
         obj_files.push_back(obj_file);
         asm_files.push_back(asm_file);
 
+        // Store in cache (if enabled)
+        if (opts.incremental) {
+            auto ck_it = mod_cache_keys.find(mod_path);
+            if (ck_it != mod_cache_keys.end()) {
+                cache.store(ck_it->second, obj_file);
+            }
+        }
+
         // Track this module as registered
         registered_asts[mod_path] = mi.ast;
     }
@@ -1150,6 +1430,12 @@ int CompilerPipeline::runModular(const CompileOptions& opts,
     // Clean up temp files
     for (const auto& f : asm_files) std::remove(f.c_str());
     for (const auto& f : obj_files) std::remove(f.c_str());
+
+    // Print cache stats
+    if (opts.incremental && (cache_hits > 0 || cache_misses > 0)) {
+        err << "incremental: " << cache_hits << " cached, "
+            << cache_misses << " compiled\n";
+    }
 
     // Print warnings even on success
     if (ctx_.diag.hasWarnings()) {

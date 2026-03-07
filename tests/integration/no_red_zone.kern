@@ -1,0 +1,4 @@
+@no_red_zone
+fn f() -> i32 { 42 }
+
+fn main() -> i32 { f() }

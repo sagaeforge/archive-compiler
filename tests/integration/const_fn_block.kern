@@ -1,0 +1,18 @@
+// Test const fn evaluation with block bodies and val bindings
+@const
+fn page_size() -> u64 {
+    4096u64
+}
+
+@const
+fn page_table_entries() -> u64 {
+    val page_sz: u64 = page_size()
+    val entry_size: u64 = 8u64
+    page_sz / entry_size
+}
+
+static_assert(page_table_entries() == 512u64, "page table should have 512 entries")
+
+fn main() -> i64 {
+    page_table_entries() as i64 - 470
+}

@@ -358,6 +358,32 @@ void Formatter::formatExpr(const Expr* expr) {
             break;
         }
 
+        case Expr::Kind::StringInterp: {
+            auto* si = static_cast<const StringInterpExpr*>(expr);
+            out_ << "f\"";
+            for (uint32_t i = 0; i < si->part_count; ++i) {
+                auto& part = si->parts[i];
+                if (part.is_expr) {
+                    out_ << '{';
+                    formatExpr(part.expr);
+                    out_ << '}';
+                } else {
+                    for (uint32_t j = 0; j < part.str_length; ++j) {
+                        char c = part.str_data[j];
+                        switch (c) {
+                            case '\n': out_ << "\\n"; break;
+                            case '\t': out_ << "\\t"; break;
+                            case '\\': out_ << "\\\\"; break;
+                            case '"': out_ << "\\\""; break;
+                            default: out_ << c;
+                        }
+                    }
+                }
+            }
+            out_ << '"';
+            break;
+        }
+
         case Expr::Kind::Ident:
             out_ << static_cast<const IdentExpr*>(expr)->name;
             break;
@@ -395,8 +421,10 @@ void Formatter::formatExpr(const Expr* expr) {
             break;
         }
 
+        case Expr::Kind::ConstIf:
         case Expr::Kind::If: {
             auto* ife = static_cast<const IfExpr*>(expr);
+            if (expr->kind == Expr::Kind::ConstIf) out_ << "const ";
             out_ << "if ";
             formatExpr(ife->condition);
             out_ << " ";
@@ -598,6 +626,14 @@ void Formatter::formatExpr(const Expr* expr) {
                 formatExpr(al->elements[i]);
             }
             out_ << "]";
+            break;
+        }
+
+        case Expr::Kind::ArrayRepeat: {
+            auto* ar = static_cast<const ArrayRepeatExpr*>(expr);
+            out_ << "[";
+            formatExpr(ar->value);
+            out_ << "; " << ar->repeat_count << "]";
             break;
         }
 

@@ -5,8 +5,15 @@
 
 namespace kern {
 
-// Strip integer type suffix (u8, u16, u32, u64, i8, i16, i32, i64) from text
+// Strip integer type suffix (u8, u16, u32, u64, i8, i16, i32, i64, isize, usize) from text
 static std::string_view stripIntSuffix(std::string_view text) {
+    // Check for 5-char suffixes: isize, usize
+    if (text.size() >= 6) {
+        auto tail5 = text.substr(text.size() - 5);
+        if (tail5 == "isize" || tail5 == "usize") {
+            return text.substr(0, text.size() - 5);
+        }
+    }
     // Check for 3-char suffixes: u16, u32, u64, i16, i32, i64
     if (text.size() >= 4) {
         auto tail3 = text.substr(text.size() - 3);
@@ -159,6 +166,30 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             out << "\")\n";
             break;
         }
+        case Expr::Kind::StringInterp: {
+            auto* si = static_cast<const StringInterpExpr*>(expr);
+            out << "StringInterp(\n";
+            for (uint32_t i = 0; i < si->part_count; ++i) {
+                auto& part = si->parts[i];
+                for (int d = 0; d < ind + 1; ++d) out << "  ";
+                if (part.is_expr) {
+                    out << "Expr: ";
+                    dumpExpr(part.expr, out, ind + 1);
+                } else {
+                    out << "Str(\"";
+                    for (uint32_t j = 0; j < part.str_length; ++j) {
+                        char c = part.str_data[j];
+                        if (c == '\n') out << "\\n";
+                        else if (c == '"') out << "\\\"";
+                        else out << c;
+                    }
+                    out << "\")\n";
+                }
+            }
+            for (int d = 0; d < ind; ++d) out << "  ";
+            out << ")\n";
+            break;
+        }
         case Expr::Kind::Ident:
             out << "Ident(" << static_cast<const IdentExpr*>(expr)->name << ")\n";
             break;
@@ -185,9 +216,10 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             }
             break;
         }
-        case Expr::Kind::If: {
+        case Expr::Kind::If:
+        case Expr::Kind::ConstIf: {
             auto* ifE = static_cast<const IfExpr*>(expr);
-            out << "If\n";
+            out << (expr->kind == Expr::Kind::ConstIf ? "ConstIf" : "If") << "\n";
             indent(out, ind + 1); out << "cond:\n";
             dumpExpr(ifE->condition, out, ind + 2);
             indent(out, ind + 1); out << "then:\n";
@@ -434,6 +466,12 @@ void dumpExpr(const Expr* expr, std::ostream& out, int ind) {
             for (uint32_t i = 0; i < al->count; ++i) {
                 dumpExpr(al->elements[i], out, ind + 1);
             }
+            break;
+        }
+        case Expr::Kind::ArrayRepeat: {
+            auto* ar = static_cast<const ArrayRepeatExpr*>(expr);
+            out << "ArrayRepeat(" << ar->repeat_count << ")\n";
+            dumpExpr(ar->value, out, ind + 1);
             break;
         }
         case Expr::Kind::IndexAccess: {
@@ -918,7 +956,10 @@ Module* Parser::parseModule() {
         // Parse annotations (@packed, @align(N), @section("name"), @cfg(...))
         bool is_packed = false;
         bool is_naked = false;
+        bool is_no_red_zone = false;
         bool is_interrupt = false;
+        bool is_interrupt_error = false;
+        bool is_interrupt_nofp = false;
         bool is_inline = false;
         bool is_noinline = false;
         bool is_noreturn = false;
@@ -929,9 +970,20 @@ Module* Parser::parseModule() {
         bool is_cold = false;
         bool is_hot = false;
         bool is_no_mangle = false;
+        bool is_panic_handler = false;
+        bool is_hidden = false;
+        bool is_protected = false;
+        bool is_constructor = false;
+        bool is_destructor = false;
+        uint32_t constructor_priority = 65535;
+        uint32_t destructor_priority = 65535;
+        bool is_must_use = false;
+        bool is_used = false;
         bool cfg_excluded = false;
+        bool is_global_allocator = false;
         uint32_t explicit_align = 0;
         std::string_view section_name;
+        std::string_view section_flags;
         std::string_view link_name;
         while (check(TokenKind::At)) {
             advance(); // consume '@'
@@ -948,8 +1000,16 @@ Module* Parser::parseModule() {
                 is_packed = true;
             } else if (anno.text == "naked") {
                 is_naked = true;
+            } else if (anno.text == "no_red_zone") {
+                is_no_red_zone = true;
             } else if (anno.text == "interrupt") {
                 is_interrupt = true;
+            } else if (anno.text == "interrupt_error") {
+                is_interrupt = true;       // still an interrupt handler
+                is_interrupt_error = true;
+            } else if (anno.text == "interrupt_nofp") {
+                is_interrupt = true;       // still an interrupt handler
+                is_interrupt_nofp = true;
             } else if (anno.text == "inline") {
                 is_inline = true;
             } else if (anno.text == "noinline") {
@@ -975,7 +1035,16 @@ Module* Parser::parseModule() {
                 if (section_name.size() >= 2 && section_name.front() == '"' && section_name.back() == '"') {
                     section_name = section_name.substr(1, section_name.size() - 2);
                 }
-                expect(TokenKind::RParen, "expected ')' after @section(\"name\")");
+                // Optional second argument: @section("name", "flags")
+                if (check(TokenKind::Comma)) {
+                    advance(); // consume ','
+                    Token flags_tok = expect(TokenKind::StringLit, "expected string in @section(\"name\", \"flags\")");
+                    section_flags = flags_tok.text;
+                    if (section_flags.size() >= 2 && section_flags.front() == '"' && section_flags.back() == '"') {
+                        section_flags = section_flags.substr(1, section_flags.size() - 2);
+                    }
+                }
+                expect(TokenKind::RParen, "expected ')' after @section");
             } else if (anno.text == "repr") {
                 expect(TokenKind::LParen, "expected '(' after @repr");
                 Token val = expect(TokenKind::Ident, "expected repr kind in @repr(C)");
@@ -996,6 +1065,28 @@ Module* Parser::parseModule() {
                                 std::string(val.text) + "'; expected 'C', 'u8', 'u16', 'u32', or 'u64'");
                 }
                 expect(TokenKind::RParen, "expected ')' after @repr(C)");
+            } else if (anno.text == "constructor") {
+                is_constructor = true;
+                if (check(TokenKind::LParen)) {
+                    advance();
+                    Token prio = expect(TokenKind::IntLit, "expected priority number");
+                    constructor_priority = static_cast<uint32_t>(parseIntText(prio.text));
+                    expect(TokenKind::RParen, "expected ')' after priority");
+                }
+            } else if (anno.text == "destructor") {
+                is_destructor = true;
+                if (check(TokenKind::LParen)) {
+                    advance();
+                    Token prio = expect(TokenKind::IntLit, "expected priority number");
+                    destructor_priority = static_cast<uint32_t>(parseIntText(prio.text));
+                    expect(TokenKind::RParen, "expected ')' after priority");
+                }
+            } else if (anno.text == "must_use") {
+                is_must_use = true;
+            } else if (anno.text == "used") {
+                is_used = true;
+            } else if (anno.text == "global_allocator") {
+                is_global_allocator = true;
             } else if (anno.text == "weak") {
                 is_weak = true;
             } else if (anno.text == "cold") {
@@ -1004,6 +1095,12 @@ Module* Parser::parseModule() {
                 is_hot = true;
             } else if (anno.text == "no_mangle") {
                 is_no_mangle = true;
+            } else if (anno.text == "panic_handler") {
+                is_panic_handler = true;
+            } else if (anno.text == "hidden") {
+                is_hidden = true;
+            } else if (anno.text == "protected") {
+                is_protected = true;
             } else if (anno.text == "link_name") {
                 expect(TokenKind::LParen, "expected '(' after @link_name");
                 Token val = expect(TokenKind::StringLit, "expected string in @link_name(\"name\")");
@@ -1072,6 +1169,9 @@ Module* Parser::parseModule() {
             if (ud) {
                 ud->is_pub = is_pub;
                 ud->is_repr_c = is_repr_c;
+                if (repr_backing_size > 0) {
+                    ud->tag_size = repr_backing_size;
+                }
                 unions.push_back(ud);
                 union_names_.insert(ud->name);
             }
@@ -1079,7 +1179,10 @@ Module* Parser::parseModule() {
             FnDecl* fn = parseFnDecl();
             if (fn) {
                 fn->is_naked = is_naked;
+                fn->is_no_red_zone = is_no_red_zone;
                 fn->is_interrupt = is_interrupt;
+                fn->is_interrupt_error = is_interrupt_error;
+                fn->is_interrupt_nofp = is_interrupt_nofp;
                 fn->is_inline = is_inline;
                 fn->is_noinline = is_noinline;
                 fn->is_noreturn = is_noreturn;
@@ -1090,8 +1193,19 @@ Module* Parser::parseModule() {
                 fn->is_cold = is_cold;
                 fn->is_hot = is_hot;
                 fn->is_no_mangle = is_no_mangle;
+                fn->is_panic_handler = is_panic_handler;
+                fn->is_hidden = is_hidden;
+                fn->is_protected = is_protected;
+                fn->is_constructor = is_constructor;
+                fn->is_destructor = is_destructor;
+                fn->constructor_priority = constructor_priority;
+                fn->destructor_priority = destructor_priority;
+                fn->is_must_use = is_must_use;
+                fn->is_used = is_used;
+                fn->fn_align = explicit_align;
                 fn->extern_abi = extern_abi;
                 fn->section_name = section_name;
+                fn->section_flags = section_flags;
                 fn->link_name = link_name;
                 if (is_no_mangle && fn->link_name.empty()) {
                     fn->link_name = fn->name;
@@ -1133,7 +1247,14 @@ Module* Parser::parseModule() {
             if (gd) {
                 gd->is_pub = is_pub;
                 gd->is_extern = is_extern;
+                gd->is_global_allocator = is_global_allocator;
+                gd->is_used = is_used;
+                gd->is_weak = is_weak;
+                gd->is_hidden = is_hidden;
+                gd->is_protected = is_protected;
+                gd->explicit_align = explicit_align;
                 gd->section_name = section_name;
+                gd->section_flags = section_flags;
                 gd->link_name = link_name;
                 if (is_no_mangle && gd->link_name.empty()) {
                     gd->link_name = gd->name;
@@ -1325,12 +1446,58 @@ TypeAliasDecl* Parser::parseTypeAlias() {
     SourceLocation loc = peek().loc;
     advance(); // consume 'type'
     Token nameTok = expect(TokenKind::Ident, "expected type alias name");
+
+    // Parse optional type parameters: type Result<T, E> = ...
+    std::vector<TypeParam> type_params;
+    if (check(TokenKind::Lt)) {
+        advance();
+        while (!check(TokenKind::Gt) && !check(TokenKind::Eof)) {
+            TypeParam p;
+            if (check(TokenKind::KwConst)) {
+                advance();
+                Token tp = expect(TokenKind::Ident, "expected const parameter name");
+                p.name = tp.text;
+                p.loc = tp.loc;
+                p.is_const = true;
+                expect(TokenKind::Colon, "expected ':' after const parameter name");
+                p.const_type = parseType();
+            } else {
+                Token tp = expect(TokenKind::Ident, "expected type parameter name");
+                p.name = tp.text;
+                p.loc = tp.loc;
+                if (check(TokenKind::Colon)) {
+                    advance();
+                    std::vector<std::string_view> bounds;
+                    bounds.push_back(expect(TokenKind::Ident, "expected trait name after ':'").text);
+                    while (check(TokenKind::Plus)) {
+                        advance();
+                        bounds.push_back(expect(TokenKind::Ident, "expected trait name after '+'").text);
+                    }
+                    p.bounds = arena_.makeArray<std::string_view>(bounds.size());
+                    for (size_t bi = 0; bi < bounds.size(); ++bi) p.bounds[bi] = bounds[bi];
+                    p.bound_count = static_cast<uint32_t>(bounds.size());
+                }
+            }
+            type_params.push_back(p);
+            if (!check(TokenKind::Gt)) {
+                expect(TokenKind::Comma, "expected ',' or '>' in type parameter list");
+            }
+        }
+        expect(TokenKind::Gt, "expected '>' after type parameters");
+    }
+
     expect(TokenKind::Eq, "expected '=' in type alias");
     TypeRef target = parseType();
     auto* ta = arena_.make<TypeAliasDecl>();
     ta->name = nameTok.text;
     ta->target = target;
     ta->loc = loc;
+    ta->type_param_count = static_cast<uint32_t>(type_params.size());
+    if (!type_params.empty()) {
+        ta->type_params = arena_.makeArray<TypeParam>(type_params.size());
+        for (size_t i = 0; i < type_params.size(); ++i)
+            ta->type_params[i] = type_params[i];
+    }
     return ta;
 }
 
@@ -1362,8 +1529,21 @@ TraitDecl* Parser::parseTraitDecl() {
     skipNewlines();
 
     std::vector<TraitMethodSig> methods;
+    std::vector<TraitAssocType> assoc_types;
     while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
-        expect(TokenKind::KwFn, "expected 'fn' in trait body");
+        // Associated type: `type Name;`
+        if (check(TokenKind::KwType)) {
+            advance(); // consume 'type'
+            Token at_name = expect(TokenKind::Ident, "expected associated type name");
+            TraitAssocType at;
+            at.name = at_name.text;
+            at.loc = at_name.loc;
+            assoc_types.push_back(at);
+            while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+            continue;
+        }
+
+        expect(TokenKind::KwFn, "expected 'fn' or 'type' in trait body");
         Token methodName = expect(TokenKind::Ident, "expected method name");
         expect(TokenKind::LParen, "expected '(' after method name");
 
@@ -1422,6 +1602,13 @@ TraitDecl* Parser::parseTraitDecl() {
     for (size_t j = 0; j < methods.size(); ++j) {
         td->methods[j] = methods[j];
     }
+    td->assoc_type_count = static_cast<uint32_t>(assoc_types.size());
+    if (!assoc_types.empty()) {
+        td->assoc_types = arena_.makeArray<TraitAssocType>(assoc_types.size());
+        for (size_t j = 0; j < assoc_types.size(); ++j) {
+            td->assoc_types[j] = assoc_types[j];
+        }
+    }
     td->loc = loc;
     return td;
 }
@@ -1457,7 +1644,53 @@ ImplDecl* Parser::parseImplDecl() {
     skipNewlines();
 
     std::vector<FnDecl*> methods;
+    std::vector<ImplAssocType> assoc_types;
     while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        // Associated type definition: `type Name = ConcreteType;`
+        if (check(TokenKind::KwType)) {
+            advance(); // consume 'type'
+            Token at_name = expect(TokenKind::Ident, "expected associated type name");
+            expect(TokenKind::Eq, "expected '=' after associated type name");
+            TypeRef ty = parseType();
+            ImplAssocType iat;
+            iat.name = at_name.text;
+            iat.type = ty;
+            iat.loc = at_name.loc;
+            assoc_types.push_back(iat);
+            while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+            continue;
+        }
+
+        // Handle @cfg on impl methods
+        if (check(TokenKind::At)) {
+            auto snap = lexer_.save();
+            Token sc = current_, sp = previous_;
+            bool sh = has_current_;
+            advance();
+            if (check(TokenKind::Ident) && peek().text == "cfg") {
+                advance();
+                bool cfg_active = evaluateCfg();
+                skipNewlines();
+                if (!cfg_active) {
+                    // Skip one method: fn name(...) -> Type { body }
+                    int depth = 0;
+                    while (!check(TokenKind::Eof)) {
+                        if (check(TokenKind::LBrace)) { depth++; advance(); }
+                        else if (check(TokenKind::RBrace)) {
+                            if (depth == 0) break;
+                            depth--; advance();
+                        } else { advance(); }
+                    }
+                    skipNewlines();
+                    continue;
+                }
+                // cfg_active — fall through to parse fn normally
+            } else {
+                lexer_.restore(snap);
+                current_ = sc; previous_ = sp; has_current_ = sh;
+            }
+        }
+
         if (check(TokenKind::KwFn)) {
             FnDecl* fn = parseFnDecl();
             if (fn) methods.push_back(fn);
@@ -1476,6 +1709,13 @@ ImplDecl* Parser::parseImplDecl() {
     id->methods = arena_.makeArray<FnDecl*>(methods.size());
     for (size_t j = 0; j < methods.size(); ++j) {
         id->methods[j] = methods[j];
+    }
+    id->assoc_type_count = static_cast<uint32_t>(assoc_types.size());
+    if (!assoc_types.empty()) {
+        id->assoc_types = arena_.makeArray<ImplAssocType>(assoc_types.size());
+        for (size_t j = 0; j < assoc_types.size(); ++j) {
+            id->assoc_types[j] = assoc_types[j];
+        }
     }
     id->loc = loc;
     return id;
@@ -1539,6 +1779,19 @@ StructDecl* Parser::parseStructDecl() {
                 Token tp = expect(TokenKind::Ident, "expected type parameter name");
                 p.name = tp.text;
                 p.loc = tp.loc;
+                // Parse optional trait bounds: T: Trait1 + Trait2
+                if (check(TokenKind::Colon)) {
+                    advance();
+                    std::vector<std::string_view> bounds;
+                    bounds.push_back(expect(TokenKind::Ident, "expected trait name after ':'").text);
+                    while (check(TokenKind::Plus)) {
+                        advance();
+                        bounds.push_back(expect(TokenKind::Ident, "expected trait name after '+'").text);
+                    }
+                    p.bounds = arena_.makeArray<std::string_view>(bounds.size());
+                    for (size_t bi = 0; bi < bounds.size(); ++bi) p.bounds[bi] = bounds[bi];
+                    p.bound_count = static_cast<uint32_t>(bounds.size());
+                }
             }
             type_params.push_back(p);
             if (!check(TokenKind::Gt)) {
@@ -1554,6 +1807,32 @@ StructDecl* Parser::parseStructDecl() {
 
     std::vector<FieldDecl> fields;
     while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        // Handle @cfg on struct fields
+        if (check(TokenKind::At)) {
+            auto snap = lexer_.save();
+            Token sc = current_, sp = previous_;
+            bool sh = has_current_;
+            advance(); // consume '@'
+            if (check(TokenKind::Ident) && peek().text == "cfg") {
+                advance(); // consume 'cfg'
+                bool cfg_active = evaluateCfg();
+                skipNewlines();
+                if (!cfg_active) {
+                    // Skip one field: name : type [: bitwidth]
+                    while (!check(TokenKind::Eof) && !check(TokenKind::RBrace) &&
+                           !check(TokenKind::Comma) && !check(TokenKind::Semicolon) &&
+                           !check(TokenKind::Newline)) {
+                        advance();
+                    }
+                    while (match(TokenKind::Comma) || match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+                    continue;
+                }
+            } else {
+                lexer_.restore(snap);
+                current_ = sc; previous_ = sp; has_current_ = sh;
+            }
+        }
+
         FieldDecl fd;
         fd.is_mutable = false;
         fd.is_pub = true;  // default: public (backward compat)
@@ -1617,6 +1896,32 @@ EnumDecl* Parser::parseEnumDecl() {
 
     std::vector<EnumVariant> variants;
     while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        // Handle @cfg on enum variants
+        if (check(TokenKind::At)) {
+            auto snap = lexer_.save();
+            Token sc = current_, sp = previous_;
+            bool sh = has_current_;
+            advance();
+            if (check(TokenKind::Ident) && peek().text == "cfg") {
+                advance();
+                bool cfg_active = evaluateCfg();
+                skipNewlines();
+                if (!cfg_active) {
+                    // Skip one variant: Name [= value]
+                    while (!check(TokenKind::Eof) && !check(TokenKind::RBrace) &&
+                           !check(TokenKind::Comma) && !check(TokenKind::Semicolon) &&
+                           !check(TokenKind::Newline)) {
+                        advance();
+                    }
+                    while (match(TokenKind::Comma) || match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+                    continue;
+                }
+            } else {
+                lexer_.restore(snap);
+                current_ = sc; previous_ = sp; has_current_ = sh;
+            }
+        }
+
         Token vname = expect(TokenKind::Ident, "expected variant name");
         EnumVariant ev;
         ev.name = vname.text;
@@ -1666,6 +1971,18 @@ UnionDecl* Parser::parseUnionDecl() {
             } else {
                 Token tp = expect(TokenKind::Ident, "expected type parameter name");
                 p.name = tp.text; p.loc = tp.loc;
+                if (check(TokenKind::Colon)) {
+                    advance();
+                    std::vector<std::string_view> bounds;
+                    bounds.push_back(expect(TokenKind::Ident, "expected trait name after ':'").text);
+                    while (check(TokenKind::Plus)) {
+                        advance();
+                        bounds.push_back(expect(TokenKind::Ident, "expected trait name after '+'").text);
+                    }
+                    p.bounds = arena_.makeArray<std::string_view>(bounds.size());
+                    for (size_t bi = 0; bi < bounds.size(); ++bi) p.bounds[bi] = bounds[bi];
+                    p.bound_count = static_cast<uint32_t>(bounds.size());
+                }
             }
             type_params.push_back(p);
             if (!check(TokenKind::Gt)) {
@@ -1681,6 +1998,32 @@ UnionDecl* Parser::parseUnionDecl() {
 
     std::vector<UnionVariantDecl> variants;
     while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        // Handle @cfg on union variants
+        if (check(TokenKind::At)) {
+            auto snap = lexer_.save();
+            Token sc = current_, sp = previous_;
+            bool sh = has_current_;
+            advance();
+            if (check(TokenKind::Ident) && peek().text == "cfg") {
+                advance();
+                bool cfg_active = evaluateCfg();
+                skipNewlines();
+                if (!cfg_active) {
+                    // Skip one variant: Name[(Type)]
+                    while (!check(TokenKind::Eof) && !check(TokenKind::RBrace) &&
+                           !check(TokenKind::Comma) && !check(TokenKind::Semicolon) &&
+                           !check(TokenKind::Newline)) {
+                        advance();
+                    }
+                    while (match(TokenKind::Comma) || match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+                    continue;
+                }
+            } else {
+                lexer_.restore(snap);
+                current_ = sc; previous_ = sp; has_current_ = sh;
+            }
+        }
+
         Token vname = expect(TokenKind::Ident, "expected variant name");
         UnionVariantDecl vd;
         vd.name = vname.text;
@@ -1739,6 +2082,18 @@ FnDecl* Parser::parseFnDecl() {
                 Token tp = expect(TokenKind::Ident, "expected type parameter name");
                 p.name = tp.text;
                 p.loc = tp.loc;
+                if (check(TokenKind::Colon)) {
+                    advance();
+                    std::vector<std::string_view> bounds;
+                    bounds.push_back(expect(TokenKind::Ident, "expected trait name after ':'").text);
+                    while (check(TokenKind::Plus)) {
+                        advance();
+                        bounds.push_back(expect(TokenKind::Ident, "expected trait name after '+'").text);
+                    }
+                    p.bounds = arena_.makeArray<std::string_view>(bounds.size());
+                    for (size_t bi = 0; bi < bounds.size(); ++bi) p.bounds[bi] = bounds[bi];
+                    p.bound_count = static_cast<uint32_t>(bounds.size());
+                }
             }
             type_params.push_back(p);
             if (!check(TokenKind::Gt)) {
@@ -1834,6 +2189,29 @@ FnDecl* Parser::parseFnDecl() {
         }
     }
 
+    // Parse optional where clause: where T: Ord + Clone, U: Display
+    std::vector<WhereClause> where_clauses;
+    if (check(TokenKind::KwWhere)) {
+        advance(); // consume 'where'
+        do {
+            WhereClause wc;
+            Token type_name = expect(TokenKind::Ident, "expected type name in where clause");
+            wc.type_name = type_name.text;
+            wc.loc = type_name.loc;
+            expect(TokenKind::Colon, "expected ':' after type name in where clause");
+            std::vector<std::string_view> bounds;
+            bounds.push_back(expect(TokenKind::Ident, "expected trait name in where clause").text);
+            while (check(TokenKind::Plus)) {
+                advance();
+                bounds.push_back(expect(TokenKind::Ident, "expected trait name after '+'").text);
+            }
+            wc.bound_count = static_cast<uint32_t>(bounds.size());
+            wc.bounds = arena_.makeArray<std::string_view>(bounds.size());
+            for (size_t i = 0; i < bounds.size(); ++i) wc.bounds[i] = bounds[i];
+            where_clauses.push_back(wc);
+        } while (match(TokenKind::Comma));
+    }
+
     skipNewlines();
 
     // Check for `= intrinsic`, body block, or forward declaration (no body)
@@ -1882,6 +2260,13 @@ FnDecl* Parser::parseFnDecl() {
             fn->effect_names[i] = effect_names[i];
         }
     }
+    fn->where_clause_count = static_cast<uint32_t>(where_clauses.size());
+    if (!where_clauses.empty()) {
+        fn->where_clauses = arena_.makeArray<WhereClause>(where_clauses.size());
+        for (size_t i = 0; i < where_clauses.size(); ++i) {
+            fn->where_clauses[i] = where_clauses[i];
+        }
+    }
     return fn;
 }
 
@@ -1890,6 +2275,7 @@ Param Parser::parseParam() {
     expect(TokenKind::Colon, "expected ':' after parameter name");
     // Check for passing mode: "var Type" or "own Type"
     PassingMode mode = PassingMode::Borrow;
+    bool is_restrict = false;
     if (check(TokenKind::KwVar)) {
         advance();
         mode = PassingMode::MutBorrow;
@@ -1897,8 +2283,19 @@ Param Parser::parseParam() {
         advance();
         mode = PassingMode::Own;
     }
+    // Check for restrict modifier before type
+    if (check(TokenKind::Ident) && peek().text == "restrict") {
+        advance();
+        is_restrict = true;
+    }
     TypeRef type = parseType();
-    return {name.text, type, name.loc, mode};
+    Param p;
+    p.name = name.text;
+    p.type = type;
+    p.loc = name.loc;
+    p.mode = mode;
+    p.is_restrict = is_restrict;
+    return p;
 }
 
 TypeRef Parser::parseType() {
@@ -2006,6 +2403,20 @@ TypeRef Parser::parseType() {
         return ref;
     }
     Token tok = expect(TokenKind::Ident, "expected type name");
+    // Qualified type: TypeName::AssocTypeName (for associated types)
+    if (check(TokenKind::ColonColon)) {
+        advance(); // consume '::'
+        Token assoc = expect(TokenKind::Ident, "expected associated type name after '::'");
+        // Build "TypeName::AssocName" as the full name
+        std::string qualified = std::string(tok.text) + "::" + std::string(assoc.text);
+        char* buf = arena_.makeArray<char>(qualified.size());
+        std::memcpy(buf, qualified.data(), qualified.size());
+        TypeRef ref;
+        ref.kind = TypeRef::Kind::Named;
+        ref.name = std::string_view(buf, qualified.size());
+        ref.loc = tok.loc;
+        return ref;
+    }
     if (tok.text == "Ptr" && check(TokenKind::Lt)) {
         advance(); // consume '<'
         bool is_var = false;
@@ -2551,6 +2962,103 @@ Expr* Parser::parsePrimary() {
         return lit;
     }
 
+    // F-string interpolation: f"hello {expr}, n={expr2}"
+    if (tok.kind == TokenKind::FStringLit) {
+        advance();
+        auto* interp = arena_.make<StringInterpExpr>();
+        interp->kind = Expr::Kind::StringInterp;
+        interp->loc = tok.loc;
+        std::string_view raw = tok.text;
+        // raw is f"..." — skip 'f' prefix and quotes: content is raw[2..len-1)
+        std::vector<StringInterpPart> parts;
+        size_t content_start = 2;
+        size_t content_end = raw.size() > 0 ? raw.size() - 1 : 0;
+        size_t i = content_start;
+        size_t str_begin = i;
+        while (i < content_end) {
+            if (raw[i] == '\\' && i + 1 < content_end) {
+                i += 2; // skip escape
+                continue;
+            }
+            if (raw[i] == '{') {
+                // Emit preceding string part
+                if (i > str_begin) {
+                    StringInterpPart sp;
+                    sp.is_expr = false;
+                    auto* buf = static_cast<char*>(arena_.allocate(i - str_begin, 1));
+                    uint32_t len = 0;
+                    for (size_t j = str_begin; j < i; ++j) {
+                        if (raw[j] == '\\' && j + 1 < i) {
+                            char esc = raw[j + 1];
+                            if (esc == 'n')       { buf[len++] = '\n'; ++j; }
+                            else if (esc == 't')  { buf[len++] = '\t'; ++j; }
+                            else if (esc == '\\') { buf[len++] = '\\'; ++j; }
+                            else if (esc == '"')  { buf[len++] = '"'; ++j; }
+                            else                  { buf[len++] = raw[j]; }
+                        } else {
+                            buf[len++] = raw[j];
+                        }
+                    }
+                    sp.str_data = buf;
+                    sp.str_length = len;
+                    parts.push_back(sp);
+                }
+                // Find matching '}'
+                size_t brace_start = i + 1;
+                int depth = 1;
+                size_t k = brace_start;
+                while (k < content_end && depth > 0) {
+                    if (raw[k] == '{') depth++;
+                    else if (raw[k] == '}') depth--;
+                    if (depth > 0) k++;
+                }
+                // raw[brace_start..k) is the expression text
+                std::string_view expr_text(raw.data() + brace_start, k - brace_start);
+                // Parse the expression using a sub-lexer/parser
+                Lexer sub_lexer(expr_text, "<f-string>", diag_);
+                Parser sub_parser(sub_lexer, arena_, diag_);
+                sub_parser.copyNamesFrom(*this);
+                Expr* sub_expr = sub_parser.parseExpression();
+                StringInterpPart ep;
+                ep.is_expr = true;
+                ep.expr = sub_expr;
+                parts.push_back(ep);
+                i = k + 1; // skip '}'
+                str_begin = i;
+                continue;
+            }
+            i++;
+        }
+        // Trailing string part
+        if (i > str_begin) {
+            StringInterpPart sp;
+            sp.is_expr = false;
+            auto* buf = static_cast<char*>(arena_.allocate(i - str_begin, 1));
+            uint32_t len = 0;
+            for (size_t j = str_begin; j < i; ++j) {
+                if (raw[j] == '\\' && j + 1 < i) {
+                    char esc = raw[j + 1];
+                    if (esc == 'n')       { buf[len++] = '\n'; ++j; }
+                    else if (esc == 't')  { buf[len++] = '\t'; ++j; }
+                    else if (esc == '\\') { buf[len++] = '\\'; ++j; }
+                    else if (esc == '"')  { buf[len++] = '"'; ++j; }
+                    else                  { buf[len++] = raw[j]; }
+                } else {
+                    buf[len++] = raw[j];
+                }
+            }
+            sp.str_data = buf;
+            sp.str_length = len;
+            parts.push_back(sp);
+        }
+        interp->part_count = static_cast<uint32_t>(parts.size());
+        interp->parts = arena_.makeArray<StringInterpPart>(parts.size());
+        for (size_t p = 0; p < parts.size(); ++p) {
+            interp->parts[p] = parts[p];
+        }
+        return interp;
+    }
+
     // Identifier, function call, struct literal, enum access, or union variant
     if (tok.kind == TokenKind::Ident) {
         advance();
@@ -2737,7 +3245,20 @@ Expr* Parser::parsePrimary() {
         skipNewlines();
         std::vector<Expr*> elems;
         if (!check(TokenKind::RBracket)) {
-            elems.push_back(parseExpr());
+            Expr* first = parseExpr();
+            // Array repeat: [expr; N]
+            if (check(TokenKind::Semicolon)) {
+                advance(); // consume ';'
+                Token count_tok = expect(TokenKind::IntLit, "expected integer count in [expr; N]");
+                expect(TokenKind::RBracket, "expected ']' after array repeat count");
+                auto* rep = arena_.make<ArrayRepeatExpr>();
+                rep->kind = Expr::Kind::ArrayRepeat;
+                rep->loc = tok.loc;
+                rep->value = first;
+                rep->repeat_count = static_cast<uint32_t>(parseIntText(count_tok.text));
+                return rep;
+            }
+            elems.push_back(first);
             while (match(TokenKind::Comma)) {
                 skipNewlines();
                 if (check(TokenKind::RBracket)) break; // trailing comma
@@ -2760,6 +3281,37 @@ Expr* Parser::parsePrimary() {
     // Match expression
     if (tok.kind == TokenKind::KwMatch) {
         return parseMatchExpr();
+    }
+
+    // const if — compile-time branch elimination
+    if (tok.kind == TokenKind::KwConst) {
+        SourceLocation loc = tok.loc;
+        advance(); // consume 'const'
+        if (!check(TokenKind::KwIf)) {
+            diag_.error(loc, "expected 'if' after 'const' in expression position");
+            return arena_.make<Expr>();
+        }
+        advance(); // consume 'if'
+        Expr* cond = parseExpr();
+        skipNewlines();
+        Expr* then_br = parseBlockExpr();
+        Expr* else_br = nullptr;
+        skipNewlines();
+        if (match(TokenKind::KwElse)) {
+            skipNewlines();
+            if (check(TokenKind::KwIf)) {
+                else_br = parseIfExpr();
+            } else {
+                else_br = parseBlockExpr();
+            }
+        }
+        auto* ifExpr = arena_.make<IfExpr>();
+        ifExpr->kind = Expr::Kind::ConstIf;
+        ifExpr->loc = loc;
+        ifExpr->condition = cond;
+        ifExpr->then_branch = then_br;
+        ifExpr->else_branch = else_br;
+        return ifExpr;
     }
 
     // If expression
@@ -3149,6 +3701,59 @@ Expr* Parser::parseBlockExpr() {
     Expr* result = nullptr;
 
     while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        // Handle @cfg(...) annotation on statements
+        if (check(TokenKind::At)) {
+            auto at_snap = lexer_.save();
+            Token at_saved_current = current_;
+            Token at_saved_previous = previous_;
+            bool at_saved_has = has_current_;
+
+            advance(); // consume '@'
+            if (check(TokenKind::Ident) && peek().text == "cfg") {
+                advance(); // consume 'cfg'
+                bool cfg_active = evaluateCfg();
+                skipNewlines();
+                if (!cfg_active) {
+                    // Skip the next statement: balanced braces, stop at newline/semicolon at depth 0
+                    int depth = 0;
+                    while (!check(TokenKind::Eof)) {
+                        if (check(TokenKind::LBrace)) {
+                            depth++;
+                            advance();
+                        } else if (check(TokenKind::RBrace)) {
+                            if (depth == 0) break;
+                            depth--;
+                            advance();
+                        } else if (depth == 0 && (check(TokenKind::Newline) || check(TokenKind::Semicolon))) {
+                            break;
+                        } else {
+                            advance();
+                        }
+                    }
+                    while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+                    continue;
+                }
+                // cfg_active == true: fall through to parse the statement normally
+            } else if (check(TokenKind::Ident) && peek().text == "align") {
+                // @align(N) on local variable
+                advance(); // consume 'align'
+                expect(TokenKind::LParen, "expected '(' after @align");
+                Token aval = expect(TokenKind::IntLit, "expected integer in @align(N)");
+                uint32_t local_align = static_cast<uint32_t>(parseIntText(aval.text));
+                expect(TokenKind::RParen, "expected ')' after @align(N)");
+                skipNewlines();
+                stmts.push_back(parseValDecl(local_align));
+                while (match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+                continue;
+            } else {
+                // Not @cfg or @align — restore and fall through to normal parsing
+                lexer_.restore(at_snap);
+                current_ = at_saved_current;
+                previous_ = at_saved_previous;
+                has_current_ = at_saved_has;
+            }
+        }
+
         // Try to parse val/var declaration
         if (check(TokenKind::KwVal) || check(TokenKind::KwVar)) {
             stmts.push_back(parseValDecl());
@@ -3600,7 +4205,16 @@ Expr* Parser::parseStructLit(std::string_view name, SourceLocation loc) {
     expect(TokenKind::LBrace, "expected '{' in struct literal");
     skipNewlines();
 
+    Expr* base = nullptr;
     std::vector<FieldInit> fields;
+
+    // Check for struct update syntax: { ..base, field: value }
+    if (check(TokenKind::DotDot)) {
+        advance(); // consume '..'
+        base = parseExpr();
+        while (match(TokenKind::Comma) || match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+    }
+
     while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
         FieldInit fi;
         Token field_name = expect(TokenKind::Ident, "expected field name");
@@ -3619,6 +4233,7 @@ Expr* Parser::parseStructLit(std::string_view name, SourceLocation loc) {
     sl->kind = Expr::Kind::StructLit;
     sl->loc = loc;
     sl->struct_name = name;
+    sl->base = base;
     sl->field_count = static_cast<uint32_t>(fields.size());
     sl->fields = arena_.makeArray<FieldInit>(fields.size());
     for (size_t i = 0; i < fields.size(); ++i) {
@@ -3639,6 +4254,38 @@ Expr* Parser::parseMatchExpr() {
 
     std::vector<MatchArm> arms;
     while (!check(TokenKind::RBrace) && !check(TokenKind::Eof)) {
+        // Handle @cfg on match arms
+        if (check(TokenKind::At)) {
+            auto snap = lexer_.save();
+            Token sc = current_, sp = previous_;
+            bool sh = has_current_;
+            advance();
+            if (check(TokenKind::Ident) && peek().text == "cfg") {
+                advance();
+                bool cfg_active = evaluateCfg();
+                skipNewlines();
+                if (!cfg_active) {
+                    // Skip one arm: pattern [guard] => body
+                    int depth = 0;
+                    while (!check(TokenKind::Eof)) {
+                        if (check(TokenKind::LBrace)) { depth++; advance(); }
+                        else if (check(TokenKind::RBrace)) {
+                            if (depth == 0) break;
+                            depth--; advance();
+                        } else if (depth == 0 && (check(TokenKind::Comma) ||
+                                   check(TokenKind::Newline) || check(TokenKind::Semicolon))) {
+                            break;
+                        } else { advance(); }
+                    }
+                    while (match(TokenKind::Comma) || match(TokenKind::Semicolon) || match(TokenKind::Newline)) {}
+                    continue;
+                }
+            } else {
+                lexer_.restore(snap);
+                current_ = sc; previous_ = sp; has_current_ = sh;
+            }
+        }
+
         MatchArm arm;
         arm.loc = peek().loc;
         arm.pattern = parsePattern();
@@ -4433,6 +5080,32 @@ Pattern* Parser::parsePattern() {
             pat->loc = tok.loc;
             return pat;
         }
+        // Qualified union pattern: TypeName::Variant(binding) — e.g. Pair::First(n)
+        if (check(TokenKind::ColonColon)) {
+            advance(); // consume ::
+            Token variant = expect(TokenKind::Ident, "expected variant name after '::'");
+            if (check(TokenKind::LParen)) {
+                advance(); // consume (
+                auto* upat = arena_.make<UnionPattern>();
+                upat->kind = Pattern::Kind::Union;
+                upat->loc = tok.loc;
+                upat->variant_name = variant.text;
+                upat->inner = nullptr;
+                upat->field_bindings = nullptr;
+                upat->field_binding_count = 0;
+                if (!check(TokenKind::RParen)) {
+                    upat->inner = parsePattern();
+                }
+                expect(TokenKind::RParen, "expected ')' in union pattern");
+                return upat;
+            }
+            // Qualified variant without payload: TypeName::Variant
+            auto* pat = arena_.make<VariablePattern>();
+            pat->kind = Pattern::Kind::Variable;
+            pat->loc = tok.loc;
+            pat->name = variant.text;
+            return pat;
+        }
         // Union pattern: Variant(binding) — e.g. Some(x)
         if (check(TokenKind::LParen)) {
             advance(); // consume (
@@ -4496,7 +5169,7 @@ Pattern* Parser::parsePattern() {
 }
 
 // --- Statements ---
-Stmt* Parser::parseValDecl() {
+Stmt* Parser::parseValDecl(uint32_t explicit_align) {
     Token kw = advance(); // val or var
     bool is_var = (kw.kind == TokenKind::KwVar);
 
@@ -4545,6 +5218,7 @@ Stmt* Parser::parseValDecl() {
         decl->name = name.text;
         decl->type = type;
         decl->init = init;
+        decl->explicit_align = explicit_align;
         return decl;
     } else {
         auto* decl = arena_.make<ValDeclStmt>();
@@ -4553,6 +5227,7 @@ Stmt* Parser::parseValDecl() {
         decl->name = name.text;
         decl->type = type;
         decl->init = init;
+        decl->explicit_align = explicit_align;
         return decl;
     }
 }

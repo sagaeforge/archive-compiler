@@ -132,6 +132,9 @@ private:
     // Block label counter for uniqueness
     uint32_t label_counter_ = 0;
 
+    // Current function's fixed parameter count (for va_start)
+    uint32_t current_param_count_ = 0;
+
     // Loop context (for break/continue lowering)
     uint32_t current_loop_header_ = 0;
     uint32_t current_loop_exit_ = 0;
@@ -146,6 +149,12 @@ private:
 
     // Runtime bounds checking (--bounds-check flag)
     bool bounds_check_ = false;
+
+    // Branch prediction hints: VReg → +1 (likely true) or -1 (likely false)
+    std::unordered_map<VReg, int8_t> branch_hints_;
+
+    // Panic handler function name (set if @panic_handler found in module)
+    std::string_view panic_handler_name_;
 };
 
 } // namespace kern

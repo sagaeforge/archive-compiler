@@ -87,6 +87,7 @@ static void collectExprRefs(const HIRExpr* expr, std::string_view name,
             auto* m = static_cast<const HIRMatchExpr*>(expr);
             collectExprRefs(m->scrutinee, name, refs);
             for (uint32_t i = 0; i < m->arm_count; ++i) {
+                collectExprRefs(m->arms[i].guard, name, refs);
                 collectExprRefs(m->arms[i].body, name, refs);
             }
             break;
@@ -119,8 +120,25 @@ static void collectExprRefs(const HIRExpr* expr, std::string_view name,
                         collectExprRefs(es->expr, name, refs);
                         break;
                     }
-                    default:
+                    case HIRStmt::Kind::FieldAssign: {
+                        auto* fa = static_cast<const HIRFieldAssignStmt*>(stmt);
+                        collectExprRefs(fa->target, name, refs);
+                        collectExprRefs(fa->value, name, refs);
                         break;
+                    }
+                    case HIRStmt::Kind::DerefAssign: {
+                        auto* da = static_cast<const HIRDerefAssignStmt*>(stmt);
+                        collectExprRefs(da->target, name, refs);
+                        collectExprRefs(da->value, name, refs);
+                        break;
+                    }
+                    case HIRStmt::Kind::IndexAssign: {
+                        auto* ia = static_cast<const HIRIndexAssignStmt*>(stmt);
+                        collectExprRefs(ia->array, name, refs);
+                        collectExprRefs(ia->index, name, refs);
+                        collectExprRefs(ia->value, name, refs);
+                        break;
+                    }
                 }
             }
             collectExprRefs(blk->result, name, refs);
@@ -136,7 +154,84 @@ static void collectExprRefs(const HIRExpr* expr, std::string_view name,
             collectExprRefs(ret->value, name, refs);
             break;
         }
+        case HIRExpr::Kind::StructLit: {
+            auto* sl = static_cast<const HIRStructLitExpr*>(expr);
+            for (uint32_t i = 0; i < sl->field_count; ++i) {
+                collectExprRefs(sl->fields[i].value, name, refs);
+            }
+            break;
+        }
+        case HIRExpr::Kind::ArrayLit: {
+            auto* al = static_cast<const HIRArrayLitExpr*>(expr);
+            for (uint32_t i = 0; i < al->element_count; ++i) {
+                collectExprRefs(al->elements[i], name, refs);
+            }
+            break;
+        }
+        case HIRExpr::Kind::IndexAccess: {
+            auto* ia = static_cast<const HIRIndexAccessExpr*>(expr);
+            collectExprRefs(ia->array, name, refs);
+            collectExprRefs(ia->index, name, refs);
+            break;
+        }
+        case HIRExpr::Kind::Cast: {
+            auto* c = static_cast<const HIRCastExpr*>(expr);
+            collectExprRefs(c->operand, name, refs);
+            break;
+        }
+        case HIRExpr::Kind::Loop: {
+            auto* lp = static_cast<const HIRLoopExpr*>(expr);
+            for (uint32_t i = 0; i < lp->binding_count; ++i) {
+                collectExprRefs(lp->bindings[i].init, name, refs);
+            }
+            collectExprRefs(lp->body, name, refs);
+            break;
+        }
+        case HIRExpr::Kind::Break: {
+            auto* brk = static_cast<const HIRBreakExpr*>(expr);
+            collectExprRefs(brk->value, name, refs);
+            break;
+        }
+        case HIRExpr::Kind::Continue: {
+            auto* cont = static_cast<const HIRContinueExpr*>(expr);
+            for (uint32_t i = 0; i < cont->arg_count; ++i) {
+                collectExprRefs(cont->args[i], name, refs);
+            }
+            break;
+        }
+        case HIRExpr::Kind::AddrOf: {
+            auto* ao = static_cast<const HIRAddrOfExpr*>(expr);
+            collectExprRefs(ao->operand, name, refs);
+            break;
+        }
+        case HIRExpr::Kind::Deref: {
+            auto* dr = static_cast<const HIRDerefExpr*>(expr);
+            collectExprRefs(dr->operand, name, refs);
+            break;
+        }
+        case HIRExpr::Kind::UnionVariant: {
+            auto* uv = static_cast<const HIRUnionVariantExpr*>(expr);
+            collectExprRefs(uv->payload, name, refs);
+            break;
+        }
+        case HIRExpr::Kind::CallIndirect: {
+            auto* ci = static_cast<const HIRCallIndirectExpr*>(expr);
+            collectExprRefs(ci->callee, name, refs);
+            for (uint32_t i = 0; i < ci->arg_count; ++i) {
+                collectExprRefs(ci->args[i], name, refs);
+            }
+            break;
+        }
+        case HIRExpr::Kind::FnRef: {
+            auto* fr = static_cast<const HIRFnRefExpr*>(expr);
+            if (fr->fn_name == name) {
+                refs.push_back({expr->loc, false});
+            }
+            break;
+        }
         default:
+            // IntLit, FloatLit, BoolLit, StringLit, EnumAccess, InlineAsm
+            // — no sub-expressions with variable references
             break;
     }
 }
@@ -157,11 +252,32 @@ std::vector<ReferenceLocation> ReferencesProvider::findReferences(
     const HIRModule* hir = ctx.getHIR(path);
     if (!hir) return refs;
 
-    // Find definition
+    // Find definition (top-level)
     for (uint32_t i = 0; i < hir->fn_count; ++i) {
         auto* fn = hir->functions[i];
         if (fn->name == ident && include_definition) {
             refs.push_back({fn->loc, true});
+        }
+    }
+
+    for (uint32_t i = 0; i < hir->struct_count; ++i) {
+        auto* s = hir->structs[i];
+        if (s->name == ident && include_definition) {
+            refs.push_back({s->loc, true});
+        }
+    }
+
+    for (uint32_t i = 0; i < hir->enum_count; ++i) {
+        auto* e = hir->enums[i];
+        if (e->name == ident && include_definition) {
+            refs.push_back({e->loc, true});
+        }
+    }
+
+    for (uint32_t i = 0; i < hir->union_count; ++i) {
+        auto* u = hir->unions[i];
+        if (u->name == ident && include_definition) {
+            refs.push_back({u->loc, true});
         }
     }
 

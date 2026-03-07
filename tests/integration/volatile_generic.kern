@@ -1,0 +1,13 @@
+// Test generic volatile_read/volatile_write — works with any type
+fn volatile_read<T>(ptr: Ptr<T>) -> T = intrinsic
+fn volatile_write<T>(ptr: Ptr<var T>, v: T) -> Unit = intrinsic
+
+fn main() -> i64 {
+    var x: i64 = 0
+    var y: u8 = 0 as u8
+    volatile_write(&var x, 42)
+    volatile_write(&var y, 10 as u8)
+    val a: i64 = volatile_read(&x)
+    val b: u8 = volatile_read(&y)
+    a + (b as i64) - 10
+}

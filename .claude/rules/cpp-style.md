@@ -9,8 +9,8 @@ paths:
 - #pragma once (not include guards)
 - namespace kern { ... } // namespace kern
 - Indent: 4 spaces, no tabs. K&R braces (opening on same line).
-- PascalCase: classes, structs, enums (CodeGen, IRType, Purity::Pure)
-- camelCase: methods (emitModule, typeOfExpr, regForWidth)
+- PascalCase: classes, structs, enums (X86Backend, TypeTable, Purity::Pure)
+- camelCase: methods (emitFunction, lowerExpr, regForWidth)
 - snake_case_: private members with trailing underscore (out_, diag_, has_errors_)
 - snake_case: locals and parameters (kern_file, test_name)
 - ALL_CAPS: constants and static arrays (ARG_REGS, MAX_ARG_REGS)

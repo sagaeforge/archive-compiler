@@ -759,4 +759,72 @@ TEST_F(LIRTest, ConstFoldNotBool) {
     EXPECT_FALSE(folded.const_bool.value);
 }
 
+// ============================================================================
+// ConstPropPass tests
+// ============================================================================
+
+TEST_F(LIRTest, ConstPropAddZero) {
+    // x + 0 → x (when x is const, becomes ConstInt(x))
+    LIRInstr instrs[3];
+    instrs[0] = makeConstInt(0, 42, TypeTable::I64);
+    instrs[1] = makeConstInt(1, 0, TypeTable::I64);
+    instrs[2] = makeBinOp(LIROp::Add, 2, 0, 1, TypeTable::I64);
+
+    auto m = makeSimpleModule(ctx, instrs, 3);
+    ConstPropPass pass;
+    pass.run(m.mod, ctx);
+
+    auto& prop = m.mod.functions[0].blocks[0].instrs[2];
+    EXPECT_EQ(prop.op, LIROp::ConstInt);
+    EXPECT_EQ(prop.const_int.value, 42);
+}
+
+TEST_F(LIRTest, ConstPropMulZero) {
+    // x * 0 → 0
+    LIRInstr instrs[3];
+    instrs[0] = makeConstInt(0, 42, TypeTable::I64);
+    instrs[1] = makeConstInt(1, 0, TypeTable::I64);
+    instrs[2] = makeBinOp(LIROp::Mul, 2, 0, 1, TypeTable::I64);
+
+    auto m = makeSimpleModule(ctx, instrs, 3);
+    ConstPropPass pass;
+    pass.run(m.mod, ctx);
+
+    auto& prop = m.mod.functions[0].blocks[0].instrs[2];
+    EXPECT_EQ(prop.op, LIROp::ConstInt);
+    EXPECT_EQ(prop.const_int.value, 0);
+}
+
+TEST_F(LIRTest, ConstPropMulOne) {
+    // x * 1 → x (when x is const)
+    LIRInstr instrs[3];
+    instrs[0] = makeConstInt(0, 42, TypeTable::I64);
+    instrs[1] = makeConstInt(1, 1, TypeTable::I64);
+    instrs[2] = makeBinOp(LIROp::Mul, 2, 0, 1, TypeTable::I64);
+
+    auto m = makeSimpleModule(ctx, instrs, 3);
+    ConstPropPass pass;
+    pass.run(m.mod, ctx);
+
+    auto& prop = m.mod.functions[0].blocks[0].instrs[2];
+    EXPECT_EQ(prop.op, LIROp::ConstInt);
+    EXPECT_EQ(prop.const_int.value, 42);
+}
+
+TEST_F(LIRTest, ConstPropNoop) {
+    // x + y where neither is 0 → no change
+    LIRInstr instrs[3];
+    instrs[0] = makeConstInt(0, 10, TypeTable::I64);
+    instrs[1] = makeConstInt(1, 20, TypeTable::I64);
+    instrs[2] = makeBinOp(LIROp::Add, 2, 0, 1, TypeTable::I64);
+
+    auto m = makeSimpleModule(ctx, instrs, 3);
+    ConstPropPass pass;
+    pass.run(m.mod, ctx);
+
+    // Neither operand is 0 or 1, so no propagation
+    auto& prop = m.mod.functions[0].blocks[0].instrs[2];
+    EXPECT_EQ(prop.op, LIROp::Add);
+}
+
 } // namespace kern

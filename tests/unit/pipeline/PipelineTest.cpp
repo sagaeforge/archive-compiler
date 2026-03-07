@@ -1,5 +1,7 @@
 #include "kern/pipeline/CompilerPipeline.h"
 #include <gtest/gtest.h>
+#include <filesystem>
+#include <fstream>
 #include <sstream>
 
 namespace kern {
@@ -286,6 +288,108 @@ TEST_F(PipelineTest, DefaultOptions) {
     EXPECT_FALSE(opts.dump_purity);
     EXPECT_FALSE(opts.freestanding);
     EXPECT_TRUE(opts.linker_script.empty());
+    EXPECT_EQ(opts.format, OutputFormat::Macho64);
+}
+
+// ============================================================================
+// ELF Output Format
+// ============================================================================
+
+TEST_F(PipelineTest, ElfFormatOption) {
+    CompileOptions opts;
+    opts.format = OutputFormat::Elf64;
+    opts.asm_only = true;
+    opts.input_file = "test.kern";
+    std::ostringstream out, err;
+    CompilationContext elf_ctx;
+    CompilerPipeline pipeline(elf_ctx);
+    EXPECT_EQ(pipeline.run("fn main() -> i64 { 42 }", opts, out, err), 0);
+    // ASM written — check output message (asm_only=true writes to file, not out)
+}
+
+// --- @include preprocessor tests ---
+
+TEST_F(PipelineTest, PreprocessIncludesNoDirectives) {
+    std::ostringstream err;
+    bool ok;
+    auto result = CompilerPipeline::preprocessIncludes(
+        "fn main() -> i64 { 42 }", ".", {}, err, ok);
+    EXPECT_TRUE(ok);
+    EXPECT_EQ(result, "fn main() -> i64 { 42 }");
+}
+
+TEST_F(PipelineTest, PreprocessIncludesFileNotFound) {
+    std::ostringstream err;
+    bool ok;
+    auto result = CompilerPipeline::preprocessIncludes(
+        "@include(\"nonexistent.kern\")\nfn main() -> i64 { 0 }", ".", {}, err, ok);
+    EXPECT_FALSE(ok);
+    EXPECT_NE(err.str().find("not found"), std::string::npos);
+}
+
+TEST_F(PipelineTest, PreprocessIncludesBasic) {
+    // Create a temp file to include
+    std::string tmp_dir = "/tmp/kern_test_include_" + std::to_string(getpid());
+    std::filesystem::create_directories(tmp_dir);
+    {
+        std::ofstream hdr(tmp_dir + "/types.kern");
+        hdr << "struct Foo { x: i64 }\n";
+    }
+
+    std::ostringstream err;
+    bool ok;
+    std::string source = "@include(\"types.kern\")\nfn main() -> i64 { 0 }\n";
+    auto result = CompilerPipeline::preprocessIncludes(source, tmp_dir, {}, err, ok);
+    EXPECT_TRUE(ok) << err.str();
+    EXPECT_NE(result.find("struct Foo"), std::string::npos);
+    EXPECT_NE(result.find("fn main"), std::string::npos);
+    EXPECT_EQ(result.find("@include"), std::string::npos);
+
+    std::filesystem::remove_all(tmp_dir);
+}
+
+TEST_F(PipelineTest, PreprocessIncludesOnce) {
+    // Double include should include only once
+    std::string tmp_dir = "/tmp/kern_test_include_once_" + std::to_string(getpid());
+    std::filesystem::create_directories(tmp_dir);
+    {
+        std::ofstream hdr(tmp_dir + "/shared.kern");
+        hdr << "struct Shared { v: i64 }\n";
+    }
+
+    std::ostringstream err;
+    bool ok;
+    std::string source = "@include(\"shared.kern\")\n@include(\"shared.kern\")\n";
+    auto result = CompilerPipeline::preprocessIncludes(source, tmp_dir, {}, err, ok);
+    EXPECT_TRUE(ok) << err.str();
+    // Should only appear once
+    auto first = result.find("struct Shared");
+    auto second = result.find("struct Shared", first + 1);
+    EXPECT_NE(first, std::string::npos);
+    EXPECT_EQ(second, std::string::npos);
+
+    std::filesystem::remove_all(tmp_dir);
+}
+
+TEST_F(PipelineTest, PreprocessIncludesSearchPath) {
+    // Test -I search path
+    std::string tmp_dir = "/tmp/kern_test_include_ipath_" + std::to_string(getpid());
+    std::string inc_dir = tmp_dir + "/inc";
+    std::filesystem::create_directories(inc_dir);
+    {
+        std::ofstream hdr(inc_dir + "/defs.kern");
+        hdr << "type MyInt = i64\n";
+    }
+
+    std::ostringstream err;
+    bool ok;
+    std::string source = "@include(\"defs.kern\")\n";
+    // Not in base_dir (tmp_dir), but in inc_dir which is an include path
+    auto result = CompilerPipeline::preprocessIncludes(source, tmp_dir, {inc_dir}, err, ok);
+    EXPECT_TRUE(ok) << err.str();
+    EXPECT_NE(result.find("type MyInt"), std::string::npos);
+
+    std::filesystem::remove_all(tmp_dir);
 }
 
 } // namespace kern

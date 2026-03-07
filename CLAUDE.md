@@ -11,14 +11,8 @@ build/tests/unit/kern_tests
 bash tests/integration/run_tests.sh build/tools/kernc/kernc tests/integration
 ```
 
-## Pipeline
+## Pipeline (4-level IR)
 
-v1 (legacy, still used for final binary emission):
-```
-Lexer → Parser → TypeChecker → PurityChecker → IRBuilder → CodeGen → NASM → ld
-```
-
-v2 (4-level IR, dump flags operational):
 ```
 Source → Lexer → Parser → AST → HIRBuilder → HIR → LIRBuilder → LIR → Backend → MachIR → NASM → ld
 ```
@@ -28,13 +22,15 @@ Each stage: `include/kern/<stage>/` headers, `lib/<Stage>/` implementation.
 ## Directory Structure
 
 ```
-include/kern/{lexer,parser,sema,ir,codegen,support}/  — v1 headers
-include/kern/{hir,lir,backend}/                        — v2 headers
-lib/{Lexer,Parser,Sema,IR,CodeGen,Support}/            — v1 implementations
-lib/{HIR,LIR,Backend}/                                 — v2 implementations
-tools/kernc/main.cpp                                    — compiler driver
-tests/unit/                                             — GoogleTest unit tests
-tests/integration/                                      — .kern + .expected E2E tests
+include/kern/{lexer,parser,support}/         — core headers
+include/kern/{hir,lir,backend}/              — IR pipeline headers
+include/kern/{ide,fmt,debug,pipeline,pkg}/   — tooling headers
+lib/{Lexer,Parser,Support}/                  — core implementations
+lib/{HIR,LIR,Backend}/                       — IR pipeline implementations
+lib/{IDE,Fmt,Debug,Pipeline,Pkg}/            — tooling implementations
+tools/kernc/main.cpp                         — compiler driver
+tests/unit/                                  — GoogleTest unit tests
+tests/integration/                           — .kern + .expected E2E tests
 ```
 
 ## Agent Scope

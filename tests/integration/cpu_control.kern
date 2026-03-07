@@ -1,0 +1,17 @@
+// Test CPU control intrinsics — verify they compile and lower correctly
+// Most are privileged and would SIGILL in user mode, so we only call pause
+fn pause() -> Unit = intrinsic
+fn read_cr0() -> u64 = intrinsic
+fn write_cr0(v: u64) -> Unit = intrinsic
+fn read_cr3() -> u64 = intrinsic
+fn write_cr3(v: u64) -> Unit = intrinsic
+fn cli() -> Unit = intrinsic
+fn sti() -> Unit = intrinsic
+fn hlt() -> Unit = intrinsic
+fn invlpg(addr: u64) -> Unit = intrinsic
+
+fn main() -> i64 {
+    // pause is the only non-privileged instruction — it's a NOP hint
+    pause()
+    42
+}

@@ -1,0 +1,27 @@
+// Test full cpuid register access
+fn cpuid_eax(leaf: u32) -> u32 = intrinsic
+fn cpuid_ebx(leaf: u32) -> u32 = intrinsic
+fn cpuid_ecx(leaf: u32) -> u32 = intrinsic
+fn cpuid_edx(leaf: u32) -> u32 = intrinsic
+fn cpuid_sub(leaf: u32, subleaf: u32) -> u32 = intrinsic
+
+fn main() -> i64 {
+    // cpuid leaf 0: eax = max basic leaf (>0)
+    val max_leaf: u32 = cpuid_eax(0u32)
+    val ok1: i64 = if max_leaf > 0u32 { 1 } else { 0 }
+
+    // cpuid leaf 0: ebx = vendor string first 4 bytes (always non-zero)
+    val vendor_ebx: u32 = cpuid_ebx(0u32)
+    val ok2: i64 = if vendor_ebx > 0u32 { 1 } else { 0 }
+
+    // cpuid leaf 1: edx has feature flags (bit 0 = FPU, always set)
+    val features: u32 = cpuid_edx(1u32)
+    val ok3: i64 = if features > 0u32 { 1 } else { 0 }
+
+    // cpuid_sub leaf 7, subleaf 0: just verify no crash
+    cpuid_sub(7u32, 0u32)
+    val ok4: i64 = 1
+
+    // 4 * 10 + 2 = 42
+    (ok1 + ok2 + ok3 + ok4) * 10 + 2
+}

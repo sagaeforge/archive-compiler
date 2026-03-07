@@ -68,6 +68,7 @@ const char* lirOpName(LIROp op) {
         case LIROp::AtomicFetchAnd: return "atomic_fetch_and";
         case LIROp::AtomicFetchOr:  return "atomic_fetch_or";
         case LIROp::AtomicFetchXor: return "atomic_fetch_xor";
+        case LIROp::AtomicCas128:  return "atomic_cas128";
         case LIROp::Fence:          return "fence";
         case LIROp::CompilerFence:  return "compiler_fence";
         case LIROp::PercpuLoad:     return "percpu_load";
@@ -81,6 +82,12 @@ const char* lirOpName(LIROp op) {
         case LIROp::PortIn:         return "port_in";
         case LIROp::PortOut:        return "port_out";
         case LIROp::Trap:           return "trap";
+        case LIROp::Switch:         return "switch";
+        case LIROp::VaStart:        return "va_start";
+        case LIROp::VaArg:          return "va_arg";
+        case LIROp::Alloca:         return "alloca";
+        case LIROp::TlsLoad:        return "tls_load";
+        case LIROp::TlsStore:       return "tls_store";
     }
     return "?";
 }
@@ -212,6 +219,12 @@ void dumpLIRInstr(const LIRInstr& i, const TypeTable& types, std::ostream& out) 
                 << ", %v" << i.atomic_cas.desired
                 << " order=" << static_cast<int>(i.atomic_cas.order);
             break;
+        case LIROp::AtomicCas128:
+            out << " %v" << i.atomic_cas128.ptr
+                << ", %v" << i.atomic_cas128.exp_lo << ":%v" << i.atomic_cas128.exp_hi
+                << ", %v" << i.atomic_cas128.des_lo << ":%v" << i.atomic_cas128.des_hi
+                << " order=" << static_cast<int>(i.atomic_cas128.order);
+            break;
         case LIROp::AtomicFetchAdd:
             out << " %v" << i.atomic_fetch_add.ptr << ", %v" << i.atomic_fetch_add.value
                 << " order=" << static_cast<int>(i.atomic_fetch_add.order);
@@ -254,6 +267,29 @@ void dumpLIRInstr(const LIRInstr& i, const TypeTable& types, std::ostream& out) 
             break;
         case LIROp::Trap:
             break; // no operands
+        case LIROp::Switch:
+            out << " %v" << i.switch_.scrutinee << " [";
+            for (uint32_t c = 0; c < i.switch_.case_count; ++c) {
+                if (c > 0) out << ", ";
+                out << i.switch_.cases[c].value << "->bb" << i.switch_.cases[c].target_block;
+            }
+            out << "] default->bb" << i.switch_.default_block;
+            break;
+        case LIROp::VaStart:
+            out << " fixed=" << i.va_start.fixed_param_count;
+            break;
+        case LIROp::VaArg:
+            out << " %v" << i.va_arg.ap;
+            break;
+        case LIROp::Alloca:
+            out << " %v" << i.alloca_.size;
+            break;
+        case LIROp::TlsLoad:
+            out << " %v" << i.tls_load.offset;
+            break;
+        case LIROp::TlsStore:
+            out << " %v" << i.tls_store.offset << ", %v" << i.tls_store.value;
+            break;
     }
 
     out << " : " << types.name(i.type);

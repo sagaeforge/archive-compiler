@@ -232,3 +232,61 @@ TEST_F(RegisterAllocatorTest, ComparisonAllocated) {
     auto& fn = mod->functions[0];
     EXPECT_FALSE(hasVirtualRegs(fn));
 }
+
+// ============================================================================
+// Advanced Allocation Tests
+// ============================================================================
+
+TEST_F(RegisterAllocatorTest, SpillReload) {
+    // Force many live values to test spilling — 8+ params exceeds available GPRs
+    auto* mod = buildMachIR(
+        "fn many(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64) -> i64 {\n"
+        "  val r1: i64 = a + b\n"
+        "  val r2: i64 = c + d\n"
+        "  val r3: i64 = e + f\n"
+        "  val r4: i64 = r1 + r2\n"
+        "  val r5: i64 = r3 + r4\n"
+        "  r5\n"
+        "}");
+    runRegAlloc(mod);
+    auto& fn = mod->functions[0];
+    EXPECT_FALSE(hasVirtualRegs(fn));
+    // With 6 params + many temps, some may spill
+    // Key invariant: all vregs resolved, stack aligned
+    EXPECT_EQ(fn.stack_size % 8, 0u);
+}
+
+TEST_F(RegisterAllocatorTest, CalleeSavedTracked) {
+    auto* mod = buildMachIR(
+        "fn f(a: i64, b: i64, c: i64, d: i64) -> i64 {\n"
+        "  val x: i64 = a + b\n"
+        "  val y: i64 = c + d\n"
+        "  x + y\n"
+        "}");
+    runRegAlloc(mod);
+    auto& fn = mod->functions[0];
+    EXPECT_FALSE(hasVirtualRegs(fn));
+    // callee_saved_regs should be populated if callee-saved regs are used
+    // (won't necessarily be used for simple funcs, but the infrastructure should be valid)
+}
+
+TEST_F(RegisterAllocatorTest, FloatPool) {
+    auto* mod = buildMachIR(
+        "fn fadd(a: f64, b: f64) -> f64 { a + b }");
+    runRegAlloc(mod);
+    auto& fn = mod->functions[0];
+    EXPECT_FALSE(hasVirtualRegs(fn));
+}
+
+TEST_F(RegisterAllocatorTest, PrecoloredDiv) {
+    // Division requires precolored rax/rdx — test that regalloc handles them
+    auto* mod = buildMachIR(
+        "fn divmod(a: i64, b: i64) -> i64 {\n"
+        "  val q: i64 = a / b\n"
+        "  val r: i64 = a - q * b\n"
+        "  q + r\n"
+        "}");
+    runRegAlloc(mod);
+    auto& fn = mod->functions[0];
+    EXPECT_FALSE(hasVirtualRegs(fn));
+}

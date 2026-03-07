@@ -10,6 +10,7 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::FloatLit:   return "FloatLit";
         case TokenKind::StringLit:  return "StringLit";
         case TokenKind::CStringLit: return "CStringLit";
+        case TokenKind::FStringLit: return "FStringLit";
         case TokenKind::CharLit:    return "CharLit";
         case TokenKind::Ident:      return "Ident";
         case TokenKind::KwFn:       return "fn";
@@ -57,6 +58,7 @@ const char* tokenKindName(TokenKind kind) {
         case TokenKind::KwIn:       return "in";
         case TokenKind::KwWhile:    return "while";
         case TokenKind::KwDefer:    return "defer";
+        case TokenKind::KwWhere:    return "where";
         case TokenKind::Plus:       return "+";
         case TokenKind::PlusWrap:   return "+%";
         case TokenKind::PlusSat:    return "+|";
@@ -263,24 +265,30 @@ Token Lexer::scanNumber() {
     }
 
 scan_int_suffix:
-    // Check for integer type suffix: u8, u16, u32, u64, i8, i16, i32, i64
+    // Check for integer type suffix: u8, u16, u32, u64, i8, i16, i32, i64, isize, usize
     if (!isAtEnd() && (peek() == 'u' || peek() == 'i')) {
         const char* suffix_start = current_;
         advance(); // consume 'u' or 'i'
-        // Must be followed by 8, 16, 32, or 64
         if (!isAtEnd() && std::isdigit(static_cast<unsigned char>(peek()))) {
+            // Numeric suffix: u8, u16, u32, u64, i8, i16, i32, i64
             while (!isAtEnd() && std::isdigit(static_cast<unsigned char>(peek()))) {
                 advance();
             }
-            // Verify it's a valid suffix width
             std::string_view suffix(suffix_start, static_cast<size_t>(current_ - suffix_start));
             if (suffix != "u8" && suffix != "u16" && suffix != "u32" && suffix != "u64" &&
                 suffix != "i8" && suffix != "i16" && suffix != "i32" && suffix != "i64") {
-                // Not a valid suffix — rewind
+                current_ = suffix_start;
+            }
+        } else if (!isAtEnd() && peek() == 's') {
+            // Possible isize/usize suffix
+            while (!isAtEnd() && std::isalpha(static_cast<unsigned char>(peek()))) {
+                advance();
+            }
+            std::string_view suffix(suffix_start, static_cast<size_t>(current_ - suffix_start));
+            if (suffix != "isize" && suffix != "usize") {
                 current_ = suffix_start;
             }
         } else {
-            // No digit after u/i — rewind
             current_ = suffix_start;
         }
     }
@@ -334,6 +342,7 @@ TokenKind Lexer::identifierKind(std::string_view text) {
     if (text == "in")       return TokenKind::KwIn;
     if (text == "while")    return TokenKind::KwWhile;
     if (text == "defer")    return TokenKind::KwDefer;
+    if (text == "where")    return TokenKind::KwWhere;
     return TokenKind::Ident;
 }
 
@@ -387,6 +396,40 @@ Token Lexer::scanCString() {
         advance();
     }
     return errorToken("unterminated C string literal");
+}
+
+Token Lexer::scanFString() {
+    // Scans f"..." content, handling {expr} interpolation holes.
+    // We lex the entire f-string as a single token; the parser splits it into parts.
+    int brace_depth = 0;
+    while (!isAtEnd()) {
+        char c = peek();
+        if (c == '"' && brace_depth == 0) {
+            advance();
+            return makeToken(TokenKind::FStringLit);
+        }
+        if (c == '{') {
+            brace_depth++;
+            advance();
+            continue;
+        }
+        if (c == '}') {
+            if (brace_depth > 0) brace_depth--;
+            advance();
+            continue;
+        }
+        if (c == '\\') {
+            advance();
+            if (isAtEnd()) break;
+            advance();
+            continue;
+        }
+        if (c == '\n') {
+            return errorToken("unterminated f-string literal");
+        }
+        advance();
+    }
+    return errorToken("unterminated f-string literal");
 }
 
 Token Lexer::scanIdentifierOrKeyword() {
@@ -465,6 +508,12 @@ Token Lexer::nextToken() {
     if (c == 'c' && !isAtEnd() && peek() == '"') {
         advance(); // consume the opening '"'
         return scanCString();
+    }
+
+    // F-string literal: f"...{expr}..."
+    if (c == 'f' && !isAtEnd() && peek() == '"') {
+        advance(); // consume the opening '"'
+        return scanFString();
     }
 
     // Identifiers and keywords

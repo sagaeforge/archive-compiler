@@ -4,6 +4,7 @@ add_library(kern_backend
     InstructionSelector.cpp
     RegisterAllocator.cpp
     Emitter.cpp
+    PeepholeOptimizer.cpp
     X86Backend.cpp
     TargetBackend.cpp
 )

@@ -1,0 +1,7 @@
+fn add_val<T>(a: T, b: T) -> T { a + b }
+
+fn main() -> i64 {
+  val a: i64 = 20
+  val b: i64 = 22
+  add_val(a, b)
+}

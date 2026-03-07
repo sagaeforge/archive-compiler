@@ -59,6 +59,7 @@ private:
     HIRExpr* buildBoolLit(const Expr* expr);
     HIRExpr* buildStringLit(const Expr* expr);
     HIRExpr* buildCStringLit(const Expr* expr);
+    HIRExpr* buildStringInterp(const Expr* expr);
     HIRExpr* buildIdent(const Expr* expr);
     HIRExpr* buildBinOp(const Expr* expr, std::optional<TypeId> ctx_type);
     HIRExpr* buildUnaryOp(const Expr* expr);
@@ -78,6 +79,7 @@ private:
     HIRExpr* buildForEach(const Expr* expr);
     HIRExpr* buildWhileLoop(const Expr* expr);
     HIRExpr* buildArrayLit(const Expr* expr);
+    HIRExpr* buildArrayRepeat(const Expr* expr);
     HIRExpr* buildIndexAccess(const Expr* expr);
     HIRExpr* buildSliceExpr(const Expr* expr);
     HIRExpr* buildInlineAsm(const Expr* expr);
@@ -108,6 +110,11 @@ private:
     // Compile-time evaluation for const fn / static_assert
     bool constEvalInt(HIRExpr* expr, int64_t* out,
                       const std::unordered_map<std::string_view, int64_t>* env = nullptr);
+    bool constEvalFloat(HIRExpr* expr, double* out,
+                        const std::unordered_map<std::string_view, int64_t>* env = nullptr);
+
+    // Fold constant expressions in global initializers to literal nodes
+    HIRExpr* constFoldExpr(HIRExpr* expr);
 
     CompilationContext& ctx_;
 
@@ -123,13 +130,16 @@ private:
     std::unordered_map<std::string_view, TypeId> local_vars_;
     std::unordered_set<std::string_view> mutable_vars_;
     TypeId current_return_type_ = INVALID_TYPE;
+    std::string_view current_fn_name_;  // for generic bounds lookup
 
     // Type name → TypeId for struct/enum/union
     std::unordered_map<std::string_view, TypeId> named_types_;
 
-    // Generic struct/union templates (for on-demand monomorphization)
+    // Generic struct/union/type-alias/fn templates (for on-demand monomorphization)
     std::unordered_map<std::string_view, const StructDecl*> generic_structs_;
     std::unordered_map<std::string_view, const UnionDecl*> generic_unions_;
+    std::unordered_map<std::string_view, const TypeAliasDecl*> generic_type_aliases_;
+    std::unordered_map<std::string_view, const FnDecl*> generic_extern_fns_;  // cross-module generic bodies
 
     // Const generic parameter values (name → value), scoped during instantiation
     std::unordered_map<std::string_view, int64_t> const_values_;
@@ -166,6 +176,8 @@ private:
         std::string_view name;
         std::vector<std::string_view> method_names;
         std::vector<EffectSet> method_effects;  // declared effects per method
+        std::vector<std::string_view> assoc_type_names;  // associated type names
+        const TraitDecl* ast = nullptr;  // for method sig lookups (TypeVar dispatch)
     };
     std::unordered_map<std::string_view, TraitInfo> trait_table_;
 
@@ -175,8 +187,24 @@ private:
     };
     std::unordered_map<std::string_view, ImplMethods> impl_table_;
 
+    // Associated type resolution: "TypeName::AssocTypeName" → TypeId
+    std::unordered_map<std::string_view, TypeId> assoc_type_map_;
+
+    // Current impl target type name (for Self:: resolution in method bodies)
+    std::string_view current_impl_type_name_;
+
     void registerTraits(const Module* ast);
     void registerImpls(const Module* ast);
+    bool typeImplementsTrait(std::string_view type_name, std::string_view trait_name);
+
+    // Generic function type param bounds: fn_name → list of (type_var_id, bounds[])
+    struct GenericBound {
+        TypeId type_var_id;
+        std::string_view param_name;
+        std::string_view* bounds;
+        uint32_t bound_count;
+    };
+    std::unordered_map<std::string_view, std::vector<GenericBound>> generic_bounds_;
 
     // Resolve method on a type: returns mangled fn name or empty
     std::string_view resolveMethod(TypeId type, std::string_view method) const;
@@ -205,6 +233,48 @@ private:
     std::unordered_map<std::string_view, std::string_view> struct_module_map_;
     // Current module being compiled (empty for single-file compilation)
     std::string_view current_module_;
+
+    // Drop trait support: type_name → mangled drop fn name
+    std::unordered_map<std::string_view, std::string_view> drop_fns_;
+
+    // Copy/Clone trait support
+    std::unordered_set<std::string_view> copy_types_;   // types implementing Copy trait
+    std::unordered_set<std::string_view> clone_types_;   // types implementing Clone trait
+
+    // Deref/DerefMut trait support: type_name → deref target TypeId
+    std::unordered_map<std::string_view, TypeId> deref_targets_;
+    std::unordered_map<std::string_view, TypeId> deref_mut_targets_;
+
+    // Send/Sync marker traits: types explicitly implementing or opting out
+    std::unordered_set<std::string_view> send_types_;
+    std::unordered_set<std::string_view> not_send_types_;
+    std::unordered_set<std::string_view> sync_types_;
+    std::unordered_set<std::string_view> not_sync_types_;
+    bool isSendType(TypeId type) const;
+    bool isSyncType(TypeId type) const;
+
+    // Check if a type is Copy (primitive or explicitly marked)
+    bool isCopyType(TypeId type) const;
+
+    // Track local variable declaration order within current scope for drop ordering
+    struct ScopeVar {
+        std::string_view name;
+        TypeId type;
+    };
+    std::vector<std::vector<ScopeVar>> scope_stack_;  // stack of scope frames
+
+    // Check if a type needs dropping (implements Drop trait)
+    bool needsDrop(TypeId type) const;
+
+    // Generate a drop call HIRExpr for a variable
+    HIRExpr* makeDropCall(std::string_view var_name, TypeId type, SourceLocation loc);
+
+    // Push/pop scope frames
+    void pushScope();
+    void popScope();
+
+    // Record a local variable in the current scope frame
+    void recordScopeVar(std::string_view name, TypeId type);
 };
 
 } // namespace kern

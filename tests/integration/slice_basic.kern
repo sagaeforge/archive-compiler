@@ -1,9 +1,17 @@
-fn get_len(s: Slice<i64>) -> i64 {
-    s.len as i64
+// Test Slice<T> type: construction, field access, indexing
+fn sum_slice(s: Slice<i64>) -> i64 {
+    var total: i64 = 0
+    var i: u64 = 0u64
+    while i < s.len {
+        total = total + s[i]
+        i = i + 1u64
+    }
+    total
 }
 
 fn main() -> i64 {
-    val arr: [i64; 3] = [42, 10, 20]
-    val s: Slice<i64> = Slice<i64> { data: &arr[0], len: 3 }
-    get_len(s) + s.data as i64 - s.data as i64 + 39
+    var buf: [i64; 5] = [10, 8, 12, 7, 5]
+    val s: Slice<i64> = Slice { data: &buf[0], len: 5u64 }
+    // 10 + 8 + 12 + 7 + 5 = 42
+    sum_slice(s)
 }

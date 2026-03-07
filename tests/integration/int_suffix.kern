@@ -1,0 +1,7 @@
+// Test integer literal type suffixes
+fn main() -> i64 {
+    val a: u8 = 10u8
+    val b: u32 = 20u32
+    val c: i64 = 12i64
+    (a as i64) + (b as i64) + c
+}

@@ -1,1 +1,1 @@
-error:declared to return i64 but body has type i32
+exit:42

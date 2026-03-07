@@ -114,6 +114,55 @@ std::optional<HoverResult> HoverProvider::hover(
         }
     }
 
+    // Search params and locals in enclosing function
+    const HIRFnDecl* enclosing = nullptr;
+    for (uint32_t i = 0; i < hir->fn_count; ++i) {
+        auto* fn = hir->functions[i];
+        if (fn->loc.line <= line) {
+            if (!enclosing || fn->loc.line > enclosing->loc.line) {
+                enclosing = fn;
+            }
+        }
+    }
+    if (enclosing) {
+        // Params
+        for (uint32_t i = 0; i < enclosing->param_count; ++i) {
+            if (enclosing->params[i].name == ident) {
+                HoverResult result;
+                result.type_info = std::string(enclosing->params[i].name) + ": " +
+                                   ctx.context().types.name(enclosing->params[i].type);
+                result.definition_loc = enclosing->params[i].loc;
+                return result;
+            }
+        }
+        // Local val/var declarations
+        if (enclosing->body && enclosing->body->kind == HIRExpr::Kind::Block) {
+            auto* blk = static_cast<const HIRBlockExpr*>(enclosing->body);
+            for (uint32_t i = 0; i < blk->stmt_count; ++i) {
+                auto* stmt = blk->stmts[i];
+                if (stmt->kind == HIRStmt::Kind::ValDecl) {
+                    auto* vd = static_cast<const HIRValDeclStmt*>(stmt);
+                    if (vd->name == ident) {
+                        HoverResult result;
+                        result.type_info = "val " + std::string(vd->name) + ": " +
+                                           ctx.context().types.name(vd->type);
+                        result.definition_loc = stmt->loc;
+                        return result;
+                    }
+                } else if (stmt->kind == HIRStmt::Kind::VarDecl) {
+                    auto* vd = static_cast<const HIRVarDeclStmt*>(stmt);
+                    if (vd->name == ident) {
+                        HoverResult result;
+                        result.type_info = "var " + std::string(vd->name) + ": " +
+                                           ctx.context().types.name(vd->type);
+                        result.definition_loc = stmt->loc;
+                        return result;
+                    }
+                }
+            }
+        }
+    }
+
     return std::nullopt;
 }
 

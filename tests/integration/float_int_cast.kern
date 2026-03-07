@@ -1,0 +1,25 @@
+// E2E: float <-> integer casts
+fn main() -> i64 {
+    // f64 → i64 (truncate toward zero)
+    val x: f64 = 42.7
+    val i: i64 = x as i64    // 42
+
+    // i64 → f64
+    val n: i64 = 10
+    val f: f64 = n as f64    // 10.0
+
+    // f64 → f32 → f64 roundtrip
+    val a: f64 = 3.14
+    val b: f32 = a as f32
+    val c: f64 = b as f64
+
+    // i64 → f32
+    val m: i64 = 5
+    val g: f32 = m as f32
+
+    // f32 → i64
+    val h: i64 = g as i64    // 5
+
+    // combine: (42) + (5) - (10) + (5) = 42
+    i + h - n + h
+}

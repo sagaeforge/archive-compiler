@@ -196,6 +196,7 @@ enum class X86Op : uint8_t {
     // Atomic operations
     LockCmpxchg,    // lock cmpxchg [ptr], desired (uses rax as expected)
     LockXadd,       // lock xadd [ptr], value
+    LockCmpxchg16b, // lock cmpxchg16b [ptr] (rdx:rax expected, rcx:rbx desired)
     Xchg,           // xchg [ptr], value (implicitly locked)
     Mfence,         // mfence
     Sfence,         // sfence
@@ -204,6 +205,10 @@ enum class X86Op : uint8_t {
     // Per-CPU data (GS segment)
     GsLoad,         // mov dst, [gs:offset]
     GsStore,        // mov [gs:offset], src
+
+    // Thread-local storage (FS segment)
+    FsLoad,         // mov dst, [fs:offset]
+    FsStore,        // mov [fs:offset], src
 
     // Global variables (.data/.bss/.rodata)
     MovLoadGlobal,  // mov dst, [rel label]
@@ -230,6 +235,9 @@ enum class X86Op : uint8_t {
 
     // Trap
     Ud2,            // ud2 — illegal instruction trap
+
+    // Jump table
+    JmpTable,       // indirect jump through table: jmp [r11 + idx*8]
 };
 
 const char* x86OpName(X86Op op);
@@ -276,6 +284,7 @@ struct MachInstr {
     uint8_t width = 64;             // 8, 16, 32, 64
     uint8_t operand_count = 0;
     bool is_volatile = false;       // volatile load/store — must not be optimized away
+    int8_t branch_hint = 0;         // +1 = likely taken, -1 = likely not taken (for Jcc)
 
     union {
         MachOperand inline_ops[MACH_INLINE_OPERANDS];
@@ -358,10 +367,30 @@ struct MachFunction {
     bool is_extern = false;         // extern "C" fn — external C linkage
     bool is_weak = false;           // @weak — weak symbol linkage
     bool is_cold = false;           // @cold — unlikely code path
+    bool is_interrupt_error = false; // @interrupt_error — has error code
+    bool is_interrupt_nofp = false;  // @interrupt_nofp — no XMM save/restore
     bool is_hot = false;            // @hot — frequently executed
+    bool is_hidden = false;         // @hidden — ELF hidden visibility
+    bool is_protected = false;      // @protected — ELF protected visibility
+    bool is_constructor = false;    // @constructor — placed in .init_array
+    bool is_destructor = false;     // @destructor — placed in .fini_array
+    uint32_t constructor_priority = 65535;
+    uint32_t destructor_priority = 65535;
+    bool is_no_red_zone = false;    // @no_red_zone — disable red zone
+    uint32_t fn_align = 0;          // @align(N) — function alignment
     std::string_view section_name;  // @section("name"), empty = default
+    std::string_view section_flags; // @section("name", "awx"), empty = default
     std::string_view link_name;     // @link_name("name"), empty = auto
     SourceLocation loc;             // function declaration source location
+
+    // Jump tables for switch optimization
+    struct JumpTable {
+        std::string_view label;     // .jt_N label
+        std::string_view* targets;  // block labels for each entry
+        uint32_t entry_count;       // total entries (including default fills)
+    };
+    JumpTable* jump_tables = nullptr;
+    uint32_t jump_table_count = 0;
 };
 
 // ============================================================================

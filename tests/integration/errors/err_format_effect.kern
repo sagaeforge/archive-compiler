@@ -1,0 +1,6 @@
+fn impure() -> i64 with io {
+  var x: i64 = 10
+  x = 20
+  x
+}
+fn main() -> i64 { impure() }

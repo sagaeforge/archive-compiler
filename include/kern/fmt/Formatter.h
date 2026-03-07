@@ -25,6 +25,13 @@ private:
     void formatStructDecl(const StructDecl* s);
     void formatEnumDecl(const EnumDecl* e);
     void formatUnionDecl(const UnionDecl* u);
+    void formatImportDecl(const ImportDecl* imp);
+    void formatTypeAliasDecl(const TypeAliasDecl* ta);
+    void formatNewtypeDecl(const NewtypeDecl* nt);
+    void formatStaticAssertDecl(const StaticAssertDecl* sa);
+    void formatTraitDecl(const TraitDecl* t);
+    void formatImplDecl(const ImplDecl* imp);
+    void formatGlobalDecl(const GlobalDecl* g);
     void formatTypeRef(const TypeRef& t);
     void formatExpr(const Expr* expr);
     void formatStmt(const Stmt* stmt);

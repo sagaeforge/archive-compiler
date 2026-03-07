@@ -14,6 +14,13 @@ enum class TargetArch : uint8_t {
     AArch64,
 };
 
+// Object file format for assembly and linking
+enum class OutputFormat : uint8_t {
+    Macho64,      // macOS Mach-O 64-bit (nasm -f macho64)
+    Elf64,        // Linux/generic ELF 64-bit (nasm -f elf64)
+    FlatBinary,   // Raw flat binary (nasm -f bin), for bootloaders
+};
+
 // Abstract interface for target-specific backends.
 // Each architecture implements this to handle LIR → assembly.
 class TargetBackend {

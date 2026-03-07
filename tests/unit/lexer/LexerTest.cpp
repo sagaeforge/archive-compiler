@@ -567,3 +567,23 @@ TEST(LexerTest, StringLitInvalidEscape) {
     auto r = lex("\"hello\\xworld\"");
     EXPECT_EQ(r[0].kind, TokenKind::Error);
 }
+
+TEST(LexerTest, FStringLitSimple) {
+    auto r = lex("f\"hello {name}\"");
+    ASSERT_GE(r.size(), 1u);
+    EXPECT_EQ(r[0].kind, TokenKind::FStringLit);
+    EXPECT_EQ(r[0].text, "f\"hello {name}\"");
+}
+
+TEST(LexerTest, FStringLitNested) {
+    auto r = lex("f\"x={a + b}\"");
+    ASSERT_GE(r.size(), 1u);
+    EXPECT_EQ(r[0].kind, TokenKind::FStringLit);
+    EXPECT_EQ(r[0].text, "f\"x={a + b}\"");
+}
+
+TEST(LexerTest, FStringLitNoInterp) {
+    auto r = lex("f\"plain text\"");
+    ASSERT_GE(r.size(), 1u);
+    EXPECT_EQ(r[0].kind, TokenKind::FStringLit);
+}

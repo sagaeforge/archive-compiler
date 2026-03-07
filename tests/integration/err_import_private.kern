@@ -1,0 +1,5 @@
+import multimod_math (add, helper)
+
+fn main() -> i64 {
+    helper(add(1, 2))
+}

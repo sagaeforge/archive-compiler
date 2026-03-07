@@ -11,6 +11,7 @@ enum class TokenKind : uint8_t {
     FloatLit,
     StringLit,
     CStringLit,  // c"..." NUL-terminated C string literal → Ptr<u8>
+    FStringLit,  // f"...{expr}..." interpolated string literal
     CharLit,
 
     // Identifiers & Keywords
@@ -60,6 +61,7 @@ enum class TokenKind : uint8_t {
     KwIn,
     KwWhile,
     KwDefer,
+    KwWhere,
 
     // Operators
     Plus,        // +
