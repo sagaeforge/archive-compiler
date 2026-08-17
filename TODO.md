@@ -1,7 +1,7 @@
 
 +Project nString #우선순위 #마감_2021-02-18까지
 
-보이어 - 무어 알고리즘 최적화 
+보이어 - 무어 알고리즘 최적화  {c}
     String_Contains.c
     String_Count.c
     String_IndexAt.c
@@ -13,5 +13,5 @@
 
 네이밍 규칙 통일화 {c}
 
-+Project nRegularExpression 
++Project nRegularExpression  {c}
     구현해야함.
