@@ -1,0 +1,35 @@
+{
+    "type": "Program",
+    "statements": [
+        {
+            "type": "ExpressionStatement",
+            "expression": {
+                "type": "When",
+                "target": null,
+                "conditions": [
+                    {
+                        "condition": {
+                            "type": "BooleanLiteral",
+                            "value": true
+                        },
+                        "consequence": {
+                            "type": "IdentifierLiteral",
+                            "value": "a"
+                        }
+                    },
+                    {
+                        "condition": {
+                            "type": "BooleanLiteral",
+                            "value": false
+                        },
+                        "consequence": {
+                            "type": "IdentifierLiteral",
+                            "value": "b"
+                        }
+                    }
+                ],
+                "alternative": null
+            }
+        }
+    ]
+}

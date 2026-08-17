@@ -1,0 +1,12 @@
+{
+    "type": "Program",
+    "statements": [
+        {
+            "type": "Break",
+            "label": {
+                "type": "IdentifierLiteral",
+                "value": "label"
+            }
+        }
+    ]
+}

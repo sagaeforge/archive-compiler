@@ -1,0 +1,9 @@
+{
+    "type": "Program",
+    "statements": [
+        {
+            "type": "Break",
+            "label": null
+        }
+    ]
+}

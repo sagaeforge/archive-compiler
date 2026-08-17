@@ -1,0 +1,13 @@
+{
+    "type": "Program",
+    "statements": [
+        {
+            "type": "Return",
+            "label": {
+                "type": "IdentifierLiteral",
+                "value": "label"
+            },
+            "value": null
+        }
+    ]
+}

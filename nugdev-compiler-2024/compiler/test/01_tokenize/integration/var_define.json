@@ -1,0 +1,18 @@
+[
+    {
+        "type": "Let",
+        "literal": "let"
+    },
+    {
+        "type": "Identifier",
+        "literal": "a"
+    },
+    {
+        "type": "Assign",
+        "literal": "="
+    },
+    {
+        "type": "Number",
+        "literal": "1"
+    }
+]

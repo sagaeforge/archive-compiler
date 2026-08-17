@@ -1,0 +1,19 @@
+{
+    "type": "Program",
+    "statements": [
+        {
+            "type": "ExpressionStatement",
+            "expression": {
+                "type": "IndexExpression",
+                "left": {
+                    "type": "IdentifierLiteral",
+                    "value": "a"
+                },
+                "index": {
+                    "type": "NumberLiteral",
+                    "value": "1"
+                }
+            }
+        }
+    ]
+}

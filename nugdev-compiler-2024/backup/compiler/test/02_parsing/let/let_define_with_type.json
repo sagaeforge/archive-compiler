@@ -1,0 +1,18 @@
+{
+    "type": "Program",
+    "statements": [
+        {
+            "type": "Let",
+            "name": {
+                "type": "IdentifierLiteral",
+                "value": "a"
+            },
+            "type_expression": {
+                "type": "TypeLiteral",
+                "type-name": "i32",
+                "size": 4
+            },
+            "value": null
+        }
+    ]
+}
