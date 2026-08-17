@@ -1,0 +1,62 @@
+
+#ifndef __PUBLIC_APPLICATION_DATATYPE_APPLICATION__
+#define __PUBLIC_APPLICATION_DATATYPE_APPLICATION__
+
+#pragma pack(push, 1)
+// clang-format off
+
+#include <Types/DataType.h>
+#include <Types/DataType_GarbageCollection.h>
+#include <Types/DataType_Object.h>
+#include <Types/DataType_ProcessEvent.h>
+#include <Types/DataTypes_String.h>
+
+#include <pthread.h>
+
+struct ApplicationManager_t {
+  ProcessEvent ProcessEvent[8];
+  const StringAry ProgramParam;
+
+  struct {
+    pthread_t         ProcessEvent_UpdateThread;
+    pthread_t         ProcessEvent_FixedUpdateThread;
+    Length_t          ProcessEvent_FixedUpdateTime;
+    bool              ProcessEvent_IsUpdated;
+    bool              ProcessEvent_IsFixedUpdated;
+    bool              ProcessEvent_ProgramQuit;
+    ProcessEventName  ProcessEvent_Status;
+    Func_t            ProcessEvent_UpdateStart;
+    Func_t            ProcessEvent_UpdateStop;
+    Func_t            ProcessEvent_UpdateWaitStop;
+    Func_t            ProcessEvent_FixedUpdateStart;
+    Func_t            ProcessEvent_FixedUpdateStop;
+    Func_t            ProcessEvent_FixedUpdateWaitStop;
+
+    const DataTypeInfo_t* DataTypeTable;
+
+    struct {
+      Length_t UsedObjectLength;
+      Object   Value[ObjectMaxLength];
+      bool     IsUsed[ObjectMaxLength];
+    } GarbageCollection_ObjectTable;
+    struct
+    {
+      Length_t TotalUsedMemoryLength;
+      Length_t UsedMemoryPageLength;
+      MemoryPage_t MemoryPages;
+    } GarbageCollection_HeapTable;
+  } Member;
+
+  void (*ApplicationInit)     ();
+  void (*ApplicationStart)    ();
+  void (*ApplicationQuit)     ();
+
+  void (*Update_AllStart)     ();
+  void (*Update_AllStop)      ();
+  void (*Update_AllWaitStop)  ();
+};
+
+// clang-format on
+#pragma pack(pop)
+
+#endif
