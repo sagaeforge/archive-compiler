@@ -1,0 +1,6 @@
+[submodule "nugdev-compiler-2024/external/vcpkg"]
+	path = nugdev-compiler-2024/external/vcpkg
+	url = https://github.com/microsoft/vcpkg.git
+[submodule "nugdev-compiler-2025/external/vcpkg"]
+	path = nugdev-compiler-2025/external/vcpkg
+	url = https://github.com/microsoft/vcpkg.git
