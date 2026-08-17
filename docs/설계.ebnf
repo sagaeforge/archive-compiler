@@ -1,0 +1,56 @@
+(* 프로그램 기본 구조 *)
+Program ::= Declaration*
+
+(* 선언 *)
+Declaration ::= FunctionDeclaration | ClassDeclaration | VariableDeclaration
+
+(* 함수 선언 *)
+FunctionDeclaration ::= "fun" Identifier "(" Parameters? ")" (":" Type)? Block
+
+(* 파라미터 *)
+Parameters ::= Parameter ("," Parameter)*
+Parameter ::= Identifier ":" Type
+
+(* 클래스 선언 *)
+ClassDeclaration ::= "class" Identifier "{" ClassMember* "}"
+ClassMember ::= FunctionDeclaration | VariableDeclaration
+
+(* 변수 선언 *)
+VariableDeclaration ::= ("val" | "var") Identifier (":" Type)? "=" Expression ";"
+
+(* 타입 *)
+Type ::= PrimitiveType | ArrayType | UserDefinedType
+PrimitiveType ::= "Int" | "Double" | "Boolean" | "String"
+ArrayType ::= Type "[]"
+UserDefinedType ::= Identifier
+
+(* 블록과 문장 *)
+Block ::= "{" Statement* "}"
+Statement ::= Expression ";" | IfStatement | WhileStatement | ForStatement | ReturnStatement | Block
+
+(* 제어 구문 *)
+IfStatement ::= "if" "(" Expression ")" Statement ("else" Statement)?
+WhileStatement ::= "while" "(" Expression ")" Statement
+ForStatement ::= "for" "(" Identifier "in" Expression ")" Statement
+ReturnStatement ::= "return" Expression? ";"
+
+(* 표현식 *)
+Expression ::= Assignment | BinaryOperation | UnaryOperation | FunctionCall | ArrayAccess | ObjectCreation | Literal | Identifier
+Assignment ::= Identifier "=" Expression
+BinaryOperation ::= Expression Operator Expression
+UnaryOperation ::= Operator Expression
+Operator ::= "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||"
+FunctionCall ::= Identifier "(" Arguments? ")"
+Arguments ::= Expression ("," Expression)*
+ArrayAccess ::= Identifier "[" Expression "]"
+ObjectCreation ::= "new" Identifier "(" Arguments? ")"
+
+(* 기본 요소 *)
+Identifier ::= Letter (Letter | Digit)*
+Letter ::= "A" | ... | "Z" | "a" | ... | "z"
+Digit ::= "0" | ... | "9"
+Literal ::= IntegerLiteral | DoubleLiteral | StringLiteral | BooleanLiteral | "null"
+IntegerLiteral ::= Digit+
+DoubleLiteral ::= Digit+ "." Digit*
+StringLiteral ::= '"' [^"]* '"'
+BooleanLiteral ::= "true" | "false"
