@@ -1,0 +1,5 @@
+add_subdirectory(01_lib)
+add_subdirectory(02_scanning)
+add_subdirectory(03_tokenize)
+add_subdirectory(04_parsing)
+add_subdirectory(05_analysis)

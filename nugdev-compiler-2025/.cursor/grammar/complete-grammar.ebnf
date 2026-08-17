@@ -1,0 +1,415 @@
+(* Complete EBNF Grammar for nugdev Language *)
+(* Program -> Module -> Statement -> Expression Structure *)
+
+(* ================================================= *)
+(* PROGRAM STRUCTURE                                 *)
+(* ================================================= *)
+
+program = { module } ;
+
+(* ================================================= *)
+(* MODULE STRUCTURE                                  *)
+(* ================================================= *)
+
+module = { import_statement | export_statement | statement } ;
+
+import_statement = "import" string_literal [ "as" identifier ] [ ";" ] ;
+export_statement = "export" statement ;
+
+(* ================================================= *)
+(* STATEMENTS (No return value)                      *)
+(* ================================================= *)
+
+statement = variable_declaration
+          | function_declaration
+          | struct_declaration
+          | interface_declaration
+          | control_statement
+          | loop_statement
+          | if_statement
+          | expression_statement ;
+
+variable_declaration = ( "let" | "mut" ) identifier ":" type_literal [ ";" ]
+                     | ( "let" | "mut" ) identifier "=" expression [ ";" ]
+                     | ( "let" | "mut" ) identifier ":" type_literal "=" expression [ ";" ] ;
+
+function_declaration = "fun" identifier "(" [ parameter_list ] ")" ":" type_literal function_body ;
+function_body = "{" { statement } "}"
+              | "=" expression [ ";" ] ;
+
+struct_declaration = "struct" identifier "{" [ struct_field_list ] "}" [ ";" ] ;
+struct_field_list = struct_field { "," struct_field } [ "," ] ;
+struct_field = identifier ":" type_literal ;
+
+interface_declaration = "interface" identifier "{" [ interface_member_list ] "}" [ ";" ] ;
+interface_member_list = interface_member { "," interface_member } [ "," ] ;
+interface_member = identifier ":" type_literal
+                 | method_signature ;
+method_signature = identifier "(" [ parameter_list ] ")" ":" type_literal ;
+
+parameter_list = parameter { "," parameter } ;
+parameter = ( "let" | "mut" ) identifier ":" type_literal [ "=" expression ] ;
+
+control_statement = break_statement | continue_statement | return_statement ;
+break_statement = "break" [ "@" identifier ] [ ";" ] ;
+continue_statement = "continue" [ "@" identifier ] [ ";" ] ;
+return_statement = "return" [ "@" identifier ] [ expression ] [ ";" ] ;
+
+(* ================================================= *)
+(* CONTROL FLOW STATEMENTS                           *)
+(* ================================================= *)
+
+if_statement = [ label ] "if" [ "(" expression ")" ] "{" { statement_or_expression } "}"
+               { "elif" [ "(" expression ")" ] "{" { statement_or_expression } "}" }
+               [ "else" "{" { statement_or_expression } "}" ] ;
+
+(* NOTE: if_statement requires braces around bodies *)
+
+loop_statement = for_statement ;
+
+for_statement = [ label ] "for" for_clause "{" { statement_or_expression } "}" ;
+
+for_clause = (* empty *)                                                    (* infinite loop *)
+           | "(" expression ")"                                             (* while-style *)
+           | "(" variable_declaration ";" expression ")"                    (* init; condition *)
+           | "(" variable_declaration ";" expression ";" expression ")"     (* init; condition; increment *)
+           | "(" identifier "in" expression ")"                             (* for-in loop *) ;
+
+label = identifier "@" ;
+
+statement_or_expression = statement | expression ;
+
+expression_statement = expression [ ";" ] ;
+
+(* ================================================= *)
+(* EXPRESSIONS (Have return value)                   *)
+(* ================================================= *)
+
+expression = assignment_expression ;
+
+assignment_expression = ternary_expression [ assignment_operator assignment_expression ] ;
+assignment_operator = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^=" | "~=" ;
+
+ternary_expression = null_coalescing_expression [ "?" expression ":" expression ] ;
+
+null_coalescing_expression = logical_or_expression { "??" logical_or_expression } ;
+
+logical_or_expression = logical_and_expression { "or" logical_and_expression } ;
+
+logical_and_expression = bitwise_or_expression { "and" bitwise_or_expression } ;
+
+bitwise_or_expression = bitwise_xor_expression { "|" bitwise_xor_expression } ;
+
+bitwise_xor_expression = bitwise_and_expression { "^" bitwise_and_expression } ;
+
+bitwise_and_expression = equality_expression { "&" equality_expression } ;
+
+equality_expression = relational_expression { ( "==" | "!=" ) relational_expression } ;
+
+relational_expression = type_check_expression { ( "<" | ">" | "<=" | ">=" ) type_check_expression } ;
+
+type_check_expression = shift_expression { "is" type_literal } ;
+
+shift_expression = additive_expression { ( "<<" | ">>" ) additive_expression } ;
+
+additive_expression = multiplicative_expression { ( "+" | "-" ) multiplicative_expression } ;
+
+multiplicative_expression = unary_expression { ( "*" | "/" | "%" ) unary_expression } ;
+
+unary_expression = ( "+" | "-" | "!" | "not" | "~" | "++" | "--" ) unary_expression
+                 | postfix_expression ;
+
+postfix_expression = primary_expression { postfix_operator } ;
+postfix_operator = "++" 
+                 | "--" 
+                 | "." identifier
+                 | "?." identifier  (* null-safe access *)
+                 | "[" expression "]"
+                 | "(" [ argument_list ] ")"
+                 | cast_operator ;
+
+cast_operator = "as" type_literal      (* unsafe cast *)
+              | "as?" type_literal ;   (* safe cast *)
+
+(* ================================================= *)
+(* PRIMARY EXPRESSIONS                               *)
+(* ================================================= *)
+
+primary_expression = identifier
+                   | literal
+                   | "(" expression ")"
+                   | array_literal
+                   | object_literal
+                   | block_expression
+                   | if_expression
+                   | when_expression
+                   | function_expression
+                   | lambda_expression ;
+
+(* ================================================= *)
+(* BLOCK EXPRESSIONS                                 *)
+(* ================================================= *)
+
+block_expression = "{" { statement } [ expression ] "}" ;
+statement_block = "{" { statement } "}" ;
+
+(* ================================================= *)
+(* CONTROL FLOW EXPRESSIONS                          *)
+(* ================================================= *)
+
+if_expression = "if" "(" expression ")" expression [ "else" expression ] ;
+
+(* NOTE: if_expression has no braces, expressions only *)
+
+when_expression = "when" "(" expression ")" "{" 
+                  { when_clause } 
+                  [ else_clause ] 
+                  "}" ;
+when_clause = when_condition "->" ( statement | expression ) [ "," ] ;
+else_clause = "else" "->" ( statement | expression ) ;
+
+(* ================================================= *)
+(* WHEN CONDITIONS (for when expressions)            *)
+(* ================================================= *)
+
+when_condition = value_condition
+               | range_condition  
+               | type_condition
+               | guard_condition
+               | multiple_condition ;
+
+value_condition = expression ;
+range_condition = expression "in" expression ;
+type_condition = expression "is" type_literal ;
+guard_condition = value_condition "if" expression ;
+multiple_condition = value_condition { "," value_condition } ;
+
+(* ================================================= *)
+(* FUNCTION EXPRESSIONS                              *)
+(* ================================================= *)
+
+function_expression = [ label ] "fun" "(" [ parameter_list ] ")" ":" type_literal function_expression_body ;
+function_expression_body = "{" { statement } [ expression ] "}"
+                         | "=" expression ;
+
+lambda_expression = [ label ] "(" [ lambda_parameter_list ] ")" "=>" expression ;
+lambda_parameter_list = lambda_parameter { "," lambda_parameter } ;
+lambda_parameter = ( "let" | "mut" ) identifier ":" type_literal [ "=" expression ] ;
+
+(* NOTE: Lambda parameters MUST have type annotations to distinguish from function calls *)
+(* Example: (let x: number) => x * 2  vs  func(x) *)
+
+argument_list = expression { "," expression } ;
+
+(* ================================================= *)
+(* LITERALS                                          *)
+(* ================================================= *)
+
+literal = number_literal
+        | string_literal
+        | character_literal
+        | boolean_literal
+        | null_literal
+        | none_literal
+        | range_literal ;
+
+(* Number Literals *)
+number_literal = integer_literal | floating_point_literal ;
+
+integer_literal = decimal_integer 
+                | binary_integer 
+                | octal_integer 
+                | hexadecimal_integer ;
+
+decimal_integer = DIGIT { DIGIT | "_" } ;
+binary_integer = "0b" BINARY_DIGIT { BINARY_DIGIT | "_" } ;
+octal_integer = "0o" OCTAL_DIGIT { OCTAL_DIGIT | "_" } ;
+hexadecimal_integer = "0x" HEX_DIGIT { HEX_DIGIT | "_" } ;
+
+floating_point_literal = DIGIT { DIGIT | "_" } "." { DIGIT | "_" } [ exponent ]
+                       | DIGIT { DIGIT | "_" } exponent ;
+
+exponent = ( "e" | "E" ) [ "+" | "-" ] DIGIT { DIGIT } ;
+
+(* String Literals *)
+string_literal = simple_string | raw_string | template_string ;
+
+simple_string = "\"" { string_character } "\"" ;
+string_character = ESCAPE_SEQUENCE | ~( "\"" | "\\" | NEWLINE ) ;
+
+raw_string = "r\"" { ~"\"" } "\"" ;
+
+template_string = "`" { template_character | template_expression } "`" ;
+template_character = ESCAPE_SEQUENCE | ~( "`" | "$" ) ;
+template_expression = "${" expression "}" ;
+
+(* Character Literals *)
+character_literal = "'" ( ESCAPE_SEQUENCE | ~( "'" | "\\" | NEWLINE ) ) "'" ;
+
+(* Boolean Literals *)
+boolean_literal = "true" | "false" ;
+
+(* Null and None Literals *)
+null_literal = "null" ;
+none_literal = "None" ;
+
+(* Range Literals *)
+range_literal = expression ".." [ expression ] ;
+
+(* ================================================= *)
+(* COLLECTION LITERALS                               *)
+(* ================================================= *)
+
+array_literal = "[" [ expression_list ] "]" 
+              | array_comprehension ;
+
+array_comprehension = "[" expression "for" identifier "in" expression [ "if" expression ] "]" ;
+
+object_literal = "{" [ property_list ] "}" ;
+
+property_list = property { "," property } [ "," ] ;
+
+property = property_name ":" expression
+         | "[" expression "]" ":" expression    (* computed property *)
+         | identifier                           (* shorthand property *)
+         | "." identifier "=" expression        (* shorthand assignment *)
+         | "..." expression ;                   (* spread operator *)
+
+property_name = identifier | string_literal | number_literal ;
+
+expression_list = expression { "," expression } [ "," ] ;
+
+(* ================================================= *)
+(* TYPE LITERALS                                     *)
+(* ================================================= *)
+
+type_literal = identifier | complex_type ;
+
+complex_type = function_type 
+             | optional_type
+             | tuple_type ;
+
+function_type = "(" [ type_list ] ")" "->" type_literal ;
+optional_type = type_literal "?" ;
+tuple_type = "(" type_literal "," type_list ")" ;
+
+type_list = type_literal { "," type_literal } ;
+
+(* ================================================= *)
+(* TERMINAL SYMBOLS                                  *)
+(* ================================================= *)
+
+identifier = IDENTIFIER ;
+
+(* ================================================= *)
+(* LEXICAL RULES                                     *)
+(* ================================================= *)
+
+ESCAPE_SEQUENCE = "\\" ( "n" | "t" | "r" | "\\" | "\"" | "'" | "0" | "u" HEX_DIGIT{4} ) ;
+
+IDENTIFIER = LETTER { LETTER | DIGIT | "_" } ;
+LETTER = "a".."z" | "A".."Z" | "_" ;
+DIGIT = "0".."9" ;
+BINARY_DIGIT = "0" | "1" ;
+OCTAL_DIGIT = "0".."7" ;
+HEX_DIGIT = "0".."9" | "a".."f" | "A".."F" ;
+
+NEWLINE = "\n" | "\r\n" | "\r" ;
+WHITESPACE = " " | "\t" | NEWLINE ;
+
+(* ================================================= *)
+(* COMMENTS                                          *)
+(* ================================================= *)
+
+line_comment = "#" { ~NEWLINE } NEWLINE ;
+block_comment = "/*" { ~"*/" } "*/" ;
+
+(* ================================================= *)
+(* RESERVED KEYWORDS                                 *)
+(* ================================================= *)
+
+(* Keywords that cannot be used as identifiers:
+   let, mut, fun, if, elif, else, when, for, in,
+   break, continue, return, true, false, null, None, and, or, not,
+   import, export, as, is, struct, interface
+   
+   NOTE: Type names like 'number', 'string', 'boolean', 'object', 'void', 'any' 
+   are NOT reserved keywords - they are regular identifiers.
+*)
+
+(* ================================================= *)
+(* OPERATOR PRECEDENCE (High to Low)                 *)
+(* ================================================= *)
+
+(* 
+1. Postfix operators: ++, --, ., ?., [], (), as, as?
+2. Unary operators: +, -, !, not, ~, ++, --
+3. Multiplicative: *, /, %
+4. Additive: +, -
+5. Shift: <<, >>
+6. Relational: <, >, <=, >=
+7. Type checking: is
+8. Equality: ==, !=
+9. Bitwise AND: &
+10. Bitwise XOR: ^
+11. Bitwise OR: |
+12. Logical AND: and
+13. Logical OR: or
+14. Null coalescing: ??
+15. Ternary: ? :
+16. Assignment: =, +=, -=, *=, /=, %=, &=, |=, ^=, ~=
+*)
+
+(* ================================================= *)
+(* FUTURE EXTENSIONS                                 *)
+(* ================================================= *)
+
+(* 
+   Future language features to be added:
+   - async/await expressions
+   - try/catch/finally statements and expressions
+   - struct/enum/trait definitions
+   - impl blocks
+   - pattern matching extensions
+   - macro system
+   - operator overloading
+   - module attributes and annotations
+   - destructuring assignment
+   - default parameter values
+   - labeled statements and expressions with @ syntax
+   - optional semicolons for cleaner syntax
+*)
+
+(* ================================================= *)
+(* GRAMMAR AMBIGUITY RESOLUTIONS                     *)
+(* ================================================= *)
+
+(*
+   RESOLVED AMBIGUITIES:
+   
+   1. Range vs Spread: ".." (range) vs "..." (spread) - clearly distinguished
+   2. Unit vs Empty Params: "()" can be unit literal or empty parameter list - context dependent
+   3. Guard Condition: Fixed circular definition by using value_condition only
+   4. Multiple Condition: Fixed circular definition by using value_condition only  
+   5. Tuple vs Function Type: Tuple requires minimum 2 elements with comma
+   6. Missing if_statement: Added to statement alternatives
+   
+   REMAINING POTENTIAL AMBIGUITIES:
+   
+   1. Block vs Object: "{}" could be empty block or empty object - requires lookahead
+      RESOLUTION: Use context to determine:
+      - In expression context: object literal
+      - In statement context: block expression
+      - Empty "{}" defaults to empty object in expression context
+   
+   2. Parenthesized Expression vs Tuple: "(expr)" vs "(expr,)" - comma distinguishes
+      RESOLUTION: Trailing comma required for single-element tuple
+   
+   3. Function Call vs Lambda: context dependent parsing needed
+      RESOLUTION: Parse as function call until "=>" is encountered, then reparse as lambda
+   
+   4. IF Statement vs IF Expression:
+      RESOLUTION: Use lookahead for opening brace vs expression to distinguish
+      - if (...) { ... } → statement
+      - if (...) expr → expression
+*) 
