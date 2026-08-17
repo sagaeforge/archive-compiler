@@ -1,0 +1,157 @@
+# Test Program for nugdev Analysis System
+# This file tests various language features and analysis capabilities
+
+# Function declaration with type annotations
+fun factorial(let n: number): number {
+    if (n <= 1) {
+        return 1;
+    } else {
+        return n * factorial(n - 1);
+    }
+}
+
+# Variable declarations with different mutability
+let immutable_value: number = 42;
+mut mutable_counter: number = 0;
+
+# Type inference test
+let inferred_string = "Hello, nugdev!";
+let inferred_number = 3.14;
+
+# Control flow structures
+fun test_control_flow(let x: number): string {
+    # If-else statement
+    if (x > 0) {
+        return "positive";
+    } elif (x < 0) {
+        return "negative";
+    } else {
+        return "zero";
+    }
+}
+
+# Loop structure
+fun count_to_n(let n: number): void {
+    for (mut i: number = 0; i < n; i += 1) {
+        mutable_counter += 1;
+    }
+}
+
+# When expression (EBNF compliance test)
+fun classify_number(let num: number): string {
+    return when (num) {
+        0 -> "zero",
+        1..10 -> "small",
+        x if x > 100 -> "large",
+        else -> "medium"
+    };
+}
+
+# Function with optional parameters and range types
+fun process_range(let start: number, let end: number = 10): void {
+    let range = start..end;
+    # Process range here
+}
+
+# Struct declaration (EBNF compliance)
+struct Point {
+    x: number,
+    y: number
+}
+
+# Interface declaration (EBNF compliance)
+interface Drawable {
+    draw(): void,
+    get_area(): number
+}
+
+# Lambda expression with type annotations (EBNF compliance)
+let mapper = (let x: number) => x * 2;
+let filter_condition = (let item: string) => item.length > 0;
+
+# Array and object literals
+let numbers: number[] = [1, 2, 3, 4, 5];
+let point_obj = {
+    x: 10,
+    y: 20,
+    .description = "A point in 2D space"
+};
+
+# Template string
+let greeting = `Hello, ${inferred_string}! The answer is ${immutable_value}.`;
+
+# Character literal (EBNF compliance)
+let newline_char: character = '\n';
+
+# Null and None literals (EBNF compliance)
+let nullable_value: string? = null;
+let optional_value: Option<string> = None;
+
+# Type casting (EBNF compliance)
+fun safe_cast_example(let value: any): string? {
+    return value as? string;
+}
+
+# Unsafe cast example
+fun unsafe_cast_example(let value: any): string {
+    return value as string;  # This should trigger a warning
+}
+
+# Error cases for testing
+fun test_errors(): void {
+    # Undefined variable usage (should be caught)
+    let result = undefined_variable + 1;
+    
+    # Type mismatch (should be caught)
+    let wrong_type: string = 42;
+    
+    # Using immutable variable as mutable (should be caught)
+    immutable_value += 1;
+    
+    # Unreachable code (should be caught)
+    return;
+    let unreachable = "This should never execute";
+}
+
+# Unused variable (should generate warning)
+fun unused_variable_test(): void {
+    let unused = "This variable is never used";
+    let used = "This variable is used";
+    println(used);
+}
+
+# Complex expression for constant folding testing
+let compile_time_constant = 2 + 3 * 4 - 1;  # Should be folded to 13
+let boolean_constant = true and false;       # Should be folded to false
+
+# Performance analysis test case
+fun inefficient_function(let n: number): number {
+    # O(n^2) complexity - should be detected
+    mut total = 0;
+    for (mut i = 0; i < n; i += 1) {
+        for (mut j = 0; j < n; j += 1) {
+            total += i * j;
+        }
+    }
+    return total;
+}
+
+# Memory safety test
+fun memory_safety_test(): void {
+    let arr: number[] = [1, 2, 3];
+    
+    # Bounds checking test
+    let safe_access = arr[1];      # Should be OK
+    let unsafe_access = arr[10];   # Should trigger bounds check warning
+    
+    # Null safety test
+    let maybe_null: string? = get_nullable_string();
+    if (maybe_null != null) {
+        # Safe usage - compiler knows it's non-null here
+        let length = maybe_null.length;
+    }
+}
+
+# External function declaration for testing
+fun get_nullable_string(): string?;
+fun println(let message: string): void; 

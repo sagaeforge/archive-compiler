@@ -201,7 +201,7 @@ Token Tokenizer::parse_number() {
       number_str += ".";
       while (!is_at_end() &&
              (lib::Char(current_char()).isDigit() || current_char() == '_')) {
-        if (current_char() != '_') { // 언더스코어는 무시
+        if (current_char() != '_') {
           number_str += current_char();
         }
         advance();
@@ -222,7 +222,7 @@ Token Tokenizer::parse_number() {
               (current_char() >= 'a' && current_char() <= 'f') ||
               (current_char() >= 'A' && current_char() <= 'F') ||
               current_char() == '_')) {
-        if (current_char() != '_') { // 언더스코어는 무시
+        if (current_char() != '_') {
           number_str += current_char();
         }
         advance();
@@ -235,7 +235,7 @@ Token Tokenizer::parse_number() {
 
       while (!is_at_end() && (current_char() == '0' || current_char() == '1' ||
                               current_char() == '_')) {
-        if (current_char() != '_') { // 언더스코어는 무시
+        if (current_char() != '_') {
           number_str += current_char();
         }
         advance();
@@ -249,7 +249,7 @@ Token Tokenizer::parse_number() {
       while (!is_at_end() &&
              ((current_char() >= '0' && current_char() <= '7') ||
               current_char() == '_')) {
-        if (current_char() != '_') { // 언더스코어는 무시
+        if (current_char() != '_') {
           number_str += current_char();
         }
         advance();
@@ -259,17 +259,23 @@ Token Tokenizer::parse_number() {
     else {
       number_str += advance(); // '0'
 
-      // 소수점이 있는 경우
+      // 소수점이 있는 경우 처리
       if (!is_at_end() && current_char() == '.') {
-        number_str += advance(); // '.'
+        // 다음 문자 확인: .. (range)인지 아닌지
+        if (peek_char() == '.') {
+          // Range operator이므로 소수점 처리하지 않음
+        } else {
+          // 소수점 추가
+          number_str += advance(); // '.'
 
-        // 소수점 뒤에 숫자가 있으면 처리
-        while (!is_at_end() &&
-               (lib::Char(current_char()).isDigit() || current_char() == '_')) {
-          if (current_char() != '_') { // 언더스코어는 무시
-            number_str += current_char();
+          // 소수점 뒤에 숫자가 있으면 처리 (없어도 유효한 float)
+          while (!is_at_end() && (lib::Char(current_char()).isDigit() ||
+                                  current_char() == '_')) {
+            if (current_char() != '_') {
+              number_str += current_char();
+            }
+            advance();
           }
-          advance();
         }
       }
 
@@ -285,7 +291,7 @@ Token Tokenizer::parse_number() {
         // 지수 숫자 처리
         while (!is_at_end() &&
                (lib::Char(current_char()).isDigit() || current_char() == '_')) {
-          if (current_char() != '_') { // 언더스코어는 무시
+          if (current_char() != '_') {
             number_str += current_char();
           }
           advance();
@@ -298,23 +304,40 @@ Token Tokenizer::parse_number() {
     // 정수 부분
     while (!is_at_end() &&
            (lib::Char(current_char()).isDigit() || current_char() == '_')) {
-      if (current_char() != '_') { // 언더스코어는 무시
+      if (current_char() != '_') {
         number_str += current_char();
       }
       advance();
     }
 
-    // 소수점이 있는 경우
+    // 소수점이 있는 경우 처리
     if (!is_at_end() && current_char() == '.') {
-      number_str += advance(); // '.'
-
-      // 소수점 뒤에 숫자가 있으면 처리
-      while (!is_at_end() &&
-             (lib::Char(current_char()).isDigit() || current_char() == '_')) {
-        if (current_char() != '_') { // 언더스코어는 무시
-          number_str += current_char();
+      // 다음 문자들 확인:
+      // - .. (range operator) - 소수점으로 처리하지 않음
+      // - ... (3개 점 있으면 앞의 정수에 . 붙이고 range operator로 처리)
+      if (peek_char() == '.') {
+        // 다음에 점이 하나 더 있는지 확인
+        if (m_current_pos + 2 < m_cached_input.length() &&
+            m_cached_input[m_current_pos + 2] == '.') {
+          // 1...5 케이스: 이것을 1. + .. + 5로 파싱하려면
+          // 현재 숫자에 .을 추가하고 끝냄
+          number_str += advance(); // '.'
+          // .. 부분은 다음 토큰으로 처리됨
+        } else {
+          // 1..10 케이스: 정수로 끝내고 .. 는 별도 토큰으로 처리
         }
-        advance();
+      } else {
+        // 일반적인 소수점 (1.23 등)
+        number_str += advance(); // '.'
+
+        // 소수점 뒤에 숫자가 있으면 처리 (없어도 유효한 float)
+        while (!is_at_end() &&
+               (lib::Char(current_char()).isDigit() || current_char() == '_')) {
+          if (current_char() != '_') {
+            number_str += current_char();
+          }
+          advance();
+        }
       }
     }
 
@@ -330,7 +353,7 @@ Token Tokenizer::parse_number() {
       // 지수 숫자 처리
       while (!is_at_end() &&
              (lib::Char(current_char()).isDigit() || current_char() == '_')) {
-        if (current_char() != '_') { // 언더스코어는 무시
+        if (current_char() != '_') {
           number_str += current_char();
         }
         advance();
@@ -412,7 +435,45 @@ Token Tokenizer::parse_string() {
     if (current_char() == '\\' && !is_at_end()) {
       advance(); // '\' 건너뛰기
       if (!is_at_end()) {
-        advance(); // 이스케이프된 문자 건너뛰기
+        char escape_char = current_char();
+        advance(); // 이스케이프 타입 문자 건너뛰기
+
+        // 유니코드 이스케이프 시퀀스 처리 (\u 또는 \U)
+        if (escape_char == 'u') {
+          // \uXXXX 형태 - 4개의 16진수
+          for (int i = 0; i < 4 && !is_at_end(); ++i) {
+            if (!((current_char() >= '0' && current_char() <= '9') ||
+                  (current_char() >= 'a' && current_char() <= 'f') ||
+                  (current_char() >= 'A' && current_char() <= 'F'))) {
+              return make_error_token(
+                  lib::String("Invalid unicode escape sequence"));
+            }
+            advance();
+          }
+        } else if (escape_char == 'U') {
+          // \UXXXXXXXX 형태 - 8개의 16진수
+          for (int i = 0; i < 8 && !is_at_end(); ++i) {
+            if (!((current_char() >= '0' && current_char() <= '9') ||
+                  (current_char() >= 'a' && current_char() <= 'f') ||
+                  (current_char() >= 'A' && current_char() <= 'F'))) {
+              return make_error_token(
+                  lib::String("Invalid unicode escape sequence"));
+            }
+            advance();
+          }
+        } else if (escape_char == 'x') {
+          // \xXX 형태 - 2개의 16진수
+          for (int i = 0; i < 2 && !is_at_end(); ++i) {
+            if (!((current_char() >= '0' && current_char() <= '9') ||
+                  (current_char() >= 'a' && current_char() <= 'f') ||
+                  (current_char() >= 'A' && current_char() <= 'F'))) {
+              return make_error_token(
+                  lib::String("Invalid hex escape sequence"));
+            }
+            advance();
+          }
+        }
+        // 다른 이스케이프 문자들은 이미 처리됨
       }
     }
     // 일반 문자

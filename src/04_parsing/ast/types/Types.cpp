@@ -1,4 +1,4 @@
-#include <04_parsing/ast/core/ASTVisitor.hpp>
+#include <04_parsing/ast/core/ASTVisitor.h>
 #include <04_parsing/ast/types/Types.hpp>
 
 namespace nugdev {

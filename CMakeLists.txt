@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.0.2)
+cmake_minimum_required(VERSION 3.20)
 project(compiler VERSION 1.0 LANGUAGES CXX)
 
 # C++ 표준 설정
@@ -24,9 +24,9 @@ endif()
 # clangd
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/cmake")
-include(${CMAKE_CURRENT_SOURCE_DIR}/external/cmake/vcpkg.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/external/cmake/gtest.cmake)
+# Find required packages
+find_package(Threads REQUIRED)
+find_package(GTest REQUIRED)
 
 # 라이브러리 빌드
 add_subdirectory(src)

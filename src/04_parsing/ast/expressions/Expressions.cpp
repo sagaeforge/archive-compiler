@@ -1,4 +1,4 @@
-#include <04_parsing/ast/core/ASTVisitor.hpp>
+#include <04_parsing/ast/core/ASTVisitor.h>
 #include <04_parsing/ast/expressions/Expressions.hpp>
 
 namespace nugdev {
@@ -80,6 +80,10 @@ std::string BinaryExpression::get_operator_string() const {
     return "??";
   case Operator::TYPE_CHECK:
     return "is";
+  case Operator::RANGE:
+    return "..";
+  case Operator::IN:
+    return "in";
   default:
     return "unknown";
   }

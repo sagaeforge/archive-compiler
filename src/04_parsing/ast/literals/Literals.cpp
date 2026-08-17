@@ -1,5 +1,5 @@
 #include "Literals.hpp"
-#include <04_parsing/ast/core/ASTVisitor.hpp>
+#include <04_parsing/ast/core/ASTVisitor.h>
 #include <sstream>
 #include <stdexcept>
 

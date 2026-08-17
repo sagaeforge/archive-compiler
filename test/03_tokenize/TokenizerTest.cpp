@@ -921,4 +921,326 @@ TEST_F(TokenizerTest, LargeInputPerformance) {
       << "Tokenization took too long: " << duration.count() << "ms";
 }
 
+// 새로운 키워드들 테스트 개선
+TEST_F(TokenizerTest, AllGrammarKeywords) {
+  std::vector<std::pair<std::string, TokenType>> testCases = {
+      // Control flow keywords
+      {"let", TokenType::Let},
+      {"mut", TokenType::Mut},
+      {"if", TokenType::If},
+      {"elif", TokenType::Elif},
+      {"else", TokenType::Else},
+      {"when", TokenType::When},
+      {"for", TokenType::For},
+      {"in", TokenType::In},
+      {"break", TokenType::Break},
+      {"continue", TokenType::Continue},
+      {"fun", TokenType::Function},
+      {"return", TokenType::Return},
+
+      // Boolean literals
+      {"true", TokenType::True},
+      {"false", TokenType::False},
+
+      // Null literals
+      {"null", TokenType::Null},
+      {"None", TokenType::None},
+
+      // Logical operators
+      {"and", TokenType::LogicalAnd},
+      {"or", TokenType::LogicalOr},
+      {"not", TokenType::LogicalNot},
+
+      // Module keywords
+      {"import", TokenType::Import},
+      {"export", TokenType::Export},
+      {"as", TokenType::As},
+      {"is", TokenType::Is},
+
+      // Type declaration keywords
+      {"struct", TokenType::Struct},
+      {"interface", TokenType::Interface}};
+
+  for (const auto &[input, expectedType] : testCases) {
+    auto tokens = tokenizer->tokenize(String(input));
+
+    ASSERT_EQ(tokens.size(), 1) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_type(), expectedType) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_literal().to_string(), input) << "Input: " << input;
+  }
+}
+
+// Binary literals 테스트 개선
+TEST_F(TokenizerTest, BinaryLiteralsWithUnderscores) {
+  std::vector<std::pair<std::string, std::string>> testCases = {
+      {"0b1010", "0b1010"},
+      {"0b1111_0000", "0b11110000"},
+      {"0b1010_1010_1010_1010", "0b1010101010101010"},
+      {"0b1", "0b1"},
+      {"0b0", "0b0"}};
+
+  for (const auto &[input, expected] : testCases) {
+    auto tokens = tokenizer->tokenize(String(input));
+
+    ASSERT_EQ(tokens.size(), 1) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_type(), TokenType::Number) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_literal().to_string(), expected)
+        << "Input: " << input;
+  }
+}
+
+// Hexadecimal literals 테스트 개선
+TEST_F(TokenizerTest, HexadecimalLiteralsWithUnderscores) {
+  std::vector<std::pair<std::string, std::string>> testCases = {
+      {"0xFF", "0xFF"},           {"0x00FF", "0x00FF"},
+      {"0xFF_FF_FF", "0xFFFFFF"}, {"0xDEAD_BEEF", "0xDEADBEEF"},
+      {"0x123ABC", "0x123ABC"},   {"0x0", "0x0"}};
+
+  for (const auto &[input, expected] : testCases) {
+    auto tokens = tokenizer->tokenize(String(input));
+
+    ASSERT_EQ(tokens.size(), 1) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_type(), TokenType::Number) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_literal().to_string(), expected)
+        << "Input: " << input;
+  }
+}
+
+// Octal literals 테스트 개선
+TEST_F(TokenizerTest, OctalLiteralsWithUnderscores) {
+  std::vector<std::pair<std::string, std::string>> testCases = {
+      {"0o755", "0o755"},
+      {"0o123", "0o123"},
+      {"0o7_7_7", "0o777"},
+      {"0o0", "0o0"},
+      {"0o777", "0o777"}};
+
+  for (const auto &[input, expected] : testCases) {
+    auto tokens = tokenizer->tokenize(String(input));
+
+    ASSERT_EQ(tokens.size(), 1) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_type(), TokenType::Number) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_literal().to_string(), expected)
+        << "Input: " << input;
+  }
+}
+
+// Scientific notation 테스트 개선
+TEST_F(TokenizerTest, ScientificNotationWithUnderscores) {
+  std::vector<std::pair<std::string, std::string>> testCases = {
+      {"1e10", "1e10"},
+      {"1.5e10", "1.5e10"},
+      {"1.5E10", "1.5E10"},
+      {"1.5e+10", "1.5e+10"},
+      {"1.5e-10", "1.5e-10"},
+      {"6.022e23", "6.022e23"},
+      {"6.626_070_15e-34", "6.62607015e-34"},
+      {"2.998E8", "2.998E8"},
+      {"9.109e-31", "9.109e-31"}};
+
+  for (const auto &[input, expected] : testCases) {
+    auto tokens = tokenizer->tokenize(String(input));
+
+    ASSERT_EQ(tokens.size(), 1) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_type(), TokenType::Number) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_literal().to_string(), expected)
+        << "Input: " << input;
+  }
+}
+
+// Character literals 테스트 개선
+TEST_F(TokenizerTest, CharacterLiteralsWithEscapes) {
+  std::vector<std::pair<std::string, std::string>> testCases = {
+      {"'A'", "A"},     {"'5'", "5"},
+      {"'\\n'", "\\n"}, {"'\\t'", "\\t"},
+      {"'\\r'", "\\r"}, {"'\\\\'", "\\\\"},
+      {"'\\''", "\\'"}, {"'\\\"'", "\\\""},
+      {"'\\0'", "\\0"}, {"'\\u03A9'", "\\u03A9"}}; // Omega symbol
+
+  for (const auto &[input, expected] : testCases) {
+    auto tokens = tokenizer->tokenize(String(input));
+
+    ASSERT_EQ(tokens.size(), 1) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_type(), TokenType::Character) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_literal().to_string(), expected)
+        << "Input: " << input;
+  }
+}
+
+// Raw string literals 테스트 개선
+TEST_F(TokenizerTest, RawStringLiterals) {
+  std::vector<std::pair<std::string, std::string>> testCases = {
+      {"r\"hello\"", "hello"},
+      {"r\"C:\\\\Users\\\\nugdev\"", "C:\\\\Users\\\\nugdev"},
+      {"r\"\\d+\\.\\d+\"", "\\d+\\.\\d+"},
+      {"r\"no\\nescapes\\there\"", "no\\nescapes\\there"},
+      {"r\"\"", ""}};
+
+  for (const auto &[input, expected] : testCases) {
+    auto tokens = tokenizer->tokenize(String(input));
+
+    ASSERT_EQ(tokens.size(), 1) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_type(), TokenType::String) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_literal().to_string(), expected)
+        << "Input: " << input;
+  }
+}
+
+// Template string literals 테스트 개선
+TEST_F(TokenizerTest, TemplateStringLiterals) {
+  // Simple template strings without expressions
+  std::vector<std::pair<std::string, std::string>> simpleTemplates = {
+      {"`hello world`", "hello world"},
+      {"`simple string`", "simple string"},
+      {"``", ""}};
+
+  for (const auto &[input, expected] : simpleTemplates) {
+    auto tokens = tokenizer->tokenize(String(input));
+
+    ASSERT_EQ(tokens.size(), 1) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_type(), TokenType::String) << "Input: " << input;
+    EXPECT_EQ(tokens[0].get_literal().to_string(), expected)
+        << "Input: " << input;
+  }
+}
+
+// Range literals 테스트 추가
+TEST_F(TokenizerTest, RangeLiterals) {
+  std::vector<
+      std::pair<std::string, std::vector<std::pair<TokenType, std::string>>>>
+      testCases = {
+          // 1..10
+          {"1..10",
+           {{TokenType::Number, "1"},
+            {TokenType::Range, ".."},
+            {TokenType::Number, "10"}}},
+          // 'a'..'z'
+          {"'a'..'z'",
+           {{TokenType::Character, "a"},
+            {TokenType::Range, ".."},
+            {TokenType::Character, "z"}}},
+          // 10..
+          {"10..", {{TokenType::Number, "10"}, {TokenType::Range, ".."}}},
+          // x..y
+          {"x..y",
+           {{TokenType::Identifier, "x"},
+            {TokenType::Range, ".."},
+            {TokenType::Identifier, "y"}}}};
+
+  for (size_t i = 0; i < testCases.size(); ++i) {
+    const auto &[input, expectedTokens] = testCases[i];
+
+    auto tokens = tokenizer->tokenize(String(input));
+
+    ASSERT_EQ(tokens.size(), expectedTokens.size())
+        << "Test case " << i << ", Input: " << input;
+
+    for (size_t j = 0; j < expectedTokens.size(); ++j) {
+      EXPECT_EQ(tokens[j].get_type(), expectedTokens[j].first)
+          << "Test case " << i << ", token " << j << ", Input: " << input;
+      EXPECT_EQ(tokens[j].get_literal().to_string(), expectedTokens[j].second)
+          << "Test case " << i << ", token " << j << ", Input: " << input;
+    }
+  }
+}
+
+// 모호한 구문들에 대한 테스트 (Grammar Ambiguity Test)
+TEST_F(TokenizerTest, AmbiguousFloatAndRangeCases) {
+  // 모호성: 1. .. 1.5
+  // Expected: "1." (float) + ".." (range) + "1.5" (float)
+  // This tests the parser's ability to handle ambiguous decimal/range
+  // combinations
+  std::vector<std::vector<std::pair<TokenType, std::string>>> testCases = {
+      // 1. .. 1.5 - should be parsed as "1." ".." "1.5"
+      {{TokenType::Number, "1."},
+       {TokenType::Range, ".."},
+       {TokenType::Number, "1.5"}},
+
+      // 1.. 1.5 - should be parsed as "1" ".." "1.5"
+      {{TokenType::Number, "1"},
+       {TokenType::Range, ".."},
+       {TokenType::Number, "1.5"}},
+
+      // 1.0 .. 1.5 - clear case
+      {{TokenType::Number, "1.0"},
+       {TokenType::Range, ".."},
+       {TokenType::Number, "1.5"}},
+
+      // 0. .. 1 - edge case with zero
+      {{TokenType::Number, "0."},
+       {TokenType::Range, ".."},
+       {TokenType::Number, "1"}},
+
+      // Test with more complex numbers
+      // 3.14 .. 2.71e10
+      {{TokenType::Number, "3.14"},
+       {TokenType::Range, ".."},
+       {TokenType::Number, "2.71e10"}}};
+
+  for (size_t i = 0; i < testCases.size(); ++i) {
+    const auto &testCase = testCases[i];
+
+    // Build input string with spaces to make the intent clear
+    std::string input;
+    for (size_t j = 0; j < testCase.size(); ++j) {
+      if (j > 0)
+        input += " ";
+      input += testCase[j].second;
+    }
+
+    auto tokens = tokenizer->tokenize(String(input));
+
+    ASSERT_EQ(tokens.size(), testCase.size())
+        << "Test case " << i << ", Input: " << input;
+
+    for (size_t j = 0; j < testCase.size(); ++j) {
+      EXPECT_EQ(tokens[j].get_type(), testCase[j].first)
+          << "Test case " << i << ", token " << j << ", Input: " << input;
+      EXPECT_EQ(tokens[j].get_literal().to_string(), testCase[j].second)
+          << "Test case " << i << ", token " << j << ", Input: " << input;
+    }
+  }
+}
+
+// Edge case: Floating point numbers ending with dot followed by range
+TEST_F(TokenizerTest, FloatingPointWithTrailingDotAndRange) {
+  // Test the specific ambiguous case without spaces: "1...5"
+  // This should be parsed as "1." (float) + ".." (range) + "5" (int)
+  // NOT as "1" + "..." (spread operator)
+
+  std::vector<std::vector<std::pair<TokenType, std::string>>> testCases = {
+      // 1...5 should be "1." + ".." + "5" (NOT "1" + "..." + "5")
+      {{TokenType::Number, "1."},
+       {TokenType::Range, ".."},
+       {TokenType::Number, "5"}},
+
+      // 42...0
+      {{TokenType::Number, "42."},
+       {TokenType::Range, ".."},
+       {TokenType::Number, "0"}},
+  };
+
+  for (size_t i = 0; i < testCases.size(); ++i) {
+    const auto &testCase = testCases[i];
+
+    // Build input string WITHOUT spaces to test the ambiguous parsing
+    std::string input;
+    for (const auto &[tokenType, literal] : testCase) {
+      input += literal;
+    }
+
+    auto tokens = tokenizer->tokenize(String(input));
+
+    ASSERT_EQ(tokens.size(), testCase.size())
+        << "Test case " << i << ", Input: " << input;
+
+    for (size_t j = 0; j < testCase.size(); ++j) {
+      EXPECT_EQ(tokens[j].get_type(), testCase[j].first)
+          << "Test case " << i << ", token " << j << ", Input: " << input;
+      EXPECT_EQ(tokens[j].get_literal().to_string(), testCase[j].second)
+          << "Test case " << i << ", token " << j << ", Input: " << input;
+    }
+  }
+}
+
 } // namespace nugdev::test

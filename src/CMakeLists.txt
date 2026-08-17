@@ -18,7 +18,7 @@ add_library(compiler_lib SHARED
 
     # AST System - Core
     ${CMAKE_CURRENT_SOURCE_DIR}/04_parsing/ast/core/ASTNode.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/04_parsing/ast/core/ASTVisitor.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/04_parsing/ast/core/ASTVisitor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/04_parsing/ast/core/AST.hpp
 
     # AST System - Types
@@ -54,6 +54,17 @@ add_library(compiler_lib SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/04_parsing/ast/program/Program.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/04_parsing/ast/program/ImportExport.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/04_parsing/ast/program/ImportExport.cpp
+
+    # AST System - Parser
+    ${CMAKE_CURRENT_SOURCE_DIR}/04_parsing/Parser.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/04_parsing/Parser.cpp
+
+    # Analysis Components - Core
+    ${CMAKE_CURRENT_SOURCE_DIR}/05_analysis/AnalysisConfig.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/05_analysis/AnalysisConfig.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/05_analysis/AnalysisManager.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/05_analysis/ImplementationTemplate.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/05_analysis/MissingASTSupport.hpp
 )
 
 target_include_directories(compiler_lib
@@ -62,12 +73,7 @@ target_include_directories(compiler_lib
 )
 target_link_libraries(compiler_lib
 PUBLIC
-    ICU::uc
-    ICU::i18n
-    ICU::data
-    RapidJSON rapidjson
-    magic_enum::magic_enum
-    Boost::uuid
+    ${CMAKE_THREAD_LIBS_INIT}
 )
 target_include_directories(compiler_lib
     PRIVATE

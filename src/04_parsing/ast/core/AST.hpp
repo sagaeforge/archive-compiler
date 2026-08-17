@@ -38,7 +38,7 @@
 
 // Core AST components
 #include <04_parsing/ast/core/ASTNode.hpp>
-#include <04_parsing/ast/core/ASTVisitor.hpp>
+#include <04_parsing/ast/core/ASTVisitor.h>
 
 // Type system
 #include <04_parsing/ast/types/Parameters.hpp>

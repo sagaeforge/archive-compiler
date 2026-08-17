@@ -1,6 +1,6 @@
 #include "AdvancedExpressions.hpp"
 #include <04_parsing/ast/core/AST.hpp>
-#include <04_parsing/ast/core/ASTVisitor.hpp>
+#include <04_parsing/ast/core/ASTVisitor.h>
 
 namespace nugdev {
 namespace ast {

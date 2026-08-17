@@ -100,7 +100,9 @@ public:
 
     // Special operators
     NULL_COALESCING, // ??
-    TYPE_CHECK       // is
+    TYPE_CHECK,      // is
+    RANGE,           // ..
+    IN               // in
   };
 
   explicit BinaryExpression(Operator op, std::unique_ptr<Expression> left,
