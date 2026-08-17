@@ -1,0 +1,4 @@
+#ifndef __DATATYPE_NDICTIONARY_H__
+#define __DATATYPE_NDICTIONARY_H__
+
+#endif // __NDICTIONARY_H__

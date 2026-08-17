@@ -1,0 +1,4 @@
+#ifndef __NGARBAGECOILECTION_H__
+#define __NGARBAGECOILECTION_H__
+
+#endif // __NGARBAGECOILECTION_H__
