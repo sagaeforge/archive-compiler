@@ -1,11 +1,13 @@
 # archive-compiler
 
 2021년부터 이어온 **컴파일러·언어 설계** 작업 아카이브입니다.
-Quantum(자작 언어 + VM) 에서 시작해 NCX, nCompiler 를 거쳐 nugdev-compiler 로 이어집니다.
+안양공고 시절의 AnyangTechInterpreter 에서 시작해 Quantum(자작 언어 + VM), NCX, nCompiler 를 거쳐
+nugdev-compiler 로 이어집니다.
 
 ## 계보
 
 ```
+2021.06  AnyangTechInterpreter    "Quantum Language" — 첫 인터프리터  (54 커밋)
 2021.12  Quantum          C 기반 컴파일러 + VM + GC  (103 커밋, 최대 규모)
 2022.02      ↓ C++ 전환
 2022.03  NCX              프론트엔드 교체형 컴파일러 확장
@@ -15,12 +17,18 @@ Quantum(자작 언어 + VM) 에서 시작해 NCX, nCompiler 를 거쳐 nugdev-co
 2024.03  nugdev-compiler-2024   FSM 토크나이저 / 타입 파싱  (66 커밋)
 2025.05  nugdev-compiler-2025   Tokenizer + AST + gtest    ← 가장 진전된 코드
 2025.11  cos                    NASM 백엔드
+    ⋮
+2026.03  kern-research          순수 함수로 커널을 쓰는 언어 + kernc  ← 현역, 별도 리포
 ```
+
+> `kern-research` 는 아카이브가 아니라 진행 중인 작업이라
+> [`sagaeforge/kern-research`](https://github.com/sagaeforge/kern-research) 로 따로 두었습니다.
 
 ## 구성
 
 | 디렉터리 | 내용 | 커밋 | 기간 |
 |---|---|---:|---|
+| [`anyangtech-interpreter/`](anyangtech-interpreter) | "Quantum Language" — 첫 인터프리터. 『만들면서 배우는 인터프리터』 참고 | 54 | 2021.06 |
 | [`quantum/`](quantum) | 자작 언어 Quantum — 컴파일러 · VM · GC | 103 | 2021.12–2026.08 |
 | [`ncx/`](ncx) | Nugunga Compiler eXtensions — 프론트엔드 교체형 | 14 | 2022.03 |
 | [`ncompiler/`](ncompiler) | 컴파일러 재작성 시도 | 11 | 2022.02–2026.08 |
@@ -55,9 +63,10 @@ git show legacy/<프로젝트>/<브랜치>          # 편입 직전 최종 상�
 > 서브트리 편입에 `-s ours` 병합을 써서 main 쪽 경로 히스토리에는 병합 커밋만 남기 때문입니다.
 > **원본 커밋은 전부 이 저장소 안에 그대로 있고, 위의 `legacy/*` 태그로 접근합니다.**
 
-보존된 태그 17개:
+보존된 태그 18개:
 
 ```
+  legacy/anyangtech-interpreter/main
   legacy/cos/master
   legacy/cos/wip/archive-import
   legacy/make-interpreter-csharp/main
