@@ -1,16 +1,25 @@
 # archive-compiler
 
 2021년부터 이어온 **컴파일러·언어 설계** 작업 아카이브입니다.
-안양공고 시절의 AnyangTechInterpreter 에서 시작해 Quantum(자작 언어 + VM), NCX, nCompiler 를 거쳐
-nugdev-compiler, kern-research 로 이어집니다.
+안양공고 시절의 AnyangTechInterpreter 에서 시작해 Quantum(런타임), NCX, nCompiler 를 거쳐
+nugdev-compiler, cos, kern-research 로 이어집니다.
 
-시작은 『만들면서 배우는 인터프리터』를 따라 만든 것이었고, 그 뒤로는 계속 처음부터 다시 썼습니다.
+### 책과의 관계
+
+`anyangtech-interpreter`, `nugdev-compiler-2024`, `nugdev-compiler-2025`, `cos` 는
+『만들면서 배우는 인터프리터 / 컴파일러』(Monkey) 를 따라 만든 계열입니다 —
+Pratt 파서의 우선순위 열거형과 `LetStatement` / `InfixExpression` 계열 AST 노드 구성이 그대로 있습니다.
+`nugdev-compiler-2024/documents/rag/` 에는 Monkey VM 을 **스택 기반에서 레지스터 기반으로 바꾸는** 연구 노트가 따로 있고,
+`cos/src/04_generate/register_allocator` 가 그 연장선으로 보입니다.
+
+`quantum` 은 이 계열이 아닙니다. Monkey 흔적이 하나도 없고, `Sources/Parser.c` 는 **빈 파일**입니다.
+103 커밋은 전부 런타임(Object 박싱 · GC · Delegate · Exception)과 String / JSON 모듈에 들어갔습니다.
 
 ## 계보
 
 ```
 2021.06  AnyangTechInterpreter    "Quantum Language" — 첫 인터프리터  (54 커밋)
-2021.12  Quantum          C 기반 컴파일러 + VM + GC  (103 커밋, 최대 규모)
+2021.12  Quantum          C 런타임 — Object · GC · String · JSON  (103 커밋, 최대 규모)
 2022.02      ↓ C++ 전환
 2022.03  NCX              프론트엔드 교체형 컴파일러 확장
 2022.02  nCompiler        컴파일러 재작성 시도
@@ -28,7 +37,7 @@ nugdev-compiler, kern-research 로 이어집니다.
 | 디렉터리 | 내용 | 커밋 | 기간 |
 |---|---|---:|---|
 | [`anyangtech-interpreter/`](anyangtech-interpreter) | "Quantum Language" — 첫 인터프리터. 『만들면서 배우는 인터프리터』 참고 | 54 | 2021.06 |
-| [`quantum/`](quantum) | 자작 언어 Quantum — 컴파일러 · VM · GC | 103 | 2021.12–2026.08 |
+| [`quantum/`](quantum) | 자작 언어 Quantum 의 C 런타임 — Object 박싱 · GC · Delegate · Exception + String / JSON 모듈 (`.c` 243개). 프론트엔드는 계획만 | 103 | 2021.12–2026.08 |
 | [`ncx/`](ncx) | Nugunga Compiler eXtensions — 프론트엔드 교체형 | 14 | 2022.03 |
 | [`ncompiler/`](ncompiler) | 컴파일러 재작성 시도 | 11 | 2022.02–2026.08 |
 | [`make-interpreter-csharp/`](make-interpreter-csharp) | C#으로 인터프리터 구현 | 3 | 2022.05–2022.06 |
