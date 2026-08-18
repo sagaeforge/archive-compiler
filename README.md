@@ -18,11 +18,11 @@ nugdev-compiler 로 이어집니다.
 2025.05  nugdev-compiler-2025   Tokenizer + AST + gtest    ← 가장 진전된 코드
 2025.11  cos                    NASM 백엔드
     ⋮
-2026.03  kern-research          순수 함수로 커널을 쓰는 언어 + kernc  ← 현역, 별도 리포
+2026.03  kern-research          순수 함수로 커널을 쓰는 언어 + kernc  ← 현역
 ```
 
-> `kern-research` 는 아카이브가 아니라 진행 중인 작업이라
-> [`sagaeforge/kern-research`](https://github.com/sagaeforge/kern-research) 로 따로 두었습니다.
+> ⚠ `kern-research/` 만은 아카이브가 아니라 **진행 중인 작업**입니다.
+> 나머지는 전부 유지보수하지 않습니다.
 
 ## 구성
 
@@ -37,6 +37,7 @@ nugdev-compiler 로 이어집니다.
 | [`nugdev-compiler-2025/`](nugdev-compiler-2025) | Tokenizer + AST + gtest (C++) — 최신 | 9 | 2025.05–2026.08 |
 | [`nugdev-compiler-init/`](nugdev-compiler-init) | 프로젝트 초기 셋업본 | 1 | 2025.05 |
 | [`cos/`](cos) | NASM 백엔드 컴파일러 | 4 | 2025.11–2026.08 |
+| [`kern-research/`](kern-research) | 순수 함수만으로 커널을 쓰는 언어 + `kernc` 컴파일러 — **현역** | 155 | 2026.01–2026.03 |
 | [`nugdev-language/`](nugdev-language) | nugdev 언어 EBNF 설계 + 뷰어 | 1 | 2025.06 |
 | [`docs/language-design/`](docs/language-design) | 언어 설계 노트 | 1 | 2025.01 |
 
@@ -63,12 +64,13 @@ git show legacy/<프로젝트>/<브랜치>          # 편입 직전 최종 상�
 > 서브트리 편입에 `-s ours` 병합을 써서 main 쪽 경로 히스토리에는 병합 커밋만 남기 때문입니다.
 > **원본 커밋은 전부 이 저장소 안에 그대로 있고, 위의 `legacy/*` 태그로 접근합니다.**
 
-보존된 태그 18개:
+보존된 태그 19개:
 
 ```
   legacy/anyangtech-interpreter/main
   legacy/cos/master
   legacy/cos/wip/archive-import
+  legacy/kern-research/develop
   legacy/make-interpreter-csharp/main
   legacy/ncompiler/main
   legacy/ncompiler/wip/archive-import
