@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  build-and-test:
+    runs-on: macos-13  # Intel macOS for native x86-64
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install NASM
+      run: brew install nasm
+
+    - name: Configure CMake
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: cmake --build build -j$(sysctl -n hw.ncpu)
+
+    - name: Run Unit Tests
+      run: build/tests/unit/kern_tests
+
+    - name: Run Integration Tests
+      run: bash tests/integration/run_tests.sh build/tools/kernc/kernc tests/integration
+
+    - name: Run Tool Tests (kern-fmt)
+      run: bash tests/tool/fmt/run_tests.sh build/tools/kern-fmt/kern-fmt
+
+    - name: Run Tool Tests (kern-lsp)
+      run: bash tests/tool/lsp/run_tests.sh build/tools/kern-lsp/kern-lsp
+
+  coverage:
+    runs-on: macos-13
+    needs: build-and-test
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install NASM
+      run: brew install nasm
+
+    - name: Build with Coverage
+      run: |
+        cmake -B build-cov -DKERN_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug
+        cmake --build build-cov -j$(sysctl -n hw.ncpu)
+
+    - name: Run Tests with Coverage
+      run: |
+        mkdir -p build-cov/profraw
+        LLVM_PROFILE_FILE="build-cov/profraw/unit_%p.profraw" \
+            build-cov/tests/unit/kern_tests
+        LLVM_PROFILE_FILE="build-cov/profraw/e2e_%p.profraw" \
+            bash tests/integration/run_tests.sh build-cov/tools/kernc/kernc tests/integration
+
+    - name: Generate Coverage Report
+      run: |
+        xcrun llvm-profdata merge -sparse build-cov/profraw/*.profraw -o build-cov/coverage.profdata
+        xcrun llvm-cov report \
+            build-cov/tests/unit/kern_tests \
+            -instr-profile=build-cov/coverage.profdata \
+            -ignore-filename-regex='(googletest|_deps|tests/)' \
+            --sources lib/ include/
+
+    - name: Coverage Gate (98%)
+      run: bash scripts/coverage_gate.sh build-cov 98

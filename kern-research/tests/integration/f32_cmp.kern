@@ -1,0 +1,29 @@
+// Test f32 comparisons use ucomiss (not ucomisd)
+fn cmp_lt(a: f32, b: f32) -> bool { a < b }
+fn cmp_gt(a: f32, b: f32) -> bool { a > b }
+fn cmp_eq(a: f32, b: f32) -> bool { a == b }
+fn cmp_ne(a: f32, b: f32) -> bool { a != b }
+fn cmp_le(a: f32, b: f32) -> bool { a <= b }
+fn cmp_ge(a: f32, b: f32) -> bool { a >= b }
+
+fn main() -> i64 {
+    val a: f32 = 1.5f
+    val b: f32 = 2.5f
+    val c: f32 = 1.5f
+
+    // lt: 1.5 < 2.5 = true
+    val r1: i64 = if cmp_lt(a, b) { 1 } else { 0 }
+    // gt: 2.5 > 1.5 = true
+    val r2: i64 = if cmp_gt(b, a) { 2 } else { 0 }
+    // eq: 1.5 == 1.5 = true
+    val r3: i64 = if cmp_eq(a, c) { 4 } else { 0 }
+    // ne: 1.5 != 2.5 = true
+    val r4: i64 = if cmp_ne(a, b) { 8 } else { 0 }
+    // le: 1.5 <= 1.5 = true
+    val r5: i64 = if cmp_le(a, c) { 16 } else { 0 }
+    // ge: 2.5 >= 1.5 = true
+    val r6: i64 = if cmp_ge(b, a) { 11 } else { 0 }
+
+    // 1 + 2 + 4 + 8 + 16 + 11 = 42
+    r1 + r2 + r3 + r4 + r5 + r6
+}

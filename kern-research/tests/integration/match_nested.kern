@@ -1,0 +1,8 @@
+fn classify(n: i64) -> i64 {
+    match n {
+        0 => 10,
+        1 => 20,
+        _ => 30
+    }
+}
+fn main() -> i64 { classify(1) }

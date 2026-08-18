@@ -1,0 +1,11 @@
+union Result1 { Ok(i64), Err(i64) }
+union Result2 { Ok(i64), Err(bool) }
+
+fn might_fail() -> Result1 {
+    Result1::Ok(42)
+}
+
+fn main() -> Result2 {
+    val v: i64 = might_fail()?
+    Result2::Ok(v)
+}

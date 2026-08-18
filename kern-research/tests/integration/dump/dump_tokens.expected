@@ -1,0 +1,2 @@
+args:--dump-tokens
+stdout:fn 'fn'

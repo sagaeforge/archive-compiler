@@ -1,0 +1,12 @@
+newtype PhysAddr(u64)
+newtype VirtAddr(u64)
+
+fn phys_offset(base: PhysAddr, off: u64) -> PhysAddr {
+    PhysAddr { inner: base.inner + off }
+}
+
+fn main() -> i64 {
+    val base: PhysAddr = PhysAddr { inner: 40 }
+    val addr: PhysAddr = phys_offset(base, 2)
+    addr.inner as i64
+}

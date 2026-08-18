@@ -1,0 +1,23 @@
+enum TcpState {
+    Closed = 0,
+    Listen = 1,
+    SynSent = 2,
+    Established = 3
+}
+
+fn transition(state: TcpState, event: i64) -> TcpState {
+    match state {
+        Closed => if event == 1 { TcpState.Listen } else { TcpState.Closed },
+        Listen => if event == 2 { TcpState.SynSent } else { TcpState.Listen },
+        SynSent => if event == 3 { TcpState.Established } else { TcpState.SynSent },
+        Established => TcpState.Established
+    }
+}
+
+fn main() -> i64 with mut {
+    var state: TcpState = TcpState.Closed
+    state = transition(state, 1)
+    state = transition(state, 2)
+    state = transition(state, 3)
+    (state as i64) + 39
+}

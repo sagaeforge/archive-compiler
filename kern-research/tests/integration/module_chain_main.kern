@@ -1,0 +1,7 @@
+import module_chain_mid (load_config)
+import module_chain_base (Config)
+
+fn main() -> i64 with io, atomic, mut, mem {
+    val cfg: Config = load_config()
+    cfg.value
+}

@@ -1,0 +1,6 @@
+import multimod_types (Point, make_point)
+
+fn main() -> i64 {
+    val p: Point = make_point(10, 32)
+    p.x + p.y
+}

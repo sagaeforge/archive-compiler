@@ -1,0 +1,8 @@
+fn main() -> i64 {
+    val arr: [i64; 4] = [10, 20, 5, 7]
+    var sum: i64 = 0
+    for x in arr {
+        sum = sum + x
+    }
+    sum
+}

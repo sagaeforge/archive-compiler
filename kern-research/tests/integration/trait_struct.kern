@@ -1,0 +1,19 @@
+struct Point {
+    x: i64
+    y: i64
+}
+
+trait Summable {
+    fn sum(self: Point) -> i64
+}
+
+impl Summable for Point {
+    fn sum(self: Point) -> i64 {
+        self.x + self.y
+    }
+}
+
+fn main() -> i64 {
+    val p: Point = Point { x: 20, y: 22 }
+    p.sum()
+}

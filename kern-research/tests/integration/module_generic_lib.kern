@@ -1,0 +1,20 @@
+module module_generic_lib
+
+pub union Option<T> {
+    Some(T),
+    None
+}
+
+pub fn unwrap_or(opt: Option<i64>, default: i64) -> i64 {
+    match opt {
+        Some(v) => v,
+        None => default
+    }
+}
+
+pub fn map_option(opt: Option<i64>, offset: i64) -> Option<i64> {
+    match opt {
+        Some(v) => Option::Some(v + offset),
+        None => Option::None
+    }
+}

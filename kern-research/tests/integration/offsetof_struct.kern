@@ -1,0 +1,17 @@
+// Test offsetof() compile-time intrinsic
+
+struct Data {
+    a: u8
+    b: i64
+    c: i32
+}
+
+fn main() -> i64 {
+    val o_a: u64 = offsetof(Data, a)
+    val o_b: u64 = offsetof(Data, b)
+    val o_c: u64 = offsetof(Data, c)
+
+    // 0 + 8 + 16 = 24
+    // We want exit code 42, so add 18
+    (o_a + o_b + o_c + 18 as u64) as i64
+}

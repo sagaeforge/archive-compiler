@@ -1,0 +1,8 @@
+fn volatile_read(ptr: Ptr<i64>) -> i64 = intrinsic
+fn volatile_write(ptr: Ptr<var i64>, v: i64) -> Unit = intrinsic
+
+fn main() -> i64 {
+    var x: i64 = 10
+    volatile_write(&var x, 42)
+    volatile_read(&x)
+}

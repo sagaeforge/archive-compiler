@@ -1,0 +1,7 @@
+@include("include_header.kern")
+@include("include_header.kern")
+
+fn main() -> i64 {
+    val p: Point = make_point(20, 22)
+    p.x + p.y
+}

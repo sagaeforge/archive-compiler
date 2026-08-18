@@ -1,0 +1,16 @@
+// Array of structs: elements stored inline (not as pointers)
+struct Entry { base: i64, limit: i64 }
+
+fn sum_entries(entries: [Entry; 3]) -> i64 {
+    entries[0u64].base + entries[1u64].base + entries[2u64].base +
+    entries[0u64].limit + entries[1u64].limit + entries[2u64].limit
+}
+
+fn main() -> i64 {
+    val e = [
+        Entry { base: 1, limit: 2 },
+        Entry { base: 3, limit: 4 },
+        Entry { base: 10, limit: 22 }
+    ]
+    sum_entries(e)
+}

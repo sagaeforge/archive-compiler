@@ -1,0 +1,8 @@
+fn get_ref() -> Ptr<i64> {
+  var x: i64 = 42
+  return &x
+}
+
+fn main() -> u8 {
+  0
+}

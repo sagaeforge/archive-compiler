@@ -1,0 +1,14 @@
+union Option { None, Some(i64) }
+
+fn unwrap_or(opt: Option, default: i64) -> i64 {
+    match opt {
+        None => default,
+        Some(v) => v
+    }
+}
+
+fn main() -> i64 {
+    val a: Option = Option::Some(40)
+    val b: Option = Option::None
+    unwrap_or(a, 0) + unwrap_or(b, 2)
+}

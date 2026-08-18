@@ -1,0 +1,7 @@
+fn compiler_barrier() -> Unit = intrinsic
+
+fn main() -> i64 {
+    var x: i64 = 42
+    compiler_barrier()
+    x
+}

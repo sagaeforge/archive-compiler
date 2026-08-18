@@ -1,0 +1,13 @@
+static var counter: i64 = 10
+
+fn increment() -> i64 with mut {
+    counter = counter + 1
+    counter
+}
+
+fn main() -> i64 with mut {
+    val a: i64 = increment()
+    val b: i64 = increment()
+    val c: i64 = increment()
+    a + b + c
+}

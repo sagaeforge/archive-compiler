@@ -1,0 +1,12 @@
+// Nested generic monomorphization: Option<Ptr<T>> must produce
+// correct mangled name Option_Ptr_T (not just Option_Ptr)
+union Option<T> { Some(T), None }
+
+fn main() -> i64 {
+    var x: i64 = 42
+    val opt: Option<Ptr<i64>> = Option<Ptr<i64>>::Some(&x)
+    match opt {
+        Some(p) => *p
+        None => 0
+    }
+}

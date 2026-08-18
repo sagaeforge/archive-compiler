@@ -1,0 +1,5 @@
+fn main() -> i64 {
+    val x: bool = true
+    x as f64
+    0
+}

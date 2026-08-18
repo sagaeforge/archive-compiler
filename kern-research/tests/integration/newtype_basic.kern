@@ -1,0 +1,6 @@
+newtype Celsius(i64)
+
+fn main() -> i64 {
+    val temp: Celsius = Celsius { inner: 42 }
+    temp.inner
+}

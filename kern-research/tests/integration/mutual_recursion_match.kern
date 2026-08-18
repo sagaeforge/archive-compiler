@@ -1,0 +1,17 @@
+fn is_even(n: i64) -> bool {
+    match n {
+        0 => true
+        _ => is_odd(n - 1)
+    }
+}
+
+fn is_odd(n: i64) -> bool {
+    match n {
+        0 => false
+        _ => is_even(n - 1)
+    }
+}
+
+fn main() -> i64 {
+    if is_even(42) { 42 } else { 0 }
+}

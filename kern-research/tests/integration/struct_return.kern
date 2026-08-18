@@ -1,0 +1,10 @@
+struct Pair { a: i64, b: i64 }
+
+fn make_pair() -> Pair {
+    Pair { a: 40, b: 2 }
+}
+
+fn main() -> i64 {
+    val p: Pair = make_pair()
+    p.a + p.b
+}

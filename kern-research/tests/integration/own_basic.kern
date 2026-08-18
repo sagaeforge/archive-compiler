@@ -1,0 +1,8 @@
+// Ownership: own parameter passes ownership
+fn consume(x: own i64) -> i64 {
+    x
+}
+
+fn main() -> i64 {
+    consume(42)
+}

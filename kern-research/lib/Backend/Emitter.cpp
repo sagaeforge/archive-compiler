@@ -1,0 +1,1727 @@
+#include "kern/backend/Emitter.h"
+#include <cstring>
+#include <cstdint>
+#include <vector>
+#include <unordered_map>
+#include <unordered_set>
+
+namespace kern {
+
+// Check if a 64-bit value fits in a sign-extended 32-bit immediate
+static bool fitsInSignedDword(int64_t val) {
+    return val >= INT32_MIN && val <= INT32_MAX;
+}
+
+// ============================================================================
+// Size Prefix
+// ============================================================================
+
+const char* NASMEmitter::sizePrefix(uint8_t width) {
+    switch (width) {
+        case 8:  return "byte";
+        case 16: return "word";
+        case 32: return "dword";
+        case 64: return "qword";
+        default: return "qword";
+    }
+}
+
+// ============================================================================
+// Operand Emission
+// ============================================================================
+
+void NASMEmitter::emitOperand(const MachOperand& op, uint8_t width) {
+    switch (op.kind) {
+        case MachOperand::Reg:
+            if (op.is_physical) {
+                out_ << physRegName(op.phys, width);
+            } else {
+                // Should not happen after regalloc
+                out_ << "%v" << op.vreg;
+            }
+            break;
+        case MachOperand::Imm:
+            out_ << op.imm;
+            break;
+        case MachOperand::Stack:
+            out_ << "[rbp" << (op.stack_offset >= 0 ? "+" : "")
+                 << op.stack_offset << "]";
+            break;
+        case MachOperand::Label:
+            out_ << op.label;
+            break;
+        case MachOperand::None:
+            break;
+    }
+}
+
+// ============================================================================
+// Instruction Emission
+// ============================================================================
+
+void NASMEmitter::emitInstr(const MachInstr& instr) {
+    out_ << "    ";
+
+    switch (instr.op) {
+        case X86Op::Mov: {
+            // If dst is stack, need size prefix
+            if (instr.dst().isStack()) {
+                // x86-64 mov [mem], imm only supports 32-bit sign-extended immediates.
+                // For 64-bit values that don't fit, use r11 as scratch.
+                if (instr.width == 64 && instr.src1().isImm() &&
+                    !fitsInSignedDword(instr.src1().imm)) {
+                    out_ << "mov r11, ";
+                    emitOperand(instr.src1(), 64);
+                    out_ << "\n    mov qword ";
+                    emitOperand(instr.dst(), 64);
+                    out_ << ", r11";
+                } else {
+                    out_ << "mov " << sizePrefix(instr.width) << " ";
+                    emitOperand(instr.dst(), instr.width);
+                    out_ << ", ";
+                    emitOperand(instr.src1(), instr.width);
+                }
+            } else {
+                out_ << "mov ";
+                emitOperand(instr.dst(), instr.width);
+                out_ << ", ";
+                emitOperand(instr.src1(), instr.width);
+            }
+            break;
+        }
+
+        case X86Op::MovLoad:
+            // mov dst, [src]  — load from memory
+            out_ << "mov ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            if (instr.src1().isStack()) {
+                emitOperand(instr.src1(), instr.width);
+            } else {
+                out_ << sizePrefix(instr.width) << " [";
+                emitOperand(instr.src1(), 64);
+                out_ << "]";
+            }
+            break;
+
+        case X86Op::MovStore:
+            // mov [dst], src  — store to memory
+            // If value is a large 64-bit immediate, load into r11 first
+            if (instr.width == 64 && instr.src1().isImm() &&
+                !fitsInSignedDword(instr.src1().imm)) {
+                out_ << "mov r11, ";
+                emitOperand(instr.src1(), 64);
+                out_ << "\n    mov qword ";
+                if (instr.dst().isStack()) {
+                    emitOperand(instr.dst(), 64);
+                } else {
+                    out_ << "[";
+                    emitOperand(instr.dst(), 64);
+                    out_ << "]";
+                }
+                out_ << ", r11";
+            } else {
+                out_ << "mov ";
+                if (instr.dst().isStack()) {
+                    out_ << sizePrefix(instr.width) << " ";
+                    emitOperand(instr.dst(), instr.width);
+                } else {
+                    out_ << sizePrefix(instr.width) << " [";
+                    emitOperand(instr.dst(), 64);
+                    out_ << "]";
+                }
+                out_ << ", ";
+                emitOperand(instr.src1(), instr.width);
+            }
+            break;
+
+        case X86Op::MovZX:
+            if (instr.width == 32) {
+                // x86-64: writing to 32-bit register auto-zeros upper 32 bits
+                out_ << "mov ";
+                emitOperand(instr.dst(), 32);
+                out_ << ", ";
+                if (instr.src1().isStack()) {
+                    out_ << sizePrefix(32) << " ";
+                }
+                emitOperand(instr.src1(), 32);
+            } else {
+                out_ << "movzx ";
+                emitOperand(instr.dst(), 64);
+                out_ << ", ";
+                if (instr.src1().isStack()) {
+                    out_ << sizePrefix(instr.width) << " ";
+                }
+                emitOperand(instr.src1(), instr.width);
+            }
+            break;
+
+        case X86Op::MovSX:
+            // NASM: movsxd for 32→64, movsx for 8→N and 16→N
+            out_ << (instr.width == 32 ? "movsxd " : "movsx ");
+            emitOperand(instr.dst(), 64);
+            out_ << ", ";
+            if (instr.src1().isStack()) {
+                out_ << sizePrefix(instr.width) << " ";
+            }
+            emitOperand(instr.src1(), instr.width);
+            break;
+
+        case X86Op::Lea:
+            out_ << "lea ";
+            emitOperand(instr.dst(), 64);
+            out_ << ", ";
+            if (instr.src1().isLabel()) {
+                out_ << "[rel " << instr.src1().label << "]";
+            } else if (instr.src1().isPhysical()) {
+                out_ << "[";
+                emitOperand(instr.src1(), 64);
+                out_ << "]";
+            } else if (instr.src1().isStack()) {
+                // Stack operand already formatted as [rbp+N]
+                emitOperand(instr.src1(), 64);
+            } else {
+                emitOperand(instr.src1(), 64);
+            }
+            break;
+
+        case X86Op::Push:
+            out_ << "push ";
+            emitOperand(instr.dst(), 64);
+            break;
+
+        case X86Op::Pop:
+            out_ << "pop ";
+            emitOperand(instr.dst(), 64);
+            break;
+
+        case X86Op::Add:
+        case X86Op::Sub:
+        case X86Op::IMul:
+        case X86Op::Xor:
+        case X86Op::And:
+        case X86Op::Or:
+            // x86-64 ALU r64,imm32 sign-extends the immediate. If the
+            // 64-bit immediate doesn't fit in signed 32-bit, load it
+            // into r11 first to avoid silent truncation by NASM.
+            if (instr.width == 64 && instr.src1().isImm() &&
+                !fitsInSignedDword(instr.src1().imm)) {
+                out_ << "mov r11, ";
+                emitOperand(instr.src1(), 64);
+                out_ << "\n    " << x86OpName(instr.op) << " ";
+                emitOperand(instr.dst(), 64);
+                out_ << ", r11";
+            } else {
+                out_ << x86OpName(instr.op) << " ";
+                emitOperand(instr.dst(), instr.width);
+                out_ << ", ";
+                emitOperand(instr.src1(), instr.width);
+            }
+            break;
+
+        case X86Op::Shl:
+        case X86Op::Shr:
+        case X86Op::Sar:
+            // x86 shift: op dst, cl
+            out_ << x86OpName(instr.op) << " ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", cl";
+            break;
+
+        case X86Op::Neg:
+        case X86Op::Not:
+            out_ << x86OpName(instr.op) << " ";
+            emitOperand(instr.dst(), instr.width);
+            break;
+
+        case X86Op::IDiv:
+            out_ << "idiv ";
+            emitOperand(instr.dst(), instr.width);
+            break;
+
+        case X86Op::Cqo:
+            if (instr.width == 16) out_ << "cwd";
+            else if (instr.width == 32) out_ << "cdq";
+            else out_ << "cqo";
+            break;
+
+        case X86Op::Cmp:
+            if (instr.width == 64 && instr.src1().isImm() &&
+                !fitsInSignedDword(instr.src1().imm)) {
+                out_ << "mov r11, ";
+                emitOperand(instr.src1(), 64);
+                out_ << "\n    cmp ";
+                emitOperand(instr.dst(), 64);
+                out_ << ", r11";
+            } else {
+                out_ << "cmp ";
+                emitOperand(instr.dst(), instr.width);
+                out_ << ", ";
+                emitOperand(instr.src1(), instr.width);
+            }
+            break;
+
+        case X86Op::Test:
+            out_ << "test ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
+        case X86Op::Setcc:
+            out_ << "set" << condCodeSuffix(instr.cc) << " ";
+            emitOperand(instr.dst(), 8);
+            break;
+
+        case X86Op::Cmovcc:
+            out_ << "cmov" << condCodeSuffix(instr.cc) << " ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
+        case X86Op::Jmp:
+            out_ << "jmp ";
+            emitOperand(instr.dst(), 64);
+            break;
+
+        case X86Op::Jcc:
+            // Emit Intel branch hint prefix: 0x3E = taken, 0x2E = not taken
+            if (instr.branch_hint > 0) out_ << "db 0x3E\n    ";
+            else if (instr.branch_hint < 0) out_ << "db 0x2E\n    ";
+            out_ << "j" << condCodeSuffix(instr.cc) << " ";
+            emitOperand(instr.dst(), 64);
+            break;
+
+        case X86Op::Call:
+            out_ << "call ";
+            emitOperand(instr.dst(), 64);
+            break;
+
+        case X86Op::Ret:
+            out_ << "ret";
+            break;
+
+        // SSE
+        case X86Op::Movss:
+        case X86Op::Movsd:
+            out_ << x86OpName(instr.op) << " ";
+            if (instr.dst().isStack()) {
+                out_ << sizePrefix(instr.width) << " ";
+            }
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            if (instr.src1().isLabel()) {
+                // Global data reference: movsd xmm0, [rel _float_0]
+                out_ << "[rel " << instr.src1().label << "]";
+            } else if (instr.src1().isStack()) {
+                emitOperand(instr.src1(), instr.width);
+            } else {
+                emitOperand(instr.src1(), instr.width);
+            }
+            break;
+
+        case X86Op::FloatLoad:
+            // movss/movsd xmm, [gpr]  — float load from pointer
+            out_ << (instr.width == 32 ? "movss" : "movsd") << " ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", [";
+            emitOperand(instr.src1(), 64);
+            out_ << "]";
+            break;
+
+        case X86Op::FloatStore:
+            // movss/movsd [gpr], xmm  — float store to pointer
+            out_ << (instr.width == 32 ? "movss" : "movsd") << " [";
+            emitOperand(instr.dst(), 64);
+            out_ << "], ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
+        case X86Op::Addss:
+        case X86Op::Addsd:
+        case X86Op::Subss:
+        case X86Op::Subsd:
+        case X86Op::Mulss:
+        case X86Op::Mulsd:
+        case X86Op::Divss:
+        case X86Op::Divsd:
+            out_ << x86OpName(instr.op) << " ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
+        case X86Op::Ucomisd:
+        case X86Op::Ucomiss:
+            out_ << x86OpName(instr.op) << " ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
+        case X86Op::Xorps:
+        case X86Op::Xorpd:
+            out_ << x86OpName(instr.op) << " ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
+        // Float <-> Integer conversions
+        case X86Op::Cvttsd2si:
+        case X86Op::Cvttss2si:
+            // cvttsd2si gpr, xmm  /  cvttss2si gpr, xmm
+            out_ << x86OpName(instr.op) << " ";
+            emitOperand(instr.dst(), instr.width);  // GPR with target width
+            out_ << ", ";
+            emitOperand(instr.src1(), 128);  // XMM (always full name)
+            break;
+
+        case X86Op::Cvtsi2sd:
+        case X86Op::Cvtsi2ss:
+            // cvtsi2sd xmm, gpr  /  cvtsi2ss xmm, gpr
+            out_ << x86OpName(instr.op) << " ";
+            emitOperand(instr.dst(), 128);   // XMM dest
+            out_ << ", ";
+            emitOperand(instr.src1(), instr.width);  // GPR source
+            break;
+
+        case X86Op::Cvtsd2ss:
+        case X86Op::Cvtss2sd:
+            // cvtsd2ss xmm, xmm  /  cvtss2sd xmm, xmm
+            out_ << x86OpName(instr.op) << " ";
+            emitOperand(instr.dst(), 128);   // XMM dest
+            out_ << ", ";
+            emitOperand(instr.src1(), 128);  // XMM source
+            break;
+
+        case X86Op::Pseudo_ParallelMove:
+            emitParallelMove(instr);
+            return;  // don't add newline
+
+        case X86Op::Pseudo_FrameSetup:
+            return;  // handled by prologue
+
+        case X86Op::Pseudo_FrameDestroy:
+            // Emit epilogue without ret (used for tail calls)
+            return;  // handled in emitFunction loop
+
+        case X86Op::Nop:
+            out_ << "nop";
+            break;
+
+        case X86Op::InlineAsm:
+            if (instr.asm_data.output_count == 0 && instr.asm_data.input_count == 0) {
+                // Legacy: emit raw assembly lines directly
+                for (uint32_t i = 0; i < instr.asm_data.line_count; ++i) {
+                    if (i > 0) out_ << "\n    ";
+                    out_.write(instr.asm_data.lines[i], instr.asm_data.line_lengths[i]);
+                }
+            } else {
+                // Extended: substitute $N with resolved register names
+                // Operand numbering: outputs first, then inputs
+                for (uint32_t i = 0; i < instr.asm_data.line_count; ++i) {
+                    if (i > 0) out_ << "\n    ";
+                    const char* text = instr.asm_data.lines[i];
+                    uint32_t len = instr.asm_data.line_lengths[i];
+                    for (uint32_t j = 0; j < len; ++j) {
+                        if (text[j] == '$' && j + 1 < len && text[j + 1] >= '0' && text[j + 1] <= '9') {
+                            uint32_t idx = text[j + 1] - '0';
+                            ++j; // skip digit
+                            if (idx < instr.asm_data.output_count) {
+                                out_ << physRegName(instr.asm_data.outputs[idx].phys);
+                            } else {
+                                uint32_t in_idx = idx - instr.asm_data.output_count;
+                                if (in_idx < instr.asm_data.input_count) {
+                                    out_ << physRegName(instr.asm_data.inputs[in_idx].phys);
+                                } else {
+                                    out_ << '$' << static_cast<char>('0' + idx);
+                                }
+                            }
+                        } else {
+                            out_ << text[j];
+                        }
+                    }
+                }
+            }
+            break;
+
+        case X86Op::LockCmpxchg:
+            // lock cmpxchg [ptr], desired — rax holds expected, result in rax
+            if (instr.src1().isStack()) {
+                out_ << "mov r11, ";
+                emitOperand(instr.src1(), 64);
+                out_ << "\n    lock cmpxchg [r11], ";
+            } else {
+                out_ << "lock cmpxchg [";
+                emitOperand(instr.src1(), 64);
+                out_ << "], ";
+            }
+            emitOperand(instr.src2(), 64);
+            break;
+        case X86Op::LockCmpxchg16b:
+            // lock cmpxchg16b [ptr] — RDX:RAX expected, RCX:RBX desired
+            if (instr.operand(0).isStack()) {
+                out_ << "mov r11, ";
+                emitOperand(instr.operand(0), 64);
+                out_ << "\n    lock cmpxchg16b [r11]";
+            } else {
+                out_ << "lock cmpxchg16b [";
+                emitOperand(instr.operand(0), 64);
+                out_ << "]";
+            }
+            break;
+        case X86Op::LockXadd:
+            // lock xadd [ptr], value — old value returned in value reg
+            if (instr.src1().isStack()) {
+                out_ << "mov r11, ";
+                emitOperand(instr.src1(), 64);
+                out_ << "\n    lock xadd [r11], ";
+            } else {
+                out_ << "lock xadd [";
+                emitOperand(instr.src1(), 64);
+                out_ << "], ";
+            }
+            emitOperand(instr.src2(), 64);
+            break;
+        case X86Op::Xchg: {
+            // xchg [ptr], value — implicitly locked
+            // Both operands can't be memory; load spilled values into temps.
+            bool dst_spill = instr.dst().isStack();
+            bool src_spill = instr.src1().isStack();
+            if (src_spill) {
+                // Load the spilled value into r11 first
+                out_ << "mov r11, ";
+                emitOperand(instr.src1(), 64);
+                out_ << "\n    ";
+            }
+            if (dst_spill) {
+                // Load spilled ptr into rcx (r11 may hold value)
+                std::string_view tmp = src_spill ? "rcx" : "r11";
+                out_ << "mov " << tmp << ", ";
+                emitOperand(instr.dst(), 64);
+                out_ << "\n    xchg [" << tmp << "], ";
+            } else {
+                out_ << "xchg [";
+                emitOperand(instr.dst(), 64);
+                out_ << "], ";
+            }
+            out_ << (src_spill ? "r11" : "");
+            if (!src_spill) emitOperand(instr.src1(), 64);
+            // Note: do NOT write r11 back to the spill slot — xchg returns
+            // the old memory value in r11, which would clobber the original
+            // spilled variable. For atomic_store the old value is discarded.
+            break;
+        }
+            break;
+        case X86Op::Mfence:
+            out_ << "mfence";
+            break;
+        case X86Op::Sfence:
+            out_ << "sfence";
+            break;
+        case X86Op::Lfence:
+            out_ << "lfence";
+            break;
+        case X86Op::GsLoad:
+            if (instr.src1().isStack()) {
+                out_ << "mov r11, ";
+                emitOperand(instr.src1(), 64);
+                out_ << "\n    mov ";
+                emitOperand(instr.dst(), instr.width);
+                out_ << ", [gs:r11]";
+            } else {
+                out_ << "mov ";
+                emitOperand(instr.dst(), instr.width);
+                out_ << ", [gs:";
+                emitOperand(instr.src1(), 64);
+                out_ << "]";
+            }
+            break;
+        case X86Op::GsStore:
+            if (instr.dst().isStack()) {
+                out_ << "mov r11, ";
+                emitOperand(instr.dst(), 64);
+                out_ << "\n    mov [gs:r11], ";
+            } else {
+                out_ << "mov [gs:";
+                emitOperand(instr.dst(), 64);
+                out_ << "], ";
+            }
+            emitOperand(instr.src1(), 64);
+            break;
+        case X86Op::FsLoad:
+            if (instr.src1().isStack()) {
+                out_ << "mov r11, ";
+                emitOperand(instr.src1(), 64);
+                out_ << "\n    mov ";
+                emitOperand(instr.dst(), instr.width);
+                out_ << ", [fs:r11]";
+            } else {
+                out_ << "mov ";
+                emitOperand(instr.dst(), instr.width);
+                out_ << ", [fs:";
+                emitOperand(instr.src1(), 64);
+                out_ << "]";
+            }
+            break;
+        case X86Op::FsStore:
+            if (instr.dst().isStack()) {
+                out_ << "mov r11, ";
+                emitOperand(instr.dst(), 64);
+                out_ << "\n    mov [fs:r11], ";
+            } else {
+                out_ << "mov [fs:";
+                emitOperand(instr.dst(), 64);
+                out_ << "], ";
+            }
+            emitOperand(instr.src1(), 64);
+            break;
+        case X86Op::MovLoadGlobal: {
+            // x86 can't do mem-to-mem mov, so if dst is stack, use rax as temp
+            auto& dst = instr.dst();
+            const char* sp = symPrefix();
+            if (dst.isStack()) {
+                const char* tmp = (instr.width <= 32) ? "eax" : "rax";
+                out_ << "mov " << tmp << ", [rel " << sp << instr.global_label << "]\n";
+                out_ << "    mov ";
+                emitOperand(dst, instr.width);
+                out_ << ", " << tmp;
+            } else {
+                out_ << "mov ";
+                emitOperand(dst, instr.width);
+                out_ << ", [rel " << sp << instr.global_label << "]";
+            }
+            break;
+        }
+        case X86Op::MovStoreGlobal: {
+            auto& src = instr.dst();
+            const char* sp = symPrefix();
+            if (src.isStack()) {
+                const char* tmp = (instr.width <= 32) ? "eax" : "rax";
+                out_ << "mov " << tmp << ", ";
+                emitOperand(src, instr.width);
+                out_ << "\n    mov [rel " << sp << instr.global_label << "], " << tmp;
+            } else {
+                out_ << "mov [rel " << sp << instr.global_label << "], ";
+                emitOperand(src, instr.width);
+            }
+            break;
+        }
+
+        case X86Op::LeaGlobal: {
+            const char* sp = symPrefix();
+            auto& dst = instr.dst();
+            if (dst.isStack()) {
+                out_ << "lea rax, [rel " << sp << instr.global_label << "]\n";
+                out_ << "    mov ";
+                emitOperand(dst, 64);
+                out_ << ", rax";
+            } else {
+                out_ << "lea ";
+                emitOperand(dst, 64);
+                out_ << ", [rel " << sp << instr.global_label << "]";
+            }
+            break;
+        }
+
+        case X86Op::Bsf:
+            out_ << "bsf ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
+        case X86Op::Bsr:
+            out_ << "bsr ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
+        case X86Op::Popcnt:
+            out_ << "popcnt ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
+        case X86Op::Bswap:
+            out_ << "bswap ";
+            emitOperand(instr.dst(), instr.width);
+            break;
+
+        case X86Op::In:
+            // in al/ax/eax, dx  (width determines accumulator size)
+            out_ << "in ";
+            emitOperand(instr.dst(), instr.width);
+            out_ << ", dx";
+            break;
+
+        case X86Op::Out:
+            // out dx, al/ax/eax
+            out_ << "out dx, ";
+            emitOperand(instr.src1(), instr.width);
+            break;
+
+        case X86Op::Ud2:
+            out_ << "ud2";
+            break;
+
+        case X86Op::JmpTable: {
+            // Load PC-relative offset from table, add base, jump
+            // mov tmp, [base + idx*8]   ; load relative offset
+            // add tmp, base             ; compute absolute target
+            // jmp tmp
+            auto base = instr.dst();
+            auto idx = instr.src1();
+            out_ << "mov ";
+            emitOperand(idx, 64);
+            out_ << ", [";
+            emitOperand(base, 64);
+            out_ << " + ";
+            emitOperand(idx, 64);
+            out_ << "*8]\n    add ";
+            emitOperand(idx, 64);
+            out_ << ", ";
+            emitOperand(base, 64);
+            out_ << "\n    jmp ";
+            emitOperand(idx, 64);
+            break;
+        }
+    }
+
+    out_ << "\n";
+}
+
+// ============================================================================
+// Parallel Move (cycle-breaking)
+// ============================================================================
+
+// Helper: get a unique key for a physical register operand
+static uint8_t physKey(PhysReg r) {
+    return static_cast<uint8_t>(r);
+}
+
+void NASMEmitter::emitParallelMove(const MachInstr& instr) {
+    // Collect dst→src pairs (only physical registers)
+    struct MovePair {
+        MachOperand dst;
+        MachOperand src;
+    };
+    std::vector<MovePair> moves;
+    for (uint8_t i = 0; i + 1 < instr.operand_count; i += 2) {
+        moves.push_back({instr.operand(i), instr.operand(i + 1)});
+    }
+
+    if (moves.empty()) return;
+
+    // Build adjacency: dst_reg → index in moves
+    // We need to detect cycles among physical register moves
+    std::unordered_map<uint8_t, uint32_t> dst_map; // phys_key → move index
+    for (uint32_t i = 0; i < moves.size(); ++i) {
+        if (moves[i].dst.isPhysical()) {
+            dst_map[physKey(moves[i].dst.phys)] = i;
+        }
+    }
+
+    // Track which moves have been emitted
+    std::vector<bool> emitted(moves.size(), false);
+
+    // Pass 1: emit non-cyclic moves via topological ordering
+    // A move is "ready" if its dst is not a src of any un-emitted move
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (uint32_t i = 0; i < moves.size(); ++i) {
+            if (emitted[i]) continue;
+            // Check if this move's dst register is used as a src by another un-emitted move
+            bool blocked = false;
+            if (moves[i].dst.isPhysical()) {
+                uint8_t dk = physKey(moves[i].dst.phys);
+                for (uint32_t j = 0; j < moves.size(); ++j) {
+                    if (j == i || emitted[j]) continue;
+                    if (moves[j].src.isPhysical() && physKey(moves[j].src.phys) == dk) {
+                        blocked = true;
+                        break;
+                    }
+                }
+            }
+            if (!blocked) {
+                // Safe to emit
+                out_ << "    mov ";
+                emitOperand(moves[i].dst, 64);
+                out_ << ", ";
+                emitOperand(moves[i].src, 64);
+                out_ << "\n";
+                emitted[i] = true;
+                changed = true;
+            }
+        }
+    }
+
+    // Pass 2: remaining moves form cycles — break with xchg / scratch r11
+    for (uint32_t i = 0; i < moves.size(); ++i) {
+        if (emitted[i]) continue;
+
+        // Find the cycle starting from move i
+        std::vector<uint32_t> cycle;
+        uint32_t cur = i;
+        while (cur < moves.size() && !emitted[cur]) {
+            cycle.push_back(cur);
+            emitted[cur] = true;
+            // Follow: the src of cur is the dst of the next move in the cycle
+            if (!moves[cur].src.isPhysical()) break;
+            auto it = dst_map.find(physKey(moves[cur].src.phys));
+            if (it == dst_map.end() || emitted[it->second]) break;
+            cur = it->second;
+        }
+
+        if (cycle.size() == 2) {
+            // 2-cycle: use xchg
+            out_ << "    xchg ";
+            emitOperand(moves[cycle[0]].dst, 64);
+            out_ << ", ";
+            emitOperand(moves[cycle[1]].dst, 64);
+            out_ << "\n";
+        } else if (cycle.size() > 2) {
+            // N-cycle: use r11 as scratch
+            // Save first dst to r11, shift all moves, then move r11 to last dst
+            out_ << "    mov r11, ";
+            emitOperand(moves[cycle[0]].dst, 64);
+            out_ << "\n";
+            for (uint32_t c = 0; c + 1 < cycle.size(); ++c) {
+                out_ << "    mov ";
+                emitOperand(moves[cycle[c]].dst, 64);
+                out_ << ", ";
+                emitOperand(moves[cycle[c]].src, 64);
+                out_ << "\n";
+            }
+            out_ << "    mov ";
+            emitOperand(moves[cycle.back()].dst, 64);
+            out_ << ", r11\n";
+        } else if (cycle.size() == 1) {
+            // Single un-emitted move (src isn't physical or no cycle) — just emit
+            out_ << "    mov ";
+            emitOperand(moves[cycle[0]].dst, 64);
+            out_ << ", ";
+            emitOperand(moves[cycle[0]].src, 64);
+            out_ << "\n";
+        }
+    }
+}
+
+// ============================================================================
+// Prologue / Epilogue
+// ============================================================================
+
+void NASMEmitter::emitPrologue(const MachFunction& fn) {
+    if (fn.is_interrupt) {
+        // Interrupt handler: save ALL GPRs
+        out_ << "    push rax\n";
+        out_ << "    push rbx\n";
+        out_ << "    push rcx\n";
+        out_ << "    push rdx\n";
+        out_ << "    push rsi\n";
+        out_ << "    push rdi\n";
+        out_ << "    push rbp\n";
+        out_ << "    push r8\n";
+        out_ << "    push r9\n";
+        out_ << "    push r10\n";
+        out_ << "    push r11\n";
+        out_ << "    push r12\n";
+        out_ << "    push r13\n";
+        out_ << "    push r14\n";
+        out_ << "    push r15\n";
+        if (!fn.is_interrupt_nofp) {
+            // Save all 16 XMM registers (256 bytes, unaligned store)
+            out_ << "    sub rsp, 256\n";
+            for (int i = 0; i < 16; ++i) {
+                out_ << "    movdqu [rsp+" << (i * 16) << "], xmm" << i << "\n";
+            }
+        }
+        out_ << "    mov rbp, rsp\n";
+        if (fn.is_interrupt_error) {
+            // Load the error code into rdi for the handler's first parameter.
+            // Error code offset: 15 pushed GPRs (15*8=120) + XMM bytes above.
+            uint32_t xmm_bytes = fn.is_interrupt_nofp ? 0 : 256;
+            out_ << "    mov rdi, [rsp+" << (120 + xmm_bytes) << "]\n";
+        }
+    } else {
+        out_ << "    push rbp\n";
+        out_ << "    mov rbp, rsp\n";
+    }
+
+    // Push callee-saved registers (skip for interrupt — already saved all)
+    if (!fn.is_interrupt) {
+        for (uint32_t i = 0; i < NUM_CALLEE_SAVED; ++i) {
+            if (fn.callee_saved_used[i]) {
+                out_ << "    push " << physRegName(CALLEE_SAVED_GPRS[i]) << "\n";
+            }
+        }
+    }
+
+    // Allocate stack frame (with stack probing for large frames)
+    // When no_red_zone is set, ensure RSP is decremented by at least 128 bytes
+    // to protect against interrupt clobbering the red zone area below RSP.
+    uint32_t effective_stack = fn.stack_size;
+    if (fn.is_no_red_zone && !fn.is_interrupt && effective_stack < 128) {
+        effective_stack = 128;
+    }
+    if (effective_stack > 0) {
+        if (effective_stack > 4096) {
+            // Probe each page to ensure guard pages are hit
+            uint32_t remaining = effective_stack;
+            while (remaining > 4096) {
+                out_ << "    sub rsp, 4096\n";
+                out_ << "    or dword [rsp], 0\n";  // write-probe the page
+                remaining -= 4096;
+            }
+            if (remaining > 0) {
+                out_ << "    sub rsp, " << remaining << "\n";
+            }
+        } else {
+            out_ << "    sub rsp, " << effective_stack << "\n";
+        }
+    }
+}
+
+void NASMEmitter::emitEpilogue(const MachFunction& fn) {
+    // Deallocate stack frame (match prologue's effective_stack)
+    uint32_t effective_stack = fn.stack_size;
+    if (fn.is_no_red_zone && !fn.is_interrupt && effective_stack < 128) {
+        effective_stack = 128;
+    }
+    if (effective_stack > 0) {
+        out_ << "    add rsp, " << effective_stack << "\n";
+    }
+
+    if (fn.is_interrupt) {
+        // Interrupt handler: restore all XMM + GPRs + iretq
+        out_ << "    mov rsp, rbp\n";
+        if (!fn.is_interrupt_nofp) {
+            // Restore 16 XMM registers
+            for (int i = 0; i < 16; ++i) {
+                out_ << "    movdqu xmm" << i << ", [rsp+" << (i * 16) << "]\n";
+            }
+            out_ << "    add rsp, 256\n";
+        }
+        out_ << "    pop r15\n";
+        out_ << "    pop r14\n";
+        out_ << "    pop r13\n";
+        out_ << "    pop r12\n";
+        out_ << "    pop r11\n";
+        out_ << "    pop r10\n";
+        out_ << "    pop r9\n";
+        out_ << "    pop r8\n";
+        out_ << "    pop rbp\n";
+        out_ << "    pop rdi\n";
+        out_ << "    pop rsi\n";
+        out_ << "    pop rdx\n";
+        out_ << "    pop rcx\n";
+        out_ << "    pop rbx\n";
+        out_ << "    pop rax\n";
+        if (fn.is_interrupt_error) {
+            // Pop the CPU-pushed error code before iretq
+            out_ << "    add rsp, 8\n";
+        }
+        out_ << "    iretq\n";
+    } else {
+        // Pop callee-saved registers (reverse order)
+        for (int i = NUM_CALLEE_SAVED - 1; i >= 0; --i) {
+            if (fn.callee_saved_used[i]) {
+                out_ << "    pop " << physRegName(CALLEE_SAVED_GPRS[i]) << "\n";
+            }
+        }
+        out_ << "    pop rbp\n";
+        out_ << "    ret\n";
+    }
+}
+
+// ============================================================================
+// Function Emission
+// ============================================================================
+
+void NASMEmitter::emitFunction(const MachFunction& fn) {
+    if (fn.is_intrinsic || fn.is_extern) return;
+
+    last_emitted_line_ = 0;  // reset for each function
+    bool has_canary = stack_protector_ && !fn.is_naked && !fn.is_interrupt && fn.stack_size > 0;
+
+    // Emit custom section directive if specified
+    if (!fn.section_name.empty()) {
+        out_ << "section " << fn.section_name;
+        if (!fn.section_flags.empty()) {
+            for (char c : fn.section_flags) {
+                switch (c) {
+                case 'a': out_ << " alloc"; break;
+                case 'w': out_ << " write"; break;
+                case 'x': out_ << " exec"; break;
+                case 'p': out_ << " progbits"; break;
+                case 'n': out_ << " nobits"; break;
+                }
+            }
+        }
+        out_ << "\n";
+    } else if (fn.is_cold) {
+        if (format_ == OutputFormat::Elf64) {
+            out_ << "section .text.cold\n";
+        }
+        // Mach-O doesn't support arbitrary text subsections, emit in normal .text
+    } else if (fn.is_hot) {
+        if (format_ == OutputFormat::Elf64) {
+            out_ << "section .text.hot\n";
+        }
+    }
+
+    // Function alignment
+    if (fn.fn_align > 0) {
+        out_ << "align " << fn.fn_align << "\n";
+    }
+
+    // Function label: @link_name overrides, otherwise mangled if module context exists
+    if (!fn.link_name.empty()) {
+        out_ << symPrefix() << fn.link_name << ":\n";
+    } else if (!module_name_.empty() && fn.name != "main") {
+        out_ << symPrefix() << module_name_ << "__" << fn.name << ":\n";
+    } else {
+        out_ << symPrefix() << fn.name << ":\n";
+    }
+
+    if (!fn.is_naked) {
+        emitPrologue(fn);
+    }
+
+    // Stack canary: store guard value after frame allocation
+    if (has_canary) {
+        out_ << "    sub rsp, 8\n"; // extra 8 bytes for canary
+        out_ << "    mov r11, [rel " << symPrefix() << "__stack_chk_guard]\n";
+        out_ << "    mov [rsp], r11\n";
+    }
+
+    for (uint32_t b = 0; b < fn.block_count; ++b) {
+        const auto& block = fn.blocks[b];
+        // Emit block label (skip first block, it's the entry)
+        if (b > 0) {
+            out_ << block.label << ":\n";
+        }
+
+        for (uint32_t i = 0; i < block.instr_count; ++i) {
+            const auto& instr = block.instrs[i];
+
+            // Emit source location info when line changes
+            if ((emit_source_locs_ || emit_debug_info_) && instr.loc.line > 0 &&
+                instr.loc.line != last_emitted_line_) {
+                last_emitted_line_ = instr.loc.line;
+                if (emit_source_locs_) {
+                    out_ << "    ; " << instr.loc.filename << ":" << instr.loc.line << "\n";
+                }
+                if (emit_debug_info_) {
+                    out_ << "%line " << instr.loc.line << " "
+                         << instr.loc.filename << "\n";
+                }
+            }
+
+            // For naked functions, skip all frame-related pseudo-instructions
+            if (fn.is_naked) {
+                if (instr.op == X86Op::Ret || instr.op == X86Op::Pseudo_FrameSetup ||
+                    instr.op == X86Op::Pseudo_FrameDestroy) {
+                    if (instr.op == X86Op::Ret) {
+                        out_ << "    ret\n";
+                    }
+                    continue;
+                }
+                emitInstr(instr);
+                continue;
+            }
+
+            // Replace ret with epilogue
+            if (instr.op == X86Op::Ret) {
+                // Stack canary check before return
+                if (has_canary) {
+                    out_ << "    mov r11, [rsp]\n";
+                    out_ << "    cmp r11, [rel " << symPrefix() << "__stack_chk_guard]\n";
+                    out_ << "    jne .canary_fail_" << fn.name << "\n";
+                    out_ << "    add rsp, 8\n"; // remove canary slot
+                }
+                emitEpilogue(fn);
+                continue;
+            }
+
+            // Emit frame teardown for tail calls (epilogue without ret)
+            if (instr.op == X86Op::Pseudo_FrameDestroy) {
+                // Stack canary check before tail call
+                if (has_canary) {
+                    out_ << "    mov r11, [rsp]\n";
+                    out_ << "    cmp r11, [rel " << symPrefix() << "__stack_chk_guard]\n";
+                    out_ << "    jne .canary_fail_" << fn.name << "\n";
+                    out_ << "    add rsp, 8\n"; // remove canary slot
+                }
+                if (fn.stack_size > 0) {
+                    out_ << "    add rsp, " << fn.stack_size << "\n";
+                }
+                for (int j = NUM_CALLEE_SAVED - 1; j >= 0; --j) {
+                    if (fn.callee_saved_used[j]) {
+                        out_ << "    pop " << physRegName(CALLEE_SAVED_GPRS[j]) << "\n";
+                    }
+                }
+                out_ << "    pop rbp\n";
+                continue;
+            }
+
+            emitInstr(instr);
+        }
+    }
+
+    // Emit canary fail trap if stack protector is enabled
+    if (has_canary) {
+        out_ << ".canary_fail_" << fn.name << ":\n";
+        out_ << "    ud2\n";
+    }
+
+    // Emit jump tables in .rodata with PC-relative offsets for PIE compatibility
+    if (fn.jump_table_count > 0) {
+        out_ << "section .rodata\n";
+        for (uint32_t jt = 0; jt < fn.jump_table_count; ++jt) {
+            auto& jtbl = fn.jump_tables[jt];
+            out_ << "align 8\n";
+            out_ << jtbl.label << ":\n";
+            for (uint32_t e = 0; e < jtbl.entry_count; ++e) {
+                // Relative offset: target - table_base (PIE-safe)
+                out_ << "    dq " << jtbl.targets[e] << " - " << jtbl.label << "\n";
+            }
+        }
+        out_ << "section .text\n";
+    }
+
+    // Switch back to .text if we emitted a custom section
+    if (!fn.section_name.empty()) {
+        out_ << "section .text\n";
+    } else if (format_ == OutputFormat::Elf64 && (fn.is_cold || fn.is_hot)) {
+        out_ << "section .text\n";
+    }
+
+    // Emit function end label for .eh_frame FDE address range
+    if (emit_unwind_info_) {
+        if (!fn.link_name.empty()) {
+            out_ << symPrefix() << fn.link_name << "__end:\n";
+        } else if (!module_name_.empty() && fn.name != "main") {
+            out_ << symPrefix() << module_name_ << "__" << fn.name << "__end:\n";
+        } else {
+            out_ << symPrefix() << fn.name << "__end:\n";
+        }
+    }
+
+    out_ << "\n";
+}
+
+// ============================================================================
+// .rodata Emission
+// ============================================================================
+
+void NASMEmitter::emitRodata(const GlobalData* globals, uint32_t global_count) {
+    if (global_count == 0) return;
+
+    // Export pub/weak/hidden/protected globals as global symbols
+    for (uint32_t i = 0; i < global_count; ++i) {
+        const auto& g = globals[i];
+        if (g.kind != GlobalData::Variable) continue;
+        if (g.variable.is_extern) continue;
+        if (!g.variable.is_pub && !g.variable.is_weak &&
+            !g.variable.is_hidden && !g.variable.is_protected) continue;
+        std::string sym;
+        if (!g.variable.link_name.empty()) {
+            sym = std::string(symPrefix()) + std::string(g.variable.link_name);
+        } else {
+            sym = std::string(symPrefix()) + std::string(g.label);
+        }
+        out_ << "global " << sym << "\n";
+        if (g.variable.is_weak) {
+            out_ << "weak " << sym << "\n";
+        }
+        if (format_ != OutputFormat::Macho64) {
+            if (g.variable.is_hidden) {
+                out_ << "hidden " << sym << "\n";
+            } else if (g.variable.is_protected) {
+                out_ << "protected " << sym << "\n";
+            }
+        }
+    }
+
+    // Emit weak alias for @global_allocator globals
+    for (uint32_t i = 0; i < global_count; ++i) {
+        const auto& g = globals[i];
+        if (g.kind != GlobalData::Variable || !g.variable.is_global_allocator) continue;
+        std::string sym;
+        if (!g.variable.link_name.empty()) {
+            sym = std::string(symPrefix()) + std::string(g.variable.link_name);
+        } else {
+            sym = std::string(symPrefix()) + std::string(g.label);
+        }
+        // Export the global allocator under a well-known weak symbol
+        out_ << "global " << symPrefix() << "__kern_global_alloc\n";
+        out_ << symPrefix() << "__kern_global_alloc equ " << sym << "\n";
+    }
+
+    // Emit extern declarations for extern globals
+    for (uint32_t i = 0; i < global_count; ++i) {
+        const auto& g = globals[i];
+        if (g.kind != GlobalData::Variable || !g.variable.is_extern) continue;
+        std::string sym;
+        if (!g.variable.link_name.empty()) {
+            sym = std::string(symPrefix()) + std::string(g.variable.link_name);
+        } else {
+            sym = std::string(symPrefix()) + std::string(g.label);
+        }
+        out_ << "extern " << sym << "\n";
+    }
+
+    // Emit extern declarations for cross-module vtable method labels
+    for (uint32_t i = 0; i < global_count; ++i) {
+        const auto& g = globals[i];
+        if (g.kind != GlobalData::VTable) continue;
+        for (uint32_t j = 0; j < g.vtable.method_count; ++j) {
+            auto fn_label = g.vtable.fn_labels[j];
+            // Cross-module labels already contain "__" (e.g. "modname__Type_method")
+            if (fn_label.find("__") != std::string_view::npos) {
+                std::string mangled = std::string(symPrefix()) + std::string(fn_label);
+                out_ << "extern " << mangled << "\n";
+            }
+        }
+    }
+
+    // .rodata: string literals, float constants, immutable globals (without custom section)
+    bool has_rodata = false;
+    for (uint32_t i = 0; i < global_count; ++i) {
+        const auto& g = globals[i];
+        if (g.kind == GlobalData::Variable && g.variable.is_extern) continue;
+        if (g.kind == GlobalData::Variable && g.variable.is_mutable) continue;
+        if (g.kind == GlobalData::Variable && !g.variable.section_name.empty()) continue;
+        if (!has_rodata) { out_ << "section .rodata\n"; has_rodata = true; }
+
+        if (g.kind == GlobalData::StringLit) {
+            out_ << g.label << ":\n    db ";
+            for (uint32_t j = 0; j < g.string_lit.length; ++j) {
+                if (j > 0) out_ << ", ";
+                out_ << static_cast<int>(static_cast<uint8_t>(g.string_lit.data[j]));
+            }
+            out_ << "\n";
+        } else if (g.kind == GlobalData::FloatConst) {
+            out_ << g.label << ":\n";
+            if (g.float_const.is_f32) {
+                uint32_t bits;
+                float f = static_cast<float>(g.float_const.value);
+                std::memcpy(&bits, &f, sizeof(bits));
+                out_ << "    dd 0x" << std::hex << bits << std::dec << "\n";
+            } else {
+                uint64_t bits;
+                std::memcpy(&bits, &g.float_const.value, sizeof(bits));
+                out_ << "    dq 0x" << std::hex << bits << std::dec << "\n";
+            }
+        } else if (g.kind == GlobalData::Variable) {
+            // Immutable global variable → .rodata
+            uint32_t align = g.variable.explicit_align > 0 ? g.variable.explicit_align
+                : (g.variable.size >= 8 ? 8 : (g.variable.size >= 4 ? 4 : 1));
+            if (align > 1) out_ << "align " << align << "\n";
+            out_ << symPrefix() << g.label << ":\n";
+            emitGlobalVarDirective(g.variable);
+        } else if (g.kind == GlobalData::VTable) {
+            // VTable: array of function pointer labels
+            out_ << "align 8\n";
+            out_ << symPrefix() << g.label << ":\n";
+            for (uint32_t j = 0; j < g.vtable.method_count; ++j) {
+                auto fn_label = g.vtable.fn_labels[j];
+                // Mangle: symPrefix + module__fn_name (or just symPrefix + fn_name)
+                std::string mangled;
+                if (!module_name_.empty() &&
+                    fn_label.find("__") == std::string_view::npos &&
+                    fn_label != "main") {
+                    mangled = std::string(symPrefix()) + std::string(module_name_) + "__" + std::string(fn_label);
+                } else {
+                    mangled = std::string(symPrefix()) + std::string(fn_label);
+                }
+
+                // Generate dyn dispatch thunk if self is passed by value (≤16B struct)
+                if (g.vtable.self_size > 0 && g.vtable.self_size <= 16) {
+                    std::string thunk = std::string(symPrefix()) + "__dyn_thunk_" + std::string(fn_label);
+                    dyn_thunks_.push_back({thunk, mangled, g.vtable.self_size});
+                    out_ << "    dq " << thunk << "\n";
+                } else {
+                    out_ << "    dq " << mangled << "\n";
+                }
+            }
+        }
+    }
+    if (has_rodata) out_ << "\n";
+
+    // .data: mutable globals with non-zero initializer (without custom section)
+    bool has_data = false;
+    for (uint32_t i = 0; i < global_count; ++i) {
+        const auto& g = globals[i];
+        if (g.kind != GlobalData::Variable || !g.variable.is_mutable) continue;
+        if (g.variable.is_extern) continue;
+        if (!g.variable.section_name.empty()) continue;
+        bool has_init = g.variable.init_value != 0 || g.variable.array_count > 0 ||
+                        g.variable.init_byte_count > 0;
+        if (!has_init) continue;  // zero-init goes to .bss
+        if (!has_data) { out_ << "section .data\n"; has_data = true; }
+        uint32_t align = g.variable.explicit_align > 0 ? g.variable.explicit_align
+            : (g.variable.size >= 8 ? 8 : (g.variable.size >= 4 ? 4 : 1));
+        if (align > 1) out_ << "align " << align << "\n";
+        out_ << symPrefix() << g.label << ":\n";
+        emitGlobalVarDirective(g.variable);
+    }
+    if (has_data) out_ << "\n";
+
+    // .bss: mutable globals with zero initializer (without custom section)
+    bool has_bss = false;
+    for (uint32_t i = 0; i < global_count; ++i) {
+        const auto& g = globals[i];
+        if (g.kind != GlobalData::Variable || !g.variable.is_mutable) continue;
+        if (g.variable.is_extern) continue;
+        if (!g.variable.section_name.empty()) continue;
+        if (g.variable.init_value != 0 || g.variable.array_count > 0 ||
+            g.variable.init_byte_count > 0) continue;
+        if (!has_bss) { out_ << "section .bss\n"; has_bss = true; }
+        if (g.variable.explicit_align > 1) out_ << "align " << g.variable.explicit_align << "\n";
+        // For structs, init_byte_count may carry the full size
+        uint32_t bss_sz = g.variable.init_byte_count > 0 ? g.variable.init_byte_count
+                         : static_cast<uint32_t>(g.variable.size);
+        out_ << symPrefix() << g.label << ": resb " << bss_sz << "\n";
+    }
+    if (has_bss) out_ << "\n";
+
+    // Custom sections: globals with @section("name")
+    for (uint32_t i = 0; i < global_count; ++i) {
+        const auto& g = globals[i];
+        if (g.kind != GlobalData::Variable) continue;
+        if (g.variable.is_extern) continue;
+        if (g.variable.section_name.empty()) continue;
+        out_ << "section " << g.variable.section_name;
+        if (!g.variable.section_flags.empty()) {
+            for (char c : g.variable.section_flags) {
+                switch (c) {
+                case 'a': out_ << " alloc"; break;
+                case 'w': out_ << " write"; break;
+                case 'x': out_ << " exec"; break;
+                case 'p': out_ << " progbits"; break;
+                case 'n': out_ << " nobits"; break;
+                }
+            }
+        }
+        out_ << "\n";
+        if (g.variable.explicit_align > 1) out_ << "align " << g.variable.explicit_align << "\n";
+        out_ << symPrefix() << g.label << ":\n";
+        bool is_zero = (g.variable.init_value == 0 && g.variable.array_count == 0 &&
+                        g.variable.init_byte_count == 0);
+        if (is_zero) {
+            uint32_t sz = g.variable.init_byte_count > 0 ? g.variable.init_byte_count
+                         : static_cast<uint32_t>(g.variable.size);
+            out_ << "    resb " << sz << "\n";
+        } else {
+            emitGlobalVarDirective(g.variable);
+        }
+        out_ << "\n";
+    }
+}
+
+void NASMEmitter::emitGlobalVarDirective(const GlobalVariable& var) {
+    // Raw byte initializer (struct/float literals) with optional symbol relocations
+    if (var.init_bytes && var.init_byte_count > 0) {
+        if (var.relocs && var.reloc_count > 0) {
+            // Emit bytes with interleaved symbol references at relocation offsets
+            uint32_t pos = 0;
+            for (uint32_t r = 0; r < var.reloc_count; ++r) {
+                auto& reloc = var.relocs[r];
+                // Emit plain bytes before this relocation
+                if (reloc.offset > pos) {
+                    out_ << "    db ";
+                    for (uint32_t i = pos; i < reloc.offset; ++i) {
+                        if (i > pos) out_ << ", ";
+                        out_ << static_cast<int>(var.init_bytes[i]);
+                    }
+                    out_ << "\n";
+                }
+                // Emit symbol reference
+                if (reloc.size == 8) {
+                    out_ << "    dq " << symPrefix() << reloc.symbol << "\n";
+                } else {
+                    out_ << "    dd " << symPrefix() << reloc.symbol << "\n";
+                }
+                pos = reloc.offset + reloc.size;
+            }
+            // Emit remaining bytes after last relocation
+            if (pos < var.init_byte_count) {
+                out_ << "    db ";
+                for (uint32_t i = pos; i < var.init_byte_count; ++i) {
+                    if (i > pos) out_ << ", ";
+                    out_ << static_cast<int>(var.init_bytes[i]);
+                }
+                out_ << "\n";
+            }
+        } else {
+            out_ << "    db ";
+            for (uint32_t i = 0; i < var.init_byte_count; ++i) {
+                if (i > 0) out_ << ", ";
+                out_ << static_cast<int>(var.init_bytes[i]);
+            }
+            out_ << "\n";
+        }
+        return;
+    }
+    if (var.array_values && var.array_count > 0) {
+        // Array initializer: emit one directive per element
+        for (uint32_t i = 0; i < var.array_count; ++i) {
+            // If this element has a label reference (fn pointer), emit dq <label>
+            if (var.array_labels && !var.array_labels[i].empty()) {
+                out_ << "    dq " << symPrefix() << var.array_labels[i] << "\n";
+                continue;
+            }
+            int64_t v = var.array_values[i];
+            switch (var.size) {
+                case 1: out_ << "    db " << (v & 0xFF) << "\n"; break;
+                case 2: out_ << "    dw " << (v & 0xFFFF) << "\n"; break;
+                case 4: out_ << "    dd " << (v & 0xFFFFFFFF) << "\n"; break;
+                default: out_ << "    dq " << v << "\n"; break;
+            }
+        }
+        return;
+    }
+    switch (var.size) {
+        case 1: out_ << "    db " << (var.init_value & 0xFF) << "\n"; break;
+        case 2: out_ << "    dw " << (var.init_value & 0xFFFF) << "\n"; break;
+        case 4: out_ << "    dd " << (var.init_value & 0xFFFFFFFF) << "\n"; break;
+        default: out_ << "    dq " << var.init_value << "\n"; break;
+    }
+}
+
+// ============================================================================
+// _start Wrapper
+// ============================================================================
+
+void NASMEmitter::emitStartWrapper() {
+    const char* sp = symPrefix();
+    out_ << "section .text\n";
+    out_ << "global " << sp << "start\n\n";
+    out_ << sp << "start:\n";
+    out_ << "    call " << sp << "main\n";
+    out_ << "    mov  rdi, rax\n";
+    if (format_ == OutputFormat::Elf64) {
+        out_ << "    mov  rax, 60\n";          // Linux x86-64 exit syscall
+    } else {
+        out_ << "    mov  rax, 0x02000001\n";  // macOS exit syscall
+    }
+    out_ << "    syscall\n";
+}
+
+// ============================================================================
+// Dyn Dispatch Thunks
+// ============================================================================
+
+void NASMEmitter::emitDynThunks() {
+    for (auto& thunk : dyn_thunks_) {
+        out_ << thunk.thunk_label << ":\n";
+        if (thunk.self_size <= 8) {
+            // 1-GPR self: just dereference the data pointer
+            out_ << "    mov rdi, [rdi]\n";
+        } else {
+            // 2-GPR self (9-16 bytes): shift explicit args right by 1 reg, load self
+            out_ << "    mov r9, r8\n";
+            out_ << "    mov r8, rcx\n";
+            out_ << "    mov rcx, rdx\n";
+            out_ << "    mov rdx, rsi\n";
+            out_ << "    mov rsi, [rdi+8]\n";
+            out_ << "    mov rdi, [rdi]\n";
+        }
+        out_ << "    jmp " << thunk.target_label << "\n\n";
+    }
+    dyn_thunks_.clear();
+}
+
+// ============================================================================
+// Module Emission
+// ============================================================================
+
+void NASMEmitter::emitModule(const MachModule& mod, const LIRModule& lir_mod,
+                              bool freestanding) {
+    module_name_ = mod.module_name;
+    const char* sp = symPrefix();
+
+    // Emit extern declarations for intrinsic and extern "C" functions
+    // (skip if the function is also defined in this module)
+    std::unordered_set<std::string_view> defined_names;
+    for (uint32_t i = 0; i < mod.fn_count; ++i) {
+        if (mod.functions[i].block_count > 0) {
+            defined_names.insert(mod.functions[i].name);
+        }
+    }
+    for (uint32_t i = 0; i < mod.fn_count; ++i) {
+        if ((mod.functions[i].is_intrinsic || mod.functions[i].is_extern)
+            && !defined_names.count(mod.functions[i].name)) {
+            out_ << "extern " << sp << mod.functions[i].name << "\n";
+        }
+    }
+
+    // Emit extern declarations for cross-module imports
+    // These labels already include the correct prefix from ISel
+    for (uint32_t i = 0; i < mod.extern_label_count; ++i) {
+        out_ << "extern " << mod.extern_labels[i] << "\n";
+    }
+
+    // Stack protector: define __stack_chk_guard in .data (weak, overridable by kernel)
+    if (stack_protector_) {
+        out_ << "\nsection .data\n";
+        if (format_ == OutputFormat::Elf64) {
+            out_ << "global __stack_chk_guard:data\n";
+            out_ << "weak __stack_chk_guard\n";
+        } else {
+            out_ << "global " << sp << "__stack_chk_guard\n";
+        }
+        out_ << sp << "__stack_chk_guard:\n";
+        out_ << "    dq 0xDEADBEEFDEADBEEF\n";
+        out_ << "section .text\n\n";
+    }
+    // Export only pub functions as global symbols
+    for (uint32_t i = 0; i < mod.fn_count; ++i) {
+        auto& fn = mod.functions[i];
+        if (fn.is_intrinsic || fn.is_extern) continue;
+        // Only export: pub functions, main, weak symbols, visibility-annotated, or explicitly named symbols
+        if (!fn.is_pub && !fn.is_weak && !fn.is_hidden && !fn.is_protected && fn.link_name.empty()) continue;
+        std::string sym;
+        if (!fn.link_name.empty()) {
+            sym = std::string(sp) + std::string(fn.link_name);
+        } else if (!mod.module_name.empty() && fn.name != "main") {
+            sym = std::string(sp) + std::string(mod.module_name) + "__" + std::string(fn.name);
+        } else {
+            sym = std::string(sp) + std::string(fn.name);
+        }
+        out_ << "global " << sym << "\n";
+        if (fn.is_weak) {
+            out_ << "weak " << sym << "\n";
+        }
+        // ELF visibility (only meaningful for ELF, not Mach-O)
+        if (format_ != OutputFormat::Macho64) {
+            if (fn.is_hidden) {
+                out_ << "hidden " << sym << "\n";
+            } else if (fn.is_protected) {
+                out_ << "protected " << sym << "\n";
+            }
+        }
+    }
+
+    // .rodata first
+    emitRodata(lir_mod.globals, lir_mod.global_count);
+
+    // .text section
+    out_ << "section .text\n\n";
+
+    bool has_main = false;
+    for (uint32_t i = 0; i < mod.fn_count; ++i) {
+        emitFunction(mod.functions[i]);
+        if (mod.functions[i].name == "main") has_main = true;
+    }
+
+    // Emit dyn dispatch thunks (collected during emitRodata)
+    emitDynThunks();
+
+    // _start wrapper (omitted in freestanding mode)
+    if (has_main && !freestanding) {
+        emitStartWrapper();
+    }
+
+    // In freestanding mode, export main as global entry
+    if (freestanding && has_main) {
+        out_ << "global " << sp << "main\n";
+    }
+
+    // Emit .eh_frame for stack unwinding
+    if (emit_unwind_info_) {
+        emitEhFrame(mod);
+    }
+
+    // Emit .init_array for @constructor functions (grouped by priority)
+    {
+        // Group constructors by priority for correct section ordering
+        uint32_t last_priority = 0;
+        bool has_init = false;
+        // First pass: sort by priority (emit lower priorities first)
+        std::vector<std::pair<uint32_t, uint32_t>> ctor_indices; // (priority, index)
+        for (uint32_t i = 0; i < mod.fn_count; ++i) {
+            if (mod.functions[i].is_constructor)
+                ctor_indices.push_back({mod.functions[i].constructor_priority, i});
+        }
+        std::sort(ctor_indices.begin(), ctor_indices.end());
+        for (auto& [prio, idx] : ctor_indices) {
+            auto& fn = mod.functions[idx];
+            if (!has_init || prio != last_priority) {
+                if (prio == 65535) {
+                    out_ << "\nsection .init_array\n";
+                } else {
+                    // Zero-pad priority to 5 digits for correct linker sorting
+                    char pbuf[16];
+                    std::snprintf(pbuf, sizeof(pbuf), "%05u", prio);
+                    out_ << "\nsection .init_array." << pbuf << "\n";
+                }
+                last_priority = prio;
+                has_init = true;
+            }
+            std::string sym;
+            if (!fn.link_name.empty()) {
+                sym = std::string(sp) + std::string(fn.link_name);
+            } else if (!mod.module_name.empty() && fn.name != "main") {
+                sym = std::string(sp) + std::string(mod.module_name) + "__" + std::string(fn.name);
+            } else {
+                sym = std::string(sp) + std::string(fn.name);
+            }
+            out_ << "    dq " << sym << "\n";
+        }
+    }
+
+    // Emit .fini_array for @destructor functions (grouped by priority)
+    {
+        std::vector<std::pair<uint32_t, uint32_t>> dtor_indices;
+        for (uint32_t i = 0; i < mod.fn_count; ++i) {
+            if (mod.functions[i].is_destructor)
+                dtor_indices.push_back({mod.functions[i].destructor_priority, i});
+        }
+        std::sort(dtor_indices.begin(), dtor_indices.end());
+        uint32_t last_priority = 0;
+        bool has_fini = false;
+        for (auto& [prio, idx] : dtor_indices) {
+            auto& fn = mod.functions[idx];
+            if (!has_fini || prio != last_priority) {
+                if (prio == 65535) {
+                    out_ << "\nsection .fini_array\n";
+                } else {
+                    char pbuf[16];
+                    std::snprintf(pbuf, sizeof(pbuf), "%05u", prio);
+                    out_ << "\nsection .fini_array." << pbuf << "\n";
+                }
+                last_priority = prio;
+                has_fini = true;
+            }
+            std::string sym;
+            if (!fn.link_name.empty()) {
+                sym = std::string(sp) + std::string(fn.link_name);
+            } else if (!mod.module_name.empty() && fn.name != "main") {
+                sym = std::string(sp) + std::string(mod.module_name) + "__" + std::string(fn.name);
+            } else {
+                sym = std::string(sp) + std::string(fn.name);
+            }
+            out_ << "    dq " << sym << "\n";
+        }
+    }
+}
+
+void NASMEmitter::emitEhFrame(const MachModule& mod) {
+    auto sp = symPrefix();
+
+    // Emit .eh_frame section with DWARF CIE and FDE entries
+    // This allows debuggers and unwinders to reconstruct call stacks.
+    out_ << "\n; --- .eh_frame (stack unwind info) ---\n";
+    if (format_ == OutputFormat::Elf64) {
+        out_ << "section .eh_frame alloc noexec nowrite progbits align=8\n";
+    } else {
+        out_ << "section __TEXT,__eh_frame\n";
+    }
+
+    // CIE (Common Information Entry) — one per module
+    // DWARF4 x86-64 CIE:
+    //   length (4B) | CIE_id=0 (4B) | version=1 (1B) | augmentation
+    //   code_align=1 (ULEB128) | data_align=-8 (SLEB128) | ret_addr_reg=16 (ULEB128)
+    //   [augmentation data] | initial instructions
+    out_ << "__cie_start:\n";
+    out_ << "    dd __cie_end - __cie_start - 4  ; CIE length\n";
+    out_ << "    dd 0                             ; CIE_id (0 = this is a CIE)\n";
+    out_ << "    db 1                             ; version\n";
+    if (format_ == OutputFormat::Elf64) {
+        // ELF: "zR" augmentation = augmentation data length (z) + FDE encoding (R)
+        out_ << "    db 'z','R',0                    ; augmentation \"zR\"\n";
+    } else {
+        out_ << "    db 0                             ; augmentation (empty string)\n";
+    }
+    out_ << "    db 1                             ; code alignment factor (ULEB128)\n";
+    out_ << "    db 0x78                          ; data alignment factor -8 (SLEB128)\n";
+    out_ << "    db 16                            ; return address register (ULEB128)\n";
+    if (format_ == OutputFormat::Elf64) {
+        // Augmentation data: 1 byte length + FDE pointer encoding
+        // DW_EH_PE_pcrel(0x10) | DW_EH_PE_sdata8(0x0c) = 0x1c
+        out_ << "    db 1                             ; augmentation data length\n";
+        out_ << "    db 0x1c                          ; FDE encoding: pcrel|sdata8\n";
+    }
+    // Initial instructions: CFA = RSP+8 (after call pushes return addr)
+    out_ << "    db 0x0c, 7, 8                    ; DW_CFA_def_cfa: r7 (rsp) ofs 8\n";
+    // RA at CFA-8 (offset 1 * data_align = -8)
+    out_ << "    db 0x80 + 16, 1                  ; DW_CFA_offset: r16 (ra) at cfa-8\n";
+    out_ << "    align 8, db 0                    ; pad to 8-byte boundary\n";
+    out_ << "__cie_end:\n";
+
+    // FDE (Frame Description Entry) — one per function
+    for (uint32_t i = 0; i < mod.fn_count; ++i) {
+        auto& fn = mod.functions[i];
+        if (fn.is_naked) continue; // naked functions have no frame
+
+        std::string sym;
+        if (!fn.link_name.empty()) {
+            sym = std::string(sp) + std::string(fn.link_name);
+        } else if (!mod.module_name.empty() && fn.name != "main") {
+            sym = std::string(sp) + std::string(mod.module_name) + "__" + std::string(fn.name);
+        } else {
+            sym = std::string(sp) + std::string(fn.name);
+        }
+
+        std::string fde_start = "__fde_" + std::to_string(i) + "_start";
+        std::string fde_end = "__fde_" + std::to_string(i) + "_end";
+
+        out_ << fde_start << ":\n";
+        out_ << "    dd " << fde_end << " - " << fde_start << " - 4  ; FDE length\n";
+        out_ << "    dd " << fde_start << " - __cie_start             ; CIE pointer\n";
+        if (format_ == OutputFormat::Elf64) {
+            // PC-relative initial location (pcrel|sdata8 encoding)
+            out_ << "    dq " << sym << " - $                             ; initial location (pcrel)\n";
+            out_ << "    dq " << sym << "__end - " << sym << "            ; address range\n";
+            // Augmentation data: 0 bytes (no LSDA)
+            out_ << "    db 0                                             ; augmentation data length\n";
+        } else {
+            // Mach-O: absolute pointers
+            out_ << "    dq " << sym << "                                 ; initial location\n";
+            out_ << "    dq " << sym << "__end - " << sym << "            ; address range\n";
+        }
+
+        // CFA = RSP+8 initially (after call instruction)
+        // After push rbp: CFA = RSP+16, rbp at CFA-16
+        // After mov rbp,rsp: CFA = RBP+16
+        if (!fn.is_interrupt) {
+            // push rbp — CFA now RSP+16, rbp saved at CFA-16
+            out_ << "    db 0x41                           ; DW_CFA_advance_loc: 1\n";
+            out_ << "    db 0x0e, 16                       ; DW_CFA_def_cfa_offset: 16\n";
+            out_ << "    db 0x80 + 6, 2                    ; DW_CFA_offset: r6 (rbp) at cfa-16\n";
+            // mov rbp, rsp — CFA now RBP+16
+            out_ << "    db 0x41                           ; DW_CFA_advance_loc: 1\n";
+            out_ << "    db 0x0d, 6                        ; DW_CFA_def_cfa_register: r6 (rbp)\n";
+        }
+
+        out_ << "    align 8, db 0                    ; pad to 8-byte boundary\n";
+        out_ << fde_end << ":\n";
+    }
+
+    // Emit function end labels (needed by FDE address range)
+    out_ << "\nsection .text\n";
+    for (uint32_t i = 0; i < mod.fn_count; ++i) {
+        auto& fn = mod.functions[i];
+        if (fn.is_naked) continue;
+        std::string sym;
+        if (!fn.link_name.empty()) {
+            sym = std::string(sp) + std::string(fn.link_name);
+        } else if (!mod.module_name.empty() && fn.name != "main") {
+            sym = std::string(sp) + std::string(mod.module_name) + "__" + std::string(fn.name);
+        } else {
+            sym = std::string(sp) + std::string(fn.name);
+        }
+        // The end label is emitted after the last ret of each function
+        // We don't re-emit it here; emitFunction should emit fn_name__end
+    }
+}
+
+} // namespace kern

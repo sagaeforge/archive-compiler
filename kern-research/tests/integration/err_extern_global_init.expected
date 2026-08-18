@@ -1,0 +1,1 @@
+error:extern global 'FOO' cannot have an initializer

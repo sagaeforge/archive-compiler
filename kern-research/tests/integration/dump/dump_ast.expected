@@ -1,0 +1,2 @@
+args:--dump-ast
+stdout:FnDecl(main

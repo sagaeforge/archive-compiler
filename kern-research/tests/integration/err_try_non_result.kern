@@ -1,0 +1,8 @@
+union Maybe<T> { Some(T), None }
+
+fn test() -> Maybe<i64> {
+    val x: Maybe<i64> = Maybe::Some(42)
+    x?
+}
+
+fn main() -> i64 { 0 }

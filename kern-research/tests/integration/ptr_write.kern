@@ -1,0 +1,12 @@
+fn swap(a: Ptr<var i64>, b: Ptr<var i64>) -> i64 {
+    val tmp: i64 = (*a)
+    *a = (*b)
+    *b = tmp
+    (*a)
+}
+
+fn main() -> i64 {
+    var x: i64 = 10
+    var y: i64 = 32
+    swap(&var x, &var y)
+}

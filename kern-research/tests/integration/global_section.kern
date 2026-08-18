@@ -1,0 +1,9 @@
+// E2E: @section on static globals
+// Use .data section (macOS-compatible) to test the mechanism
+// In real OS builds (.elf), custom sections like .page_tables work
+@section(".data")
+static var boot_flag: u64 = 42u64
+
+fn main() -> i64 {
+    boot_flag as i64
+}

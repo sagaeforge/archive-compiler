@@ -1,0 +1,17 @@
+// Test @repr(C) untagged union — C-style union layout
+// All variants share the same memory at offset 0, no tag.
+@repr(C)
+union WordBytes {
+    AsWord(i64),
+    AsByte(u8)
+}
+
+fn main() -> i64 {
+    // Store 42 as a word
+    val u: WordBytes = WordBytes::AsWord(42)
+    // Read back as word — untagged, all at offset 0
+    match u {
+        AsWord(v) => v,
+        AsByte(_) => 0
+    }
+}

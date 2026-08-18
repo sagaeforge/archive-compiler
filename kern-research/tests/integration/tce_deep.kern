@@ -1,0 +1,9 @@
+// Deep recursion: 1,000,000 iterations — stack overflow without TCE
+fn deep(n: i64, result: i64) -> i64 {
+    if n <= 0 { result }
+    else { deep(n - 1, result) }
+}
+
+fn main() -> i64 {
+    deep(1000000, 42)
+}

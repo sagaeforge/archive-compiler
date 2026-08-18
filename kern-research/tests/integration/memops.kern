@@ -1,0 +1,19 @@
+// Test memcpy and memset intrinsics
+fn memcpy(dst: Ptr<var u8>, src: Ptr<u8>, count: u64) -> Unit = intrinsic
+fn memset(dst: Ptr<var u8>, byte_val: u8, count: u64) -> Unit = intrinsic
+
+fn main() -> i64 {
+    // Test memset: fill 8 bytes with 0
+    var buf: i64 = 99
+    val buf_ptr: Ptr<var u8> = (&var buf) as Ptr<var u8>
+    memset(buf_ptr, 0 as u8, 8 as u64)
+
+    // Test memcpy: copy a value
+    var src: i64 = 42
+    var dst: i64 = 0
+    val dst_ptr: Ptr<var u8> = (&var dst) as Ptr<var u8>
+    val src_ptr: Ptr<u8> = (&src) as Ptr<u8>
+    memcpy(dst_ptr, src_ptr, 8 as u64)
+
+    buf + dst
+}

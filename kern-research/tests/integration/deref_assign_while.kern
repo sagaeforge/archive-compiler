@@ -1,0 +1,14 @@
+fn fill(dst: Ptr<var i64>, count: i64, value: i64) with mem, mut {
+    var i: i64 = 0
+    while i < count {
+        val d: Ptr<var i64> = (dst as i64 + i * 8) as Ptr<var i64>
+        *d = value + i
+        i = i + 1
+    }
+}
+
+fn main() -> i64 with mem, mut {
+    var arr: [i64; 4] = [0, 0, 0, 0]
+    fill(&var arr as Ptr<var i64>, 4, 13)
+    arr[0] + arr[1] + arr[2]
+}

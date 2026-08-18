@@ -1,0 +1,10 @@
+// Effect system error: function has undeclared effects
+// Declares 'io' but body uses 'var' (mut effect)
+fn bad_fn() -> i64 with io {
+    var x: i64 = 42
+    x
+}
+
+fn main() -> i64 {
+    bad_fn()
+}

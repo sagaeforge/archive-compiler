@@ -1,0 +1,9 @@
+fn atomic_fetch_add(ptr: Ptr<var i64>, value: i64) -> i64 = intrinsic
+fn mfence() -> Unit = intrinsic
+
+fn main() -> i64 {
+    var counter: i64 = 40
+    val old: i64 = atomic_fetch_add(&var counter, 2)
+    mfence()
+    old + counter - old
+}

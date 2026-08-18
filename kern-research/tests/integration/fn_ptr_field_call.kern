@@ -1,0 +1,15 @@
+// Calling function pointers stored in struct fields directly (vtable pattern)
+struct VTable {
+    read_fn: fn(i64) -> i64,
+    write_fn: fn(i64, i64) -> i64
+}
+
+fn my_read(addr: i64) -> i64 { addr + 1 }
+fn my_write(addr: i64, data: i64) -> i64 { addr + data }
+
+fn main() -> i64 {
+    val vt = VTable { read_fn: my_read, write_fn: my_write }
+    val a = vt.read_fn(10)
+    val b = vt.write_fn(20, 11)
+    a + b
+}

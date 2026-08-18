@@ -1,0 +1,23 @@
+union Option<T> {
+    Some(T),
+    None(Unit)
+}
+
+fn safe_div(a: i64, b: i64) -> Option<i64> {
+    if b == 0 {
+        Option::None(())
+    } else {
+        Option::Some(a / b)
+    }
+}
+
+fn unwrap_or(opt: Option<i64>, default: i64) -> i64 {
+    match opt {
+        Some(v) => v,
+        None(_) => default
+    }
+}
+
+fn main() -> i64 {
+    unwrap_or(safe_div(84, 2), 0)
+}

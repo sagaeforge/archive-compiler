@@ -1,0 +1,7 @@
+fn add32(a: i32, b: i32) -> i32 { a + b }
+fn test_i32(a: i32, b: i32) -> i32 {
+    add32(a, b)
+}
+fn main() -> i64 {
+    42
+}

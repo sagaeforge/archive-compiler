@@ -1,0 +1,39 @@
+struct IDTEntry {
+    offset_low: u16,
+    selector: u16,
+    ist: u8,
+    type_attr: u8,
+    offset_mid: u16,
+    offset_high: u32,
+    reserved: u32
+}
+
+fn make_idt_entry(handler: u64, selector: u16, gate_type: u8) -> IDTEntry {
+    IDTEntry {
+        offset_low: (handler & 0xFFFFu64) as u16,
+        selector: selector,
+        ist: 0u8,
+        type_attr: gate_type,
+        offset_mid: ((handler >> 16u64) & 0xFFFFu64) as u16,
+        offset_high: ((handler >> 32u64) & 0xFFFFFFFFu64) as u32,
+        reserved: 0u32
+    }
+}
+
+fn handler_addr() -> u64 {
+    0xFFFF800000001234u64
+}
+
+fn main() -> i64 with mem, mut {
+    val addr: u64 = handler_addr()
+    val entry: IDTEntry = make_idt_entry(addr, 8u16, 0x8Eu8)
+    var result: i64 = 0
+
+    if entry.offset_low == 0x1234u16 { result = result + 1 }
+    if entry.selector == 8u16 { result = result + 2 }
+    if entry.offset_mid == 0x0000u16 { result = result + 4 }
+    if entry.offset_high == 0xFFFF8000u32 { result = result + 8 }
+    if entry.type_attr == 0x8Eu8 { result = result + 27 }
+
+    result
+}

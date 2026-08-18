@@ -1,0 +1,6 @@
+args:--dump-lir
+stdout:fn @add
+stdout:fn @main
+stdout:add %v0, %v1
+stdout:call
+stdout:@add

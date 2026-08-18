@@ -1,0 +1,14 @@
+enum Dir { Up, Down, Left, Right }
+
+fn step(d: Dir) -> i64 {
+    match d {
+        Up => 10,
+        Down => 20,
+        Left => 5,
+        Right => 7
+    }
+}
+
+fn main() -> i64 {
+    step(Dir.Up) + step(Dir.Right) + step(Dir.Left) + step(Dir.Down)
+}

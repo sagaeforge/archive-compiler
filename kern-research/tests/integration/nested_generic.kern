@@ -1,0 +1,12 @@
+// Nested generics: >> is split into > > in type argument context
+// Uses Ptr<T> inside generic type args to exercise >> splitting
+union MaybePtr<T> { Some(Ptr<T>), None }
+
+fn main() -> i64 {
+    var x: i64 = 42
+    val mp: MaybePtr<i64> = MaybePtr<i64>::Some(&x)
+    match mp {
+        Some(p) => *p
+        None => 0
+    }
+}

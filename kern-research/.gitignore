@@ -1,0 +1,8 @@
+build/
+build*/
+.cache/
+*.o
+*.asm
+a.out
+*.profraw
+*.profdata

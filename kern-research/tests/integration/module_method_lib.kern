@@ -1,0 +1,19 @@
+module module_method_lib
+
+pub struct Counter {
+    count: i64
+}
+
+impl Counter {
+    fn new(start: i64) -> Counter {
+        Counter { count: start }
+    }
+
+    fn value(self: Counter) -> i64 {
+        self.count
+    }
+
+    fn inc(self: Counter) -> Counter {
+        Counter { count: self.count + 1 }
+    }
+}

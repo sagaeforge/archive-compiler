@@ -1,0 +1,10 @@
+// Tail call with float argument, returns integer
+fn to_int(x: i64) -> i64 { x }
+
+fn compute(a: i64, b: i64) -> i64 {
+    to_int(a + b)
+}
+
+fn main() -> i64 {
+    compute(20, 22)
+}

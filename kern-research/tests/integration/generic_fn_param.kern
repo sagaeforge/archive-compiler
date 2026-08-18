@@ -1,0 +1,6 @@
+fn apply<T>(f: fn(T) -> T, x: T) -> T { f(x) }
+
+fn main() -> i64 {
+    val inc: fn(i64) -> i64 = { x: i64 => x + 1 }
+    apply(inc, 41)
+}

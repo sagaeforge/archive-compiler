@@ -1,0 +1,17 @@
+// Test Slice<T> type: construction, field access, indexing
+fn sum_slice(s: Slice<i64>) -> i64 {
+    var total: i64 = 0
+    var i: u64 = 0u64
+    while i < s.len {
+        total = total + s[i]
+        i = i + 1u64
+    }
+    total
+}
+
+fn main() -> i64 {
+    var buf: [i64; 5] = [10, 8, 12, 7, 5]
+    val s: Slice<i64> = Slice { data: &buf[0], len: 5u64 }
+    // 10 + 8 + 12 + 7 + 5 = 42
+    sum_slice(s)
+}

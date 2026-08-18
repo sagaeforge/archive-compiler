@@ -1,0 +1,10 @@
+struct Pair<T> { first: T, second: T }
+
+fn make_pair(a: i64, b: i64) -> Pair<i64> {
+    Pair<i64> { first: a, second: b }
+}
+
+fn main() -> i64 {
+    val p: Pair<i64> = make_pair(20, 22)
+    p.first + p.second
+}

@@ -1,0 +1,46 @@
+// Test operator overloading via trait impl
+struct PhysAddr {
+    val addr: u64
+}
+
+trait Add {
+    fn add(self: PhysAddr, other: PhysAddr) -> PhysAddr
+}
+
+trait Sub {
+    fn sub(self: PhysAddr, other: PhysAddr) -> PhysAddr
+}
+
+trait Eq {
+    fn eq(self: PhysAddr, other: PhysAddr) -> bool
+}
+
+impl Add for PhysAddr {
+    fn add(self: PhysAddr, other: PhysAddr) -> PhysAddr {
+        PhysAddr { addr: self.addr + other.addr }
+    }
+}
+
+impl Sub for PhysAddr {
+    fn sub(self: PhysAddr, other: PhysAddr) -> PhysAddr {
+        PhysAddr { addr: self.addr - other.addr }
+    }
+}
+
+impl Eq for PhysAddr {
+    fn eq(self: PhysAddr, other: PhysAddr) -> bool {
+        self.addr == other.addr
+    }
+}
+
+fn main() -> i64 {
+    val a: PhysAddr = PhysAddr { addr: 30u64 }
+    val b: PhysAddr = PhysAddr { addr: 12u64 }
+    val c: PhysAddr = a + b
+    val d: PhysAddr = c - b
+    if d == a {
+        c.addr as i64
+    } else {
+        0
+    }
+}

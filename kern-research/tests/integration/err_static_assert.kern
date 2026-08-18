@@ -1,0 +1,5 @@
+static_assert(sizeof(i64) == 4, "wrong size")
+
+fn main() -> i64 {
+    0
+}

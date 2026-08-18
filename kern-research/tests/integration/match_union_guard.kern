@@ -1,0 +1,16 @@
+union Maybe { Some(i64), None }
+
+fn filter_positive(m: Maybe) -> i64 {
+    match m {
+        Some(v) if v > 0 => v
+        Some(_) => 0
+        None => 0
+    }
+}
+
+fn main() -> i64 {
+    val a: i64 = filter_positive(Maybe::Some(42))
+    val b: i64 = filter_positive(Maybe::Some(0 - 5))
+    val c: i64 = filter_positive(Maybe::None)
+    a + b + c
+}

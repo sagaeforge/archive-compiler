@@ -1,0 +1,6 @@
+struct Counter { var value: i64 }
+
+fn main() -> i64 {
+    var c: Counter = Counter { value: 0 }
+    c.increment()
+}

@@ -1,0 +1,10 @@
+fn main() -> i64 {
+    val mask: u64 = 18446744073709547520u64
+    val addr: u64 = 4099u64
+    val result: u64 = addr & mask
+    if result == 4096u64 {
+        42
+    } else {
+        0
+    }
+}

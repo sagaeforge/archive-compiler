@@ -1,0 +1,10 @@
+// Ownership: var parameter (mutable borrow)
+fn increment(x: var i64) -> i64 with mut {
+    var y: i64 = x
+    y = y + 1
+    y
+}
+
+fn main() -> i64 {
+    increment(41)
+}

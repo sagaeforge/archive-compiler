@@ -1,0 +1,14 @@
+// Test unreachable intrinsic — compiles to ud2 instruction
+fn unreachable() -> ! = intrinsic
+
+fn safe_div(a: i64, b: i64) -> i64 {
+    if b == 0 {
+        unreachable()
+    } else {
+        a / b
+    }
+}
+
+fn main() -> i64 {
+    safe_div(84, 2)
+}

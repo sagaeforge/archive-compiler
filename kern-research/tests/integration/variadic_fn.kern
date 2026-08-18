@@ -1,0 +1,15 @@
+// Test variadic function declaration and calling
+// Extern variadic function (C FFI pattern)
+extern "C" fn c_printf(fmt: Ptr<u8>, ...) -> i32 = intrinsic
+
+// Non-variadic helper
+fn add(a: i64, b: i64) -> i64 {
+    a + b
+}
+
+fn main() -> i64 {
+    // Just test that the variadic syntax parses correctly
+    // We can't actually call c_printf in userspace test, but
+    // the compiler should accept the declaration
+    add(20, 22)
+}

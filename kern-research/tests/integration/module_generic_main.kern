@@ -1,0 +1,13 @@
+import module_generic_lib (Option, unwrap_or, map_option)
+
+fn main() -> i64 with io, atomic, mut, mem {
+    val some_val: Option<i64> = Option::Some(35)
+    val none_val: Option<i64> = Option::None
+
+    val r1: i64 = unwrap_or(some_val, 0)
+    val r2: i64 = unwrap_or(none_val, 7)
+    val mapped: Option<i64> = map_option(some_val, 5)
+    val r3: i64 = unwrap_or(mapped, 0)
+
+    r1 + r2 - r3
+}

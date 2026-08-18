@@ -1,0 +1,10 @@
+// Test @link_name annotation — custom symbol name
+@link_name("custom_add")
+fn add_impl(a: i64, b: i64) -> i64 {
+    a + b
+}
+
+fn main() -> i64 {
+    // Call the function by its Kern name
+    add_impl(20, 22)
+}

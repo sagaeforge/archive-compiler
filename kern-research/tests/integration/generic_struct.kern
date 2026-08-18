@@ -1,0 +1,8 @@
+struct Box { val value: i64 }
+
+fn identity<T>(x: T) -> T { x }
+
+fn main() -> i64 {
+    val b: Box = identity(Box { value: 42 })
+    b.value
+}

@@ -1,0 +1,16 @@
+// @repr(packed) struct — no alignment padding between fields
+@repr(packed)
+struct HWRegs {
+    a: u8,
+    b: u8,
+    c: u16,
+    d: u32,
+    e: u64
+}
+
+fn main() -> i64 {
+    // packed: 1+1+2+4+8 = 16 bytes
+    val sz = sizeof(HWRegs)
+    val expected = 16u64
+    if sz == expected { 42 } else { sz as i64 }
+}

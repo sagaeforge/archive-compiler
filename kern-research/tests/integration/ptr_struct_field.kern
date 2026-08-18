@@ -1,0 +1,7 @@
+struct Point { var x: i64, var y: i64 }
+
+fn main() -> i64 {
+    var p: Point = Point { x: 21, y: 21 }
+    val px: Ptr<i64> = &p.x
+    *px
+}

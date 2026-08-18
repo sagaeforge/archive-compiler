@@ -1,0 +1,7 @@
+fn countdown(n: i64) -> i64 {
+    match n {
+        0 => 0,
+        x => countdown(x - 1)
+    }
+}
+fn main() -> i64 { countdown(1000000) }

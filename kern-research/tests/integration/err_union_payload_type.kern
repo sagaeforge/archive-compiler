@@ -1,0 +1,6 @@
+union Option { Some(i64), None }
+
+fn main() -> i64 {
+    val x: Option = Option::Some(true)
+    0
+}

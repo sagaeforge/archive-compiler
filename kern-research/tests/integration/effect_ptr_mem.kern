@@ -1,0 +1,9 @@
+fn get_ptr() -> i64 with pure {
+    val x: i64 = 42
+    val p: Ptr<i64> = &x
+    *p
+}
+
+fn main() -> i64 {
+    get_ptr()
+}

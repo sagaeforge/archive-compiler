@@ -1,0 +1,9 @@
+@packed
+struct Packed {
+    val a: i8,
+    val b: i64,
+}
+
+fn main() -> u64 {
+    sizeof(Packed)
+}

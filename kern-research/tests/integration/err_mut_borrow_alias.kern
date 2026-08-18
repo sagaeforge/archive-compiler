@@ -1,0 +1,9 @@
+fn swap(a: var i64, b: var i64) -> i64 {
+  a
+}
+
+fn main() -> u8 {
+  var x: i64 = 42
+  swap(x, x)
+  0
+}

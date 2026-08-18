@@ -1,0 +1,11 @@
+import module_trait_lib (Driver, UartDriver, NullDriver, init_driver, read_driver)
+
+fn main() -> i64 with io, atomic, mut, mem {
+    val uart: UartDriver = UartDriver { port: 10, baud: 25 }
+    val null_d: NullDriver = NullDriver { id: 7 }
+
+    val r1: i64 = init_driver(uart as dyn Driver)
+    val r2: i64 = read_driver(null_d as dyn Driver)
+
+    r1 + r2
+}

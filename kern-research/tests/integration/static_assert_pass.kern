@@ -1,0 +1,10 @@
+// Test static_assert — compile-time validation
+struct Point { x: i64, y: i64 }
+
+static_assert(sizeof(i64) == 8 as u64, "i64 must be 8 bytes")
+static_assert(sizeof(Point) == 16 as u64, "Point must be 16 bytes")
+static_assert(alignof(i64) == 8 as u64, "i64 must be 8-byte aligned")
+
+fn main() -> i64 {
+    42
+}

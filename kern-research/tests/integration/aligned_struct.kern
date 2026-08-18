@@ -1,0 +1,10 @@
+@align(16)
+struct AlignedData {
+    x: i64,
+    y: i64
+}
+
+fn main() -> i64 {
+    val d: AlignedData = AlignedData { x: 20, y: 22 }
+    d.x + d.y
+}

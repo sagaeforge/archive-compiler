@@ -1,0 +1,6 @@
+union Shape { Circle(i64), Square(i64) }
+
+fn main() -> i64 {
+    val s: Shape = Shape::Circle
+    0
+}

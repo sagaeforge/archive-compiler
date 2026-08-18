@@ -1,0 +1,20 @@
+fn handler_a(code: i64) -> i64 {
+    code + 10
+}
+
+fn handler_b(code: i64) -> i64 {
+    code + 20
+}
+
+fn dispatch(fn_addr: u64, arg: i64) -> i64 with io, atomic, mut, mem {
+    val f: fn(i64) -> i64 = fn_addr as fn(i64) -> i64
+    f(arg)
+}
+
+fn main() -> i64 with io, atomic, mut, mem {
+    val a_addr: u64 = handler_a as u64
+    val b_addr: u64 = handler_b as u64
+    val ra: i64 = dispatch(a_addr, 11)
+    val rb: i64 = dispatch(b_addr, 1)
+    ra + rb
+}

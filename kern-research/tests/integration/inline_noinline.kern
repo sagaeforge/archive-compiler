@@ -1,0 +1,15 @@
+@inline
+fn fast_add(a: i64, b: i64) -> i64 {
+    a + b
+}
+
+@noinline
+fn slow_mul(a: i64, b: i64) -> i64 {
+    a * b
+}
+
+fn main() -> i64 {
+    val sum: i64 = fast_add(10, 20)
+    val prod: i64 = slow_mul(3, 4)
+    sum + prod - 18
+}

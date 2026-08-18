@@ -1,0 +1,6 @@
+// Test uninit keyword for uninitialized memory
+fn main() -> i64 {
+    var x: i64 = uninit
+    x = 42
+    x
+}

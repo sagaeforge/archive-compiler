@@ -1,0 +1,6 @@
+// Test global array access by index
+static val TABLE: [i64; 4] = [10, 20, 30, 42]
+
+fn main() -> i64 {
+    TABLE[3]
+}

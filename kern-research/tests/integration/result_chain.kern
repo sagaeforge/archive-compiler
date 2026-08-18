@@ -1,0 +1,21 @@
+union Result { Ok(i64), Err(i64) }
+
+fn safe_div(a: i64, b: i64) -> Result {
+    if b == 0 { Result::Err(1) }
+    else { Result::Ok(a / b) }
+}
+
+fn compute(x: i64) -> Result {
+    val a: i64 = safe_div(x, 2)?
+    val b: i64 = safe_div(a, 3)?
+    val c: i64 = safe_div(b + a, 1)?
+    Result::Ok(c)
+}
+
+fn main() -> i64 {
+    val r: Result = compute(84)
+    match r {
+        Ok(v) => v
+        Err(_) => 0
+    }
+}

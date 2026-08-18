@@ -1,0 +1,13 @@
+// Test: calling function pointers from array elements
+fn handler0() -> i64 { 10 }
+fn handler1() -> i64 { 20 }
+fn handler2() -> i64 { 12 }
+
+fn dispatch(handlers: [fn() -> i64; 3], idx: i64) -> i64 {
+    handlers[idx]()
+}
+
+fn main() -> i64 {
+    val table: [fn() -> i64; 3] = [handler0, handler1, handler2]
+    dispatch(table, 0) + dispatch(table, 1) + dispatch(table, 2)
+}

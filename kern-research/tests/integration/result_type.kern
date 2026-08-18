@@ -1,0 +1,25 @@
+union Result<T, E> { Ok(T), Err(E) }
+
+fn unwrap_ok<T, E>(r: Result<T, E>, fallback: T) -> T {
+    match r {
+        Ok(v) => v,
+        Err(_) => fallback
+    }
+}
+
+fn is_ok<T, E>(r: Result<T, E>) -> bool {
+    match r {
+        Ok(_) => true,
+        Err(_) => false
+    }
+}
+
+fn main() -> i64 {
+    val ok: Result<i64, i64> = Result<i64, i64>::Ok(40)
+    val err: Result<i64, i64> = Result<i64, i64>::Err(99)
+
+    val r1: i64 = unwrap_ok(ok, 0)
+    val r2: i64 = unwrap_ok(err, 2)
+    val r3: i64 = if is_ok(ok) { 0 } else { 100 }
+    r1 + r2 + r3
+}

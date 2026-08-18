@@ -1,0 +1,10 @@
+struct Pair { val a: i64, val b: i64 }
+
+fn scale(p: Pair, n: i64) -> i64 {
+    p.a * n + p.b
+}
+
+fn main() -> i64 {
+    val p: Pair = Pair { a: 4, b: 2 }
+    scale(p, 10)
+}

@@ -1,0 +1,9 @@
+struct Buffer<T, const N: u64> {
+    data: [T; N],
+    len: i64
+}
+
+fn main() -> i64 {
+    val buf: Buffer<i64, 4> = Buffer<i64, 4> { data: [10, 11, 12, 9], len: 4 }
+    buf.data[0] + buf.data[3] + buf.len + 19
+}

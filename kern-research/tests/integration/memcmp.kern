@@ -1,0 +1,28 @@
+// Test memcmp intrinsic
+fn memcmp(a: Ptr<u8>, b: Ptr<u8>, count: u64) -> i64 = intrinsic
+
+fn main() -> i64 {
+    var x: i64 = 42
+    var y: i64 = 42
+    var z: i64 = 99
+
+    val xp: Ptr<u8> = (&x) as Ptr<u8>
+    val yp: Ptr<u8> = (&y) as Ptr<u8>
+    val zp: Ptr<u8> = (&z) as Ptr<u8>
+
+    // Equal buffers: memcmp returns 0
+    val eq: i64 = memcmp(xp, yp, 8 as u64)
+
+    // Different buffers: memcmp returns non-zero
+    val ne: i64 = memcmp(xp, zp, 8 as u64)
+
+    // eq should be 0, ne should be non-zero
+    // Use: if eq == 0 and ne != 0 then 42 else 1
+    match eq {
+        0 => match ne {
+            0 => 1
+            _ => 42
+        }
+        _ => 2
+    }
+}

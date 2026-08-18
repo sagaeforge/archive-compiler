@@ -1,0 +1,10 @@
+// Test type inference for val/var declarations (no explicit type annotation)
+fn add(a: i64, b: i64) -> i64 { a + b }
+
+fn main() -> i64 {
+    val x = 10          // inferred as i64
+    var y = 20           // inferred as i64
+    y += 5               // y = 25
+    val z = add(x, y)   // inferred as i64 from fn return type
+    z                    // 35
+}

@@ -1,0 +1,17 @@
+// Inherent impl blocks: impl Type { fn method(self: Type) ... }
+struct Point { x: i64, y: i64 }
+
+impl Point {
+    fn sum(self: Point) -> i64 {
+        self.x + self.y
+    }
+
+    fn scale(self: Point, factor: i64) -> i64 {
+        self.sum() * factor
+    }
+}
+
+fn main() -> i64 {
+    val p = Point { x: 10, y: 11 }
+    p.scale(2)
+}

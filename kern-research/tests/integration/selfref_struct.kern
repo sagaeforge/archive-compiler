@@ -1,0 +1,21 @@
+struct Node {
+    val value: i64,
+    val next: Ptr<Node>
+}
+
+fn sum_list(head: Ptr<Node>) -> i64 with mem {
+    val node: Node = *head
+    val rest: Ptr<Node> = node.next
+    if rest == (null as Ptr<Node>) {
+        node.value
+    } else {
+        node.value + sum_list(rest)
+    }
+}
+
+fn main() -> i64 with mut, mem {
+    var n3: Node = Node { value: 10, next: null as Ptr<Node> }
+    var n2: Node = Node { value: 20, next: &n3 }
+    var n1: Node = Node { value: 12, next: &n2 }
+    sum_list(&n1)
+}

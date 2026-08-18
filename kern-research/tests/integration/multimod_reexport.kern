@@ -1,0 +1,5 @@
+import multimod_prelude (add, mul)
+
+fn main() -> i64 {
+    add(mul(3, 14), 0)
+}

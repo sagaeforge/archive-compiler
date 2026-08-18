@@ -1,0 +1,4 @@
+fn add(a: f32, b: f32) -> f32 { a + b }
+fn main() -> i64 {
+    if add(1.5f, 1.5f) == 3.0f { 42 } else { 0 }
+}

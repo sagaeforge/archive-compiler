@@ -1,0 +1,8 @@
+struct MmioReg<const SIZE: u64> {
+    value: u64
+}
+
+fn main() -> i64 {
+    val reg: MmioReg<8> = MmioReg<8> { value: 42 }
+    reg.value as i64
+}

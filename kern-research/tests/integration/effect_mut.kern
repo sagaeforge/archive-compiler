@@ -1,0 +1,10 @@
+// Effect system: mut effect auto-inferred from var usage
+fn counter() -> i64 with mut {
+    var x: i64 = 0
+    x = 42
+    x
+}
+
+fn main() -> i64 {
+    counter()
+}

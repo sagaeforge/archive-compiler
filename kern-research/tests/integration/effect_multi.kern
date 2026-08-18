@@ -1,0 +1,12 @@
+// Effect system: multiple effects (io, mut)
+fn volatile_read(ptr: Ptr<u8>) -> u8 with io = intrinsic
+
+fn read_with_count(ptr: Ptr<u8>) -> u8 with io, mut {
+    var count: i64 = 0
+    count = count + 1
+    volatile_read(ptr)
+}
+
+fn main() -> i64 {
+    42
+}

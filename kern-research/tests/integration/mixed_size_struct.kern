@@ -1,0 +1,26 @@
+struct IDTEntry {
+    offset_low: u16,
+    selector: u16,
+    ist: u8,
+    type_attr: u8,
+    offset_mid: u16
+}
+
+fn make_idt(offset: u64, sel: u16, attr: u8) -> IDTEntry {
+    IDTEntry {
+        offset_low: (offset & 0xFFFFu64) as u16,
+        selector: sel,
+        ist: 0u8,
+        type_attr: attr,
+        offset_mid: ((offset >> 16u64) & 0xFFFFu64) as u16
+    }
+}
+
+fn main() -> i64 with mut {
+    val e: IDTEntry = make_idt(0x5678ABCDu64, 8u16, 0x8Eu8)
+    var r: i64 = 0
+    if e.offset_low == 0xABCDu16 { r = r + 14 }
+    if e.selector == 8u16 { r = r + 14 }
+    if e.offset_mid == 0x5678u16 { r = r + 14 }
+    r
+}

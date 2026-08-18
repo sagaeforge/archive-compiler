@@ -1,0 +1,19 @@
+// Test compound assignment operators: +=, -=, *=, |=, &=, ^=, <<=, >>=
+fn main() -> i64 {
+    var x: i64 = 10
+    x += 5       // x = 15
+    x -= 3       // x = 12
+    x *= 2       // x = 24
+
+    var flags: i64 = 0
+    flags |= 3   // flags = 3 (0b11)
+    flags &= 2   // flags = 2 (0b10)
+    flags ^= 6   // flags = 4 (0b100)
+
+    var shift: i64 = 1
+    shift <<= 3  // shift = 8
+    shift >>= 1  // shift = 4
+
+    // x=24, flags=4, shift=4 → 24 + 4 + 4 = 32
+    x + flags + shift
+}

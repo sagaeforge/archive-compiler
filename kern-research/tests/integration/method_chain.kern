@@ -1,0 +1,13 @@
+struct Vec2 { val x: i64, val y: i64 }
+
+impl Vec2 for Vec2 {
+    fn sum(self: Vec2) -> i64 { self.x + self.y }
+}
+
+fn make_vec(a: i64, b: i64) -> Vec2 {
+    Vec2 { x: a, y: b }
+}
+
+fn main() -> i64 {
+    make_vec(20, 22).sum()
+}

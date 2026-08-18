@@ -1,0 +1,7 @@
+// Test underscore separators in integer literals
+fn main() -> i64 {
+    val a: i64 = 1_000
+    val b: u32 = 0xFF_FFu32
+    val c: i64 = a - 1000 + (b as i64) - 0xFFFF + 42
+    c
+}

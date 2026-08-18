@@ -1,0 +1,8 @@
+@interrupt
+fn timer_handler() -> Unit {
+    asm { "nop" }
+}
+
+fn main() -> i64 {
+    42
+}

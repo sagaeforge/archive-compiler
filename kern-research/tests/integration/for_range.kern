@@ -1,0 +1,9 @@
+// Test for-in-range loop
+fn main() -> i64 {
+    var sum: i64 = 0
+    for i in 0..10 {
+        sum = sum + i
+    }
+    // 0+1+2+...+9 = 45, return 45-3 = 42
+    sum - 3
+}

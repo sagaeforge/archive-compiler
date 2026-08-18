@@ -1,0 +1,2 @@
+stdout:impure(io)
+args:--dump-purity

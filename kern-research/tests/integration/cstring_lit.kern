@@ -1,0 +1,15 @@
+// Test: c"..." NUL-terminated C string literal → Ptr<u8>
+fn main() -> i64 {
+    val s = c"Hello"
+    // s is Ptr<u8>, dereference to get first byte 'H' = 72
+    val h = *s
+    // Check that it's NUL-terminated: s[5] should be 0
+    val ptr5 = (s as u64 + 5u64) as Ptr<u8>
+    val nul = *ptr5
+    if nul == 0u8 {
+        // Return 'H' - 30 = 42
+        (h as i64) - 30
+    } else {
+        1
+    }
+}

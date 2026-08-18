@@ -1,0 +1,24 @@
+// Bit manipulation intrinsic declarations
+fn ctz(x: i64) -> i64 = intrinsic
+fn popcnt(x: i64) -> i64 = intrinsic
+fn clz(x: i64) -> i64 = intrinsic
+fn bswap(x: i64) -> i64 = intrinsic
+
+// Test bit manipulation intrinsics
+fn main() -> i64 {
+    // ctz(8) = 3  (binary: 1000, trailing zeros = 3)
+    val a: i64 = ctz(8)
+
+    // popcnt(170) = 4 (binary: 10101010, 4 set bits)
+    val b: i64 = popcnt(170)
+
+    // clz(1) on 64-bit = 63
+    val c: i64 = clz(1)
+
+    // a(3) + b(4) + c(63) = 70
+    // bswap(0x2A00000000000000) = 0x000000000000002A = 42
+    val d: i64 = bswap(3026418949592973312)
+
+    // d = 42
+    d
+}

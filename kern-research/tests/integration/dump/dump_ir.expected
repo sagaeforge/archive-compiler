@@ -1,0 +1,2 @@
+args:--dump-lir
+stdout:fn @main

@@ -1,0 +1,15 @@
+// Test likely/unlikely branch hints (identity functions)
+fn likely(cond: bool) -> bool = intrinsic
+fn unlikely(cond: bool) -> bool = intrinsic
+
+fn main() -> i64 {
+    val x: i64 = 42
+    val y: i64 = 10
+    match likely(x > y) {
+        true => match unlikely(x < 0) {
+            true => 0
+            false => 42
+        }
+        false => 1
+    }
+}

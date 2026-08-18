@@ -1,0 +1,13 @@
+enum Dir { North, South, East, West }
+
+fn score(d: Dir) -> i64 {
+    match d {
+        North => 10
+        South => 20
+        _ => 42
+    }
+}
+
+fn main() -> i64 {
+    score(Dir.East)
+}

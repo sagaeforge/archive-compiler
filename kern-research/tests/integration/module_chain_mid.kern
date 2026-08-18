@@ -1,0 +1,7 @@
+module module_chain_mid
+
+import module_chain_base (Config, make_config)
+
+pub fn load_config() -> Config {
+    make_config(42)
+}

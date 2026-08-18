@@ -1,0 +1,6 @@
+import module_kernel_core (Allocator, BumpAlloc, alloc_page)
+
+fn main() -> i64 with io, atomic, mut, mem {
+    val bump: BumpAlloc = BumpAlloc { base: 42, offset: 0 }
+    alloc_page(bump as dyn Allocator)
+}

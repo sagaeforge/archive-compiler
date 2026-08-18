@@ -1,0 +1,24 @@
+module module_kernel_core
+
+pub trait Allocator {
+    fn alloc(self: Self, size: i64) -> i64
+    fn free(self: Self, ptr: i64) -> i64
+}
+
+pub struct BumpAlloc {
+    base: i64,
+    offset: i64
+}
+
+impl Allocator for BumpAlloc {
+    fn alloc(self: BumpAlloc, size: i64) -> i64 {
+        self.base + self.offset
+    }
+    fn free(self: BumpAlloc, ptr: i64) -> i64 {
+        0
+    }
+}
+
+pub fn alloc_page(a: dyn Allocator) -> i64 {
+    a.alloc(4096)
+}

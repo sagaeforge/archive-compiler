@@ -1,0 +1,4 @@
+fn fib(0) -> i64 { 0 }
+fn fib(1) -> i64 { 1 }
+fn fib(n: i64) -> i64 { fib(n - 1) + fib(n - 2) }
+fn main() -> i64 { fib(10) }

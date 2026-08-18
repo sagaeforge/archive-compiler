@@ -1,0 +1,11 @@
+fn make_adder(base: i64) -> fn(i64) -> i64 {
+    { x: i64 => x + base }
+}
+
+fn main() -> i64 {
+    val add10: fn(i64) -> i64 = make_adder(10)
+    val add20: fn(i64) -> i64 = make_adder(20)
+    val a: i64 = add10(5)
+    val b: i64 = add20(7)
+    a + b
+}

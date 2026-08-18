@@ -1,0 +1,6 @@
+fn main() -> i64 {
+    asm {
+        "mov rax, 42"
+    }
+    42
+}

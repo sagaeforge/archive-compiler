@@ -1,0 +1,12 @@
+fn main() -> i64 {
+    loop(i = 0, a = 1, b = 2, c = 3) {
+        val na: i64 = a + c
+        val nb: i64 = b + a
+        val nc: i64 = c + b
+        if i == 2 {
+            break na + nb + nc
+        } else {
+            continue(i + 1, na, nb, nc)
+        }
+    }
+}

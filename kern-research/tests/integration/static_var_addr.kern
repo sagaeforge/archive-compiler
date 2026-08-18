@@ -1,0 +1,28 @@
+fn atomic_cas(ptr: Ptr<var i64>, expected: i64, desired: i64) -> i64 = intrinsic
+fn atomic_store(ptr: Ptr<var i64>, value: i64) -> Unit = intrinsic
+
+static var counter: i64 = 0
+static var last_val: i64 = -1
+
+fn increment(amount: i64) with io, atomic, mut, mem {
+    atomic_store(&var last_val, amount)
+    var old: i64 = counter
+    while atomic_cas(&var counter, old, old + amount) != old {
+        old = counter
+    }
+}
+
+fn main() -> i64 with io, atomic, mut, mem {
+    var result: i64 = 0
+
+    if last_val == -1 { result = result + 1 }
+
+    increment(10)
+    increment(20)
+    increment(12)
+
+    if counter == 42 { result = result + 2 }
+    if last_val == 12 { result = result + 4 }
+
+    result + 35
+}

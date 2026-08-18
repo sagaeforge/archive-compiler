@@ -1,0 +1,3 @@
+fn write_port(port: i64, value: i64) -> i64 = intrinsic
+fn do_write() -> i64 { write_port(0, 0) }
+fn main() -> i64 { 42 }

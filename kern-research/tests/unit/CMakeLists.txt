@@ -1,0 +1,39 @@
+add_executable(kern_tests
+    support/ArenaTest.cpp
+    support/DiagnosticTest.cpp
+    support/ModuleResolverTest.cpp
+    support/TypeSystemTest.cpp
+    lexer/LexerTest.cpp
+    parser/ParserTest.cpp
+    hir/HIRTest.cpp
+    hir/HIRBuilderTest.cpp
+    hir/HIRPassesTest.cpp
+    hir/MonomorphizationTest.cpp
+    lir/LIRTest.cpp
+    lir/LIRBuilderTest.cpp
+    backend/MachIRTest.cpp
+    backend/InstructionSelectorTest.cpp
+    backend/RegisterAllocatorTest.cpp
+    backend/EmitterTest.cpp
+    debug/DebugInfoTest.cpp
+    ide/IDETest.cpp
+    fmt/FormatterTest.cpp
+    pkg/ManifestTest.cpp
+    pipeline/PipelineTest.cpp
+)
+target_link_libraries(kern_tests
+    kern_pipeline
+    kern_pkg
+    kern_fmt
+    kern_ide
+    kern_debug
+    kern_backend
+    kern_lir
+    kern_hir
+    kern_parser
+    kern_lexer
+    kern_support
+    GTest::gtest_main
+)
+include(GoogleTest)
+gtest_discover_tests(kern_tests DISCOVERY_TIMEOUT 120 DISCOVERY_MODE PRE_TEST)
