@@ -2,7 +2,9 @@
 
 2021년부터 이어온 **컴파일러·언어 설계** 작업 아카이브입니다.
 안양공고 시절의 AnyangTechInterpreter 에서 시작해 Quantum(자작 언어 + VM), NCX, nCompiler 를 거쳐
-nugdev-compiler 로 이어집니다.
+nugdev-compiler, kern-research 로 이어집니다.
+
+시작은 『만들면서 배우는 인터프리터』를 따라 만든 것이었고, 그 뒤로는 계속 처음부터 다시 썼습니다.
 
 ## 계보
 
@@ -18,11 +20,8 @@ nugdev-compiler 로 이어집니다.
 2025.05  nugdev-compiler-2025   Tokenizer + AST + gtest    ← 가장 진전된 코드
 2025.11  cos                    NASM 백엔드
     ⋮
-2026.03  kern-research          순수 함수로 커널을 쓰는 언어 + kernc  ← 현역
+2026.03  kern-research          순수 함수로 커널을 쓰는 언어 + kernc  ← 가장 최근
 ```
-
-> ⚠ `kern-research/` 만은 아카이브가 아니라 **진행 중인 작업**입니다.
-> 나머지는 전부 유지보수하지 않습니다.
 
 ## 구성
 
@@ -37,7 +36,7 @@ nugdev-compiler 로 이어집니다.
 | [`nugdev-compiler-2025/`](nugdev-compiler-2025) | Tokenizer + AST + gtest (C++) — 최신 | 9 | 2025.05–2026.08 |
 | [`nugdev-compiler-init/`](nugdev-compiler-init) | 프로젝트 초기 셋업본 | 1 | 2025.05 |
 | [`cos/`](cos) | NASM 백엔드 컴파일러 | 4 | 2025.11–2026.08 |
-| [`kern-research/`](kern-research) | 순수 함수만으로 커널을 쓰는 언어 + `kernc` 컴파일러 — **현역** | 155 | 2026.01–2026.03 |
+| [`kern-research/`](kern-research) | 순수 함수만으로 커널을 쓰는 언어 + `kernc` 컴파일러 — 가장 최근 | 155 | 2026.01–2026.03 |
 | [`nugdev-language/`](nugdev-language) | nugdev 언어 EBNF 설계 + 뷰어 | 1 | 2025.06 |
 | [`docs/language-design/`](docs/language-design) | 언어 설계 노트 | 1 | 2025.01 |
 
