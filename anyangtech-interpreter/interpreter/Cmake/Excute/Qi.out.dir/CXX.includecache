@@ -1,0 +1,40 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/nugunga/Desktop/AnyangTechInterpreter/interpreter/Qi.cpp
+Qi.h
+/home/nugunga/Desktop/AnyangTechInterpreter/interpreter/Qi.h
+Qi_prot.h
+/home/nugunga/Desktop/AnyangTechInterpreter/interpreter/Qi_prot.h
+
+/home/nugunga/Desktop/AnyangTechInterpreter/interpreter/Qi.h
+iostream
+-
+fstream
+-
+sstream
+-
+string
+-
+vector
+-
+stack
+-
+cstdio
+-
+cstdlib
+-
+cstring
+-
+cmath
+-
+cctype
+-
+
+/home/nugunga/Desktop/AnyangTechInterpreter/interpreter/Qi_prot.h
+

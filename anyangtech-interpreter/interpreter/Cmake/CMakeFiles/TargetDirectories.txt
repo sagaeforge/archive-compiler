@@ -1,0 +1,3 @@
+/home/nugunga/Desktop/AnyangTechInterpreter/interpreter/Cmake/CMakeFiles/rebuild_cache.dir
+/home/nugunga/Desktop/AnyangTechInterpreter/interpreter/Cmake/CMakeFiles/edit_cache.dir
+/home/nugunga/Desktop/AnyangTechInterpreter/interpreter/Cmake/CMakeFiles/../Excute/Qi.out.dir
